@@ -303,6 +303,11 @@ class _EditScreenState extends State<EditScreen> {
                 onToggleEnable: store.toggleEnabled,
                 onSeek: _seek,
                 onChunkTap: t.chordActive ? null : store.selectChunk,
+                onChunkMove: t.chordActive ? null : store.moveChunkBy,
+                onChunkResize: t.chordActive
+                    ? null
+                    : (id, {double? newStart, double? newEnd}) =>
+                        store.resizeChunk(id, newStart: newStart, newEnd: newEnd),
                 onNoteTap: t.chordActive
                     ? null // 코드 모드에선 후보 편집 비활성 (단음 모드에서 편집)
                     : (i) {

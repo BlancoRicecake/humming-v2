@@ -358,6 +358,51 @@ class ProjectStore extends ChangeNotifier {
     _audioChanged();
   }
 
+  /// 청크 전체를 dtSec 만큼 시간 이동(트랙 내 위치 변경). 시작이 0 미만이면 클램프.
+  void moveChunkBy(int id, double dtSec) {
+    final ns = _chunkNotes(id);
+    if (ns.isEmpty || dtSec == 0) return;
+    final minStart = ns.map((n) => n.start).reduce(math.min);
+    final dt = (minStart + dtSec < 0) ? -minStart : dtSec; // 0 이하 방지
+    if (dt == 0) return;
+    for (final n in ns) {
+      n.start += dt;
+      n.end += dt;
+    }
+    _resort();
+    _audioChanged();
+  }
+
+  /// 청크 양끝 트림(시간 스케일) — newEnd 지정 시 시작 고정, newStart 지정 시 끝 고정.
+  /// 노트를 제거하지 않고 늘리거나 줄여 길이를 조절(되돌리기 가능).
+  void resizeChunk(int id, {double? newStart, double? newEnd}) {
+    final ns = _chunkNotes(id);
+    if (ns.isEmpty) return;
+    final start = ns.map((n) => n.start).reduce(math.min);
+    final end = ns.map((n) => n.end).reduce(math.max);
+    final span = end - start;
+    if (span <= 0.02) return;
+    if (newEnd != null) {
+      final ne = math.max(newEnd, start + 0.12); // 최소 길이
+      final s = (ne - start) / span;
+      for (final n in ns) {
+        n.start = start + (n.start - start) * s;
+        n.end = start + (n.end - start) * s;
+        n.duration = n.end - n.start;
+      }
+    } else if (newStart != null) {
+      final nstart = math.max(0.0, math.min(newStart, end - 0.12));
+      final s = (end - nstart) / span;
+      for (final n in ns) {
+        n.start = end - (end - n.start) * s;
+        n.end = end - (end - n.end) * s;
+        n.duration = n.end - n.start;
+      }
+    }
+    _resort();
+    _audioChanged();
+  }
+
   /// 청크를 atSec(플레이헤드)에서 둘로 분할 — 그 지점 이후 노트에 새 청크 ID 부여.
   void _splitChunk(int id, double? atSec) {
     final ns = _chunkNotes(id);

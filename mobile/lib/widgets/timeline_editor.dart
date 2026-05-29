@@ -29,6 +29,8 @@ class TimelineEditor extends StatefulWidget {
     this.onActivateRole,
     this.onToggleEnable,
     this.onSeek,
+    this.onChunkMove,
+    this.onChunkResize,
   });
 
   final Map<TrackRole, List<Note>> tracks;
@@ -44,6 +46,8 @@ class TimelineEditor extends StatefulWidget {
   final void Function(TrackRole role)? onActivateRole;
   final void Function(TrackRole role)? onToggleEnable;
   final void Function(double sec)? onSeek;
+  final void Function(int chunkId, double dtSec)? onChunkMove; // 길게 눌러 이동
+  final void Function(int chunkId, {double? newStart, double? newEnd})? onChunkResize; // 양끝 트림
 
   @override
   State<TimelineEditor> createState() => _TimelineEditorState();
@@ -53,6 +57,11 @@ class _TimelineEditorState extends State<TimelineEditor> {
   double _zoom = 1.0;
   double _scrollX = 0;
   double _startZoom = 1.0;
+
+  // 청크 이동/트림 드래그 상태
+  int? _moveChunk;
+  double _movePrevCum = 0;
+  double? _resizeStart, _resizeEnd;
 
   // 제스처 콜백에서 쓰는 레이아웃 값(빌드 때 갱신).
   double _dur = 1, _pxPerSec = 90, _contentW = 0, _vpW = 0, _lanesH = 0, _maxScroll = 0;
@@ -99,6 +108,90 @@ class _TimelineEditorState extends State<TimelineEditor> {
     widget.onChunkTap?.call(cid);
   }
 
+  Map<int, List<double>> _chunkRanges(List<Note> notes) {
+    final ranges = <int, List<double>>{};
+    for (final n in notes) {
+      final r = ranges.putIfAbsent(n.chunkId, () => [n.start, n.end]);
+      if (n.start < r[0]) r[0] = n.start;
+      if (n.end > r[1]) r[1] = n.end;
+    }
+    return ranges;
+  }
+
+  // 길게 눌러 청크 이동 — 활성 레인에서 누른 청크를 잡아 가로로 끌면 위치 이동.
+  void _onLongPressStart(LongPressStartDetails d) {
+    final slot = _lanesH / TrackRole.values.length;
+    final idx = (d.localPosition.dy / slot).floor().clamp(0, TrackRole.values.length - 1);
+    if (TrackRole.values[idx] != widget.activeRole) return;
+    final time = (d.localPosition.dx + _scrollX) / _pxPerSec;
+    int? cid;
+    _chunkRanges(widget.tracks[widget.activeRole] ?? const []).forEach((id, r) {
+      if (time >= r[0] && time <= r[1]) cid = id;
+    });
+    if (cid == null) return;
+    _moveChunk = cid;
+    _movePrevCum = 0;
+    widget.onChunkTap?.call(cid); // 선택 표시
+  }
+
+  void _onLongPressMove(LongPressMoveUpdateDetails d) {
+    if (_moveChunk == null) return;
+    final cum = d.localOffsetFromOrigin.dx;
+    final dtSec = (cum - _movePrevCum) / _pxPerSec;
+    _movePrevCum = cum;
+    if (dtSec != 0) widget.onChunkMove?.call(_moveChunk!, dtSec);
+  }
+
+  void _onLongPressEnd(_) => _moveChunk = null;
+
+  // 선택된 청크의 양끝 트림 핸들(활성 레인). 좌/우 핸들을 끌어 길이 조절.
+  List<Widget> _trimHandles() {
+    final cid = widget.selectedChunk;
+    if (cid == null) return const [];
+    final notes = widget.tracks[widget.activeRole] ?? const [];
+    final r = _chunkRanges(notes)[cid];
+    if (r == null) return const [];
+    final idx = TrackRole.values.indexOf(widget.activeRole);
+    final slot = _lanesH / TrackRole.values.length;
+    final laneTop = idx * slot;
+    final laneH = slot - _laneGap;
+    final leftX = r[0] * _pxPerSec - _scrollX;
+    final rightX = r[1] * _pxPerSec - _scrollX;
+
+    Widget handle(double x, bool isLeft) => Positioned(
+          left: x - 11,
+          top: laneTop,
+          height: laneH,
+          width: 22,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (_) => isLeft ? _resizeStart = r[0] : _resizeEnd = r[1],
+            onHorizontalDragUpdate: (d) {
+              if (isLeft) {
+                _resizeStart = (_resizeStart ?? r[0]) + d.delta.dx / _pxPerSec;
+                widget.onChunkResize?.call(cid, newStart: _resizeStart);
+              } else {
+                _resizeEnd = (_resizeEnd ?? r[1]) + d.delta.dx / _pxPerSec;
+                widget.onChunkResize?.call(cid, newEnd: _resizeEnd);
+              }
+            },
+            onHorizontalDragEnd: (_) {
+              _resizeStart = null;
+              _resizeEnd = null;
+            },
+            child: Center(
+              child: Container(
+                width: 4,
+                height: laneH * 0.6,
+                decoration: BoxDecoration(color: AppColors.lime, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+          ),
+        );
+
+    return [handle(leftX, true), handle(rightX, false)];
+  }
+
   @override
   Widget build(BuildContext context) {
     _dur = math.max(widget.durationSec, 0.5);
@@ -143,6 +236,9 @@ class _TimelineEditorState extends State<TimelineEditor> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTapUp: _onTap,
+                        onLongPressStart: _onLongPressStart,
+                        onLongPressMoveUpdate: _onLongPressMove,
+                        onLongPressEnd: _onLongPressEnd,
                         onScaleStart: (_) => _startZoom = _zoom,
                         onScaleUpdate: (d) {
                           setState(() {
@@ -176,6 +272,7 @@ class _TimelineEditorState extends State<TimelineEditor> {
                                   ],
                                 ),
                               ),
+                              ..._trimHandles(),
                               if (headContentX != null && headContentX - _scrollX >= 0 && headContentX - _scrollX <= _vpW)
                                 Positioned(
                                   left: headContentX - _scrollX,
