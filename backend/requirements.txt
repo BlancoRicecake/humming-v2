@@ -1,0 +1,12 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+pydantic>=2.6
+numpy>=1.26,<2.1
+scipy>=1.11
+librosa>=0.10.1
+soundfile>=0.12
+mido>=1.3
+# Optional - SoundFont preview via FluidSynth. Requires libfluidsynth-3.dll
+# (bundled portable build under backend/bin/ is auto-loaded by app.render).
+pyfluidsynth>=1.3.0

@@ -1,0 +1,816 @@
+// 메인 편집 화면 — 상단 컨트롤(악기/역할/코드/추천Key/피치어시스트/녹음) + 하단 CapCut 타임라인.
+// 녹음은 화면 이동 없이 녹음 버튼 박스 안에서 진행(작업 동시성): 녹음 중 기존 트랙을
+// 함께 재생해 흥얼거릴 수 있고, 같은 박스에서 타이머·음파·처리과정을 보여준다.
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
+import '../audio/audio_route.dart';
+import '../audio/metronome.dart';
+import '../audio/player.dart';
+import '../audio/recorder.dart';
+import '../models/models.dart';
+import '../state/project_store.dart';
+import '../theme/app_theme.dart';
+import '../widgets/common.dart';
+import '../widgets/sheets.dart';
+import '../widgets/timeline_editor.dart';
+
+enum _PlayState { stopped, playing, paused }
+
+enum _RecState { idle, recording, processing }
+
+class EditScreen extends StatefulWidget {
+  const EditScreen({super.key});
+  @override
+  State<EditScreen> createState() => _EditScreenState();
+}
+
+class _EditScreenState extends State<EditScreen> {
+  final _player = AudioPlayerService();
+  _PlayState _ps = _PlayState.stopped;
+  double? _playheadSec;
+  int _lastEpoch = -1;
+  StreamSubscription? _posSub, _compSub;
+
+  // 인라인 녹음(작업 동시성)
+  final _rec = VoiceRecorder();
+  _RecState _recState = _RecState.idle;
+  int _recMs = 0;
+  bool _recHasBacking = false; // 반주 트랙이 있는지(헤드셋 무관)
+  bool _recPlayingAudio = false; // 반주를 실제 소리로 재생 중인지(헤드셋 연결 시만)
+  double _recBackingDur = 0; // 반주 길이(선만 움직일 때 상한)
+  final Stopwatch _recWatch = Stopwatch(); // 실제 경과시간(틱 드리프트 방지)
+  Timer? _recTimer;
+  StreamSubscription? _ampSub;
+  final List<double> _recLevels = List.filled(40, 0.04);
+
+  // 메트로놈
+  final _metro = Metronome();
+  bool _metroOn = false;
+  int _bpm = 90;
+
+  void _seek(double sec) {
+    setState(() => _playheadSec = sec);
+    if (_ps != _PlayState.stopped) {
+      _player.seek(Duration(milliseconds: (sec * 1000).round()));
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _posSub = _player.onPosition.listen((d) {
+      if (mounted) {
+        setState(() => _playheadSec = d.inMilliseconds / 1000.0);
+      }
+    });
+    _compSub = _player.onComplete.listen((_) {
+      if (!mounted) return;
+      setState(() {
+        _ps = _PlayState.stopped;
+        _playheadSec = null;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _compSub?.cancel();
+    _recTimer?.cancel();
+    _ampSub?.cancel();
+    _rec.dispose();
+    _metro.dispose();
+    _player.dispose();
+    super.dispose();
+  }
+
+  /// 편집(노트/악기/키 등)으로 오디오가 바뀌면 재생을 멈춰 다음 재생 시 재렌더.
+  void _syncEpoch(ProjectStore store) {
+    if (store.editEpoch != _lastEpoch) {
+      _lastEpoch = store.editEpoch;
+      if (_ps != _PlayState.stopped) {
+        _player.stop();
+        _ps = _PlayState.stopped;
+        _playheadSec = null;
+      }
+    }
+  }
+
+  Future<void> _onPlayTap(ProjectStore store) async {
+    switch (_ps) {
+      case _PlayState.playing:
+        await _player.pause();
+        setState(() => _ps = _PlayState.paused);
+        break;
+      case _PlayState.paused:
+        await _player.resume();
+        setState(() => _ps = _PlayState.playing);
+        break;
+      case _PlayState.stopped:
+        await _playMix(store);
+        break;
+    }
+  }
+
+  List<Note> _displayNotes(TrackData t) => t.chordActive ? t.renderNotes : t.notes;
+
+  double _projectDuration(ProjectStore store) {
+    double m = 0;
+    for (final t in store.tracks.values) {
+      for (final n in t.notes) {
+        if (n.end > m) m = n.end;
+      }
+      if (t.vocalDuration > m) m = t.vocalDuration; // 보컬 길이도 포함
+    }
+    return m;
+  }
+
+  String _instrumentName(TrackData t) {
+    for (final i in instrumentPalette[t.role] ?? const <Instrument>[]) {
+      if (i.program == t.program) return i.label;
+    }
+    return t.role == TrackRole.drum ? '드럼 키트' : (t.role == TrackRole.vocal ? '원본 보컬' : '악기');
+  }
+
+  // ─── 인라인 녹음 (작업 동시성) ──────────────────────────────────────────
+  String get _recTime {
+    final s = _recMs ~/ 1000;
+    return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _startInlineRecord(ProjectStore store) async {
+    if (_recState != _RecState.idle) return;
+    setState(() => _recState = _RecState.recording); // 즉시 잠금(재진입 방지)
+    if (!await _rec.hasPermission()) {
+      if (mounted) {
+        setState(() => _recState = _RecState.idle);
+        comingSoon(context, '마이크 권한이 필요합니다');
+      }
+      return;
+    }
+    final role = store.activeRole;
+
+    // 기존 트랙 반주: 헤드셋이 있으면 소리로 재생(흥얼거림용), 스피커뿐이면 마이크
+    // 누수 방지를 위해 소리는 끄고 트래킹 선만 움직인다(_recMuteAudio).
+    _recHasBacking = false;
+    _recPlayingAudio = false;
+    final headset = await AudioRoute.hasHeadset();
+    try {
+      final backing = await store.renderAccompaniment(role); // 악기 트랙 믹스
+      final vocalBacking = store.accompanimentVocalPath(role); // 보컬도 함께
+      debugPrint('[rec] headset=$headset backing=${backing?.length ?? 0}B vocalBacking=${vocalBacking != null}');
+      if (backing != null || vocalBacking != null) {
+        _recHasBacking = true;
+        if (headset) {
+          await _player.playLayered(mixBytes: backing, vocalPath: vocalBacking);
+          _recPlayingAudio = true; // 플레이어 위치가 플레이헤드를 구동
+        }
+      }
+    } catch (e) {
+      debugPrint('[rec] backing render failed: $e'); // 반주 없이 진행
+    }
+    if (!mounted) return;
+    _recBackingDur = _projectDuration(store);
+
+    final dir = await getTemporaryDirectory();
+    final path = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.wav';
+    await _rec.start(path);
+    _recMs = 0;
+    _recWatch
+      ..reset()
+      ..start();
+    for (int i = 0; i < _recLevels.length; i++) {
+      _recLevels[i] = 0.04;
+    }
+    setState(() => _recState = _RecState.recording);
+    // 50ms 틱이되 시간은 Stopwatch 실측을 사용 → UI 지연이 있어도 선이 실제
+    // 녹음 시간과 정확히 일치(틱 누적 드리프트 제거).
+    _recTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      if (!mounted) return;
+      setState(() {
+        _recMs = _recWatch.elapsedMilliseconds;
+        // 반주를 소리로 재생 중이면 플레이어 위치가 플레이헤드를 구동(_posSub).
+        // 스피커(음소거)면 여기서 실측 시간으로 선을 흘려 타이밍 가이드를 준다.
+        if (!_recPlayingAudio && _recBackingDur > 0) {
+          _playheadSec = (_recMs / 1000.0).clamp(0.0, _recBackingDur);
+        }
+      });
+    });
+    _ampSub = _rec.amplitude().listen((a) {
+      final level = ((a.current + 45) / 45).clamp(0.04, 1.0).toDouble();
+      if (!mounted) return;
+      setState(() {
+        _recLevels.removeAt(0);
+        _recLevels.add(level);
+      });
+    });
+    if (_metroOn) {
+      try {
+        await _metro.start(_bpm);
+      } catch (e) {
+        debugPrint('[metro] start failed: $e');
+      }
+    }
+  }
+
+  Future<void> _stopInlineRecord(ProjectStore store) async {
+    if (_recState != _RecState.recording) return;
+    _recTimer?.cancel();
+    _recWatch.stop();
+    await _ampSub?.cancel();
+    await _metro.stop();
+    if (_recPlayingAudio) {
+      await _player.stop();
+      if (mounted) _ps = _PlayState.stopped;
+    }
+    _recPlayingAudio = false;
+    final path = await _rec.stop();
+    setState(() {
+      _recState = _RecState.processing;
+      _playheadSec = null;
+    });
+    if (path != null) {
+      await store.recordAnalyzed(path, role: store.activeRole);
+      store.selectNote(null);
+    }
+    if (mounted) {
+      setState(() => _recState = _RecState.idle);
+      if (store.error != null) comingSoon(context, store.error!);
+    }
+  }
+
+  Future<void> _playMix(ProjectStore store) async {
+    if (!store.hasPlayableMix) {
+      comingSoon(context, store.hasAnyRecording ? '활성 트랙이 없습니다(사이드바 탭)' : '먼저 녹음하세요');
+      return;
+    }
+    try {
+      // 악기 믹스(변환 사운드) + 보컬(목소리 그대로)을 동시 재생.
+      final mix = store.hasEnabledNotes ? await store.renderMix() : null;
+      final vocalPath = store.vocalMixPath;
+      debugPrint('[play] mix=${mix?.length ?? 0}B vocal=${vocalPath != null}');
+      await _player.playLayered(mixBytes: mix, vocalPath: vocalPath);
+      if (mounted) setState(() => _ps = _PlayState.playing);
+    } catch (e, st) {
+      debugPrint('[play] FAILED: $e\n$st');
+      if (mounted) comingSoon(context, '재생 실패: $e');
+    }
+  }
+
+  Future<void> _playOriginal(ProjectStore store) async {
+    final wav = store.active.wavPath;
+    if (wav == null) return;
+    try {
+      await _player.playFile(wav); // 원본(내가 부른 WAV)
+    } catch (e) {
+      if (mounted) comingSoon(context, '원본 재생 실패');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = context.watch<ProjectStore>();
+    _syncEpoch(store);
+    final t = store.active;
+    final dk = t.analysis?.detectedKey;
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _header(store),
+            _controls(store, t, dk),
+            Expanded(
+              child: TimelineEditor(
+                // 코드 모드 트랙은 확장된(화음) 노트를 표시 → 코드 변환이 시각적으로 보임.
+                tracks: {for (final r in TrackRole.values) r: _displayNotes(store.tracks[r]!)},
+                enabled: {for (final r in TrackRole.values) r: store.tracks[r]!.enabled},
+                activeRole: store.activeRole,
+                durationSec: _projectDuration(store),
+                playheadSec: _playheadSec,
+                selectedNote: t.chordActive ? null : store.selectedNote,
+                selectedChunk: t.chordActive ? null : store.selectedChunk,
+                waveforms: {
+                  for (final r in TrackRole.values)
+                    if (store.tracks[r]!.vocalPeaks.isNotEmpty)
+                      r: (peaks: store.tracks[r]!.vocalPeaks, dur: store.tracks[r]!.vocalDuration),
+                },
+                onActivateRole: store.setActiveRole,
+                onToggleEnable: store.toggleEnabled,
+                onSeek: _seek,
+                onChunkTap: t.chordActive ? null : store.selectChunk,
+                onNoteTap: t.chordActive
+                    ? null // 코드 모드에선 후보 편집 비활성 (단음 모드에서 편집)
+                    : (i) {
+                        store.selectNote(i);
+                        showNoteCandidate(context, store, i);
+                      },
+              ),
+            ),
+            _toolbar(store),
+            _transport(store, t),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _header(ProjectStore store) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.of(context).maybePop(),
+              child: const Icon(Symbols.chevron_left, color: AppColors.textPrimary, size: 26),
+            ),
+            Text(store.title, style: T.title),
+            Row(children: [
+              GestureDetector(
+                onTap: store.active.notes.isEmpty ? null : () => showExportShare(context, store),
+                child: Icon(Symbols.ios_share, size: 22,
+                    color: store.active.notes.isEmpty ? AppColors.textTertiary : AppColors.textPrimary),
+              ),
+              const SizedBox(width: 16),
+              GestureDetector(
+                onTap: () => Navigator.of(context).maybePop(),
+                child: Text('Done', style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w600)),
+              ),
+            ]),
+          ],
+        ),
+      );
+
+  Widget _controls(ProjectStore store, TrackData t, DetectedKey? dk) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Column(
+        children: [
+          _roleChips(store),
+          const SizedBox(height: 12),
+          _instrumentRow(store, t),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => showKeyPicker(context, store),
+                child: _keyCard(dk, t.options.autoKey),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: _assistCard(store, t)),
+          ]),
+          const SizedBox(height: 12),
+          _recordButton(store, t),
+        ],
+      ),
+    );
+  }
+
+  Widget _roleChips(ProjectStore store) {
+    Widget chip(TrackRole r) {
+      final active = store.activeRole == r;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => store.setActiveRole(r),
+          child: Container(
+            height: 38,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: active ? AppColors.lime : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.chip),
+            ),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(r.icon, size: 15, color: active ? AppColors.bg : AppColors.textSecondary),
+              const SizedBox(width: 5),
+              Text(r.label,
+                  style: T.body.copyWith(
+                      fontSize: 12, fontWeight: FontWeight.w600, color: active ? AppColors.bg : AppColors.textSecondary)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(children: [for (final r in TrackRole.values) chip(r)]),
+    );
+  }
+
+  Widget _instrumentRow(ProjectStore store, TrackData t) {
+    return Row(children: [
+      Expanded(
+        child: GestureDetector(
+          onTap: () => showInstrumentPicker(context, store),
+          child: Container(
+            height: 50,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(children: [
+              Icon(t.role.icon, size: 18, color: AppColors.lime),
+              const SizedBox(width: 10),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('INSTRUMENT', style: T.label.copyWith(fontSize: 8)),
+                  Text(_instrumentName(t), style: T.body.copyWith(fontWeight: FontWeight.w600)),
+                ],
+              ),
+              const Spacer(),
+              const Icon(Symbols.keyboard_arrow_down, size: 20, color: AppColors.textSecondary),
+            ]),
+          ),
+        ),
+      ),
+      if (t.isChordInstrument) ...[
+        const SizedBox(width: 10),
+        _modeToggle(store, t),
+      ],
+    ]);
+  }
+
+  Widget _modeToggle(ProjectStore store, TrackData t) {
+    Widget seg(String label, bool active, VoidCallback onTap) => GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: active ? AppColors.lime : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Text(label,
+                style: T.body.copyWith(
+                    fontSize: 12, fontWeight: FontWeight.w600, color: active ? AppColors.bg : AppColors.textSecondary)),
+          ),
+        );
+    return Container(
+      height: 50,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        seg('단음', !t.chordMode, () => store.setChordMode(false)),
+        const SizedBox(width: 3),
+        seg('코드', t.chordMode, () => store.setChordMode(true)),
+      ]),
+    );
+  }
+
+  Widget _card({required Widget child}) => Container(
+        height: 86,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: child,
+      );
+
+  Widget _keyCard(DetectedKey? dk, bool isAuto) {
+    final tierLabel = dk?.keyTier == null ? '' : ' · ${dk!.keyTier}';
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('KEY', style: T.label),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: AppColors.activeLane, borderRadius: BorderRadius.circular(6)),
+              child: Text(isAuto ? 'AUTO' : '수동', style: T.label.copyWith(color: AppColors.lime, fontSize: 8)),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          Text(dk?.label ?? '—', style: T.h2.copyWith(fontSize: 22)),
+          const Spacer(),
+          Row(children: [
+            Expanded(
+              child: Text(dk == null ? '녹음 후 분석' : '신뢰도 ${dk.confidence.toStringAsFixed(2)}$tierLabel',
+                  style: T.sub.copyWith(fontSize: 10), overflow: TextOverflow.ellipsis),
+            ),
+            const Icon(Symbols.keyboard_arrow_down, size: 14, color: AppColors.textSecondary),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _assistCard(ProjectStore store, TrackData t) {
+    final count = t.analysis?.assistAppliedCount ?? 0;
+    final on = t.options.pitchAssistant;
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('피치 어시스트', style: T.label),
+            GestureDetector(
+              onTap: () => store.togglePitchAssistant(!on),
+              child: Container(
+                width: 38,
+                height: 22,
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: on ? AppColors.lime : AppColors.border,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Align(
+                  alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(width: 18, height: 18, decoration: const BoxDecoration(color: AppColors.bg, shape: BoxShape.circle)),
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text('$count', style: T.h2.copyWith(fontSize: 22, color: AppColors.lime)),
+            const SizedBox(width: 4),
+            Padding(padding: const EdgeInsets.only(bottom: 3), child: Text('보정됨', style: T.body.copyWith(fontWeight: FontWeight.w600))),
+          ]),
+          const Spacer(),
+          Text('키 밖 음 자동 정리', style: T.sub.copyWith(fontSize: 10)),
+        ],
+      ),
+    );
+  }
+
+  Widget _recordButton(ProjectStore store, TrackData t) {
+    // 처리 중: 같은 박스에 분석 진행 표시.
+    if (_recState == _RecState.processing) {
+      return Container(
+        height: 64,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+          SizedBox(
+            width: 18, height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.lime),
+          ),
+          SizedBox(width: 12),
+          Text('변환 중…', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+        ]),
+      );
+    }
+    // 녹음 중: 같은 박스에 초 + 음파, 탭하면 종료.
+    if (_recState == _RecState.recording) {
+      return GestureDetector(
+        onTap: () => _stopInlineRecord(store),
+        child: Container(
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.danger, width: 1.5),
+          ),
+          child: Row(children: [
+            Container(width: 14, height: 14, decoration: BoxDecoration(color: AppColors.danger, borderRadius: BorderRadius.circular(3))),
+            const SizedBox(width: 10),
+            Text(_recTime, style: T.body.copyWith(fontWeight: FontWeight.w700, fontFeatures: const [])),
+            const SizedBox(width: 12),
+            Expanded(child: CustomPaint(painter: _RecMeterPainter(_recLevels), size: Size.infinite)),
+            const SizedBox(width: 10),
+            if (_recHasBacking) const Icon(Symbols.headphones, size: 16, color: AppColors.textSecondary),
+          ]),
+        ),
+      );
+    }
+    // 대기: 녹음 시작.
+    final label = t.hasRecording ? '${t.role.label.toUpperCase()} 다시 녹음' : '${t.role.label.toUpperCase()} 녹음';
+    return GestureDetector(
+      onTap: () => _startInlineRecord(store),
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.dangerBorder),
+        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(width: 12, height: 12, decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Text(label, style: T.body.copyWith(fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _toolbar(ProjectStore store) {
+    // 노트 또는 청크가 선택되면 활성. 선택 대상에 따라 동작이 자동 분기.
+    final hasSel = store.hasSelection && !store.active.chordActive;
+    final hasNotes = store.active.notes.isNotEmpty;
+
+    Widget item(IconData ic, String label, {required bool enabled, required VoidCallback onTap}) {
+      return Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: GestureDetector(
+          onTap: enabled ? onTap : () => comingSoon(context, hasSel ? label : '노트나 청크를 먼저 선택하세요'),
+          behavior: HitTestBehavior.opaque,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(ic, size: 20, color: AppColors.textPrimary),
+            const SizedBox(height: 3),
+            Text(label, style: T.label.copyWith(fontSize: 9, color: const Color(0xFFA1A1AA))),
+          ]),
+        ),
+      );
+    }
+
+    return Container(
+      height: 62,
+      color: AppColors.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+        item(Symbols.content_cut, 'Split', enabled: hasSel, onTap: () => store.splitSelectedAny(_playheadSec)),
+        item(Symbols.content_copy, 'Copy', enabled: hasSel, onTap: store.copySelectedAny),
+        item(Symbols.repeat, 'Loop', enabled: hasNotes, onTap: store.loopSelectedAny),
+        item(Symbols.delete, 'Delete', enabled: hasSel, onTap: store.deleteSelectedAny),
+        item(Symbols.volume_up, 'Volume', enabled: hasSel, onTap: () => _showVolume(store)),
+      ]),
+    );
+  }
+
+  void _showVolume(ProjectStore store) {
+    int vel = store.selectedVelocity ?? 90;
+    final isChunk = store.selectedChunk != null;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (_) => StatefulBuilder(
+        builder: (c, setS) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(isChunk ? '청크 볼륨' : '노트 볼륨', style: T.title),
+              Text('${(vel / 127 * 100).round()}%', style: T.h2.copyWith(color: AppColors.lime, fontSize: 20)),
+            ]),
+            const SizedBox(height: 8),
+            Slider(
+              value: vel.toDouble(),
+              min: 1, max: 127, activeColor: AppColors.lime,
+              onChanged: (v) {
+                setS(() => vel = v.round());
+                store.setSelectedVolume(vel); // 즉시 반영(다음 재생에 적용)
+              },
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _transport(ProjectStore store, TrackData t) {
+    final canOrig = t.wavPath != null;
+    final icon = store.busy
+        ? Symbols.hourglass_empty
+        : (_ps == _PlayState.playing ? Symbols.pause : Symbols.play_arrow);
+    return Container(
+      height: 88,
+      color: AppColors.bg,
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // 원본(내가 부른 WAV) 재생
+          _miniBtn(Symbols.mic, '원본', enabled: canOrig, onTap: () => _playOriginal(store)),
+          // 활성 트랙 믹스 — 재생/일시정지 토글(멈춘 지점부터 재개)
+          GestureDetector(
+            onTap: () => _onPlayTap(store),
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: const BoxDecoration(color: AppColors.lime, shape: BoxShape.circle),
+              child: Icon(icon, color: AppColors.bg, size: 26),
+            ),
+          ),
+          _metroBtn(),
+        ],
+      ),
+    );
+  }
+
+  Widget _metroBtn() {
+    final color = _metroOn ? AppColors.lime : AppColors.textPrimary;
+    return GestureDetector(
+      onTap: () async {
+        setState(() => _metroOn = !_metroOn);
+        if (_recState == _RecState.recording) {
+          _metroOn ? await _metro.start(_bpm) : await _metro.stop();
+        }
+      },
+      onLongPress: _pickBpm,
+      child: SizedBox(
+        width: 44,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Symbols.timer, size: 24, color: color),
+          const SizedBox(height: 3),
+          Text('♩$_bpm', style: T.label.copyWith(fontSize: 9, color: color)),
+        ]),
+      ),
+    );
+  }
+
+  void _pickBpm() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (_) => StatefulBuilder(
+        builder: (c, setS) {
+          Widget step(IconData ic, VoidCallback on) => GestureDetector(
+                onTap: () => setS(on),
+                child: Container(
+                  width: 48, height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.bg, borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Icon(ic, color: AppColors.textPrimary),
+                ),
+              );
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('메트로놈 템포', style: T.title),
+              const SizedBox(height: 18),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                step(Symbols.remove, () => _bpm = (_bpm - 5).clamp(40, 240)),
+                const SizedBox(width: 28),
+                Text('$_bpm', style: T.h1.copyWith(fontSize: 44)),
+                const SizedBox(width: 6),
+                Text('BPM', style: T.sub),
+                const SizedBox(width: 28),
+                step(Symbols.add, () => _bpm = (_bpm + 5).clamp(40, 240)),
+              ]),
+            ]),
+          );
+        },
+      ),
+    ).then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Widget _miniBtn(IconData ic, String label, {required bool enabled, required VoidCallback onTap}) {
+    return Opacity(
+      opacity: enabled ? 1 : 0.4,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(ic, size: 24, color: AppColors.textPrimary),
+          const SizedBox(height: 3),
+          Text(label, style: T.label.copyWith(fontSize: 9, color: AppColors.textSecondary)),
+        ]),
+      ),
+    );
+  }
+}
+
+/// 녹음 박스 안 음파 미터 — 중앙 기준 대칭 막대(좌→우 흐름).
+class _RecMeterPainter extends CustomPainter {
+  _RecMeterPainter(this.levels);
+  final List<double> levels;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = levels.length;
+    final slot = size.width / n;
+    final barW = (slot * 0.5).clamp(1.5, 4.0);
+    final cy = size.height / 2;
+    final paint = Paint()..color = AppColors.lime;
+    for (int i = 0; i < n; i++) {
+      final h = (levels[i] * size.height).clamp(2.0, size.height);
+      final x = i * slot + (slot - barW) / 2;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTWH(x, cy - h / 2, barW, h), const Radius.circular(2)),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RecMeterPainter old) => true;
+}

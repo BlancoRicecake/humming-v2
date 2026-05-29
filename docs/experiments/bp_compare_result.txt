@@ -1,0 +1,232 @@
+========================================================================
+SAMPLE: 1. 왈츠.wav
+========================================================================
+
+[pYIN 파이프라인]  chunks=18  notes=18  dur=7.42s  mode=melodic
+     0.43-  0.74s    F3 (raw  53.0)  vel107  conf0.64  pitched
+     1.07-  1.22s   A#2 (raw  45.9)  vel 62  conf0.18  pitched
+     1.30-  1.59s    E3 (raw  52.3)  vel 98  conf0.56  pitched
+     1.96-  2.11s   A#2 (raw  45.6)  vel 64  conf0.13  pitched
+     2.16-  2.33s    E3 (raw  52.3)  vel 71  conf0.48  pitched
+     2.39-  2.54s   A#2 (raw  46.4)  vel 60  conf0.03  pitched
+     2.60-  2.79s    F3 (raw  52.8)  vel 64  conf0.69  pitched
+     2.83-  3.02s   G#3 (raw  55.6)  vel 92  conf0.70  pitched
+     3.10-  3.41s    B3 (raw  59.4)  vel 97  conf0.73  pitched
+     3.97-  4.30s    A3 (raw  57.1)  vel120  conf0.79  pitched
+     4.68-  4.84s   F#3 (raw  54.0)  vel 77  conf0.67  pitched
+     4.92-  5.20s    A3 (raw  57.2)  vel104  conf0.79  pitched
+     5.62-  5.78s    F3 (raw  53.3)  vel 71  conf0.19  pitched
+     5.85-  6.00s    A3 (raw  56.8)  vel 72  conf0.65  pitched
+     6.08-  6.22s    F3 (raw  53.2)  vel 68  conf0.62  pitched
+     6.29-  6.46s   D#3 (raw  51.3)  vel 67  conf0.22  pitched
+     6.52-  6.71s   F#3 (raw  54.1)  vel 76  conf0.50  pitched
+     6.78-  7.09s    B2 (raw  47.1)  vel 77  conf0.09  pitched
+Predicting MIDI for C:\Users\jlion\Downloads\soundsample\1. 왈츠.wav...
+
+[Basic Pitch]      notes=21  overlap_pairs=0  (monophonic 출력)
+     0.45-  0.68s    F3 (midi  53)  amp0.59  bends:20
+     1.09-  1.23s   A#2 (midi  46)  amp0.54  bends:12
+     1.31-  1.38s    E3 (midi  52)  amp0.60  bends:6
+     1.38-  1.59s    E3 (midi  52)  amp0.61  bends:18
+     1.99-  2.13s   A#2 (midi  46)  amp0.49  bends:12
+     2.17-  2.33s    E3 (midi  52)  amp0.64  bends:14
+     2.49-  2.56s    C3 (midi  48)  amp0.38  bends:6
+     2.64-  2.80s    F3 (midi  53)  amp0.56  bends:14
+     2.88-  3.03s   G#3 (midi  56)  amp0.64  bends:13
+     3.11-  3.40s    B3 (midi  59)  amp0.61  bends:25
+     4.00-  4.07s   A#3 (midi  58)  amp0.38  bends:6
+     4.07-  4.30s    A3 (midi  57)  amp0.67  bends:20
+     4.69-  4.86s   F#3 (midi  54)  amp0.63  bends:14
+     4.94-  5.01s    A3 (midi  57)  amp0.62  bends:6
+     5.01-  5.24s    A3 (midi  57)  amp0.70  bends:20
+     5.65-  5.77s    F3 (midi  53)  amp0.51  bends:11
+     5.85-  5.97s    A3 (midi  57)  amp0.57  bends:11
+     6.09-  6.24s    F3 (midi  53)  amp0.65  bends:13
+     6.30-  6.47s   D#3 (midi  51)  amp0.63  bends:15
+     6.53-  6.73s   F#3 (midi  54)  amp0.69  bends:17
+     6.81-  7.11s    B2 (midi  47)  amp0.60  bends:26
+
+   → Basic Pitch MIDI 저장: C:\Users\jlion\Desktop\Humming V2\docs\experiments\bp_out\1. 왈츠.basicpitch.mid
+
+========================================================================
+SAMPLE: 2. 연음.wav
+========================================================================
+
+[pYIN 파이프라인]  chunks=7  notes=7  dur=5.70s  mode=melodic
+     0.46-  1.29s   A#2 (raw  46.1)  vel107  conf0.49  pitched
+     1.58-  1.88s   D#3 (raw  51.0)  vel 91  conf0.58  pitched
+     1.95-  2.28s    E3 (raw  52.1)  vel 94  conf0.56  pitched
+     2.38-  2.87s   F#3 (raw  53.9)  vel104  conf0.74  pitched
+     3.03-  3.62s   G#3 (raw  55.8)  vel120  conf0.79  pitched
+     3.72-  4.24s    E3 (raw  51.6)  vel 79  conf0.57  pitched
+     4.40-  5.36s   F#3 (raw  53.8)  vel 84  conf0.53  pitched
+Predicting MIDI for C:\Users\jlion\Downloads\soundsample\2. 연음.wav...
+
+[Basic Pitch]      notes=21  overlap_pairs=6  (polyphonic 출력)
+     0.48-  1.10s    D5 (midi  74)  amp0.33  bends:54
+     0.48-  0.95s   A#2 (midi  46)  amp0.76  bends:41
+     0.95-  1.02s   A#2 (midi  46)  amp0.83  bends:6
+     1.02-  1.28s   A#2 (midi  46)  amp0.67  bends:22
+     1.59-  1.66s   D#3 (midi  51)  amp0.44  bends:6
+     1.66-  1.92s   D#3 (midi  51)  amp0.69  bends:22
+     1.97-  2.30s    E3 (midi  52)  amp0.74  bends:29
+     2.36-  2.43s   F#3 (midi  54)  amp0.57  bends:6
+     2.44-  2.54s   F#3 (midi  54)  amp0.73  bends:9
+     2.54-  2.79s   F#3 (midi  54)  amp0.74  bends:21
+     2.58-  2.69s   F#5 (midi  78)  amp0.32  bends:10
+     2.63-  2.71s   A#5 (midi  82)  amp0.34  bends:7
+     2.79-  2.88s    G3 (midi  55)  amp0.47  bends:8
+     3.04-  3.14s    G3 (midi  55)  amp0.42  bends:8
+     3.14-  3.64s   G#3 (midi  56)  amp0.68  bends:43
+     3.74-  3.97s   D#3 (midi  51)  amp0.49  bends:21
+     3.97-  4.23s    E3 (midi  52)  amp0.43  bends:22
+     4.43-  4.76s   F#3 (midi  54)  amp0.41  bends:29
+     4.76-  4.84s   F#3 (midi  54)  amp0.81  bends:7
+     4.84-  5.12s   F#3 (midi  54)  amp0.65  bends:24
+     5.12-  5.34s   F#3 (midi  54)  amp0.61  bends:19
+
+   → Basic Pitch MIDI 저장: C:\Users\jlion\Desktop\Humming V2\docs\experiments\bp_out\2. 연음.basicpitch.mid
+
+========================================================================
+SAMPLE: 3. take 5.wav
+========================================================================
+
+[pYIN 파이프라인]  chunks=16  notes=16  dur=5.28s  mode=melodic
+     0.45-  0.65s   C#3 (raw  48.7)  vel120  conf0.53  pitched
+     0.65-  0.93s    E3 (raw  52.1)  vel120  conf0.58  pitched
+     1.03-  1.16s    D3 (raw  49.6)  vel113  conf0.53  pitched
+     1.16-  1.44s    E3 (raw  52.3)  vel113  conf0.52  pitched
+     1.56-  1.86s   G#2 (raw  44.1)  vel 57  conf0.12  pitched
+     1.90-  2.14s   A#2 (raw  46.2)  vel 76  conf0.14  pitched
+     2.25-  2.46s   C#3 (raw  48.9)  vel 94  conf0.55  pitched
+     2.52-  2.73s    E3 (raw  51.9)  vel 78  conf0.28  pitched
+     2.86-  2.95s   C#3 (raw  48.8)  vel 70  conf0.03  pitched
+     3.00-  3.25s    F3 (raw  52.8)  vel 86  conf0.49  pitched
+     3.38-  3.73s   G#2 (raw  44.2)  vel 84  conf0.12  pitched
+     3.73-  4.01s   A#2 (raw  46.1)  vel 84  conf0.13  pitched
+     4.16-  4.38s   C#3 (raw  48.9)  vel 91  conf0.27  pitched
+     4.42-  4.64s    E3 (raw  52.1)  vel 79  conf0.07  pitched
+     4.76-  4.85s   C#3 (raw  48.8)  vel 77  conf0.07  pitched
+     4.90-  5.17s    E3 (raw  52.4)  vel 80  conf0.19  pitched
+Predicting MIDI for C:\Users\jlion\Downloads\soundsample\3. take 5.wav...
+
+[Basic Pitch]      notes=23  overlap_pairs=3  (polyphonic 출력)
+     0.46-  0.59s   C#3 (midi  49)  amp0.55  bends:11
+     0.59-  0.66s    C3 (midi  48)  amp0.38  bends:6
+     0.70-  0.94s    E3 (midi  52)  amp0.68  bends:21
+     1.03-  1.14s    D3 (midi  50)  amp0.38  bends:9
+     1.04-  1.13s   C#3 (midi  49)  amp0.30  bends:7
+     1.22-  1.46s    E3 (midi  52)  amp0.68  bends:21
+     1.58-  1.85s   G#2 (midi  44)  amp0.62  bends:23
+     1.93-  2.18s   A#2 (midi  46)  amp0.63  bends:23
+     2.27-  2.49s   C#3 (midi  49)  amp0.60  bends:19
+     2.52-  2.73s    E3 (midi  52)  amp0.58  bends:18
+     2.87-  2.96s   C#3 (midi  49)  amp0.40  bends:8
+     3.00-  3.26s    F3 (midi  53)  amp0.58  bends:23
+     3.40-  3.54s    C5 (midi  72)  amp0.33  bends:12
+     3.40-  3.57s   G#2 (midi  44)  amp0.75  bends:14
+     3.57-  3.73s   G#2 (midi  44)  amp0.69  bends:14
+     3.79-  4.00s   A#2 (midi  46)  amp0.63  bends:19
+     4.16-  4.23s   C#5 (midi  73)  amp0.31  bends:6
+     4.16-  4.41s   C#3 (midi  49)  amp0.70  bends:22
+     4.43-  4.55s    E3 (midi  52)  amp0.69  bends:11
+     4.55-  4.62s    F3 (midi  53)  amp0.33  bends:6
+     4.76-  4.88s   C#3 (midi  49)  amp0.50  bends:10
+     4.90-  5.03s    E3 (midi  52)  amp0.72  bends:11
+     5.03-  5.16s    F3 (midi  53)  amp0.44  bends:11
+
+   → Basic Pitch MIDI 저장: C:\Users\jlion\Desktop\Humming V2\docs\experiments\bp_out\3. take 5.basicpitch.mid
+
+========================================================================
+SAMPLE: 4. Du.wav
+========================================================================
+
+[pYIN 파이프라인]  chunks=24  notes=24  dur=5.84s  mode=melodic
+     0.28-  0.41s    G3 (raw  55.0)  vel120  conf0.57  pitched
+     0.51-  0.64s    D3 (raw  50.5)  vel 79  conf0.51  pitched
+     0.75-  0.87s    B2 (raw  46.6)  vel 53  conf0.07  pitched
+     0.98-  1.09s    F3 (raw  53.2)  vel 82  conf0.34  pitched
+     1.20-  1.32s    D3 (raw  49.9)  vel 83  conf0.64  pitched
+     1.44-  1.53s   A#2 (raw  45.8)  vel 52  conf0.13  pitched
+     1.66-  1.78s    F3 (raw  53.4)  vel 77  conf0.24  pitched
+     1.89-  2.01s   C#3 (raw  48.6)  vel 63  conf0.73  pitched
+     2.12-  2.26s   D#3 (raw  51.4)  vel 68  conf0.67  pitched
+     2.37-  2.50s   C#3 (raw  48.9)  vel 64  conf0.52  pitched
+     2.60-  2.72s    A2 (raw  44.8)  vel 56  conf0.09  pitched
+     2.82-  2.94s   D#3 (raw  51.5)  vel 63  conf0.14  pitched
+     3.04-  3.17s    C3 (raw  47.6)  vel 63  conf0.14  pitched
+     3.27-  3.39s   G#2 (raw  44.2)  vel 54  conf0.07  pitched
+     3.49-  3.62s    E3 (raw  52.1)  vel 74  conf0.28  pitched
+     3.70-  3.89s    A2 (raw  44.9)  vel 68  conf0.00  pitched
+     3.89-  4.08s    D2 (raw  37.8)  vel 68  conf0.06  pitched
+     4.18-  4.31s   G#2 (raw  43.8)  vel 64  conf0.00  pitched
+     4.41-  4.60s   G#2 (raw  43.8)  vel 71  conf0.00  pitched
+     4.60-  4.77s    D3 (raw  49.9)  vel 71  conf0.10  pitched
+     4.85-  4.99s    B2 (raw  47.3)  vel 67  conf0.18  pitched
+     5.09-  5.21s   G#2 (raw  43.7)  vel 84  conf0.01  pitched
+     5.21-  5.43s   C#3 (raw  49.3)  vel 84  conf0.17  pitched
+     5.54-  5.69s    A2 (raw  44.6)  vel 60  conf0.10  pitched
+Predicting MIDI for C:\Users\jlion\Downloads\soundsample\4. Du.wav...
+
+[Basic Pitch]      notes=27  overlap_pairs=5  (polyphonic 출력)
+     0.29-  0.42s    G3 (midi  55)  amp0.61  bends:11
+     0.53-  0.65s    D3 (midi  50)  amp0.33  bends:10
+     1.03-  1.11s    F3 (midi  53)  amp0.56  bends:7
+     1.22-  1.35s    D3 (midi  50)  amp0.59  bends:11
+     1.44-  1.54s   A#2 (midi  46)  amp0.37  bends:9
+     1.70-  1.76s    C5 (midi  72)  amp0.34  bends:6
+     1.70-  1.81s    F3 (midi  53)  amp0.60  bends:10
+     1.90-  2.04s   C#3 (midi  49)  amp0.51  bends:13
+     1.92-  2.01s    C3 (midi  48)  amp0.32  bends:9
+     2.16-  2.29s   D#3 (midi  51)  amp0.53  bends:11
+     2.38-  2.47s   C#5 (midi  73)  amp0.45  bends:8
+     2.38-  2.54s   C#3 (midi  49)  amp0.62  bends:14
+     2.61-  2.75s    A2 (midi  45)  amp0.54  bends:12
+     2.82-  2.95s   D#3 (midi  51)  amp0.39  bends:11
+     3.08-  3.21s    C3 (midi  48)  amp0.60  bends:11
+     3.29-  3.37s    C5 (midi  72)  amp0.35  bends:7
+     3.29-  3.40s   G#2 (midi  44)  amp0.46  bends:10
+     3.50-  3.67s    E3 (midi  52)  amp0.62  bends:15
+     3.75-  3.87s   A#2 (midi  46)  amp0.53  bends:10
+     3.96-  4.10s    D3 (midi  50)  amp0.42  bends:13
+     4.21-  4.33s    B2 (midi  47)  amp0.54  bends:11
+     4.43-  4.54s   G#2 (midi  44)  amp0.54  bends:10
+     4.63-  4.80s    D3 (midi  50)  amp0.61  bends:14
+     4.87-  5.03s    B2 (midi  47)  amp0.66  bends:14
+     5.32-  5.40s   C#5 (midi  73)  amp0.40  bends:7
+     5.32-  5.48s   C#3 (midi  49)  amp0.62  bends:14
+     5.58-  5.69s    A2 (midi  45)  amp0.48  bends:10
+
+   → Basic Pitch MIDI 저장: C:\Users\jlion\Desktop\Humming V2\docs\experiments\bp_out\4. Du.basicpitch.mid
+
+========================================================================
+SAMPLE: 5. 비트.wav
+========================================================================
+
+[pYIN 파이프라인]  chunks=12  notes=12  dur=4.36s  mode=percussive
+     0.49-  0.66s    D2 (raw  38.0)  vel120  conf0.00  percussive
+     0.78-  0.91s    D2 (raw  38.0)  vel107  conf0.00  percussive
+     1.13-  1.32s    D2 (raw  38.0)  vel 84  conf0.00  percussive
+     1.46-  1.58s    D2 (raw  38.0)  vel 77  conf0.00  percussive
+     1.81-  1.99s    D2 (raw  38.0)  vel 90  conf0.00  percussive
+     2.10-  2.24s    D2 (raw  38.0)  vel 90  conf0.00  percussive
+     2.43-  2.64s    D2 (raw  38.0)  vel 49  conf0.00  percussive
+     2.74-  2.86s    D2 (raw  38.0)  vel 70  conf0.00  percussive
+     3.09-  3.26s    D2 (raw  38.0)  vel 79  conf0.00  percussive
+     3.37-  3.51s    D2 (raw  38.0)  vel 83  conf0.00  percussive
+     3.68-  3.83s    D2 (raw  38.0)  vel 76  conf0.00  percussive
+     3.96-  4.12s    D2 (raw  38.0)  vel 82  conf0.00  percussive
+Predicting MIDI for C:\Users\jlion\Downloads\soundsample\5. 비트.wav...
+
+[Basic Pitch]      notes=8  overlap_pairs=0  (monophonic 출력)
+     0.44-  0.57s    B2 (midi  47)  amp0.44  bends:11
+     0.57-  0.67s   A#2 (midi  46)  amp0.40  bends:9
+     1.75-  1.87s    B2 (midi  47)  amp0.51  bends:10
+     1.88-  1.99s   A#2 (midi  46)  amp0.47  bends:10
+     3.04-  3.16s   A#2 (midi  46)  amp0.48  bends:10
+     3.17-  3.26s    A2 (midi  45)  amp0.34  bends:8
+     3.64-  3.74s   A#2 (midi  46)  amp0.21  bends:9
+     3.74-  3.83s   A#2 (midi  46)  amp0.38  bends:8
+
+   → Basic Pitch MIDI 저장: C:\Users\jlion\Desktop\Humming V2\docs\experiments\bp_out\5. 비트.basicpitch.mid
+
