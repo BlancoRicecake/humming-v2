@@ -84,6 +84,30 @@ class EngineApi {
     );
   }
 
+  /// 단음 미리듣기용 — pitch 1개를 짧은 길이(기본 0.5s)로 렌더해 WAV bytes 반환.
+  /// 노트 보정 시트의 스피커 아이콘에서 사용.
+  Future<Uint8List> previewNote(int pitch, {int program = 0, double duration = 0.5, int velocity = 100}) async {
+    final note = Note(
+      start: 0,
+      end: duration,
+      duration: duration,
+      pitch: pitch,
+      pitchRaw: pitch.toDouble(),
+      pitchHz: 0, // 백엔드는 pitch(MIDI) 로 합성. Hz 는 미리듣기 페이로드에 불필요.
+      velocity: velocity,
+      confidence: 1.0,
+      voicedRatio: 1.0,
+      kind: 'pitched',
+      pitchOriginal: pitch,
+      assisted: false,
+      candidates: const [],
+      source: 'user',
+      inKey: true,
+      correctionCents: 0,
+    );
+    return renderAudio([note], program: program);
+  }
+
   /// notes → SoundFont 렌더 WAV bytes (program = GM 악기 번호).
   Future<Uint8List> renderAudio(List<Note> notes, {int program = 0}) async {
     final r = await _dio.post<List<int>>(

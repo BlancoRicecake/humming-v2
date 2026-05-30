@@ -1,13 +1,21 @@
 // 바텀 시트 3종: 악기 선택 / 노트 후보 / 내보내기·공유.
+import 'dart:async';
 import 'dart:io';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../api/engine_api.dart';
 import '../models/models.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
+
+// 노트 보정 시트 전용 — 단음 미리듣기 (4-A). 시트가 닫혀도 재생 중이면 정지.
+final EngineApi _previewApi = EngineApi();
+final AudioPlayer _previewPlayer = AudioPlayer();
+int _previewSeq = 0;
 
 BoxDecoration _sheetDeco() => const BoxDecoration(
       color: AppColors.surface,
@@ -231,68 +239,294 @@ void showKeyPicker(BuildContext context, ProjectStore store) {
 }
 
 // ─── 노트 후보 ─────────────────────────────────────────────────────────
+// 4-D: iOS Cupertino-style wheel picker — 룰렛 머신처럼 휠을 굴려 음을 선택.
+// 전체 피아노 음역대(MIDI 21~108)를 다루고, 추천 후보엔 별/원음엔 알약 배지.
+// 가운데 항목 = 선택값, lime divider로 시각화. 멈춘 위치를 디바운스로 store 반영.
 void showNoteCandidate(BuildContext context, ProjectStore store, int index) {
   final t = store.active;
   if (index < 0 || index >= t.notes.length) return;
   final n = t.notes[index];
   if (n.kind != 'pitched') return;
-  final opts = {n.pitchOriginal, ...n.candidates}.toList()..sort();
+
+  // 전체 피아노 음역대 — 높은 음이 위 (피아노 관습, 휠은 위로 갈수록 high pitch).
+  const midiLo = 21;
+  const midiHi = 108;
+  final opts = [for (int p = midiHi; p >= midiLo; p--) p];
+  final candidateSet = n.candidates.toSet();
+  final program = t.program;
+
+  // 시트 열릴 때 진행 중 미리듣기가 있으면 정리.
+  _previewPlayer.stop();
+
+  final initialIndex = opts.indexOf(n.pitch).clamp(0, opts.length - 1);
 
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
-    builder: (_) => Container(
+    isScrollControlled: true,
+    builder: (_) {
+      return _NoteWheelSheet(
+        opts: opts,
+        candidateSet: candidateSet,
+        originalPitch: n.pitchOriginal,
+        initialIndex: initialIndex,
+        program: program,
+        noteIndex: index,
+        store: store,
+      );
+    },
+  ).whenComplete(() {
+    // 시트 닫히면 진행 중 미리듣기 정지.
+    _previewPlayer.stop();
+  });
+}
+
+// 휠 피커 시트 본체 — StatefulWidget으로 분리해서 controller / debounce 깔끔 관리.
+class _NoteWheelSheet extends StatefulWidget {
+  final List<int> opts;
+  final Set<int> candidateSet;
+  final int originalPitch;
+  final int initialIndex;
+  final int program;
+  final int noteIndex;
+  final ProjectStore store;
+
+  const _NoteWheelSheet({
+    required this.opts,
+    required this.candidateSet,
+    required this.originalPitch,
+    required this.initialIndex,
+    required this.program,
+    required this.noteIndex,
+    required this.store,
+  });
+
+  @override
+  State<_NoteWheelSheet> createState() => _NoteWheelSheetState();
+}
+
+class _NoteWheelSheetState extends State<_NoteWheelSheet> {
+  late FixedExtentScrollController _wheelCtrl;
+  late int _currentIdx;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIdx = widget.initialIndex;
+    _wheelCtrl = FixedExtentScrollController(initialItem: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _wheelCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _preview(int pitch) async {
+    final mySeq = ++_previewSeq;
+    try {
+      await _previewPlayer.stop();
+      final wav = await _previewApi.previewNote(pitch, program: widget.program);
+      if (mySeq != _previewSeq || !mounted) return;
+      await _previewPlayer.play(BytesSource(wav), volume: 1.0);
+    } catch (_) {
+      // 미리듣기는 부가 기능 — 실패해도 UI 영향 없음.
+    }
+  }
+
+  void _onSelectedItemChanged(int i) {
+    setState(() => _currentIdx = i);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      // 휠이 멈춘 위치를 store에 디바운스로 반영 (즉시 적용 UX).
+      final pitch = widget.opts[i];
+      widget.store.applyCandidate(widget.noteIndex, pitch);
+    });
+  }
+
+  Widget _itemFor(int i) {
+    final p = widget.opts[i];
+    final isCenter = i == _currentIdx;
+    final isOriginal = p == widget.originalPitch;
+    final isCandidate = widget.candidateSet.contains(p);
+    // 가운데에서 떨어진 정도에 따라 폰트/투명도 살짝 변화.
+    final dist = (i - _currentIdx).abs();
+    final fontSize = isCenter ? 26.0 : (dist == 1 ? 19.0 : 16.0);
+    final color = isCenter
+        ? AppColors.textPrimary
+        : (dist == 1 ? AppColors.textSecondary : AppColors.textTertiary);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (isCandidate) ...[
+          Icon(Symbols.star,
+              color: isCenter ? AppColors.lime : AppColors.lime.withValues(alpha: 0.55),
+              size: isCenter ? 18 : 14),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          noteName(p),
+          style: T.body.copyWith(
+            fontSize: fontSize,
+            fontWeight: isCenter ? FontWeight.w700 : FontWeight.w500,
+            color: color,
+          ),
+        ),
+        if (isOriginal) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text('원음',
+                style: T.label.copyWith(fontSize: 10, color: AppColors.textSecondary)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    const wheelHeight = 240.0;
+    const itemExtent = 44.0;
+    final centerPitch = widget.opts[_currentIdx];
+
+    return Container(
       decoration: _sheetDeco(),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
+      constraints: BoxConstraints(maxHeight: mq.size.height * 0.75),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _grabber(),
-          Text('노트 보정', style: T.h2.copyWith(fontSize: 18)),
-          Text('${t.role.label.toUpperCase()} · ${n.start.toStringAsFixed(1)}s', style: T.sub),
-          const SizedBox(height: 16),
-          ...opts.map((p) {
-            final isCurrent = p == n.pitch;
-            final isOriginal = p == n.pitchOriginal;
-            final tag = isOriginal ? '원본 유지' : '후보';
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: GestureDetector(
-                onTap: () {
-                  store.applyCandidate(index, p);
-                  Navigator.pop(context);
-                },
-                child: Container(
-                  height: 58,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: isCurrent ? AppColors.activeLane : AppColors.bg,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: isCurrent ? AppColors.lime : AppColors.border, width: isCurrent ? 1.5 : 1),
-                  ),
-                  child: Row(children: [
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${noteName(p)}  ·  $tag',
-                            style: T.body.copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
-                        Text(isOriginal ? '부른 그대로' : '키 안 후보',
-                            style: T.sub.copyWith(fontSize: 11, color: isCurrent ? AppColors.lime : AppColors.textSecondary)),
-                      ],
-                    ),
-                    const Spacer(),
-                    if (isCurrent) const Icon(Symbols.check_circle, color: AppColors.lime, size: 24),
-                  ]),
+          // 헤더 — 취소 / 타이틀 / 적용.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  child: Text('취소', style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
                 ),
               ),
-            );
-          }),
+              Column(children: [
+                Text('노트 보정 · #${widget.noteIndex + 1}',
+                    style: T.h2.copyWith(fontSize: 16)),
+              ]),
+              GestureDetector(
+                onTap: () {
+                  _debounce?.cancel();
+                  widget.store.applyCandidate(widget.noteIndex, centerPitch);
+                  Navigator.pop(context);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  child: Text('적용',
+                      style: T.body.copyWith(color: AppColors.lime, fontSize: 14, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // 범례.
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Symbols.star, color: AppColors.lime, size: 13),
+            const SizedBox(width: 4),
+            Text('추천', style: T.sub.copyWith(fontSize: 11)),
+            const SizedBox(width: 14),
+            Text('원음 = 부른 그대로', style: T.sub.copyWith(fontSize: 11)),
+          ]),
+          const SizedBox(height: 8),
+          // 휠 영역 — ListWheelScrollView + 가운데 lime divider + 위/아래 fade.
+          SizedBox(
+            height: wheelHeight,
+            child: Stack(
+              children: [
+                // 위/아래 fade 마스크.
+                Positioned.fill(
+                  child: ShaderMask(
+                    shaderCallback: (rect) => const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black,
+                        Colors.black,
+                        Colors.transparent,
+                      ],
+                      stops: [0.0, 0.18, 0.82, 1.0],
+                    ).createShader(rect),
+                    blendMode: BlendMode.dstIn,
+                    child: ListWheelScrollView.useDelegate(
+                      controller: _wheelCtrl,
+                      itemExtent: itemExtent,
+                      diameterRatio: 1.6,
+                      perspective: 0.0025,
+                      physics: const FixedExtentScrollPhysics(),
+                      overAndUnderCenterOpacity: 0.85,
+                      onSelectedItemChanged: _onSelectedItemChanged,
+                      childDelegate: ListWheelChildBuilderDelegate(
+                        childCount: widget.opts.length,
+                        builder: (_, i) => _itemFor(i),
+                      ),
+                    ),
+                  ),
+                ),
+                // 가운데 선택 인디케이터 — lime 상하 divider.
+                IgnorePointer(
+                  child: Center(
+                    child: Container(
+                      height: itemExtent,
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          top: BorderSide(color: AppColors.lime, width: 1.2),
+                          bottom: BorderSide(color: AppColors.lime, width: 1.2),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // 가운데 음 미리듣기 (스피커) — 휠 회전 중엔 자동 재생 X, 탭으로만.
+          Center(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _preview(centerPitch),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.activeLane,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppColors.lime, width: 1.2),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Symbols.volume_up, color: AppColors.lime, size: 22),
+                  const SizedBox(width: 8),
+                  Text(noteName(centerPitch),
+                      style: T.body.copyWith(fontWeight: FontWeight.w700, fontSize: 15)),
+                  const SizedBox(width: 6),
+                  Text('미리듣기',
+                      style: T.sub.copyWith(fontSize: 11, color: AppColors.textSecondary)),
+                ]),
+              ),
+            ),
+          ),
         ],
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ─── 내보내기 / 공유 ───────────────────────────────────────────────────
