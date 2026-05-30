@@ -330,16 +330,23 @@ class _TimelineEditorState extends State<TimelineEditor> {
       );
 
   Widget _ruler() {
-    final secs = _dur.ceil();
+    // Stack + Positioned 로 라벨을 절대 위치에 배치. Row + SizedBox 조합은
+    // _contentW 와 (secs+1)*_pxPerSec 가 어긋날 때 RenderFlex overflow 를 일으킴.
+    final maxSec = (_contentW / _pxPerSec).floor();
     return SizedBox(
       width: _contentW,
       height: _rulerH,
-      child: Row(
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
         children: [
-          for (int s = 0; s <= secs; s++)
-            SizedBox(
-              width: _pxPerSec,
-              child: Text('${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}', style: T.label.copyWith(fontSize: 9)),
+          for (int s = 0; s <= maxSec; s++)
+            Positioned(
+              left: s * _pxPerSec,
+              top: 0,
+              child: Text(
+                '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}',
+                style: T.label.copyWith(fontSize: 9),
+              ),
             ),
         ],
       ),
