@@ -68,46 +68,13 @@ class _TimelineEditorState extends State<TimelineEditor> {
 
   void _clampScroll() => _scrollX = _scrollX.clamp(0.0, _maxScroll);
 
-  double _timeAt(double localX) => ((localX + _scrollX) / _pxPerSec).clamp(0.0, _dur);
+  // 짧은 트랙에서 _contentW 가 _vpW 로 늘어나면 _pxPerSec 식이 시각과 어긋난다.
+  // painter / chunk outline 과 동일한 ratio 변환을 단일 진실로 사용.
+  double _pxToSec(double dx) => dx * (_dur / _contentW);
+  double _secToPx(double t) => (t / _dur) * _contentW;
+  double _timeAt(double localX) => _pxToSec(localX + _scrollX).clamp(0.0, _dur);
 
-  void _onTap(TapUpDetails d) {
-    final lp = d.localPosition;
-    final slot = _lanesH / TrackRole.values.length;
-    final idx = (lp.dy / slot).floor().clamp(0, TrackRole.values.length - 1);
-    final role = TrackRole.values[idx];
-
-    // 캡컷식: 탭한 레인의 청크/노트만 선택 가능(빈 곳=선택 해제). 다른 트랙의
-    // 청크/노트를 탭해도 한 번에 그 트랙으로 전환 + 선택.
-    if (role != widget.activeRole) widget.onActivateRole?.call(role);
-
-    final notes = widget.tracks[role] ?? const [];
-    final withinY = lp.dy - idx * slot;
-    final contentX = lp.dx + _scrollX;
-    final geo = _Geo(notes, _dur, Size(_contentW, slot - _laneGap));
-
-    // 1) 노트 히트 → 노트 선택.
-    for (int i = 0; i < notes.length; i++) {
-      if (geo.rectFor(notes[i]).inflate(8).contains(Offset(contentX, withinY))) {
-        if (widget.onNoteTap != null) widget.onNoteTap!(i);
-        return;
-      }
-    }
-
-    // 2) 청크 영역 히트 → 청크 선택. 빈 곳이면 null(선택 해제).
-    final time = contentX / _pxPerSec;
-    int? cid;
-    final ranges = <int, List<double>>{}; // chunkId → [minStart, maxEnd]
-    for (final n in notes) {
-      final r = ranges.putIfAbsent(n.chunkId, () => [n.start, n.end]);
-      if (n.start < r[0]) r[0] = n.start;
-      if (n.end > r[1]) r[1] = n.end;
-    }
-    ranges.forEach((id, r) {
-      if (time >= r[0] && time <= r[1]) cid = id;
-    });
-    widget.onChunkTap?.call(cid);
-  }
-
+  // 청크 범위 계산 (chunkId → [minStart, maxEnd]). 트림 핸들 + 청크 hit-test 공용.
   Map<int, List<double>> _chunkRanges(List<Note> notes) {
     final ranges = <int, List<double>>{};
     for (final n in notes) {
@@ -117,32 +84,6 @@ class _TimelineEditorState extends State<TimelineEditor> {
     }
     return ranges;
   }
-
-  // 길게 눌러 청크 이동 — 활성 레인에서 누른 청크를 잡아 가로로 끌면 위치 이동.
-  void _onLongPressStart(LongPressStartDetails d) {
-    final slot = _lanesH / TrackRole.values.length;
-    final idx = (d.localPosition.dy / slot).floor().clamp(0, TrackRole.values.length - 1);
-    if (TrackRole.values[idx] != widget.activeRole) return;
-    final time = (d.localPosition.dx + _scrollX) / _pxPerSec;
-    int? cid;
-    _chunkRanges(widget.tracks[widget.activeRole] ?? const []).forEach((id, r) {
-      if (time >= r[0] && time <= r[1]) cid = id;
-    });
-    if (cid == null) return;
-    _moveChunk = cid;
-    _movePrevCum = 0;
-    widget.onChunkTap?.call(cid); // 선택 표시
-  }
-
-  void _onLongPressMove(LongPressMoveUpdateDetails d) {
-    if (_moveChunk == null) return;
-    final cum = d.localOffsetFromOrigin.dx;
-    final dtSec = (cum - _movePrevCum) / _pxPerSec;
-    _movePrevCum = cum;
-    if (dtSec != 0) widget.onChunkMove?.call(_moveChunk!, dtSec);
-  }
-
-  void _onLongPressEnd(_) => _moveChunk = null;
 
   // 선택된 청크의 양끝 트림 핸들(활성 레인). 좌/우 핸들을 끌어 길이 조절.
   List<Widget> _trimHandles() {
@@ -155,23 +96,25 @@ class _TimelineEditorState extends State<TimelineEditor> {
     final slot = _lanesH / TrackRole.values.length;
     final laneTop = idx * slot;
     final laneH = slot - _laneGap;
-    final leftX = r[0] * _pxPerSec - _scrollX;
-    final rightX = r[1] * _pxPerSec - _scrollX;
+    final leftX = _secToPx(r[0]) - _scrollX;
+    final rightX = _secToPx(r[1]) - _scrollX;
 
+    // 핸들 hit 영역 12px (시각 4px 바 + 좌우 여백). 22px 였을 때 청크 몸체 드래그(이동)
+    // 가 가장자리 ±11px 에서 핸들로 빨려들어가는 문제 회피.
     Widget handle(double x, bool isLeft) => Positioned(
-          left: x - 11,
+          left: x - 6,
           top: laneTop,
           height: laneH,
-          width: 22,
+          width: 12,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onHorizontalDragStart: (_) => isLeft ? _resizeStart = r[0] : _resizeEnd = r[1],
             onHorizontalDragUpdate: (d) {
               if (isLeft) {
-                _resizeStart = (_resizeStart ?? r[0]) + d.delta.dx / _pxPerSec;
+                _resizeStart = (_resizeStart ?? r[0]) + _pxToSec(d.delta.dx);
                 widget.onChunkResize?.call(cid, newStart: _resizeStart);
               } else {
-                _resizeEnd = (_resizeEnd ?? r[1]) + d.delta.dx / _pxPerSec;
+                _resizeEnd = (_resizeEnd ?? r[1]) + _pxToSec(d.delta.dx);
                 widget.onChunkResize?.call(cid, newEnd: _resizeEnd);
               }
             },
@@ -234,11 +177,9 @@ class _TimelineEditorState extends State<TimelineEditor> {
                     // 레인 — 1손가락 팬 / 2손가락 핀치줌 / 탭 선택
                     Expanded(
                       child: GestureDetector(
+                        // 탭 / 길게-눌러-이동은 레인 내부 레이어드 GD 가 처리.
+                        // 루트는 핀치 줌 + 단일/멀티 손가락 팬만 담당.
                         behavior: HitTestBehavior.opaque,
-                        onTapUp: _onTap,
-                        onLongPressStart: _onLongPressStart,
-                        onLongPressMoveUpdate: _onLongPressMove,
-                        onLongPressEnd: _onLongPressEnd,
                         onScaleStart: (_) => _startZoom = _zoom,
                         onScaleUpdate: (d) {
                           setState(() {
@@ -330,9 +271,8 @@ class _TimelineEditorState extends State<TimelineEditor> {
       );
 
   Widget _ruler() {
-    // Stack + Positioned 로 라벨을 절대 위치에 배치. Row + SizedBox 조합은
-    // _contentW 와 (secs+1)*_pxPerSec 가 어긋날 때 RenderFlex overflow 를 일으킴.
-    final maxSec = (_contentW / _pxPerSec).floor();
+    // 라벨은 시각 비례(_secToPx) 로 배치해 짧은 트랙이 viewport 를 채울 때도 균등 정렬.
+    final maxSec = _dur.floor();
     return SizedBox(
       width: _contentW,
       height: _rulerH,
@@ -341,7 +281,7 @@ class _TimelineEditorState extends State<TimelineEditor> {
         children: [
           for (int s = 0; s <= maxSec; s++)
             Positioned(
-              left: s * _pxPerSec,
+              left: _secToPx(s.toDouble()),
               top: 0,
               child: Text(
                 '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}',
@@ -356,23 +296,112 @@ class _TimelineEditorState extends State<TimelineEditor> {
   Widget _lane(TrackRole role) {
     final active = role == widget.activeRole;
     final wave = widget.waveforms[role];
+    final notes = widget.tracks[role] ?? const [];
+    final isWave = wave != null && wave.peaks.isNotEmpty;
+
     return Container(
       decoration: BoxDecoration(
         color: active ? AppColors.activeLane : AppColors.surface,
         borderRadius: BorderRadius.circular(8),
         border: active ? Border.all(color: AppColors.lime, width: 1) : null,
       ),
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: (wave != null && wave.peaks.isNotEmpty)
-            ? _WavePainter(peaks: wave.peaks, vocalDur: wave.dur, totalDur: _dur, active: active)
-            : _NotesPainter(
-                notes: widget.tracks[role] ?? const [],
-                durationSec: _dur,
-                active: active,
-                selectedNote: active ? widget.selectedNote : null,
-                selectedChunk: active ? widget.selectedChunk : null,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: LayoutBuilder(builder: (ctx, c) {
+          final laneW = c.maxWidth;
+          final laneH = c.maxHeight;
+          final geo = _Geo(notes, _dur, Size(laneW, laneH));
+
+          // 아래에서 위로: 레인 전체 → 청크 → 노트.
+          // Flutter 가 자연스럽게 가장 위 레이어부터 hit-test 해 적절한 핸들러를 찾는다.
+          return Stack(children: [
+            // [Layer 0] 시각 + 레인 전체 hit (활성화 / 선택 해제)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (!active) widget.onActivateRole?.call(role);
+                  widget.onChunkTap?.call(null); // null = 노트·청크 둘 다 deselect
+                },
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: isWave
+                      ? _WavePainter(peaks: wave.peaks, vocalDur: wave.dur, totalDur: _dur, active: active)
+                      : _NotesPainter(
+                          notes: notes,
+                          durationSec: _dur,
+                          active: active,
+                          selectedNote: active ? widget.selectedNote : null,
+                          selectedChunk: active ? widget.selectedChunk : null,
+                        ),
+                ),
               ),
+            ),
+
+            // [Layer 1] 청크 — 파형(보컬) 레인은 청크 개념 없음
+            if (!isWave)
+              for (final entry in _chunkRanges(notes).entries)
+                _chunkHitWidget(role, active, entry.key, entry.value, laneW, laneH),
+
+            // [Layer 2] 단일 노트 — 시각상 가장 위. Flutter 가 우선 hit.
+            if (!isWave)
+              for (int i = 0; i < notes.length; i++)
+                _noteHitWidget(role, active, i, geo.rectFor(notes[i])),
+          ]);
+        }),
+      ),
+    );
+  }
+
+  Widget _chunkHitWidget(TrackRole role, bool active, int chunkId, List<double> range, double laneW, double laneH) {
+    final x0 = _secToPx(range[0]);
+    final x1 = _secToPx(range[1]);
+    return Positioned(
+      left: x0,
+      top: 0,
+      width: math.max(8, x1 - x0),
+      height: laneH,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (!active) widget.onActivateRole?.call(role);
+          widget.onChunkTap?.call(chunkId);
+        },
+        // 청크 몸체 드래그 = 이동 (long-press 불필요).
+        // 가장자리 ±6px 는 트림 핸들 hit 영역(width 12)이라 그쪽은 핸들이 catch.
+        onHorizontalDragStart: (_) {
+          if (!active) widget.onActivateRole?.call(role);
+          _moveChunk = chunkId;
+          _movePrevCum = 0;
+          widget.onChunkTap?.call(chunkId);
+        },
+        onHorizontalDragUpdate: (d) {
+          if (_moveChunk != chunkId) return;
+          final dtSec = _pxToSec(d.delta.dx);
+          if (dtSec != 0) widget.onChunkMove?.call(chunkId, dtSec);
+        },
+        onHorizontalDragEnd: (_) => _moveChunk = null,
+        onHorizontalDragCancel: () => _moveChunk = null,
+      ),
+    );
+  }
+
+  Widget _noteHitWidget(TrackRole role, bool active, int noteIndex, Rect rect) {
+    // hit 영역은 시각 rect 와 일치시켜야 청크의 빈 공간이 그대로 chunk-tap 영역으로
+    // 살아남는다. 인플레이트하면 작은 노트가 청크 전체를 덮어 chunk-tap 이 핸들 위치
+    // 외엔 막힌다. 가로만 살짝(±2px) 키워 정밀도 보조.
+    const padX = 2.0;
+    return Positioned(
+      left: rect.left - padX,
+      top: rect.top,
+      width: rect.width + padX * 2,
+      height: rect.height,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (!active) widget.onActivateRole?.call(role);
+          if (widget.onNoteTap != null) widget.onNoteTap!(noteIndex);
+        },
       ),
     );
   }
