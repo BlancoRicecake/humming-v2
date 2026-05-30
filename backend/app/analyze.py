@@ -41,7 +41,6 @@ from .envelope import (
 )
 from .pitch import extract_pitch_pyin, hz_to_midi_float
 from .assistant import run_key_and_assistant
-from .drums import classify_drum
 
 
 TARGET_SR = 22050
@@ -289,95 +288,63 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
     # Remember which chunks produced a melodic note so we can recover the rest.
     melodic_chunk_starts = {round(n.start, 6) for n in notes}
 
-    # ---- Auto percussive fallback -------------------------------------------
-    # If voicing analysis couldn't recover most chunks (typical for beatbox /
-    # drum patterns), the sample is not a melodic line. Re-emit every chunk as
-    # a generic GM snare hit so the user at least gets a 1:1 chunk→note mapping
-    # to drive a drum machine downstream. Threshold tuned so a melodic sample
-    # with a couple of weak attacks does NOT flip into this mode.
-    PERCUSSIVE_FALLBACK_RATIO = 0.55  # voiced_notes / chunks < this → percussive
-    is_percussive = (
-        chunks_final and (len(notes) / len(chunks_final)) < PERCUSSIVE_FALLBACK_RATIO
-    )
-
-    if is_percussive:
-        notes = []
-        for c in chunks_final:
-            t0, t1 = c["start"], c["end"]
-            seg = y[int(round(t0 * sr)):int(round(t1 * sr))]
-            drum_pitch = classify_drum(seg, sr)   # 36 kick / 38 snare / 42 hihat
-            notes.append(Note(
-                start=t0, end=t1, duration=t1 - t0,
-                pitch=drum_pitch,        # GM percussion key (channel 10)
-                pitch_raw=float(drum_pitch),
-                pitch_hz=0.0,            # not meaningful for drum hits
-                confidence=0.0,
-                velocity=104,            # 드럼은 일정 볼륨(타격 세기 변화 없이)
-                voiced_ratio=0.0,
-                kind="percussive",
-                pitch_original=drum_pitch,
-                candidates=[drum_pitch],
-            ))
-    else:
-        # ---- Melodic-mode chunk recovery ------------------------------------
-        # Some chunks survived envelope detection (clear peak above noise) but
-        # pyin couldn't lock a confident pitch — typical for fast attacks like
-        # "두" where the consonant dominates. Borrow pitch from the nearest
-        # melodic neighbours so the rhythm chunks don't disappear from the roll.
-        noise_floor = th["noise_floor"]
-        for c in chunks_final:
-            if round(c["start"], 6) in melodic_chunk_starts:
+    # ---- Melodic-mode chunk recovery ----------------------------------------
+    # Some chunks survived envelope detection (clear peak above noise) but pyin
+    # couldn't lock a confident pitch — typical for fast attacks like "두" where
+    # the consonant dominates. Borrow pitch from the nearest melodic neighbours
+    # so the rhythm chunks don't disappear from the roll.
+    # NOTE: Auto-percussive fallback removed. Drum conversion only happens when
+    # the user explicitly picks a drum instrument (handled outside analyze).
+    noise_floor = th["noise_floor"]
+    for c in chunks_final:
+        if round(c["start"], 6) in melodic_chunk_starts:
+            continue
+        # Real noise has peak ≈ noise_floor. Require a clear margin.
+        if c["peak_rms"] < noise_floor * 3.0:
+            continue
+        prev_n = None; next_n = None
+        for n in notes:
+            if n.kind != "pitched":
                 continue
-            # Real noise has peak ≈ noise_floor. Require a clear margin.
-            if c["peak_rms"] < noise_floor * 3.0:
-                continue
-            prev_n = None; next_n = None
-            for n in notes:
-                if n.kind != "pitched":
-                    continue
-                if n.end <= c["start"]:
-                    prev_n = n
-                elif n.start >= c["end"]:
-                    next_n = n
-                    break
-            if prev_n is None and next_n is None:
-                continue
-            if prev_n and next_n:
-                borrowed_pitch = int(round((prev_n.pitch + next_n.pitch) / 2))
-                borrowed_raw = (prev_n.pitch_raw + next_n.pitch_raw) / 2
-            elif prev_n:
-                borrowed_pitch = prev_n.pitch
-                borrowed_raw = prev_n.pitch_raw
-            else:
-                borrowed_pitch = next_n.pitch
-                borrowed_raw = next_n.pitch_raw
-            hz = float(440.0 * (2.0 ** ((borrowed_pitch - 69) / 12.0)))
-            notes.append(Note(
-                start=c["start"], end=c["end"], duration=c["end"] - c["start"],
-                pitch=int(borrowed_pitch),
-                pitch_raw=float(borrowed_raw),
-                pitch_hz=hz,
-                confidence=0.0,           # 0 = borrowed; UI can render it differently
-                velocity=_chunk_velocity(c["peak_rms"], global_peak),
-                voiced_ratio=0.0,
-                kind="pitched",
-            ))
-        notes.sort(key=lambda n: n.start)
+            if n.end <= c["start"]:
+                prev_n = n
+            elif n.start >= c["end"]:
+                next_n = n
+                break
+        if prev_n is None and next_n is None:
+            continue
+        if prev_n and next_n:
+            borrowed_pitch = int(round((prev_n.pitch + next_n.pitch) / 2))
+            borrowed_raw = (prev_n.pitch_raw + next_n.pitch_raw) / 2
+        elif prev_n:
+            borrowed_pitch = prev_n.pitch
+            borrowed_raw = prev_n.pitch_raw
+        else:
+            borrowed_pitch = next_n.pitch
+            borrowed_raw = next_n.pitch_raw
+        hz = float(440.0 * (2.0 ** ((borrowed_pitch - 69) / 12.0)))
+        notes.append(Note(
+            start=c["start"], end=c["end"], duration=c["end"] - c["start"],
+            pitch=int(borrowed_pitch),
+            pitch_raw=float(borrowed_raw),
+            pitch_hz=hz,
+            confidence=0.0,           # 0 = borrowed; UI can render it differently
+            velocity=_chunk_velocity(c["peak_rms"], global_peak),
+            voiced_ratio=0.0,
+            kind="pitched",
+        ))
+    notes.sort(key=lambda n: n.start)
 
     # ---- Stage 7: Auto Key + Pitch Assistant (shared with /assist + diagnose) -
-    detected_key = None
-    assist_count = 0
-    key_candidates: List[KeyCandidate] = []
-    if not is_percussive:
-        res = run_key_and_assistant(
-            notes, opts.auto_key, opts.pitch_assistant, opts.key_tonic, opts.scale,
-        )
-        assist_count = res["applied"]
-        detected_key = DetectedKey(
-            tonic=res["tonic"], scale=res["scale"], confidence=float(res["confidence"]),
-            key_tier=res["key_tier"], key_applied=res["key_applied"],
-        )
-        key_candidates = [KeyCandidate(**c) for c in res["top3"]]
+    res = run_key_and_assistant(
+        notes, opts.auto_key, opts.pitch_assistant, opts.key_tonic, opts.scale,
+    )
+    assist_count = res["applied"]
+    detected_key = DetectedKey(
+        tonic=res["tonic"], scale=res["scale"], confidence=float(res["confidence"]),
+        key_tier=res["key_tier"], key_applied=res["key_applied"],
+    )
+    key_candidates = [KeyCandidate(**c) for c in res["top3"]]
 
     # ---- Pack response -------------------------------------------------------
     def _safe(arr: np.ndarray) -> List[float]:
