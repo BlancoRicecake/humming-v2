@@ -10,8 +10,8 @@ class AppColors {
   static const lime = Color(0xFFA3E635); // 액센트
   static const activeLane = Color(0xFF1F2A0F); // 활성 레인 배경
   static const textPrimary = Color(0xFFFAFAFA);
-  static const textSecondary = Color(0xFF71717A);
-  static const textTertiary = Color(0xFF52525B);
+  static const textSecondary = Color(0xFFA1A1AA);
+  static const textTertiary = Color(0xFF71717A);
   static const border = Color(0xFF27272A);
   static const danger = Color(0xFFEF4444);
   static const dangerBorder = Color(0xFF3F1D1D);
