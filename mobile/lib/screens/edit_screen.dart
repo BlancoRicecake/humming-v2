@@ -633,17 +633,19 @@ class _EditScreenState extends State<EditScreen> {
     final hasNotes = store.active.notes.isNotEmpty;
 
     Widget item(IconData ic, String label, {required bool enabled, required VoidCallback onTap}) {
-      return Opacity(
-        opacity: enabled ? 1 : 0.4,
-        child: GestureDetector(
-          onTap: enabled ? onTap : () => comingSoon(context, hasSel ? label : '노트나 청크를 먼저 선택하세요'),
-          behavior: HitTestBehavior.opaque,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(ic, size: 20, color: AppColors.textPrimary),
-            const SizedBox(height: 3),
-            Text(label, style: T.label.copyWith(fontSize: 9, color: const Color(0xFFA1A1AA))),
-          ]),
-        ),
+      // 비활성 시 아이콘만 dim 처리 — 라벨은 항상 readable 하게 유지해
+      // 사용자가 어떤 버튼인지 인지할 수 있게 한다.
+      return GestureDetector(
+        onTap: enabled ? onTap : () => comingSoon(context, hasSel ? label : '노트나 청크를 먼저 선택하세요'),
+        behavior: HitTestBehavior.opaque,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Opacity(
+            opacity: enabled ? 1 : 0.45,
+            child: Icon(ic, size: 20, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 3),
+          Text(label, style: T.label.copyWith(fontSize: 9, color: AppColors.textSecondary)),
+        ]),
       );
     }
 
@@ -784,16 +786,17 @@ class _EditScreenState extends State<EditScreen> {
   }
 
   Widget _miniBtn(IconData ic, String label, {required bool enabled, required VoidCallback onTap}) {
-    return Opacity(
-      opacity: enabled ? 1 : 0.4,
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(ic, size: 24, color: AppColors.textPrimary),
-          const SizedBox(height: 3),
-          Text(label, style: T.label.copyWith(fontSize: 9, color: AppColors.textSecondary)),
-        ]),
-      ),
+    // 비활성 시 아이콘만 dim, 라벨은 항상 readable.
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Opacity(
+          opacity: enabled ? 1 : 0.45,
+          child: Icon(ic, size: 24, color: AppColors.textPrimary),
+        ),
+        const SizedBox(height: 3),
+        Text(label, style: T.label.copyWith(fontSize: 9, color: AppColors.textSecondary)),
+      ]),
     );
   }
 }

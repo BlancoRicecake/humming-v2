@@ -50,5 +50,5 @@ class T {
   static TextStyle title = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary);
   static TextStyle body = GoogleFonts.inter(fontSize: 14, color: AppColors.textPrimary);
   static TextStyle sub = GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary);
-  static TextStyle label = GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: AppColors.textTertiary);
+  static TextStyle label = GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: AppColors.textSecondary);
 }
