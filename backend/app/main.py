@@ -45,7 +45,7 @@ def health():
 
 
 # --- sample library --------------------------------------------------------
-DEFAULT_SAMPLES_DIR = r"C:\Users\jlion\Downloads\soundsample"
+DEFAULT_SAMPLES_DIR = str(Path(__file__).resolve().parent.parent / "samples")
 SAMPLES_DIR = Path(os.environ.get("HUMMING_SAMPLES_DIR", DEFAULT_SAMPLES_DIR))
 AUDIO_EXTENSIONS = {".m4a", ".wav", ".mp3", ".flac", ".ogg", ".aif", ".aiff"}
 MEDIA_TYPE_BY_EXT = {
