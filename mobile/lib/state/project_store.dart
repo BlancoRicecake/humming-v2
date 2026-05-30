@@ -224,12 +224,13 @@ class ProjectStore extends ChangeNotifier {
   }
 
   /// 노트 후보 선택(사용자 보정) — 즉시 시각 반영, 소리는 Play 시.
+  /// pitchOriginal 로 되돌리면 source 도 'raw' 로 되돌려 색/상태가 원본으로 복귀.
   void applyCandidate(int noteIndex, int pitch) {
     final t = active;
     if (noteIndex < 0 || noteIndex >= t.notes.length) return;
     final n = t.notes[noteIndex];
     n.pitch = pitch;
-    n.source = 'user';
+    n.source = (pitch == n.pitchOriginal) ? 'raw' : 'user';
     n.pitchHz = _midiToHz(pitch);
     _audioChanged();
   }

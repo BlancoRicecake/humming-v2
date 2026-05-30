@@ -115,7 +115,9 @@ class _EditScreenState extends State<EditScreen> {
     }
   }
 
-  List<Note> _displayNotes(TrackData t) => t.chordActive ? t.renderNotes : t.notes;
+  // 새 리스트 참조를 반환해 _NotesPainter.shouldRepaint(reference equality)가 통과하게 한다.
+  // applyCandidate 같은 in-place 변경 후에도 페인트가 발생함.
+  List<Note> _displayNotes(TrackData t) => List<Note>.of(t.chordActive ? t.renderNotes : t.notes);
 
   double _projectDuration(ProjectStore store) {
     double m = 0;
