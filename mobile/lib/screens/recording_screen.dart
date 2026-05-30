@@ -83,71 +83,78 @@ class _RecordingScreenState extends State<RecordingScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (_recording)
-                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle)),
-                  if (_recording) const SizedBox(width: 8),
-                  Text(
-                    _recording ? 'Recording · ${widget.role.label.toUpperCase()}' : '${widget.role.label.toUpperCase()} 녹음',
-                    style: T.title,
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            if (_err != null)
-              Text(_err!, style: T.body.copyWith(color: AppColors.danger))
-            else ...[
-              if (_recording)
-                SizedBox(
-                  height: 72,
-                  width: 280,
-                  child: CustomPaint(painter: _MeterPainter(_levels)),
-                )
-              else
-                const Icon(Symbols.mic, size: 64, color: AppColors.lime),
-              const SizedBox(height: 20),
-              Text(_recording ? _time : '0:00', style: T.h1.copyWith(fontSize: 56, fontWeight: FontWeight.w300)),
-              const SizedBox(height: 8),
-              Text(_recording ? '흥얼거리거나 노래해주세요' : '준비되면 아래 버튼을 누르세요', style: T.sub),
-            ],
-            const Spacer(),
-            Text(_recording ? '탭하면 녹음 종료' : (_ready ? '탭하면 녹음 시작' : ''), style: T.sub),
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: _recording ? _stop : (_ready ? _start : null),
-              child: Container(
-                width: 80,
-                height: 80,
-                margin: const EdgeInsets.only(bottom: 28),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.danger, width: 3),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_recording)
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle)),
+                    if (_recording) const SizedBox(width: 8),
+                    Text(
+                      _recording ? 'Recording · ${widget.role.label.toUpperCase()}' : '${widget.role.label.toUpperCase()} 녹음',
+                      style: T.title,
+                    ),
+                  ],
                 ),
+              ),
+              Expanded(
                 child: Center(
-                  child: _recording
-                      // 녹음 중: 정지(사각형)
-                      ? Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(color: AppColors.danger, borderRadius: BorderRadius.circular(6)),
-                        )
-                      // 준비: 시작(원)
-                      : Container(
-                          width: 60,
-                          height: 60,
-                          decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
-                        ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: _err != null
+                          ? [Text(_err!, style: T.body.copyWith(color: AppColors.danger))]
+                          : [
+                              if (_recording)
+                                SizedBox(
+                                  height: 72,
+                                  width: 280,
+                                  child: CustomPaint(painter: _MeterPainter(_levels)),
+                                )
+                              else
+                                const Icon(Symbols.mic, size: 64, color: AppColors.lime),
+                              const SizedBox(height: 20),
+                              Text(_recording ? _time : '0:00', style: T.h1.copyWith(fontSize: 56, fontWeight: FontWeight.w300)),
+                              const SizedBox(height: 8),
+                              Text(_recording ? '흥얼거리거나 노래해주세요' : '준비되면 아래 버튼을 누르세요', style: T.sub),
+                            ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
+              Text(_recording ? '탭하면 녹음 종료' : (_ready ? '탭하면 녹음 시작' : ''), style: T.sub),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: _recording ? _stop : (_ready ? _start : null),
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.danger, width: 3),
+                  ),
+                  child: Center(
+                    child: _recording
+                        ? Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(color: AppColors.danger, borderRadius: BorderRadius.circular(6)),
+                          )
+                        : Container(
+                            width: 60,
+                            height: 60,
+                            decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

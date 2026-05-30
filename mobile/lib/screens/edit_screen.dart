@@ -359,16 +359,18 @@ class _EditScreenState extends State<EditScreen> {
           const SizedBox(height: 12),
           _instrumentRow(store, t),
           const SizedBox(height: 12),
-          Row(children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () => showKeyPicker(context, store),
-                child: _keyCard(dk, t.options.autoKey),
+          IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => showKeyPicker(context, store),
+                  child: _keyCard(dk, t.options.autoKey),
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: _assistCard(store, t)),
-          ]),
+              const SizedBox(width: 10),
+              Expanded(child: _assistCard(store, t)),
+            ]),
+          ),
           const SizedBox(height: 12),
           _recordButton(store, t),
         ],
@@ -481,7 +483,7 @@ class _EditScreenState extends State<EditScreen> {
   }
 
   Widget _card({required Widget child}) => Container(
-        height: 86,
+        constraints: const BoxConstraints(minHeight: 86),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: AppColors.surface,
