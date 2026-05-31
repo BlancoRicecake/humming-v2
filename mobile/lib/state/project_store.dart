@@ -155,9 +155,26 @@ class ProjectStore extends ChangeNotifier {
   }
 
   // ─── 활성 트랙 ──────────────────────────────────────────────────────────
+  // 사용자가 명시적으로 사이드바 라벨을 탭해 트랙을 "선택"했는지 — 컨텍스트 액션 바
+  // 매트릭스에서 "트랙 선택" 상태(재녹음/코드/뮤트/볼륨/삭제) 분기에 사용. 초기 시드
+  // 로 정해진 activeTrackId 만으로는 "선택" 상태로 보지 않는다.
+  bool trackSelected = false;
+
   void setActiveTrack(int trackId) {
     if (trackById(trackId) == null) return;
     activeTrackId = trackId;
+    // 사이드바 탭으로 활성화 = 트랙 선택 상태로 간주. 노트/청크 선택은 해제.
+    trackSelected = true;
+    selectedNote = null;
+    selectedChunk = null;
+    notifyListeners();
+  }
+
+  /// 컨텍스트 액션 바 등에서 명시적으로 선택을 모두 해제(미선택 상태로).
+  void clearSelection() {
+    trackSelected = false;
+    selectedNote = null;
+    selectedChunk = null;
     notifyListeners();
   }
 
@@ -590,12 +607,14 @@ class ProjectStore extends ChangeNotifier {
   void selectNote(int? i) {
     selectedNote = i;
     selectedChunk = null;
+    if (i != null) trackSelected = false;
     notifyListeners();
   }
 
   void selectChunk(int? id) {
     selectedChunk = id;
     selectedNote = null;
+    if (id != null) trackSelected = false;
     notifyListeners();
   }
 

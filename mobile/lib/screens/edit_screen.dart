@@ -269,7 +269,8 @@ class _EditScreenState extends State<EditScreen> {
     });
     if (path != null) {
       await store.recordAnalyzed(path, role: store.activeRole);
-      store.selectNote(null);
+      // 녹음 직후엔 선택을 모두 해제 → 컨텍스트 액션 바 숨김(시안 Frame 1).
+      store.clearSelection();
     }
     if (mounted) {
       setState(() => _recState = _RecState.idle);
@@ -361,7 +362,7 @@ class _EditScreenState extends State<EditScreen> {
                       },
               ),
             ),
-            _toolbar(store),
+            _contextActionBar(store, t),
             _transport(store, t),
           ],
         ),
@@ -388,7 +389,7 @@ class _EditScreenState extends State<EditScreen> {
               const SizedBox(width: 16),
               GestureDetector(
                 onTap: () => Navigator.of(context).maybePop(),
-                child: Text('Done', style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w600)),
+                child: Text('완료', style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w600)),
               ),
             ]),
           ],
@@ -397,7 +398,7 @@ class _EditScreenState extends State<EditScreen> {
 
   Widget _controls(ProjectStore store, TrackData t, DetectedKey? dk) {
     // INSTRUMENT / KEY / 피치 어시스트 카드는 ActiveTrackCards 위젯이 담당(task #21).
-    // 단음/코드 모드 토글은 코드 픽커 액션바로 이전 예정(task #24) — 임시로 여기에 유지.
+    // 단음/코드 모드 토글(_modeToggle)은 #24 에서 컨텍스트 액션 바의 "코드"로 통합 — 제거됨.
     return Column(
       children: [
         Padding(
@@ -405,14 +406,6 @@ class _EditScreenState extends State<EditScreen> {
           child: _roleChips(store),
         ),
         ActiveTrackCards(store: store),
-        if (t.isChordInstrument)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Row(children: [
-              const Spacer(),
-              _modeToggle(store, t),
-            ]),
-          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: _recordButton(store, t),
@@ -455,36 +448,6 @@ class _EditScreenState extends State<EditScreen> {
         border: Border.all(color: AppColors.border),
       ),
       child: Row(children: [for (final r in TrackRole.values) chip(r)]),
-    );
-  }
-
-  Widget _modeToggle(ProjectStore store, TrackData t) {
-    Widget seg(String label, bool active, VoidCallback onTap) => GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: active ? AppColors.lime : Colors.transparent,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Text(label,
-                style: T.body.copyWith(
-                    fontSize: 12, fontWeight: FontWeight.w600, color: active ? AppColors.bg : AppColors.textSecondary)),
-          ),
-        );
-    return Container(
-      height: 50,
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        seg('단음', !t.chordMode, () => store.setChordMode(false)),
-        const SizedBox(width: 3),
-        seg('코드', t.chordMode, () => store.setChordMode(true)),
-      ]),
     );
   }
 
@@ -575,22 +538,21 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
-  Widget _toolbar(ProjectStore store) {
-    // 노트 또는 청크가 선택되면 활성. 선택 대상에 따라 동작이 자동 분기.
-    final hasSel = store.hasSelection && !store.active.chordActive;
-    final hasNotes = store.active.notes.isNotEmpty;
-    // Chord 버튼: 노트/청크 모두 지원. 이미 코드(혹은 청크가 코드 묶음 포함) 면 "Unchord".
-    final canChord = (store.canChordSelected || store.canChordChunkSelected) && !store.active.chordActive;
-    final canUnchord = (store.canUnchordSelected || store.canUnchordChunkSelected) && !store.active.chordActive;
-    final chordEnabled = canChord || canUnchord;
-    final chordLabel = canUnchord ? 'Unchord' : 'Chord';
-    final chordIcon = canUnchord ? Symbols.heart_broken : Symbols.queue_music;
+  /// 선택 상태(노트 / 청크 / 트랙 / 미선택)에 따라 액션 셋을 동적으로 구성.
+  /// - 미선택: 아예 숨김 (재생 바만 보임)
+  /// - 트랙: 재녹음 · 코드 · 뮤트 · 볼륨 · 삭제
+  /// - 청크: 분할 · 복사 · 루프 · 코드 · 볼륨 · 삭제
+  /// - 노트: 음정 · 코드 · 볼륨 · 삭제
+  Widget _contextActionBar(ProjectStore store, TrackData t) {
+    final hasNote = store.selectedNote != null && !t.chordActive;
+    final hasChunk = store.selectedChunk != null && !t.chordActive;
+    final hasTrack = !hasNote && !hasChunk && store.trackSelected && store.activeTrackId != null;
+
+    if (!hasNote && !hasChunk && !hasTrack) return const SizedBox.shrink();
 
     Widget item(IconData ic, String label, {required bool enabled, required VoidCallback onTap}) {
-      // 비활성 시 아이콘만 dim 처리 — 라벨은 항상 readable 하게 유지해
-      // 사용자가 어떤 버튼인지 인지할 수 있게 한다.
       return GestureDetector(
-        onTap: enabled ? onTap : () => comingSoon(context, hasSel ? label : '노트나 청크를 먼저 선택하세요'),
+        onTap: enabled ? onTap : () => comingSoon(context, label),
         behavior: HitTestBehavior.opaque,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Opacity(
@@ -603,21 +565,84 @@ class _EditScreenState extends State<EditScreen> {
       );
     }
 
+    final items = <Widget>[];
+
+    if (hasNote) {
+      // 노트: 음정 · 코드 · 볼륨 · 삭제
+      items.addAll([
+        item(Symbols.music_note, '음정',
+            enabled: true,
+            onTap: () => showNoteCandidate(context, store, store.selectedNote!)),
+        item(Symbols.queue_music, '코드',
+            enabled: store.canChordSelected || store.canUnchordSelected,
+            onTap: () => showChordPicker(context, store)),
+        item(Symbols.volume_up, '볼륨', enabled: true, onTap: () => _showVolume(store)),
+        item(Symbols.delete, '삭제', enabled: true, onTap: store.deleteSelectedAny),
+      ]);
+    } else if (hasChunk) {
+      // 청크: 분할 · 복사 · 루프 · 코드 · 볼륨 · 삭제
+      items.addAll([
+        item(Symbols.content_cut, '분할',
+            enabled: true, onTap: () => store.splitSelectedAny(_playheadSec)),
+        item(Symbols.content_copy, '복사', enabled: true, onTap: store.copySelectedAny),
+        item(Symbols.repeat, '루프', enabled: true, onTap: store.loopSelectedAny),
+        item(Symbols.queue_music, '코드',
+            enabled: store.canChordChunkSelected || store.canUnchordChunkSelected,
+            onTap: () => showChordPicker(context, store)),
+        item(Symbols.volume_up, '볼륨', enabled: true, onTap: () => _showVolume(store)),
+        item(Symbols.delete, '삭제', enabled: true, onTap: store.deleteSelectedAny),
+      ]);
+    } else {
+      // 트랙: 재녹음 · 코드 · 뮤트 · 볼륨 · 삭제
+      // (트랙 코드 = chordMode 토글, 시트 없이 즉시. 비-코드 악기/키 미정이면 disabled)
+      final canTrackChord = t.isChordInstrument && t.analysis?.detectedKey?.tonic != null;
+      final trackHasNotes = t.notes.isNotEmpty;
+      items.addAll([
+        item(Symbols.mic, '재녹음',
+            enabled: _recState == _RecState.idle,
+            onTap: () => _startInlineRecord(store)),
+        item(t.chordActive ? Symbols.heart_broken : Symbols.queue_music, '코드',
+            enabled: canTrackChord && trackHasNotes,
+            onTap: () => store.setChordMode(!t.chordMode)),
+        item(t.enabled ? Symbols.volume_off : Symbols.volume_up, '뮤트',
+            enabled: true,
+            onTap: () => store.toggleTrackEnabled(t.id)),
+        item(Symbols.volume_up, '볼륨',
+            enabled: false, // 트랙 단위 볼륨 sheet 는 후속 task — 라벨만 유지
+            onTap: () => comingSoon(context, '트랙 볼륨')),
+        item(Symbols.delete, '삭제',
+            enabled: true,
+            onTap: () => _confirmTrackDelete(store, t)),
+      ]);
+    }
+
     return Container(
       height: 62,
       color: AppColors.surface,
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-        item(Symbols.content_cut, 'Split', enabled: hasSel, onTap: () => store.splitSelectedAny(_playheadSec)),
-        item(Symbols.content_copy, 'Copy', enabled: hasSel, onTap: store.copySelectedAny),
-        item(Symbols.repeat, 'Loop', enabled: hasNotes, onTap: store.loopSelectedAny),
-        // 시트가 코드 ↔ 단음 토글을 통합 처리(미리듣기 포함). 항상 picker 열기.
-        item(chordIcon, chordLabel,
-            enabled: chordEnabled,
-            onTap: () => showChordPicker(context, store)),
-        item(Symbols.delete, 'Delete', enabled: hasSel, onTap: store.deleteSelectedAny),
-        item(Symbols.volume_up, 'Volume', enabled: hasSel, onTap: () => _showVolume(store)),
-      ]),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: items),
+    );
+  }
+
+  void _confirmTrackDelete(ProjectStore store, TrackData t) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text('${t.role.label} 트랙 삭제', style: T.title),
+        content: const Text('녹음과 노트가 모두 삭제됩니다.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              store.removeTrack(t.id);
+              store.clearSelection();
+            },
+            child: const Text('삭제', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
     );
   }
 
