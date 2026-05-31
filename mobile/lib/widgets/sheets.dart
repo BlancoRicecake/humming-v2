@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../audio/synth.dart';
 import '../models/models.dart';
 import '../music/chord_expand.dart';
+import '../music/instrument_icons.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
@@ -120,7 +121,11 @@ void showInstrumentPicker(BuildContext context, ProjectStore store) {
                         border: Border.all(color: sel ? AppColors.lime : AppColors.border, width: sel ? 1.5 : 1),
                       ),
                       child: Row(children: [
-                        Icon(t.role.icon, size: 18, color: sel ? AppColors.lime : AppColors.textSecondary),
+                        instrumentIcon(
+                          inst.program,
+                          size: 18,
+                          color: sel ? AppColors.lime : AppColors.textSecondary,
+                        ),
                         const SizedBox(width: 10),
                         Text(inst.label, style: T.body.copyWith(fontWeight: FontWeight.w600)),
                         const Spacer(),
@@ -583,20 +588,24 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
 // Chord 툴바 버튼이 호출. 선택한 단음을 ChordType 으로 확장(per-note chord).
 // 칩 탭 = 미리듣기 (SynthEngine 으로 코드 동시 발음), 적용 버튼 = 확정.
 // "원음" 칩(null) 은 단음 미리듣기 — 적용 시 unchord(코드면 단음 복원).
+// 단일 진입점. selectedChunk 가 있으면 청크 모드, 아니면 selectedNote 기준.
 void showChordPicker(BuildContext context, ProjectStore store) {
-  final i = store.selectedNote;
-  if (i == null) return;
+  final chunkId = store.selectedChunk;
+  final noteIdx = store.selectedNote;
+  if (chunkId == null && noteIdx == null) return;
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
-    builder: (_) => _ChordPickerSheet(store: store, noteIndex: i),
+    builder: (_) => _ChordPickerSheet(store: store, noteIndex: noteIdx, chunkId: chunkId),
   ).whenComplete(() => SynthEngine().stopAll());
 }
 
 class _ChordPickerSheet extends StatefulWidget {
   final ProjectStore store;
-  final int noteIndex;
-  const _ChordPickerSheet({required this.store, required this.noteIndex});
+  // 둘 중 하나만 non-null. chunkId 우선.
+  final int? noteIndex;
+  final int? chunkId;
+  const _ChordPickerSheet({required this.store, required this.noteIndex, required this.chunkId});
   @override
   State<_ChordPickerSheet> createState() => _ChordPickerSheetState();
 }
@@ -606,10 +615,27 @@ class _ChordPickerSheetState extends State<_ChordPickerSheet> {
   ChordType? _selected;
   int _previewSeq = 0;
 
+  bool get _isChunkMode => widget.chunkId != null;
+
+  // 미리듣기용 대표 루트 pitch — 청크 모드면 청크 안 첫 멜로딕 단음, 노트 모드면 선택 노트.
+  Note? _previewRootNote() {
+    final t = widget.store.active;
+    if (_isChunkMode) {
+      for (final n in t.notes) {
+        if (n.chunkId == widget.chunkId && n.kind == 'pitched') return n;
+      }
+      return null;
+    }
+    final i = widget.noteIndex!;
+    if (i < 0 || i >= t.notes.length) return null;
+    return t.notes[i];
+  }
+
   Future<void> _preview(ChordType? type) async {
     final mySeq = ++_previewSeq;
     final t = widget.store.active;
-    final n = t.notes[widget.noteIndex];
+    final n = _previewRootNote();
+    if (n == null) return;
     final dk = t.analysis?.detectedKey;
     final pitches = type == null
         ? [n.pitch]
@@ -638,17 +664,27 @@ class _ChordPickerSheetState extends State<_ChordPickerSheet> {
   }
 
   void _onApply() {
-    final i = widget.noteIndex;
-    final wasChord = widget.store.canUnchordSelected;
-    if (_selected == null) {
-      // 원음 선택: 현재 코드면 unchord, 단음이면 변경 없음.
-      if (wasChord) widget.store.unchordSelected();
+    final store = widget.store;
+    if (_isChunkMode) {
+      final id = widget.chunkId!;
+      if (_selected == null) {
+        if (store.canUnchordChunkSelected) store.unchordChunk(id);
+      } else {
+        // 이미 일부 코드 묶음이 있어도 OK — applyChordToChunk 는 chord 멤버 스킵.
+        // 동일 코드로 통일하려면 먼저 unchord 후 적용.
+        if (store.canUnchordChunkSelected) store.unchordChunk(id);
+        store.applyChordToChunk(id, _selected!);
+      }
     } else {
-      // 코드 선택: 현재 코드면 먼저 unchord 후 새 코드 적용 (이중 적용 방지).
-      if (wasChord) widget.store.unchordSelected();
-      // unchord 후 selectedNote 가 root 로 갱신됨 — 그 인덱스로 다시 chord 적용.
-      final newIdx = widget.store.selectedNote ?? i;
-      widget.store.applyChord(newIdx, _selected!);
+      final i = widget.noteIndex!;
+      final wasChord = store.canUnchordSelected;
+      if (_selected == null) {
+        if (wasChord) store.unchordSelected();
+      } else {
+        if (wasChord) store.unchordSelected();
+        final newIdx = store.selectedNote ?? i;
+        store.applyChord(newIdx, _selected!);
+      }
     }
     Navigator.pop(context);
   }
@@ -656,10 +692,12 @@ class _ChordPickerSheetState extends State<_ChordPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final t = widget.store.active;
-    final n = t.notes[widget.noteIndex];
     final dk = t.analysis?.detectedKey;
     final hasKey = dk?.tonic != null && dk?.scale != null;
-    final isCurrentlyChord = widget.store.canUnchordSelected;
+    final isCurrentlyChord = _isChunkMode
+        ? widget.store.canUnchordChunkSelected
+        : widget.store.canUnchordSelected;
+    final rootNote = _previewRootNote();
 
     Widget chip(ChordType? type, String label, String sub) {
       final active = _selected == type;
@@ -726,9 +764,13 @@ class _ChordPickerSheetState extends State<_ChordPickerSheet> {
           ),
           const SizedBox(height: 4),
           Text(
-            hasKey
-                ? '루트: ${noteName(n.pitch)} · 키: ${dk!.label}${isCurrentlyChord ? ' · 현재 코드' : ''}'
-                : '루트: ${noteName(n.pitch)} (키 미감지)${isCurrentlyChord ? ' · 현재 코드' : ''}',
+            () {
+              final rootLabel = rootNote != null ? noteName(rootNote.pitch) : '—';
+              final scope = _isChunkMode ? '청크' : '루트';
+              final keyPart = hasKey ? ' · 키: ${dk!.label}' : ' (키 미감지)';
+              final chordPart = isCurrentlyChord ? ' · 현재 코드' : '';
+              return '$scope: $rootLabel$keyPart$chordPart';
+            }(),
             style: T.sub,
           ),
           const SizedBox(height: 14),

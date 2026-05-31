@@ -360,6 +360,85 @@ class ProjectStore extends ChangeNotifier {
     return _chordSiblings(t.notes[i]).length >= 2;
   }
 
+  // ─── 청크 단위 코드 변환 (chunk-scoped chord toggle) ─────────────────────
+  // 청크가 선택된 상태에서 그 청크의 모든 멜로딕 단음을 한 번에 코드화/비코드화.
+  // 이미 chord 묶음 멤버는 스킵(이중 적용 방지) — mixed 청크도 안전하게 처리.
+
+  /// 청크 안의 모든 멜로딕 단음을 ChordType 으로 확장.
+  /// 이미 코드 묶음 멤버인 노트는 건너뜀.
+  void applyChordToChunk(int chunkId, ChordType type) {
+    final t = active;
+    final dk = t.analysis?.detectedKey;
+    // 스냅샷 — 순회 중 t.notes 변경하므로 미리 대상 식별.
+    final targets = <Note>[];
+    for (final n in t.notes) {
+      if (n.chunkId != chunkId) continue;
+      if (n.kind != 'pitched') continue;
+      if (_chordSiblings(n).length >= 2) continue; // 이미 코드 멤버 — 스킵
+      targets.add(n);
+    }
+    if (targets.isEmpty) return;
+    for (final n in targets) {
+      final chord = expandToChord(n, type, n.chunkId, tonic: dk?.tonic, scale: dk?.scale);
+      t.notes.remove(n);
+      t.notes.addAll(chord);
+    }
+    _resort();
+    _audioChanged();
+  }
+
+  /// 청크 안의 모든 코드 묶음 → 각 묶음마다 최저음(root)만 남김.
+  void unchordChunk(int chunkId) {
+    final t = active;
+    final inChunk = t.notes.where((n) => n.chunkId == chunkId).toList();
+    // 묶음 식별: (start, end) 키로 그룹화 (≈ _chordSiblings 와 같은 기준).
+    final seen = <Note>{};
+    final toRemove = <Note>[];
+    for (final n in inChunk) {
+      if (seen.contains(n)) continue;
+      final sibs = _chordSiblings(n);
+      seen.addAll(sibs);
+      if (sibs.length < 2) continue;
+      sibs.sort((a, b) => a.pitch.compareTo(b.pitch));
+      final root = sibs.first;
+      for (final s in sibs) {
+        if (!identical(s, root)) toRemove.add(s);
+      }
+    }
+    if (toRemove.isEmpty) return;
+    t.notes.removeWhere((n) => toRemove.contains(n));
+    _audioChanged();
+  }
+
+  /// 선택된 청크에 코드 변환 가능 노트(아직 코드 아닌 멜로딕)가 있는지.
+  bool get canChordChunkSelected {
+    final t = active;
+    final id = selectedChunk;
+    if (id == null) return false;
+    if (!t.isChordInstrument) return false;
+    if (t.chordActive) return false;
+    for (final n in t.notes) {
+      if (n.chunkId != id) continue;
+      if (n.kind != 'pitched') continue;
+      if (_chordSiblings(n).length >= 2) continue;
+      return true;
+    }
+    return false;
+  }
+
+  /// 선택된 청크에 코드 묶음이 1개 이상 있는지.
+  bool get canUnchordChunkSelected {
+    final t = active;
+    final id = selectedChunk;
+    if (id == null) return false;
+    if (t.chordActive) return false;
+    for (final n in t.notes) {
+      if (n.chunkId != id) continue;
+      if (_chordSiblings(n).length >= 2) return true;
+    }
+    return false;
+  }
+
   // ─── 선택 & 편집 (노트 또는 청크에 Split/Copy/Loop/Delete/Volume) ────────
   // 노트를 탭하면 selectedNote(그 노트만), 청크 영역을 탭하면 selectedChunk(그 청크
   // 전체)에 하단 버튼이 작용한다. 둘은 상호배타.

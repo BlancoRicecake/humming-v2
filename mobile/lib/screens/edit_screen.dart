@@ -750,9 +750,9 @@ class _EditScreenState extends State<EditScreen> {
     // 노트 또는 청크가 선택되면 활성. 선택 대상에 따라 동작이 자동 분기.
     final hasSel = store.hasSelection && !store.active.chordActive;
     final hasNotes = store.active.notes.isNotEmpty;
-    // Chord 버튼: 단음 선택 시 "Chord"(코드화 시트), 코드 묶음 선택 시 "Unchord".
-    final canChord = store.canChordSelected && !store.active.chordActive;
-    final canUnchord = store.canUnchordSelected && !store.active.chordActive;
+    // Chord 버튼: 노트/청크 모두 지원. 이미 코드(혹은 청크가 코드 묶음 포함) 면 "Unchord".
+    final canChord = (store.canChordSelected || store.canChordChunkSelected) && !store.active.chordActive;
+    final canUnchord = (store.canUnchordSelected || store.canUnchordChunkSelected) && !store.active.chordActive;
     final chordEnabled = canChord || canUnchord;
     final chordLabel = canUnchord ? 'Unchord' : 'Chord';
     final chordIcon = canUnchord ? Symbols.heart_broken : Symbols.queue_music;
