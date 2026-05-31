@@ -1,53 +1,59 @@
 // CapCut 스타일 멀티트랙 타임라인.
 // - 레인 영역: 1손가락 드래그=가로 스크롤, 2손가락 핀치=줌, 탭=노트선택/악기전환.
 // - 룰러(시간 숫자): 터치+드래그=시킹(플레이헤드 이동).
-// - 사이드바(레이블) 탭=트랙 활성/비활성.
+// - 사이드바: 카테고리 헤더 + 그 아래 N개 트랙 라벨. 탭 → 트랙 활성화.
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import '../models/models.dart';
+import '../music/instrument_icons.dart';
+import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 
 const double _rulerH = 22;
 const double _laneGap = 6;
-const double _labelW = 46;
+const double _labelW = 86; // 시안 (track-expansion.html) sidebar 너비
 const double _basePx = 90;
+const double _catH = 24; // 카테고리 헤더 행 높이
+const double _trackH = 64; // 트랙 라벨/레인 행 높이
 
 class TimelineEditor extends StatefulWidget {
   const TimelineEditor({
     super.key,
     required this.tracks,
-    required this.enabled,
-    required this.activeRole,
+    required this.activeTrackId,
     required this.durationSec,
     this.playheadSec,
     this.selectedNote,
     this.selectedChunk,
-    this.waveforms = const {},
     this.onNoteTap,
     this.onChunkTap,
-    this.onActivateRole,
-    this.onToggleEnable,
+    this.onActivateTrack,
+    this.onRecordAgain,
     this.onSeek,
     this.onChunkMove,
     this.onChunkResize,
+    this.notesOverride,
   });
 
-  final Map<TrackRole, List<Note>> tracks;
-  final Map<TrackRole, bool> enabled;
-  final TrackRole activeRole;
+  /// 전체 트랙(카테고리당 N개). 사이드바와 레인 모두 이 순서를 카테고리로 그룹화해
+  /// 표시한다. 빈 카테고리는 헤더만 보여준다.
+  final List<TrackData> tracks;
+  final int? activeTrackId;
   final double durationSec;
   final double? playheadSec;
   final int? selectedNote;
   final int? selectedChunk;
-  final Map<TrackRole, ({List<double> peaks, double dur})> waveforms; // 보컬 등 파형 표시 트랙
   final void Function(int index)? onNoteTap;
   final void Function(int? chunkId)? onChunkTap; // null = 선택 해제
-  final void Function(TrackRole role)? onActivateRole;
-  final void Function(TrackRole role)? onToggleEnable;
+  final void Function(int trackId)? onActivateTrack;
+  final void Function(int trackId)? onRecordAgain;
   final void Function(double sec)? onSeek;
   final void Function(int chunkId, double dtSec)? onChunkMove; // 길게 눌러 이동
-  final void Function(int chunkId, {double? newStart, double? newEnd})? onChunkResize; // 양끝 트림
+  final void Function(int chunkId, {double? newStart, double? newEnd})? onChunkResize;
+
+  /// 활성 트랙의 표시용 노트 오버라이드 (코드 모드 시 확장된 노트 등).
+  /// null 이면 트랙의 `notes` 를 그대로 사용.
+  final Map<int, List<Note>>? notesOverride;
 
   @override
   State<TimelineEditor> createState() => _TimelineEditorState();
@@ -63,43 +69,74 @@ class _TimelineEditorState extends State<TimelineEditor> {
   double? _resizeStart, _resizeEnd;
 
   // 제스처 콜백에서 쓰는 레이아웃 값(빌드 때 갱신).
-  double _dur = 1, _pxPerSec = 90, _contentW = 0, _vpW = 0, _lanesH = 0, _maxScroll = 0;
+  double _dur = 1, _pxPerSec = 90, _contentW = 0, _vpW = 0, _maxScroll = 0;
 
   void _clampScroll() => _scrollX = _scrollX.clamp(0.0, _maxScroll);
 
-  // 짧은 트랙에서 _contentW 가 _vpW 로 늘어나면 _pxPerSec 식이 시각과 어긋난다.
-  // painter / chunk outline 과 동일한 ratio 변환을 단일 진실로 사용.
   double _pxToSec(double dx) => dx * (_dur / _contentW);
   double _secToPx(double t) => (t / _dur) * _contentW;
   double _timeAt(double localX) => _pxToSec(localX + _scrollX).clamp(0.0, _dur);
 
-  // 청크 범위 계산 (chunkId → [minStart, maxEnd]). 트림 핸들 + 청크 hit-test 공용.
-  Map<int, List<double>> _chunkRanges(List<Note> notes) {
-    final ranges = <int, List<double>>{};
-    for (final n in notes) {
-      final r = ranges.putIfAbsent(n.chunkId, () => [n.start, n.end]);
-      if (n.start < r[0]) r[0] = n.start;
-      if (n.end > r[1]) r[1] = n.end;
+  TrackData? get _activeTrack {
+    for (final t in widget.tracks) {
+      if (t.id == widget.activeTrackId) return t;
     }
-    return ranges;
+    return null;
   }
 
-  // 선택된 청크의 양끝 트림 핸들(활성 레인). 좌/우 핸들을 끌어 길이 조절.
+  List<Note> _notesFor(TrackData t) {
+    final ov = widget.notesOverride?[t.id];
+    return ov ?? t.notes;
+  }
+
+  /// 카테고리 헤더 → 그 카테고리의 트랙들. 빈 카테고리도 entry 유지(헤더만 표시).
+  List<(TrackRole, List<TrackData>)> _grouped() {
+    final out = <(TrackRole, List<TrackData>)>[];
+    for (final r in TrackRole.values) {
+      out.add((r, widget.tracks.where((t) => t.role == r).toList()));
+    }
+    return out;
+  }
+
+  // 활성 트랙의 인덱스(전체 트랙 리스트 안에서) → 레인 영역의 y 오프셋 계산.
+  // 사이드바와 레인 양쪽이 같은 행 시퀀스를 따라가야 정렬됨.
+  Map<int, double> _trackTops() {
+    final tops = <int, double>{};
+    double y = 0;
+    for (final (_, ts) in _grouped()) {
+      y += _catH; // 카테고리 헤더 패드
+      for (final t in ts) {
+        tops[t.id] = y;
+        y += _trackH;
+      }
+    }
+    return tops;
+  }
+
+  double get _lanesH {
+    double h = 0;
+    for (final (_, ts) in _grouped()) {
+      h += _catH + _trackH * ts.length;
+    }
+    return h;
+  }
+
+  // 선택된 청크의 양끝 트림 핸들(활성 트랙 레인). 좌/우 핸들을 끌어 길이 조절.
   List<Widget> _trimHandles() {
     final cid = widget.selectedChunk;
-    if (cid == null) return const [];
-    final notes = widget.tracks[widget.activeRole] ?? const [];
-    final r = _chunkRanges(notes)[cid];
+    final t = _activeTrack;
+    if (cid == null || t == null) return const [];
+    final notes = _notesFor(t);
+    final ranges = _chunkRanges(notes);
+    final r = ranges[cid];
     if (r == null) return const [];
-    final idx = TrackRole.values.indexOf(widget.activeRole);
-    final slot = _lanesH / TrackRole.values.length;
-    final laneTop = idx * slot;
-    final laneH = slot - _laneGap;
+    final top = _trackTops()[t.id];
+    if (top == null) return const [];
+    final laneTop = top;
+    final laneH = _trackH - _laneGap;
     final leftX = _secToPx(r[0]) - _scrollX;
     final rightX = _secToPx(r[1]) - _scrollX;
 
-    // 핸들 hit 영역 12px (시각 4px 바 + 좌우 여백). 22px 였을 때 청크 몸체 드래그(이동)
-    // 가 가장자리 ±11px 에서 핸들로 빨려들어가는 문제 회피.
     Widget handle(double x, bool isLeft) => Positioned(
           left: x - 6,
           top: laneTop,
@@ -134,6 +171,16 @@ class _TimelineEditorState extends State<TimelineEditor> {
     return [handle(leftX, true), handle(rightX, false)];
   }
 
+  Map<int, List<double>> _chunkRanges(List<Note> notes) {
+    final ranges = <int, List<double>>{};
+    for (final n in notes) {
+      final r = ranges.putIfAbsent(n.chunkId, () => [n.start, n.end]);
+      if (n.start < r[0]) r[0] = n.start;
+      if (n.end > r[1]) r[1] = n.end;
+    }
+    return ranges;
+  }
+
   @override
   Widget build(BuildContext context) {
     _dur = math.max(widget.durationSec, 0.5);
@@ -146,131 +193,220 @@ class _TimelineEditorState extends State<TimelineEditor> {
           _pxPerSec = _basePx * _zoom;
           _contentW = math.max(_dur * _pxPerSec, _vpW);
           _maxScroll = math.max(0, _contentW - _vpW);
-          _lanesH = c.maxHeight - _rulerH;
           _clampScroll();
           final headContentX = widget.playheadSec == null ? null : (widget.playheadSec! / _dur) * _contentW;
+          final laneH = _lanesH;
 
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _labelColumn(c.maxHeight),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Column(
-                  children: [
-                    // 룰러 — 터치+드래그 시킹
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTapDown: (d) => widget.onSeek?.call(_timeAt(d.localPosition.dx)),
-                      onHorizontalDragUpdate: (d) => widget.onSeek?.call(_timeAt(d.localPosition.dx)),
-                      child: ClipRect(
-                        child: SizedBox(
-                          height: _rulerH,
-                          width: _vpW,
-                          child: Stack(children: [
-                            Positioned(left: -_scrollX, top: 0, width: _contentW, child: _ruler()),
-                          ]),
-                        ),
-                      ),
-                    ),
-                    // 레인 — 1손가락 팬 / 2손가락 핀치줌 / 탭 선택
-                    Expanded(
-                      child: GestureDetector(
-                        // 탭 / 길게-눌러-이동은 레인 내부 레이어드 GD 가 처리.
-                        // 루트는 핀치 줌 + 단일/멀티 손가락 팬만 담당.
-                        behavior: HitTestBehavior.opaque,
-                        onScaleStart: (_) => _startZoom = _zoom,
-                        onScaleUpdate: (d) {
-                          setState(() {
-                            if (d.scale != 1.0) {
-                              _zoom = (_startZoom * d.scale).clamp(0.3, 6.0);
-                            }
-                            _scrollX -= d.focalPointDelta.dx;
-                            _clampScroll();
-                          });
-                        },
-                        child: ClipRect(
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                left: -_scrollX,
-                                top: 0,
-                                bottom: 0,
-                                width: _contentW,
-                                child: Column(
-                                  children: [
-                                    for (final role in TrackRole.values)
-                                      Expanded(
-                                        child: Padding(
-                                          padding: const EdgeInsets.only(bottom: _laneGap),
-                                          child: Opacity(
-                                            opacity: (widget.enabled[role] ?? true) ? 1 : 0.4,
-                                            child: _lane(role),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              ..._trimHandles(),
-                              if (headContentX != null && headContentX - _scrollX >= 0 && headContentX - _scrollX <= _vpW)
-                                Positioned(
-                                  left: headContentX - _scrollX,
-                                  top: 0,
-                                  bottom: 0,
-                                  child: IgnorePointer(child: Container(width: 2, color: Colors.white)),
-                                ),
-                            ],
+          return SingleChildScrollView(
+            // 전체 트랙 수가 늘어나면 세로 스크롤로 모두 접근 가능.
+            child: SizedBox(
+              height: math.max(c.maxHeight, _rulerH + laneH),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _labelColumn(),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        // 룰러 — 터치+드래그 시킹
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapDown: (d) => widget.onSeek?.call(_timeAt(d.localPosition.dx)),
+                          onHorizontalDragUpdate: (d) => widget.onSeek?.call(_timeAt(d.localPosition.dx)),
+                          child: ClipRect(
+                            child: SizedBox(
+                              height: _rulerH,
+                              width: _vpW,
+                              child: Stack(children: [
+                                Positioned(left: -_scrollX, top: 0, width: _contentW, child: _ruler()),
+                              ]),
+                            ),
                           ),
                         ),
-                      ),
+                        // 레인 영역 — 1손가락 팬 / 2손가락 핀치줌 / 탭 선택
+                        SizedBox(
+                          height: laneH,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onScaleStart: (_) => _startZoom = _zoom,
+                            onScaleUpdate: (d) {
+                              setState(() {
+                                if (d.scale != 1.0) {
+                                  _zoom = (_startZoom * d.scale).clamp(0.3, 6.0);
+                                }
+                                _scrollX -= d.focalPointDelta.dx;
+                                _clampScroll();
+                              });
+                            },
+                            child: ClipRect(
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    left: -_scrollX,
+                                    top: 0,
+                                    bottom: 0,
+                                    width: _contentW,
+                                    child: Column(children: _laneRows()),
+                                  ),
+                                  ..._trimHandles(),
+                                  if (headContentX != null && headContentX - _scrollX >= 0 && headContentX - _scrollX <= _vpW)
+                                    Positioned(
+                                      left: headContentX - _scrollX,
+                                      top: 0,
+                                      bottom: 0,
+                                      child: IgnorePointer(child: Container(width: 2, color: Colors.white)),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           );
         },
       ),
     );
   }
 
-  Widget _labelColumn(double h) => SizedBox(
-        width: _labelW,
-        height: h,
-        child: Column(
-          children: [
-            const SizedBox(height: _rulerH),
-            for (final role in TrackRole.values)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: _laneGap),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => widget.onToggleEnable?.call(role),
-                    child: Opacity(
-                      opacity: (widget.enabled[role] ?? true) ? 1 : 0.4,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon((widget.enabled[role] ?? true) ? role.icon : Symbols.volume_off,
-                                size: 16, color: AppColors.textPrimary),
-                            const SizedBox(height: 2),
-                            Text(role.label.toUpperCase(), style: T.label),
-                          ],
-                        ),
+  // ─── 사이드바 ───────────────────────────────────────────────────────────
+  Widget _labelColumn() {
+    final groups = _grouped();
+    return SizedBox(
+      width: _labelW,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: _rulerH),
+          for (final (role, ts) in groups) ...[
+            // 카테고리 헤더
+            SizedBox(
+              height: _catH,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                child: Text(
+                  role.label.toUpperCase(),
+                  style: T.label.copyWith(fontSize: 10, letterSpacing: 1, color: AppColors.textSecondary),
+                ),
+              ),
+            ),
+            for (final t in ts) _trackLabel(t),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _trackLabel(TrackData t) {
+    final active = t.id == widget.activeTrackId;
+    final hasRec = t.hasRecording;
+    final color = active ? AppColors.lime : AppColors.textSecondary;
+    return SizedBox(
+      height: _trackH,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => widget.onActivateTrack?.call(t.id),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Opacity(
+                opacity: hasRec ? 1.0 : 0.5,
+                child: instrumentIcon(_iconProgram(t), size: 18, color: color),
+              ),
+              const SizedBox(height: 2),
+              Opacity(
+                opacity: hasRec ? 1.0 : 0.5,
+                child: Text(
+                  _trackDisplayName(t),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.label.copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: color,
+                  ),
+                ),
+              ),
+              if (hasRec) ...[
+                const SizedBox(height: 3),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => widget.onRecordAgain?.call(t.id),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.lime, width: 1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '재녹음',
+                      style: T.label.copyWith(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.lime,
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
+              ],
+            ],
+          ),
         ),
-      );
+      ),
+    );
+  }
+
+  String _trackDisplayName(TrackData t) {
+    if (t.role == TrackRole.drum) return 'DRUM';
+    if (t.role == TrackRole.vocal) return 'VOCAL';
+    for (final i in instrumentPalette[t.role] ?? const <Instrument>[]) {
+      if (i.program == t.program) return i.label.toUpperCase();
+    }
+    return t.role.label.toUpperCase();
+  }
+
+  int _iconProgram(TrackData t) {
+    switch (t.role) {
+      case TrackRole.drum:
+        return kDrumKitProgram;
+      case TrackRole.vocal:
+        return kVocalProgram;
+      case TrackRole.keys:
+      case TrackRole.bass:
+        return t.program;
+    }
+  }
+
+  // ─── 레인 영역 ──────────────────────────────────────────────────────────
+  List<Widget> _laneRows() {
+    final rows = <Widget>[];
+    for (final (_, ts) in _grouped()) {
+      rows.add(const SizedBox(height: _catH)); // 카테고리 헤더 패드
+      for (final t in ts) {
+        rows.add(SizedBox(
+          height: _trackH,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: _laneGap),
+            child: Opacity(
+              opacity: t.enabled ? 1 : 0.4,
+              child: _lane(t),
+            ),
+          ),
+        ));
+      }
+    }
+    return rows;
+  }
 
   Widget _ruler() {
-    // 라벨은 시각 비례(_secToPx) 로 배치해 짧은 트랙이 viewport 를 채울 때도 균등 정렬.
     final maxSec = _dur.floor();
     return SizedBox(
       width: _contentW,
@@ -292,11 +428,10 @@ class _TimelineEditorState extends State<TimelineEditor> {
     );
   }
 
-  Widget _lane(TrackRole role) {
-    final active = role == widget.activeRole;
-    final wave = widget.waveforms[role];
-    final notes = widget.tracks[role] ?? const [];
-    final isWave = wave != null && wave.peaks.isNotEmpty;
+  Widget _lane(TrackData t) {
+    final active = t.id == widget.activeTrackId;
+    final notes = _notesFor(t);
+    final hasWave = t.isVocal && t.vocalPeaks.isNotEmpty;
 
     return Container(
       decoration: BoxDecoration(
@@ -311,21 +446,19 @@ class _TimelineEditorState extends State<TimelineEditor> {
           final laneH = c.maxHeight;
           final geo = _Geo(notes, _dur, Size(laneW, laneH));
 
-          // 아래에서 위로: 레인 전체 → 청크 → 노트.
-          // Flutter 가 자연스럽게 가장 위 레이어부터 hit-test 해 적절한 핸들러를 찾는다.
           return Stack(children: [
             // [Layer 0] 시각 + 레인 전체 hit (활성화 / 선택 해제)
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () {
-                  if (!active) widget.onActivateRole?.call(role);
-                  widget.onChunkTap?.call(null); // null = 노트·청크 둘 다 deselect
+                  if (!active) widget.onActivateTrack?.call(t.id);
+                  widget.onChunkTap?.call(null);
                 },
                 child: CustomPaint(
                   size: Size.infinite,
-                  painter: isWave
-                      ? _WavePainter(peaks: wave.peaks, vocalDur: wave.dur, totalDur: _dur, active: active)
+                  painter: hasWave
+                      ? _WavePainter(peaks: t.vocalPeaks, vocalDur: t.vocalDuration, totalDur: _dur, active: active)
                       : _NotesPainter(
                           notes: notes,
                           durationSec: _dur,
@@ -338,21 +471,21 @@ class _TimelineEditorState extends State<TimelineEditor> {
             ),
 
             // [Layer 1] 청크 — 파형(보컬) 레인은 청크 개념 없음
-            if (!isWave)
+            if (!hasWave)
               for (final entry in _chunkRanges(notes).entries)
-                _chunkHitWidget(role, active, entry.key, entry.value, laneW, laneH),
+                _chunkHitWidget(t, active, entry.key, entry.value, laneW, laneH),
 
-            // [Layer 2] 단일 노트 — 시각상 가장 위. Flutter 가 우선 hit.
-            if (!isWave)
+            // [Layer 2] 단일 노트
+            if (!hasWave)
               for (int i = 0; i < notes.length; i++)
-                _noteHitWidget(role, active, i, geo.rectFor(notes[i])),
+                _noteHitWidget(t, active, i, geo.rectFor(notes[i])),
           ]);
         }),
       ),
     );
   }
 
-  Widget _chunkHitWidget(TrackRole role, bool active, int chunkId, List<double> range, double laneW, double laneH) {
+  Widget _chunkHitWidget(TrackData t, bool active, int chunkId, List<double> range, double laneW, double laneH) {
     final x0 = _secToPx(range[0]);
     final x1 = _secToPx(range[1]);
     return Positioned(
@@ -363,13 +496,11 @@ class _TimelineEditorState extends State<TimelineEditor> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
-          if (!active) widget.onActivateRole?.call(role);
+          if (!active) widget.onActivateTrack?.call(t.id);
           widget.onChunkTap?.call(chunkId);
         },
-        // 청크 몸체 드래그 = 이동 (long-press 불필요).
-        // 가장자리 ±6px 는 트림 핸들 hit 영역(width 12)이라 그쪽은 핸들이 catch.
         onHorizontalDragStart: (_) {
-          if (!active) widget.onActivateRole?.call(role);
+          if (!active) widget.onActivateTrack?.call(t.id);
           _moveChunk = chunkId;
           widget.onChunkTap?.call(chunkId);
         },
@@ -384,10 +515,7 @@ class _TimelineEditorState extends State<TimelineEditor> {
     );
   }
 
-  Widget _noteHitWidget(TrackRole role, bool active, int noteIndex, Rect rect) {
-    // hit 영역은 시각 rect 와 일치시켜야 청크의 빈 공간이 그대로 chunk-tap 영역으로
-    // 살아남는다. 인플레이트하면 작은 노트가 청크 전체를 덮어 chunk-tap 이 핸들 위치
-    // 외엔 막힌다. 가로만 살짝(±2px) 키워 정밀도 보조.
+  Widget _noteHitWidget(TrackData t, bool active, int noteIndex, Rect rect) {
     const padX = 2.0;
     return Positioned(
       left: rect.left - padX,
@@ -397,7 +525,7 @@ class _TimelineEditorState extends State<TimelineEditor> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
-          if (!active) widget.onActivateRole?.call(role);
+          if (!active) widget.onActivateTrack?.call(t.id);
           if (widget.onNoteTap != null) widget.onNoteTap!(noteIndex);
         },
       ),
@@ -485,8 +613,6 @@ class _NotesPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final geo = _Geo(notes, durationSec, size);
 
-    // CapCut 스타일: 모든 청크를 분리된 블록(lime tint bg + border)으로 표시.
-    // active 트랙은 진하게, idle 트랙은 흐릿하게. 선택된 청크는 강조.
     if (notes.isNotEmpty) {
       final ranges = <int, List<double>>{};
       for (final n in notes) {

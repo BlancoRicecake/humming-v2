@@ -329,34 +329,23 @@ class _EditScreenState extends State<EditScreen> {
             _controls(store, t, dk),
             Expanded(
               child: TimelineEditor(
-                // 코드 모드 트랙은 확장된(화음) 노트를 표시 → 코드 변환이 시각적으로 보임.
-                // 멀티트랙 모델(#20) — 카테고리당 첫 트랙을 UI 에 노출(기존 동작 보존).
-                // 후속 task(#21~)에서 카테고리 안의 모든 트랙을 표시하도록 확장 예정.
-                tracks: {
-                  for (final r in TrackRole.values)
-                    if (store.firstByRole(r) != null)
-                      r: _displayNotes(store.firstByRole(r)!),
-                },
-                enabled: {
-                  for (final r in TrackRole.values)
-                    if (store.firstByRole(r) != null)
-                      r: store.firstByRole(r)!.enabled,
-                },
-                activeRole: store.activeRole,
+                // 멀티트랙 모델 — 모든 트랙(카테고리당 N개) 을 한 번에 전달.
+                // 사이드바는 카테고리별로 그룹화해 표시, 레인은 트랙 단위로 1행씩.
+                tracks: store.tracks,
+                activeTrackId: store.activeTrackId,
+                // 코드 모드 활성 트랙은 확장된(화음) 노트를 표시 → 코드 변환이 시각적으로 보임.
+                notesOverride: t.chordActive ? {t.id: _displayNotes(t)} : null,
                 durationSec: _projectDuration(store),
                 playheadSec: _playheadSec,
                 selectedNote: t.chordActive ? null : store.selectedNote,
                 selectedChunk: t.chordActive ? null : store.selectedChunk,
-                waveforms: {
-                  for (final r in TrackRole.values)
-                    if ((store.firstByRole(r)?.vocalPeaks.isNotEmpty ?? false))
-                      r: (
-                        peaks: store.firstByRole(r)!.vocalPeaks,
-                        dur: store.firstByRole(r)!.vocalDuration,
-                      ),
+                onActivateTrack: store.setActiveTrack,
+                onRecordAgain: (id) {
+                  // 사이드바 "재녹음" chip — 그 트랙을 active 로 만든 뒤 인라인 녹음 시작.
+                  // (전용 store 메서드 없음 → 활성화 + 기존 _startInlineRecord 재사용)
+                  store.setActiveTrack(id);
+                  _startInlineRecord(store);
                 },
-                onActivateRole: store.setActiveRole,
-                onToggleEnable: store.toggleEnabled,
                 onSeek: _seek,
                 onChunkTap: t.chordActive ? null : store.selectChunk,
                 onChunkMove: t.chordActive ? null : store.moveChunkBy,
