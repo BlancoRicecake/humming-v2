@@ -1,0 +1,108 @@
+// 악기(GM program) → 아이콘 위젯 매핑.
+//
+// 우선순위: Phosphor Icons (MIT) → Game Icons SVG 자산 (CC BY 3.0) 폴백.
+// 이모지 사용 금지. 단일 함수 `instrumentIcon(program, ...)` 으로 모든 사용처 통일.
+//
+// SVG 파일은 모두 `fill="currentColor"` 로 정규화되어 있으므로
+// `colorFilter: ColorFilter.mode(color, BlendMode.srcIn)` 로 틴트 적용.
+//
+// 라이선스 고지: docs/credits.md 참조.
+import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+
+// drum kit / vocal 가상 program — GM 외 내부 표기.
+const int kDrumKitProgram = -1; // TrackRole.drum
+const int kVocalProgram = -2; // TrackRole.vocal
+
+enum _IconKind { phosphor, svg }
+
+class _IconSpec {
+  final _IconKind kind;
+  final IconData? icon;
+  final String? assetPath;
+  const _IconSpec.phosphor(this.icon)
+      : kind = _IconKind.phosphor,
+        assetPath = null;
+  const _IconSpec.svg(this.assetPath)
+      : kind = _IconKind.svg,
+        icon = null;
+}
+
+// GM program → 아이콘. 매핑 없는 program 은 _fallback 사용.
+_IconSpec _specFor(int program) {
+  switch (program) {
+    // Piano family + organ.
+    case 0: // Acoustic Grand Piano
+    case 4: // Electric Piano
+    case 16: // Drawbar Organ
+      return _IconSpec.phosphor(PhosphorIconsRegular.pianoKeys);
+
+    // Guitars (nylon / acoustic / electric).
+    case 24:
+    case 25:
+    case 27:
+      return _IconSpec.phosphor(PhosphorIconsRegular.guitar);
+
+    // Bass — Phosphor 에 guitar 만 있어 재사용.
+    case 32:
+    case 33:
+      return _IconSpec.phosphor(PhosphorIconsRegular.guitar);
+
+    // Synth bass / synth leads / pads.
+    case 39:
+    case 80:
+    case 81:
+    case 90:
+      return const _IconSpec.svg('assets/icons/instruments/synthesizer.svg');
+
+    // Violin / strings.
+    case 40:
+    case 48:
+      return const _IconSpec.svg('assets/icons/instruments/violin.svg');
+
+    // Choir.
+    case 52:
+      return _IconSpec.phosphor(PhosphorIconsRegular.microphoneStage);
+
+    // Trumpet.
+    case 56:
+      return const _IconSpec.svg('assets/icons/instruments/trumpet.svg');
+
+    // Flute.
+    case 73:
+      return const _IconSpec.svg('assets/icons/instruments/flute.svg');
+
+    // 가상 program.
+    case kDrumKitProgram:
+      // Phosphor 에 드럼 아이콘이 없어 game-icons SVG 사용.
+      return const _IconSpec.svg('assets/icons/instruments/drum.svg');
+    case kVocalProgram:
+      return _IconSpec.phosphor(PhosphorIconsRegular.microphone);
+
+    default:
+      // 알 수 없는 GM program → 일반 음표.
+      return _IconSpec.phosphor(PhosphorIconsRegular.musicNote);
+  }
+}
+
+/// GM program 번호로 악기 아이콘 위젯을 반환.
+///
+/// - Phosphor 아이콘은 [Icon] 으로 렌더, [color] 는 그대로 적용.
+/// - SVG 아이콘은 [SvgPicture.asset] + [ColorFilter.mode] 로 틴트.
+/// - [color] 가 null 이면 현재 [DefaultIconTheme] 색상을 따른다.
+Widget instrumentIcon(int program, {double size = 20, Color? color}) {
+  final spec = _specFor(program);
+  switch (spec.kind) {
+    case _IconKind.phosphor:
+      return Icon(spec.icon, size: size, color: color);
+    case _IconKind.svg:
+      final effective = color ?? const Color(0xFFE5E5E7); // textPrimary 기본값과 유사.
+      return SvgPicture.asset(
+        spec.assetPath!,
+        width: size,
+        height: size,
+        colorFilter: ColorFilter.mode(effective, BlendMode.srcIn),
+      );
+  }
+}
