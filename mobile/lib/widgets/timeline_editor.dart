@@ -29,6 +29,7 @@ class TimelineEditor extends StatefulWidget {
     this.onChunkTap,
     this.onActivateTrack,
     this.onRecordAgain,
+    this.onRecordEmpty,
     this.onSeek,
     this.onChunkMove,
     this.onChunkResize,
@@ -47,6 +48,8 @@ class TimelineEditor extends StatefulWidget {
   final void Function(int? chunkId)? onChunkTap; // null = 선택 해제
   final void Function(int trackId)? onActivateTrack;
   final void Function(int trackId)? onRecordAgain;
+  /// 빈 트랙(녹음/노트 없음) 레인 안 "● 녹음 시작" pill 탭. 그 트랙으로 인라인 녹음 시작.
+  final void Function(int trackId)? onRecordEmpty;
   final void Function(double sec)? onSeek;
   final void Function(int chunkId, double dtSec)? onChunkMove; // 길게 눌러 이동
   final void Function(int chunkId, {double? newStart, double? newEnd})? onChunkResize;
@@ -432,6 +435,9 @@ class _TimelineEditorState extends State<TimelineEditor> {
     final active = t.id == widget.activeTrackId;
     final notes = _notesFor(t);
     final hasWave = t.isVocal && t.vocalPeaks.isNotEmpty;
+    // 빈 트랙(녹음/노트 없음) → 레인 중앙에 "● 녹음 시작" pill 표시(시안 track-expansion.html).
+    // 노트 또는 보컬 파형이 생기면 자동으로 사라짐(청크 블록과 겹치지 않게).
+    final isEmpty = notes.isEmpty && !hasWave && !t.hasRecording;
 
     return Container(
       decoration: BoxDecoration(
@@ -479,8 +485,38 @@ class _TimelineEditorState extends State<TimelineEditor> {
             if (!hasWave)
               for (int i = 0; i < notes.length; i++)
                 _noteHitWidget(t, active, i, geo.rectFor(notes[i])),
+
+            // [Layer 3] 빈 트랙 인라인 녹음 pill — 노트/파형 위에 그릴 일 없음(isEmpty 가드).
+            if (isEmpty) Positioned.fill(child: Center(child: _recPill(t))),
           ]);
         }),
+      ),
+    );
+  }
+
+  // 빈 트랙 레인 안 "● 녹음 시작" pill. 탭 → 해당 트랙 활성화 + 인라인 녹음 시작.
+  Widget _recPill(TrackData t) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (t.id != widget.activeTrackId) widget.onActivateTrack?.call(t.id);
+        widget.onRecordEmpty?.call(t.id);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F27),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 8, height: 8,
+            decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text('녹음 시작',
+              style: T.body.copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
+        ]),
       ),
     );
   }

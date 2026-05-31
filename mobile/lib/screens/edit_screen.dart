@@ -347,6 +347,11 @@ class _EditScreenState extends State<EditScreen> {
                   store.setActiveTrack(id);
                   _startInlineRecord(store);
                 },
+                onRecordEmpty: (id) {
+                  // 빈 트랙 레인 안 "● 녹음 시작" pill → 그 트랙 활성화 + 인라인 녹음 시작.
+                  store.setActiveTrack(id);
+                  _startInlineRecord(store);
+                },
                 onSeek: _seek,
                 onChunkTap: t.chordActive ? null : store.selectChunk,
                 onChunkMove: t.chordActive ? null : store.moveChunkBy,
@@ -406,10 +411,13 @@ class _EditScreenState extends State<EditScreen> {
           child: _roleChips(store),
         ),
         ActiveTrackCards(store: store),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: _recordButton(store, t),
-        ),
+        // 녹음 트리거는 빈 트랙 레인 안의 인라인 pill 로 일원화(시안 track-expansion.html).
+        // 녹음 중/처리 중에만 진행 상태(타이머·미터·종료 버튼) 박스를 노출.
+        if (_recState != _RecState.idle)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _recordButton(store, t),
+          ),
       ],
     );
   }
