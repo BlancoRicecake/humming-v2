@@ -100,7 +100,6 @@ class _InstrumentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final program = _iconProgram(track);
     final name = _instrumentDisplayName(track);
-    final roleLabel = track.role.label.toUpperCase();
     return GestureDetector(
       onTap: () => showInstrumentPicker(context, store),
       behavior: HitTestBehavior.opaque,
@@ -133,7 +132,7 @@ class _InstrumentCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '$roleLabel · $name',
+                    name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: T.body.copyWith(

@@ -1,4 +1,5 @@
 // 재생 — audioplayers. 재생/일시정지/재개 + 위치 스트림(플레이헤드용).
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
@@ -8,6 +9,8 @@ class AudioPlayerService {
   final AudioPlayer _player = AudioPlayer(); // 메인(악기 믹스 또는 단독 소스) — 타이밍 기준
   final AudioPlayer _vocal = AudioPlayer(); // 보컬 레이어(목소리 그대로)
   int _tmpSeq = 0;
+  // 보컬 청크 스케줄링용 타이머(start 지연 + outPoint 정지).
+  final List<Timer> _vocalTimers = [];
 
   AudioPlayerService() {
     // 녹음(마이크)이 시작돼도 반주 재생이 멈추지 않도록 오디오 포커스를 양보하지
@@ -85,8 +88,39 @@ class AudioPlayerService {
   }
 
   Future<void> stop() async {
+    for (final t in _vocalTimers) {
+      t.cancel();
+    }
+    _vocalTimers.clear();
     await _player.stop();
     await _vocal.stop();
+  }
+
+  /// 보컬 청크 단위 재생 스케줄링 — chunk 의 timelineStart 지연 후 inPoint 부터 재생,
+  /// visibleLength(outPoint - inPoint) 만큼 후 정지. 멀티 청크 지원(각각 독립 스케줄).
+  /// startFromSec: 재생 헤드 시작 시점(시킹 후 재생 시 사용). 기본 0.
+  Future<void> playVocalChunks(
+    List<({String path, double timelineStart, double inPoint, double duration})> chunks, {
+    double startFromSec = 0,
+  }) async {
+    await stop();
+    for (final c in chunks) {
+      final endAt = c.timelineStart + c.duration;
+      if (endAt <= startFromSec) continue; // 이미 끝난 청크 스킵
+      final delay = (c.timelineStart - startFromSec).clamp(0.0, double.infinity);
+      final seekInto = startFromSec > c.timelineStart ? (startFromSec - c.timelineStart) : 0.0;
+      final remaining = c.duration - seekInto;
+      if (remaining <= 0) continue;
+      // start 타이머
+      _vocalTimers.add(Timer(Duration(milliseconds: (delay * 1000).round()), () async {
+        await _vocal.play(DeviceFileSource(c.path), volume: 1.0);
+        await _vocal.seek(Duration(milliseconds: ((c.inPoint + seekInto) * 1000).round()));
+      }));
+      // stop 타이머
+      _vocalTimers.add(Timer(Duration(milliseconds: ((delay + remaining) * 1000).round()), () async {
+        await _vocal.stop();
+      }));
+    }
   }
 
   void dispose() {

@@ -78,6 +78,63 @@ class Note {
     ..source = source ?? this.source;
 }
 
+/// 청크 = 한 번의 녹음/편집 단위. 노트들의 묶음(`Note.chunkId`로 참조).
+///
+/// 노트의 `start/end`는 원본 녹음 시간을 보존(편집해도 변경하지 않음).
+/// 화면/재생 시점의 효과 시간은 청크의 [timelineStart] / [inPoint] 로 계산:
+///   effectiveStart = note.start - inPoint + timelineStart
+/// 노트는 `[inPoint, outPoint)` 안에 있을 때만 가시·재생 대상.
+///
+/// 트림(handle)으로 inPoint/outPoint를 좁혀도 원본 노트는 보존 → 다시 늘리면 복원.
+/// 홀드&드래그로 청크를 옮기면 [timelineStart] 만 변하고 trim 은 그대로.
+class Chunk {
+  Chunk({
+    required this.id,
+    required this.timelineStart,
+    required this.inPoint,
+    required this.outPoint,
+    required this.originalLength,
+    this.vocalWavPath,
+    this.vocalPeaks = const [],
+    this.vocalDuration = 0,
+  });
+
+  final int id;
+  double timelineStart; // 청크 좌측이 위치하는 타임라인 절대 시간
+  double inPoint;       // 원본 기준 — 좌측 트림 (>= 0)
+  double outPoint;      // 원본 기준 — 우측 트림 (<= originalLength)
+  double originalLength; // 원본 청크 길이(불변) — 트림 최대 범위
+  // 보컬 트랙 청크 전용 — 원본 wav 파일과 메타.
+  String? vocalWavPath;
+  List<double> vocalPeaks;
+  double vocalDuration;
+
+  double get visibleLength => outPoint - inPoint;
+  double get timelineEnd => timelineStart + visibleLength;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'timeline_start': timelineStart,
+        'in_point': inPoint,
+        'out_point': outPoint,
+        'original_length': originalLength,
+        'vocal_wav_path': vocalWavPath,
+        'vocal_peaks': vocalPeaks,
+        'vocal_duration': vocalDuration,
+      };
+
+  static Chunk fromJson(Map<String, dynamic> j) => Chunk(
+        id: (j['id'] as num).toInt(),
+        timelineStart: _d(j['timeline_start']),
+        inPoint: _d(j['in_point']),
+        outPoint: _d(j['out_point']),
+        originalLength: _d(j['original_length']),
+        vocalWavPath: j['vocal_wav_path'] as String?,
+        vocalPeaks: ((j['vocal_peaks'] ?? []) as List).map((e) => _d(e)).toList(),
+        vocalDuration: _d(j['vocal_duration']),
+      );
+}
+
 class DetectedKey {
   DetectedKey({this.tonic, this.scale, this.confidence = 0, this.keyTier, this.keyApplied = false});
   final String? tonic, scale, keyTier;
@@ -174,10 +231,17 @@ const Map<TrackRole, List<Instrument>> instrumentPalette = {
     Instrument('신스', 90, chordCapable: true),
     Instrument('어쿠스틱 기타', 25, chordCapable: true),
     Instrument('일렉 기타', 27, chordCapable: true),
+    // 추후 추가 검토:
+    // Instrument('일렉 피아노', 4, chordCapable: true),
+    // Instrument('오르간', 16, chordCapable: true),
+    // Instrument('클래식 기타', 24, chordCapable: true),
+    // Instrument('스트링', 48, chordCapable: true),
   ],
   TrackRole.bass: [
     Instrument('베이스 기타', 33),
     Instrument('신스 베이스', 39),
+    // 추후 추가 검토:
+    // Instrument('어쿠스틱 베이스', 32),
   ],
   TrackRole.drum: [],
   TrackRole.vocal: [],

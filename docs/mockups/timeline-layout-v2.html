@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Timeline Layout v2 — lane 전체 가로폭 + 내부 좌측 padding</title>
+<style>
+  :root {
+    --bg: #0B0B0F;
+    --surface: #15151B;
+    --surface-2: #1F1F27;
+    --border: #2A2A33;
+    --text: #E5E5E7;
+    --text-2: #8A8A93;
+    --text-3: #5A5A63;
+    --lime: #B6FF00;
+    --lime-dim: rgba(182,255,0,0.16);
+    --lime-faint: rgba(182,255,0,0.04);
+    --white: #ffffff;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, system-ui, "Pretendard", sans-serif; }
+  .device { width: 1430px; margin: 24px auto; padding: 0; }
+
+  /* ── 룰러 + 레인 영역 (전체 가로폭) ── */
+  .timeline { border-top: 1px solid var(--border); }
+
+  .ruler {
+    position: relative;
+    height: 26px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-2);
+    font-size: 9px;
+    overflow: hidden;
+  }
+  .ruler .tick { position: absolute; top: 14px; bottom: 0; width: 1px; background: rgba(138,138,147,0.18); }
+  .ruler .label { position: absolute; top: 2px; padding-left: 3px; }
+
+  .cat-header {
+    padding: 10px 12px 4px 12px;
+    color: var(--text-2); font-weight: 700;
+    font-size: 11px; letter-spacing: 1.4px;
+  }
+  .track-row {
+    padding: 4px 0 10px 0;
+  }
+  .track-name {
+    font-size: 12px;
+    color: var(--text);
+    padding: 0 12px 4px 12px;
+    display: flex; align-items: center; gap: 6px;
+    font-weight: 600;
+  }
+  .track-name .ico { color: var(--lime); }
+  .track-name .mute { margin-left: auto; color: var(--text-3); }
+
+  /* 핵심: lane 은 전체 가로폭. 컨텐츠는 lane 전체에 걸쳐 그려지지만,
+     "지금 시간"(=anchor=viewport-x=86) 기준으로 좌측은 과거, 우측은 미래. */
+  .lane {
+    position: relative;
+    height: 56px;
+    background: var(--surface);
+    border-radius: 8px;
+    margin: 0 6px;
+    overflow: hidden;  /* lane 우측 경계만 클리핑 (좌측은 어차피 lane 시작 = 0) */
+  }
+  .lane.active { border: 1px solid var(--lime); background: rgba(182,255,0,0.02); }
+  .lane .scroll {
+    /* scroll 컨테이너 — 청크/노트 들어감. left 를 (anchor - scrollX) 로 두어
+       scrollX=0 일 때 컨텐츠가 anchor(=86) 부터 시작, 재생 중 scrollX 증가 시 좌측으로 흐름. */
+    position: absolute; top: 0; bottom: 0;
+    width: 900px;
+  }
+  .chunk {
+    position: absolute;
+    top: 4px; bottom: 4px;
+    background: var(--lime-dim);
+    border: 1px solid rgba(182,255,0,0.4);
+    border-radius: 6px;
+  }
+  .chunk.selected { border-color: var(--lime); background: rgba(182,255,0,0.22); }
+  .note { position: absolute; height: 6px; background: var(--lime); border-radius: 2px; }
+
+  .empty-pill {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%,-50%);
+    background: var(--surface-2);
+    border-radius: 999px;
+    color: var(--text);
+    font-size: 11px;
+    padding: 6px 14px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .empty-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #FF4D4D; }
+
+  /* 플레이헤드 — viewport-x = 86 (= lane padding 끝, content 시작 지점) 에 고정 */
+  .playhead {
+    position: absolute;
+    top: 0; bottom: 0; width: 2px;
+    background: var(--white);
+    pointer-events: none;
+    left: 86px;
+    z-index: 20;
+  }
+
+  .note-box { padding: 14px 24px; background: var(--surface); border-top: 1px solid var(--border); }
+  .note-box li { line-height: 1.6; font-size: 13px; color: var(--text-2); }
+  .note-box b { color: var(--text); }
+  .frame { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 36px; position: relative; }
+  .frame-title { padding: 10px 16px; background: var(--surface); font-size: 12px; color: var(--text-2); border-bottom: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="device">
+
+  <h1 style="padding: 12px 24px; margin: 0;">Timeline Layout v2 (sidebar 없음)</h1>
+  <p style="padding: 0 24px; color: var(--text-2); font-size: 13px;">
+    Lane 은 화면 전체 가로폭. Lane 내부 좌측에 anchor(86px) 만큼 빈 padding. 플레이헤드는 lane 안쪽 (viewport-x=86) 에 흰색 세로선으로 고정.
+  </p>
+
+  <!-- ─────────── Frame 1: 초기 상태(빈 트랙) ─────────── -->
+  <div class="frame">
+    <div class="frame-title">Frame 1 — 초기 상태 (빈 트랙)</div>
+    <div class="timeline">
+      <!-- 룰러 — 라벨이 anchor(86px) 부터 시작 -->
+      <div class="ruler">
+        <div class="tick" style="left: 86px"></div>
+        <div class="label" style="left: 86px">0:00</div>
+        <div class="tick" style="left: 266px"></div>
+        <div class="label" style="left: 266px">0:02</div>
+        <div class="tick" style="left: 446px"></div>
+        <div class="label" style="left: 446px">0:04</div>
+        <div class="tick" style="left: 626px"></div>
+        <div class="label" style="left: 626px">0:06</div>
+        <div class="tick" style="left: 806px"></div>
+        <div class="label" style="left: 806px">0:08</div>
+        <div class="tick" style="left: 986px"></div>
+        <div class="label" style="left: 986px">0:10</div>
+      </div>
+
+      <div class="cat-header">CHORDS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>피아노 <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+
+      <div class="cat-header">BASS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>베이스 기타 <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+
+      <div class="cat-header">DRUM</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>DRUM <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+
+      <div class="cat-header">VOCAL</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>VOCAL <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+
+      <!-- 플레이헤드 — 전체 lane 영역을 가로지름 -->
+      <div class="playhead" style="top: 26px; bottom: 0;"></div>
+    </div>
+    <div class="note-box">
+      <ul>
+        <li><b>Lane = 전체 가로폭</b>. 별도 sidebar 없음, 시각적 padding 없음.</li>
+        <li><b>플레이헤드는 viewport-x = 86 위치에 흰색 세로선으로 고정.</b> 룰러부터 마지막 트랙까지 한 줄로 관통.</li>
+        <li>컨텐츠(청크/노트)는 scroll layer 안에 들어가며, scroll layer 의 left = (86 - scrollX). 따라서 scrollX=0 일 때 컨텐츠가 viewport-x=86 부터 시작.</li>
+        <li>재생 시 컨텐츠가 좌측으로 흘러도 lane 안에 그대로 보이며, 좌측에 가려지는 영역은 없음(lane 좌측 끝까지 보임).</li>
+        <li>녹음 시작 pill 은 lane 중앙.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────── Frame 2: 청크 1개 (재생 직전) ─────────── -->
+  <div class="frame">
+    <div class="frame-title">Frame 2 — 청크 1개 (CHORDS, 0~5s). 청크 시작이 플레이헤드에 정렬</div>
+    <div class="timeline">
+      <div class="ruler">
+        <div class="tick" style="left: 86px"></div>
+        <div class="label" style="left: 86px">0:00</div>
+        <div class="tick" style="left: 266px"></div>
+        <div class="label" style="left: 266px">0:02</div>
+        <div class="tick" style="left: 446px"></div>
+        <div class="label" style="left: 446px">0:04</div>
+        <div class="tick" style="left: 626px"></div>
+        <div class="label" style="left: 626px">0:06</div>
+        <div class="tick" style="left: 806px"></div>
+        <div class="label" style="left: 806px">0:08</div>
+        <div class="tick" style="left: 986px"></div>
+        <div class="label" style="left: 986px">0:10</div>
+      </div>
+
+      <div class="cat-header">CHORDS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>피아노 <span class="mute">🔊</span></div>
+        <div class="lane active">
+          <!-- scroll 의 left = anchor(86) - scrollX(0) = 86 → 청크 좌측 끝이 플레이헤드에 정렬 -->
+          <div class="scroll" style="left: 86px;">
+            <div class="chunk selected" style="left: 0; width: 450px;">
+              <div class="note" style="left: 20px; top: 12px; width: 30px;"></div>
+              <div class="note" style="left: 80px; top: 20px; width: 40px;"></div>
+              <div class="note" style="left: 160px; top: 26px; width: 50px;"></div>
+              <div class="note" style="left: 250px; top: 18px; width: 60px;"></div>
+              <div class="note" style="left: 350px; top: 14px; width: 40px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cat-header">BASS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>베이스 기타 <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+
+      <div class="cat-header">DRUM</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>DRUM <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+
+      <div class="cat-header">VOCAL</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>VOCAL <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+
+      <div class="playhead" style="top: 26px; bottom: 0;"></div>
+    </div>
+    <div class="note-box">
+      <ul>
+        <li>청크가 lane 의 컨텐츠 영역(padding 우측) 좌측 끝에서 시작 → timelineStart=0 = 청크 좌측 끝이 viewport-x=86 = 플레이헤드 바로 옆</li>
+        <li>scrollX = 0 → content 의 scroll layer 가 좌측 끝(0px)에서 시작</li>
+        <li>재생 시작 직전 모습. 재생 누르면 scrollX 가 증가하며 컨텐츠가 좌측으로 흘러감</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────── Frame 3: 재생 중 (scrollX = 270px = 3초) ─────────── -->
+  <div class="frame">
+    <div class="frame-title">Frame 3 — 재생 중 (현재 0:03, 컨텐츠가 좌로 흘러감)</div>
+    <div class="timeline">
+      <div class="ruler">
+        <!-- ruler 의 ticks 가 좌측으로 270px 이동 -->
+        <div class="tick" style="left: -184px"></div>
+        <div class="label" style="left: -184px">0:00</div>
+        <div class="tick" style="left: -4px"></div>
+        <div class="label" style="left: -4px">0:02</div>
+        <div class="tick" style="left: 176px"></div>
+        <div class="label" style="left: 176px">0:04</div>
+        <div class="tick" style="left: 356px"></div>
+        <div class="label" style="left: 356px">0:06</div>
+        <div class="tick" style="left: 536px"></div>
+        <div class="label" style="left: 536px">0:08</div>
+        <div class="tick" style="left: 716px"></div>
+        <div class="label" style="left: 716px">0:10</div>
+      </div>
+
+      <div class="cat-header">CHORDS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>피아노 <span class="mute">🔊</span></div>
+        <div class="lane active">
+          <!-- scroll 의 left = anchor(86) - scrollX(270) = -184 → 청크의 0:03 지점이 플레이헤드에 정렬,
+               청크의 좌측 일부는 lane 의 좌측에 여전히 보임(과거 영역) -->
+          <div class="scroll" style="left: -184px;">
+            <div class="chunk selected" style="left: 0; width: 450px;">
+              <div class="note" style="left: 20px; top: 12px; width: 30px;"></div>
+              <div class="note" style="left: 80px; top: 20px; width: 40px;"></div>
+              <div class="note" style="left: 160px; top: 26px; width: 50px;"></div>
+              <div class="note" style="left: 250px; top: 18px; width: 60px;"></div>
+              <div class="note" style="left: 350px; top: 14px; width: 40px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cat-header">BASS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>베이스 기타 <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+
+      <div class="cat-header">DRUM</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>DRUM <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+
+      <div class="cat-header">VOCAL</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>VOCAL <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+
+      <div class="playhead" style="top: 26px; bottom: 0;"></div>
+    </div>
+    <div class="note-box">
+      <ul>
+        <li>scrollX = 270px (= 3초 × 90px/s). 청크의 scroll layer 가 좌측으로 270px 이동.</li>
+        <li>청크의 0:03 지점이 플레이헤드(viewport-x=86) 와 정렬됨.</li>
+        <li>플레이헤드는 절대 움직이지 않음(viewport-x=86 고정). 컨텐츠만 흐른다.</li>
+        <li>청크의 이미 재생된 좌측 부분도 그대로 lane 안에 보임 — 사라지지 않음(과거 영역). 플레이헤드만 그 위로 흰 세로선.</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

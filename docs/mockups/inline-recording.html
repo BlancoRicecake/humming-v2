@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>인라인 녹음 UI — 트랙 안에서 녹음중 피드백</title>
+<style>
+  :root {
+    --bg: #0B0B0F;
+    --surface: #15151B;
+    --surface-2: #1F1F27;
+    --border: #2A2A33;
+    --text: #E5E5E7;
+    --text-2: #8A8A93;
+    --text-3: #5A5A63;
+    --lime: #B6FF00;
+    --rec: #FF4D4D;
+    --rec-bg: rgba(255,77,77,0.10);
+    --rec-border: rgba(255,77,77,0.45);
+    --white: #ffffff;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, system-ui, "Pretendard", sans-serif; }
+  .device { width: 1430px; margin: 24px auto; padding: 0; }
+
+  .frame { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 36px; }
+  .frame-title { padding: 10px 16px; background: var(--surface); font-size: 12px; color: var(--text-2); border-bottom: 1px solid var(--border); }
+
+  .topbar { display: flex; gap: 16px; padding: 12px 24px; border-bottom: 1px solid var(--border); }
+  .tab { background: var(--surface); border-radius: 999px; padding: 8px 16px; font-weight: 600; font-size: 13px; color: var(--text-2); }
+  .tab.active { background: var(--lime); color: #000; }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 12px 24px; }
+  .card { background: var(--surface); border-radius: 12px; padding: 12px 16px; }
+  .card-label { font-size: 10px; letter-spacing: 1px; color: var(--text-2); font-weight: 600; }
+  .card-val { font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .card.disabled { opacity: 0.4; }
+
+  .ruler {
+    position: relative;
+    height: 26px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-2);
+    font-size: 9px;
+  }
+  .ruler .tick { position: absolute; top: 14px; bottom: 0; width: 1px; background: rgba(138,138,147,0.18); }
+  .ruler .label { position: absolute; top: 2px; padding-left: 3px; }
+
+  .cat-header {
+    padding: 10px 12px 4px 12px;
+    color: var(--text-2); font-weight: 700;
+    font-size: 11px; letter-spacing: 1.4px;
+  }
+  .track-row { padding: 4px 0 10px 0; }
+  .track-name {
+    font-size: 12px;
+    color: var(--text);
+    padding: 0 12px 4px 12px;
+    display: flex; align-items: center; gap: 6px;
+    font-weight: 600;
+  }
+  .track-name .ico { color: var(--lime); }
+  .track-name .mute { margin-left: auto; color: var(--text-3); }
+
+  .lane {
+    position: relative;
+    height: 56px;
+    background: var(--surface);
+    border-radius: 8px;
+    margin: 0 6px;
+    overflow: hidden;
+  }
+  .lane.recording {
+    border: 1px solid var(--rec-border);
+    background: var(--rec-bg);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,77,77,0.0); }
+    50% { box-shadow: 0 0 0 1px rgba(255,77,77,0.5); }
+  }
+  .lane.dimmed { opacity: 0.4; }
+
+  .empty-pill {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%,-50%);
+    background: var(--surface-2);
+    border-radius: 999px;
+    color: var(--text);
+    font-size: 11px;
+    padding: 6px 14px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .empty-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--rec); }
+
+  /* 인라인 녹음 컨테이너 */
+  .rec-inline {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 0 12px 0 12px;
+  }
+  .rec-time {
+    color: var(--rec);
+    font-weight: 700;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .rec-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--rec);
+    animation: blink 1s ease-in-out infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  /* 진행중 amplitude 미터 (스택형 sparkline) */
+  .rec-meter {
+    height: 36px;
+    position: relative;
+    overflow: hidden;
+  }
+  .rec-meter .bar {
+    position: absolute;
+    bottom: 50%;
+    width: 2px;
+    background: var(--rec);
+    border-radius: 1px;
+    transform: translateY(50%);
+  }
+  .rec-stop {
+    background: var(--rec);
+    border-radius: 8px;
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rec-stop::after {
+    content: "";
+    width: 12px; height: 12px;
+    background: #fff;
+    border-radius: 2px;
+  }
+
+  /* 카운트다운 — 녹음 시작 전 lane 중앙에 큰 숫자 (3 → 2 → 1) */
+  .countdown {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }
+  .cd-num {
+    font-size: 36px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--rec);
+    line-height: 1;
+    transform: scale(0.6);
+    opacity: 0.25;
+    transition: all 0.18s ease;
+  }
+  .cd-num.active {
+    transform: scale(1.0);
+    opacity: 1;
+    text-shadow: 0 0 12px rgba(255,77,77,0.55);
+  }
+  .cd-num.done {
+    opacity: 0.18;
+    transform: scale(0.55);
+  }
+
+  /* ── 옵션 A: 숫자 주위에 conic 링이 시계방향으로 차오름 (=내 추천) ── */
+  .cd-ring {
+    position: absolute;
+    inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cd-ring .wrap {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: conic-gradient(var(--rec) 0deg 240deg, rgba(255,77,77,0.18) 240deg 360deg);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 12px rgba(255,77,77,0.35);
+  }
+  .cd-ring .inner {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 800; color: var(--rec);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── 옵션 B: 숫자 아래 가로 progress bar (전체 1.2s) ── */
+  .cd-bar {
+    position: absolute;
+    inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px;
+  }
+  .cd-bar .num {
+    font-size: 28px; font-weight: 800; color: var(--rec);
+  }
+  .cd-bar .bar-track {
+    width: 160px; height: 4px;
+    background: rgba(255,77,77,0.18);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+  .cd-bar .bar-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: var(--rec);
+    border-radius: 2px;
+    width: 60%; /* 진행도 — 데모용 60% */
+  }
+
+  /* ── 옵션 C: 메트로놈 dots — 3 dots 채워짐 (●○○ → ●●○ → ●●●) ── */
+  .cd-dots {
+    position: absolute;
+    inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px;
+  }
+  .cd-dots .num {
+    font-size: 28px; font-weight: 800; color: var(--rec);
+  }
+  .cd-dots .row { display: flex; gap: 10px; }
+  .cd-dots .dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 1.5px solid var(--rec);
+    background: transparent;
+    position: relative;
+    overflow: hidden;
+  }
+  .cd-dots .dot.fill { background: var(--rec); box-shadow: 0 0 8px rgba(255,77,77,0.5); }
+  .cd-dots .dot.filling::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+    height: 60%; /* 현재 dot 60% 채워진 상태 */
+    background: var(--rec);
+  }
+
+  /* 플레이헤드 — viewport-x = 86 */
+  .playhead {
+    position: absolute;
+    top: 0; bottom: 0; width: 2px;
+    background: var(--rec); /* 녹음 중엔 빨강 */
+    pointer-events: none;
+    left: 86px;
+    z-index: 20;
+  }
+
+  .timeline { position: relative; }
+  .note-box { padding: 14px 24px; background: var(--surface); border-top: 1px solid var(--border); }
+  .note-box li { line-height: 1.6; font-size: 13px; color: var(--text-2); }
+  .note-box b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="device">
+
+  <h1 style="padding: 12px 24px; margin: 0;">인라인 녹음 피드백</h1>
+  <p style="padding: 0 24px; color: var(--text-2); font-size: 13px;">녹음 버튼을 누른 그 트랙 안에서 실시간 피드백 — 다른 트랙으로 시선 안 옮겨도 됨.</p>
+
+  <!-- ─────────── Frame 1: Idle (녹음 전) ─────────── -->
+  <div class="frame">
+    <div class="frame-title">Frame 1 — Idle: 빈 트랙에 "녹음 시작" pill</div>
+    <div class="topbar">
+      <div class="tab active">Chords</div>
+      <div class="tab">Bass</div>
+      <div class="tab">Drum</div>
+      <div class="tab">Vocal</div>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="card-label">INSTRUMENT</div><div class="card-val">피아노</div></div>
+      <div class="card"><div class="card-label">KEY</div><div class="card-val">—</div></div>
+      <div class="card"><div class="card-label">피치 어시스트</div><div class="card-val">ON</div></div>
+    </div>
+    <div class="timeline">
+      <div class="ruler">
+        <div class="tick" style="left: 86px"></div>
+        <div class="label" style="left: 86px">0:00</div>
+        <div class="tick" style="left: 266px"></div>
+        <div class="label" style="left: 266px">0:02</div>
+        <div class="tick" style="left: 446px"></div>
+        <div class="label" style="left: 446px">0:04</div>
+        <div class="tick" style="left: 626px"></div>
+        <div class="label" style="left: 626px">0:06</div>
+        <div class="tick" style="left: 806px"></div>
+        <div class="label" style="left: 806px">0:08</div>
+      </div>
+      <div class="cat-header">CHORDS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>피아노 <span class="mute">🔊</span></div>
+        <div class="lane">
+          <div class="empty-pill">녹음 시작</div>
+        </div>
+      </div>
+      <div class="cat-header">BASS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico">♪</span>베이스 기타 <span class="mute">🔊</span></div>
+        <div class="lane"><div class="empty-pill">녹음 시작</div></div>
+      </div>
+      <div class="playhead" style="background:#fff;"></div>
+    </div>
+    <div class="note-box">
+      <ul>
+        <li>현재 동작과 동일 — 빈 트랙 중앙에 "● 녹음 시작" pill.</li>
+        <li>탭 → 그 트랙으로 활성화 + 녹음 시작.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────── Frame 1.5: Countdown — 옵션 비교 ─────────── -->
+  <div class="frame">
+    <div class="frame-title">Frame 2A — 카운트다운 · 옵션 A: 숫자 주위 conic 링 (시계 진행, 추천)</div>
+    <div class="timeline" style="padding-top: 8px;">
+      <div class="ruler">
+        <div class="tick" style="left: 86px"></div>
+        <div class="label" style="left: 86px">0:00</div>
+        <div class="tick" style="left: 266px"></div>
+        <div class="label" style="left: 266px">0:02</div>
+      </div>
+      <div class="cat-header">CHORDS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico" style="color: var(--rec);">●</span>피아노</div>
+        <div class="lane recording">
+          <!-- 활성 숫자: 2 (3 → 2 진행 중, 링이 240도(2/3) 차오른 상태) -->
+          <div class="cd-ring">
+            <div class="wrap">
+              <div class="inner">2</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="playhead"></div>
+    </div>
+    <div class="note-box">
+      <ul>
+        <li>중앙 빨강 원 + 그 안에 현재 숫자(3/2/1). 원 둘레가 conic-gradient 로 시계방향으로 차오름.</li>
+        <li>한 숫자 동안(~400ms) 0° → 360° 풀로 차오른 뒤 다음 숫자로 전환. 사용자가 다음 비트 타이밍을 시각으로 정확히 예측 가능.</li>
+        <li>큰 숫자 + 글로우 = 강렬한 존재감, DAW 메트로놈 카운트다운 느낌.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-title">Frame 2B — 카운트다운 · 옵션 B: 가로 progress bar</div>
+    <div class="timeline" style="padding-top: 8px;">
+      <div class="ruler">
+        <div class="tick" style="left: 86px"></div>
+        <div class="label" style="left: 86px">0:00</div>
+        <div class="tick" style="left: 266px"></div>
+        <div class="label" style="left: 266px">0:02</div>
+      </div>
+      <div class="cat-header">CHORDS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico" style="color: var(--rec);">●</span>피아노</div>
+        <div class="lane recording">
+          <div class="cd-bar">
+            <div class="num">2</div>
+            <div class="bar-track"><div class="bar-fill"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="playhead"></div>
+    </div>
+    <div class="note-box">
+      <ul>
+        <li>숫자 아래 가로 progress bar 가 1.2초 동안 0 → 100% 차오름. 숫자는 비트별로 바뀜.</li>
+        <li>가장 단순, 시간 진행은 명확하나 음악적 느낌은 약함.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-title">Frame 2C — 카운트다운 · 옵션 C: 3개 dot 누적 채움</div>
+    <div class="timeline" style="padding-top: 8px;">
+      <div class="ruler">
+        <div class="tick" style="left: 86px"></div>
+        <div class="label" style="left: 86px">0:00</div>
+        <div class="tick" style="left: 266px"></div>
+        <div class="label" style="left: 266px">0:02</div>
+      </div>
+      <div class="cat-header">CHORDS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico" style="color: var(--rec);">●</span>피아노</div>
+        <div class="lane recording">
+          <div class="cd-dots">
+            <div class="num">2</div>
+            <div class="row">
+              <span class="dot fill"></span>
+              <span class="dot filling"></span>
+              <span class="dot"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="playhead"></div>
+    </div>
+    <div class="note-box">
+      <ul>
+        <li>3개의 dot 이 한 비트씩 채워짐(●●○ → ●●○ 진행 중 → ●●●). 가운데 dot 이 현재 차오르는 중.</li>
+        <li>메트로놈 비트 카운트 느낌. 작아서 lane 안 다른 요소 안 가림.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────── Frame 2: 기존 안 (숫자만) — 참고용 ─────────── -->
+  <div class="frame">
+    <div class="frame-title">Frame 2D — (참고) 숫자만 (피드백 없음)</div>
+    <div class="topbar">
+      <div class="tab active">Chords</div>
+      <div class="tab">Bass</div>
+      <div class="tab">Drum</div>
+      <div class="tab">Vocal</div>
+    </div>
+    <div class="cards">
+      <div class="card disabled"><div class="card-label">INSTRUMENT</div><div class="card-val">피아노</div></div>
+      <div class="card disabled"><div class="card-label">KEY</div><div class="card-val">—</div></div>
+      <div class="card disabled"><div class="card-label">피치 어시스트</div><div class="card-val">ON</div></div>
+    </div>
+    <div class="timeline">
+      <div class="ruler">
+        <div class="tick" style="left: 86px"></div>
+        <div class="label" style="left: 86px">0:00</div>
+        <div class="tick" style="left: 266px"></div>
+        <div class="label" style="left: 266px">0:02</div>
+        <div class="tick" style="left: 446px"></div>
+        <div class="label" style="left: 446px">0:04</div>
+      </div>
+      <div class="cat-header">CHORDS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico" style="color: var(--rec);">●</span>피아노 <span class="mute">🔊</span></div>
+        <div class="lane recording">
+          <div class="countdown">
+            <span class="cd-num done">3</span>
+            <span class="cd-num active">2</span>
+            <span class="cd-num">1</span>
+          </div>
+        </div>
+      </div>
+      <div class="cat-header" style="opacity: 0.4;">BASS</div>
+      <div class="track-row">
+        <div class="track-name" style="opacity: 0.4;"><span class="ico">♪</span>베이스 기타 <span class="mute">🔊</span></div>
+        <div class="lane dimmed"><div class="empty-pill">녹음 시작</div></div>
+      </div>
+      <div class="playhead"></div>
+    </div>
+    <div class="note-box">
+      <ul>
+        <li>녹음 시작 pill 탭 직후 → 카운트다운 인라인으로 표시 (lane 중앙).</li>
+        <li><b>3, 2, 1</b> 큰 숫자가 차례로 강조됨. 활성 숫자 = 빨강 풀 크기 + 옅은 글로우, 지난 숫자 = 흐려짐.</li>
+        <li>각 숫자 ~400ms (총 1.2초). 빠른 템포로 녹음 시작 흐름 끊지 않게.</li>
+        <li>각 숫자 표시 시 가벼운 메트로놈/틱 사운드(짧은 high-tick) + 마지막 숫자 후 더 강한 다운비트 또는 햅틱.</li>
+        <li>카운트다운 종료 즉시 Frame 3(녹음중) 으로 전환.</li>
+        <li>카운트다운 중 lane border/배경은 이미 빨강(녹음 모드 진입). 상단 카드/다른 트랙은 dim.</li>
+        <li>사용자가 카운트다운 중 lane 다시 탭하면 즉시 취소 → Idle 복귀.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────── Frame 3: Recording in progress ─────────── -->
+  <div class="frame">
+    <div class="frame-title">Frame 3 — 녹음중 (피아노 트랙, 0:03 경과)</div>
+    <div class="topbar">
+      <div class="tab active">Chords</div>
+      <div class="tab">Bass</div>
+      <div class="tab">Drum</div>
+      <div class="tab">Vocal</div>
+    </div>
+    <div class="cards">
+      <div class="card disabled"><div class="card-label">INSTRUMENT</div><div class="card-val">피아노</div></div>
+      <div class="card disabled"><div class="card-label">KEY</div><div class="card-val">—</div></div>
+      <div class="card disabled"><div class="card-label">피치 어시스트</div><div class="card-val">ON</div></div>
+    </div>
+    <div class="timeline">
+      <div class="ruler">
+        <div class="tick" style="left: 86px"></div>
+        <div class="label" style="left: 86px">0:00</div>
+        <div class="tick" style="left: 266px"></div>
+        <div class="label" style="left: 266px">0:02</div>
+        <div class="tick" style="left: 446px"></div>
+        <div class="label" style="left: 446px">0:04</div>
+        <div class="tick" style="left: 626px"></div>
+        <div class="label" style="left: 626px">0:06</div>
+      </div>
+      <div class="cat-header">CHORDS</div>
+      <div class="track-row">
+        <div class="track-name"><span class="ico" style="color: var(--rec);">●</span>피아노 <span class="mute">🔊</span></div>
+        <div class="lane recording">
+          <div class="rec-inline">
+            <div class="rec-time"><span class="rec-dot"></span>0:03</div>
+            <div class="rec-meter">
+              <!-- 가상 amplitude bars (왼→오, 더 우측이 최신) -->
+              <div class="bar" style="left: 4px; height: 8px;"></div>
+              <div class="bar" style="left: 10px; height: 14px;"></div>
+              <div class="bar" style="left: 16px; height: 22px;"></div>
+              <div class="bar" style="left: 22px; height: 18px;"></div>
+              <div class="bar" style="left: 28px; height: 26px;"></div>
+              <div class="bar" style="left: 34px; height: 12px;"></div>
+              <div class="bar" style="left: 40px; height: 30px;"></div>
+              <div class="bar" style="left: 46px; height: 16px;"></div>
+              <div class="bar" style="left: 52px; height: 22px;"></div>
+              <div class="bar" style="left: 58px; height: 10px;"></div>
+              <div class="bar" style="left: 64px; height: 28px;"></div>
+              <div class="bar" style="left: 70px; height: 18px;"></div>
+              <div class="bar" style="left: 76px; height: 24px;"></div>
+              <div class="bar" style="left: 82px; height: 14px;"></div>
+              <div class="bar" style="left: 88px; height: 30px;"></div>
+              <div class="bar" style="left: 94px; height: 20px;"></div>
+              <div class="bar" style="left: 100px; height: 12px;"></div>
+              <div class="bar" style="left: 106px; height: 32px;"></div>
+              <div class="bar" style="left: 112px; height: 18px;"></div>
+              <div class="bar" style="left: 118px; height: 24px;"></div>
+              <div class="bar" style="left: 124px; height: 28px;"></div>
+              <div class="bar" style="left: 130px; height: 14px;"></div>
+              <div class="bar" style="left: 136px; height: 32px;"></div>
+              <div class="bar" style="left: 142px; height: 22px;"></div>
+              <div class="bar" style="left: 148px; height: 18px;"></div>
+              <div class="bar" style="left: 154px; height: 26px;"></div>
+              <div class="bar" style="left: 160px; height: 16px;"></div>
+              <div class="bar" style="left: 166px; height: 30px;"></div>
+              <div class="bar" style="left: 172px; height: 22px;"></div>
+              <div class="bar" style="left: 178px; height: 14px;"></div>
+              <div class="bar" style="left: 184px; height: 28px;"></div>
+              <div class="bar" style="left: 190px; height: 20px;"></div>
+              <div class="bar" style="left: 196px; height: 26px;"></div>
+              <div class="bar" style="left: 202px; height: 18px;"></div>
+              <div class="bar" style="left: 208px; height: 30px;"></div>
+            </div>
+            <div class="rec-stop"></div>
+          </div>
+        </div>
+      </div>
+      <div class="cat-header" style="opacity: 0.4;">BASS</div>
+      <div class="track-row">
+        <div class="track-name" style="opacity: 0.4;"><span class="ico">♪</span>베이스 기타 <span class="mute">🔊</span></div>
+        <div class="lane dimmed"><div class="empty-pill">녹음 시작</div></div>
+      </div>
+      <div class="playhead"></div>
+    </div>
+    <div class="note-box">
+      <ul>
+        <li><b>녹음 중인 트랙 lane:</b>
+          <ul>
+            <li>좌측: 빨간 점 깜박임 + 경과 시간 (0:03)</li>
+            <li>중앙: 실시간 amplitude 미터 (마이크 입력 진폭이 좌→우로 누적)</li>
+            <li>우측: 빨강 정지 버튼(■). 탭 → 녹음 종료 + pending 시트.</li>
+          </ul>
+        </li>
+        <li><b>레인 시각</b>: 빨강 border + 옅은 빨강 배경 + 미세 펄스 그림자. 녹음 중임을 강하게 표시.</li>
+        <li><b>플레이헤드</b>: 빨강(녹음 중)으로 색 변경. (일반 재생/편집은 흰색)</li>
+        <li><b>상단 카드</b>: 흐려짐 (disabled). 녹음 중엔 옵션 변경 안 됨을 시각화.</li>
+        <li><b>다른 트랙</b>: dim(opacity 0.4). 포커스가 녹음 트랙에 있음을 강조.</li>
+        <li><b>재녹음</b>도 동일 — 기존 청크 lane 안에서 같은 인라인 UI 가 나타남(청크가 잠시 숨겨지고, 종료 시 새 청크로 교체할지 시트로 묻기).</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────── Frame 3: Stopped (Pending sheet — already implemented) ─────────── -->
+  <div class="frame">
+    <div class="frame-title">Frame 4 — 녹음 종료 직후 (Pending 시트, 이미 구현됨)</div>
+    <div style="padding: 60px 24px; text-align: center; color: var(--text-2); font-size: 13px;">
+      녹음 정지 → 분석 → 모달 시트로 사용/삭제 선택. (timeline 화면은 그대로, 시트가 아래에서 올라옴)
+      <br><br>
+      <span style="color: var(--text);">이미 구현 완료 — 변경 없음.</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

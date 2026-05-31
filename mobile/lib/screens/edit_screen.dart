@@ -22,7 +22,7 @@ import '../widgets/timeline_editor.dart';
 
 enum _PlayState { stopped, playing, paused }
 
-enum _RecState { idle, recording, processing }
+enum _RecState { idle, countingDown, recording, processing }
 
 class EditScreen extends StatefulWidget {
   const EditScreen({super.key});
@@ -43,13 +43,17 @@ class _EditScreenState extends State<EditScreen> {
   final _rec = VoiceRecorder();
   _RecState _recState = _RecState.idle;
   int _recMs = 0;
+  int _recCountdownN = 3; // 카운트다운 현재 숫자 (3 → 2 → 1)
+  double _recCountdownProgress = 0; // 0..1 — 한 비트 안에서 차오르는 비율
+  Timer? _countdownTimer;
+  int? _recTrackId; // 녹음 중인 트랙 id (인라인 UI 표시 대상)
   bool _recHasBacking = false; // 반주 트랙이 있는지(헤드셋 무관)
   bool _recPlayingAudio = false; // 반주를 실제 소리로 재생 중인지(헤드셋 연결 시만)
   double _recBackingDur = 0; // 반주 길이(선만 움직일 때 상한)
   final Stopwatch _recWatch = Stopwatch(); // 실제 경과시간(틱 드리프트 방지)
   Timer? _recTimer;
   StreamSubscription? _ampSub;
-  final List<double> _recLevels = List.filled(40, 0.04);
+  final List<double> _recLevels = List.filled(40, 0.04, growable: true);
 
   // 메트로놈
   final _metro = Metronome();
@@ -155,13 +159,19 @@ class _EditScreenState extends State<EditScreen> {
   double _projectDuration(ProjectStore store) {
     double m = 0;
     for (final t in store.tracks) {
-      for (final n in t.notes) {
-        if (n.end > m) m = n.end;
+      // 청크 timelineEnd 기준 — 청크가 이동/확장되면 타임라인도 따라 확장.
+      for (final c in t.chunks) {
+        if (c.timelineEnd > m) m = c.timelineEnd;
       }
-      if (t.vocalDuration > m) m = t.vocalDuration; // 보컬 길이도 포함
+      // 청크 메타가 없는 레거시 트랙: 노트 end 로 폴백.
+      if (t.chunks.isEmpty) {
+        for (final n in t.notes) {
+          if (n.end > m) m = n.end;
+        }
+        if (t.vocalDuration > m) m = t.vocalDuration;
+      }
     }
-    // pending 결과(아직 commit 전)의 길이도 반영 — 첫 녹음이면 트랙은 비어있고
-    // pending duration 이 사실상 프로젝트 길이.
+    // pending 결과(아직 commit 전)의 길이도 반영.
     final p = store.pendingRecording;
     if (p != null) {
       final pd = p.analysis?.durationSec ?? p.vocalDuration;
@@ -178,14 +188,57 @@ class _EditScreenState extends State<EditScreen> {
 
   Future<void> _startInlineRecord(ProjectStore store) async {
     if (_recState != _RecState.idle) return;
-    setState(() => _recState = _RecState.recording); // 즉시 잠금(재진입 방지)
+    // 권한 먼저 확인 (카운트다운 후 거부되면 시간 낭비).
     if (!await _rec.hasPermission()) {
-      if (mounted) {
-        setState(() => _recState = _RecState.idle);
-        comingSoon(context, '마이크 권한이 필요합니다');
-      }
+      if (mounted) comingSoon(context, '마이크 권한이 필요합니다');
       return;
     }
+    // 카운트다운 시작 — 3→2→1 (각 400ms). 종료 후 실제 녹음 진입.
+    setState(() {
+      _recState = _RecState.countingDown;
+      _recTrackId = store.activeTrackId;
+      _recCountdownN = 3;
+      _recCountdownProgress = 0;
+    });
+    final ok = await _runCountdown();
+    if (!ok || !mounted) {
+      setState(() => _recState = _RecState.idle);
+      return;
+    }
+    setState(() => _recState = _RecState.recording);
+    await _startActualRecording(store);
+  }
+
+  /// 카운트다운 실행 — 사용자가 lane 재탭으로 취소하면 false 반환.
+  Future<bool> _runCountdown() async {
+    const beatMs = 400;
+    const stepMs = 16;
+    final completer = Completer<bool>();
+    int elapsed = 0;
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(milliseconds: stepMs), (timer) {
+      if (_recState != _RecState.countingDown) {
+        timer.cancel();
+        if (!completer.isCompleted) completer.complete(false);
+        return;
+      }
+      elapsed += stepMs;
+      final beat = elapsed ~/ beatMs;
+      final inBeat = elapsed - beat * beatMs;
+      if (beat >= 3) {
+        timer.cancel();
+        if (!completer.isCompleted) completer.complete(true);
+        return;
+      }
+      setState(() {
+        _recCountdownN = 3 - beat;
+        _recCountdownProgress = inBeat / beatMs;
+      });
+    });
+    return completer.future;
+  }
+
+  Future<void> _startActualRecording(ProjectStore store) async {
     final role = store.activeRole;
 
     // 기존 트랙 반주: 헤드셋이 있으면 소리로 재생(흥얼거림용), 스피커뿐이면 마이크
@@ -226,7 +279,8 @@ class _EditScreenState extends State<EditScreen> {
     for (int i = 0; i < _recLevels.length; i++) {
       _recLevels[i] = 0.04;
     }
-    setState(() => _recState = _RecState.recording);
+    // _recState 는 호출자(_startInlineRecord) 가 카운트다운 종료 후 이미 recording 으로 전환.
+    if (mounted) setState(() {});
     // 50ms 틱이되 시간은 Stopwatch 실측을 사용 → UI 지연이 있어도 선이 실제
     // 녹음 시간과 정확히 일치(틱 누적 드리프트 제거).
     _recTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
@@ -273,14 +327,19 @@ class _EditScreenState extends State<EditScreen> {
     setState(() {
       _recState = _RecState.processing;
       _playheadSec = null;
+      _recTrackId = null; // 인라인 UI 제거.
     });
     if (path != null) {
-      // 분석 결과를 트랙에 바로 commit 하지 않고 pending 으로 저장 — 트랙 안
-      // 다이얼로그(레인 오버레이)에서 "사용/삭제" 선택 후 반영(task #26).
       final tid = store.activeTrackId ?? store.active.id;
-      await store.analyzeForPending(path, tid);
-      // 녹음 직후엔 선택을 모두 해제 → 컨텍스트 액션 바 숨김(시안 Frame 1).
       store.clearSelection();
+      final fut = store.analyzeForPending(path, tid);
+      if (mounted) {
+        setState(() => _recState = _RecState.idle);
+        showPendingRecordingSheet(context, store);
+      }
+      await fut;
+      if (mounted && store.error != null) comingSoon(context, store.error!);
+      return;
     }
     if (mounted) {
       setState(() => _recState = _RecState.idle);
@@ -299,13 +358,19 @@ class _EditScreenState extends State<EditScreen> {
       final synthTracks = store.playableSynthTracks()
           .map((t) => SynthTrack(notes: t.notes, program: t.program, isDrum: t.isDrum))
           .toList();
-      final vocalPath = store.vocalMixPath;
-      debugPrint('[play] synthTracks=${synthTracks.length} vocal=${vocalPath != null}');
+      final vocalSchedule = store.vocalChunkSchedule();
+      // 현재 플레이헤드 위치(scrollX 와 동기화된 _playheadSec)부터 재생 시작.
+      final startSec = (_playheadSec ?? 0).clamp(0.0, double.infinity);
+      debugPrint('[play] synthTracks=${synthTracks.length} vocalChunks=${vocalSchedule.length} startAt=${startSec.toStringAsFixed(2)}s');
       await _synth.stop();
       await _player.stop();
       final futures = <Future<void>>[];
-      if (synthTracks.isNotEmpty) futures.add(_synth.play(synthTracks));
-      if (vocalPath != null) futures.add(_player.playFile(vocalPath));
+      if (synthTracks.isNotEmpty) {
+        futures.add(_synth.play(synthTracks, startAt: Duration(milliseconds: (startSec * 1000).round())));
+      }
+      if (vocalSchedule.isNotEmpty) {
+        futures.add(_player.playVocalChunks(vocalSchedule, startFromSec: startSec));
+      }
       await Future.wait(futures);
       if (mounted) setState(() => _ps = _PlayState.playing);
     } catch (e, st) {
@@ -361,6 +426,7 @@ class _EditScreenState extends State<EditScreen> {
                 selectedNote: t.chordActive ? null : store.selectedNote,
                 selectedChunk: t.chordActive ? null : store.selectedChunk,
                 onActivateTrack: store.setActiveTrack,
+                onToggleEnabled: store.toggleTrackEnabled,
                 onRecordAgain: (id) {
                   // 사이드바 "재녹음" chip — 그 트랙을 active 로 만든 뒤 인라인 녹음 시작.
                   // (전용 store 메서드 없음 → 활성화 + 기존 _startInlineRecord 재사용)
@@ -377,19 +443,26 @@ class _EditScreenState extends State<EditScreen> {
                 onChunkMove: t.chordActive ? null : store.moveChunkBy,
                 onChunkResize: t.chordActive
                     ? null
-                    : (id, {double? newStart, double? newEnd}) =>
-                        store.resizeChunk(id, newStart: newStart, newEnd: newEnd),
+                    : (id, {double? newLeftTimeline, double? newRightTimeline}) => store.resizeChunk(id,
+                        newLeftTimeline: newLeftTimeline, newRightTimeline: newRightTimeline),
                 onNoteTap: t.chordActive
                     ? null // 코드 모드에선 후보 편집 비활성 (단음 모드에서 편집)
-                    : (i) {
-                        store.selectNote(i);
-                        showNoteCandidate(context, store, i);
-                      },
+                    : (i) => store.selectNote(i), // 선택만 — 음정 시트는 컨텍스트 액션 바의 "음정" 탭으로 열기.
                 // 녹음 종료 직후 분석 결과 사용/삭제 다이얼로그(task #26).
                 pending: store.pendingRecording,
                 onPendingUse: store.commitPendingRecording,
                 onPendingDiscard: store.discardPendingRecording,
                 onPendingToggleAssist: store.togglePendingAssist,
+                // 인라인 녹음(카운트다운 + 녹음중 UI) — 해당 트랙 lane 안에 표시.
+                recPhase: _recState == _RecState.countingDown
+                    ? InlineRecPhase.countingDown
+                    : (_recState == _RecState.recording ? InlineRecPhase.recording : InlineRecPhase.idle),
+                recTrackId: _recTrackId,
+                recCountdownN: _recCountdownN,
+                recCountdownProgress: _recCountdownProgress,
+                recElapsedMs: _recMs,
+                recLevels: _recLevels,
+                onStopRec: () => _stopInlineRecord(store),
               ),
             ),
             _contextActionBar(store, t),
@@ -444,13 +517,8 @@ class _EditScreenState extends State<EditScreen> {
           child: _roleChips(store),
         ),
         ActiveTrackCards(store: store),
-        // 녹음 트리거는 빈 트랙 레인 안의 인라인 pill 로 일원화(시안 track-expansion.html).
-        // 녹음 중/처리 중에만 진행 상태(타이머·미터·종료 버튼) 박스를 노출.
-        if (_recState != _RecState.idle)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: _recordButton(store, t),
-          ),
+        // 녹음 진행 UI(카운트다운/녹음중/정지)는 트랙 레인 안 인라인으로 이동(task #35).
+        // 상단 카드 영역엔 더 이상 녹음 상태 박스를 띄우지 않는다.
       ],
     );
   }
@@ -492,6 +560,7 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _recordButton(ProjectStore store, TrackData t) {
     // 모든 상태에서 같은 박스(높이 64) 유지 — idle→recording→processing 전환 시
     // 위치/크기 점프 없음. 미터는 항상 자리 차지(옵션 B): idle 시 lime 알파 0.18 정적,

@@ -1,11 +1,14 @@
 // 바텀 시트 3종: 악기 선택 / 노트 후보 / 내보내기·공유.
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../audio/player.dart';
 import '../audio/synth.dart';
+import '../audio/synth_player.dart';
 import '../models/models.dart';
 import '../music/chord_expand.dart';
 import '../music/instrument_icons.dart';
@@ -82,6 +85,292 @@ void showHelpSheet(BuildContext context, String title, String body) {
   );
 }
 
+// ─── 녹음 결과 사용/삭제 시트 ──────────────────────────────────────────
+// 녹음 종료 → 분석/정리 결과 미리보기 + 사용/삭제. 어시스트 토글 포함(보컬 제외).
+// 기존 인라인 트랙 박스에서 모달 시트로 승격 — 좁은 공간에 다 안 들어가는 문제 해결.
+void showPendingRecordingSheet(BuildContext context, ProjectStore store) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    isDismissible: false, // 사용/삭제 버튼으로만 닫힘 (실수 dismiss 방지)
+    enableDrag: false,
+    builder: (sheetCtx) {
+      return AnimatedBuilder(
+        animation: store,
+        builder: (_, __) {
+          final p = store.pendingRecording;
+          if (p == null) {
+            // commit/discard 후 자동 닫힘.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (Navigator.canPop(sheetCtx)) Navigator.pop(sheetCtx);
+            });
+            return const SizedBox.shrink();
+          }
+          return _PendingSheetBody(store: store, p: p);
+        },
+      );
+    },
+  );
+}
+
+class _PendingSheetBody extends StatefulWidget {
+  const _PendingSheetBody({required this.store, required this.p});
+  final ProjectStore store;
+  final PendingRecording p;
+
+  @override
+  State<_PendingSheetBody> createState() => _PendingSheetBodyState();
+}
+
+class _PendingSheetBodyState extends State<_PendingSheetBody> {
+  final SynthPlayer _synth = SynthPlayer();
+  final AudioPlayerService _audio = AudioPlayerService();
+  bool _previewPlaying = false;
+  StreamSubscription? _doneSub;
+
+  @override
+  void dispose() {
+    _doneSub?.cancel();
+    _synth.stop();
+    _audio.stop();
+    super.dispose();
+  }
+
+  Future<void> _togglePreview() async {
+    final p = widget.p;
+    if (_previewPlaying) {
+      await _synth.stop();
+      await _audio.stop();
+      if (mounted) setState(() => _previewPlaying = false);
+      return;
+    }
+    final isVocal = p.role == TrackRole.vocal;
+    setState(() => _previewPlaying = true);
+    _doneSub?.cancel();
+    if (isVocal) {
+      if (p.vocalWavPath == null) {
+        setState(() => _previewPlaying = false);
+        return;
+      }
+      await _audio.playFile(p.vocalWavPath!);
+      // audioplayers 완료 시점 stream 이 따로 있지만 간단히 duration 후 reset.
+      Future.delayed(Duration(milliseconds: (p.vocalDuration * 1000).toInt() + 200), () {
+        if (mounted) setState(() => _previewPlaying = false);
+      });
+    } else {
+      final tr = widget.store.trackById(p.trackId);
+      final program = tr?.program ?? 0;
+      final isDrum = tr?.role == TrackRole.drum;
+      _doneSub = _synth.onComplete.listen((_) {
+        if (mounted) setState(() => _previewPlaying = false);
+      });
+      await _synth.play([SynthTrack(notes: p.notes, program: program, isDrum: isDrum)]);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.p;
+    final store = widget.store;
+    final mq = MediaQuery.of(context);
+    final isVocal = p.role == TrackRole.vocal;
+    final analyzing = store.busy && p.analysis == null && p.vocalWavPath == null;
+    final notesCount = p.notes.length;
+    final dur = p.analysis?.durationSec ?? p.vocalDuration;
+    final canPreview = !analyzing && (isVocal ? p.vocalWavPath != null : p.notes.isNotEmpty);
+    return Container(
+      decoration: _sheetDeco(),
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _grabber(),
+          Text('녹음 완료', style: T.h2.copyWith(fontSize: 18)),
+          const SizedBox(height: 4),
+          Text(
+            analyzing
+                ? '분석 중…'
+                : (isVocal
+                    ? '${dur.toStringAsFixed(1)}초 보컬을 사용할까요?'
+                    : '${dur.toStringAsFixed(1)}초 · 노트 $notesCount개를 사용할까요?'),
+            style: T.body.copyWith(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            height: 110,
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: analyzing
+                ? const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.2, color: AppColors.lime),
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: CustomPaint(
+                      painter: isVocal
+                          ? _PendingWavePainter(peaks: p.vocalPeaks)
+                          : _PendingNotesPainter(notes: p.notes),
+                      size: Size.infinite,
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 12),
+          _previewButton(canPreview),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(
+              child: _pendingSheetBtn(
+                '삭제',
+                outlined: true,
+                onTap: () async {
+                  await _synth.stop();
+                  await _audio.stop();
+                  store.discardPendingRecording();
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _pendingSheetBtn(
+                '사용',
+                outlined: false,
+                onTap: analyzing
+                    ? null
+                    : () async {
+                        await _synth.stop();
+                        await _audio.stop();
+                        store.commitPendingRecording();
+                      },
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewButton(bool enabled) {
+    final color = enabled
+        ? (_previewPlaying ? AppColors.lime : AppColors.textPrimary)
+        : AppColors.textTertiary;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: enabled ? _togglePreview : null,
+      child: Container(
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _previewPlaying ? AppColors.lime : AppColors.border),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(_previewPlaying ? Symbols.stop : Symbols.play_arrow, size: 18, color: color),
+            const SizedBox(width: 6),
+            Text(_previewPlaying ? '정지' : '미리듣기',
+                style: T.body.copyWith(fontSize: 14, fontWeight: FontWeight.w600, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Widget _pendingSheetBtn(String label, {required bool outlined, VoidCallback? onTap}) {
+  final disabled = onTap == null;
+  return GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: onTap,
+    child: Container(
+      height: 48,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: outlined ? Colors.transparent : (disabled ? AppColors.border : AppColors.lime),
+        border: outlined ? Border.all(color: AppColors.border) : null,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(label,
+          style: T.body.copyWith(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: outlined ? AppColors.textPrimary : AppColors.bg)),
+    ),
+  );
+}
+
+class _PendingWavePainter extends CustomPainter {
+  _PendingWavePainter({required this.peaks});
+  final List<double> peaks;
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (peaks.isEmpty) return;
+    final w = size.width, h = size.height;
+    final pad = 8.0;
+    final innerH = h - pad * 2;
+    final mid = h / 2;
+    final paint = Paint()..color = AppColors.lime..strokeWidth = 1.4..strokeCap = StrokeCap.round;
+    final n = peaks.length;
+    for (int i = 0; i < n; i++) {
+      final x = (i / (n - 1)) * w;
+      final a = peaks[i].clamp(0.0, 1.0) * innerH / 2;
+      canvas.drawLine(Offset(x, mid - a), Offset(x, mid + a), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PendingWavePainter old) => old.peaks != peaks;
+}
+
+class _PendingNotesPainter extends CustomPainter {
+  _PendingNotesPainter({required this.notes});
+  final List<Note> notes;
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (notes.isEmpty) return;
+    final w = size.width, h = size.height;
+    final minT = notes.map((n) => n.start).reduce(math.min);
+    final maxT = notes.map((n) => n.end).reduce(math.max);
+    final span = math.max(maxT - minT, 0.05);
+    final pitched = notes.where((n) => n.kind == 'pitched').toList();
+    int minP = 60, maxP = 72;
+    if (pitched.isNotEmpty) {
+      minP = pitched.map((n) => n.pitch).reduce((a, b) => a < b ? a : b) - 1;
+      maxP = pitched.map((n) => n.pitch).reduce((a, b) => a > b ? a : b) + 1;
+    }
+    final range = (maxP - minP).clamp(1, 127);
+    final paint = Paint()..color = AppColors.lime;
+    final bh = (h / range).clamp(4.0, 10.0);
+    for (final n in notes) {
+      final x = ((n.start - minT) / span) * w;
+      final bw = math.max(((n.end - n.start) / span) * w, 3.0);
+      if (n.kind == 'percussive') {
+        canvas.drawRect(Rect.fromLTWH(x, h / 2 - 2, bw.clamp(3.0, 12.0), 4), paint);
+        continue;
+      }
+      final tt = 1 - (n.pitch - minP) / range;
+      final y = (tt * (h - bh)).clamp(0.0, h - bh);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTWH(x, y, bw, bh), const Radius.circular(2)),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PendingNotesPainter old) => old.notes != notes;
+}
+
 // ─── 트랙 추가 (FAB → 카테고리별 악기 시트) ───────────────────────────
 // #27: 우측 하단 FAB 탭으로 열림. CHORDS / BASS / DRUM / VOCAL 4개 카테고리,
 // 각 카테고리는 2 컬럼 악기 그리드. 카드 탭 → store.addTrack(role, program)
@@ -99,26 +388,31 @@ class _AddTrackItem {
   const _AddTrackItem(this.name, this.sub, this.program, {this.saveProgram});
 }
 
+// instrumentPalette 와 1:1 일치. 신규 악기는 팔레트에 추가된 후 함께 노출.
 const Map<TrackRole, List<_AddTrackItem>> _addTrackCatalog = {
   TrackRole.keys: [
-    _AddTrackItem('Piano', 'Acoustic Grand', 0),
-    _AddTrackItem('Guitar', 'Nylon', 24),
-    _AddTrackItem('E.Piano', 'Rhodes', 4),
-    _AddTrackItem('Strings', 'Ensemble', 48),
-    _AddTrackItem('Organ', 'Drawbar', 16),
-    _AddTrackItem('Synth Pad', 'Warm', 90),
+    _AddTrackItem('피아노', 'Acoustic Grand', 0),
+    _AddTrackItem('신스', 'Synth Pad', 90),
+    _AddTrackItem('어쿠스틱 기타', 'Acoustic', 25),
+    _AddTrackItem('일렉 기타', 'Electric', 27),
+    // 추후 추가 검토:
+    // _AddTrackItem('일렉 피아노', 'Rhodes', 4),
+    // _AddTrackItem('오르간', 'Drawbar', 16),
+    // _AddTrackItem('클래식 기타', 'Nylon', 24),
+    // _AddTrackItem('스트링', 'Ensemble', 48),
   ],
   TrackRole.bass: [
-    _AddTrackItem('Acoustic Bass', 'Upright', 32),
-    _AddTrackItem('Synth Bass', '808', 39),
+    _AddTrackItem('베이스 기타', 'Electric Bass', 33),
+    _AddTrackItem('신스 베이스', '808', 39),
+    // 추후 추가 검토:
+    // _AddTrackItem('어쿠스틱 베이스', 'Upright', 32),
   ],
   TrackRole.drum: [
     // 드럼은 program 이 의미 없음(자동 매핑). 아이콘만 드럼킷.
-    _AddTrackItem('Acoustic Kit', 'Standard GM', kDrumKitProgram, saveProgram: 0),
-    _AddTrackItem('808', 'Electronic', kDrumKitProgram, saveProgram: 0),
+    _AddTrackItem('드럼 키트', 'Standard GM', kDrumKitProgram, saveProgram: 0),
   ],
   TrackRole.vocal: [
-    _AddTrackItem('Original Vocal', '원본 그대로', kVocalProgram, saveProgram: 0),
+    _AddTrackItem('원본 보컬', '원본 그대로', kVocalProgram, saveProgram: 0),
   ],
 };
 

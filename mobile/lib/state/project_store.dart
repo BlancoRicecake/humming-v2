@@ -26,18 +26,27 @@ class TrackData {
   int program; // 선택된 GM 악기
   bool chordMode = false;
   bool enabled = true; // 믹스 재생 포함 여부(사이드바 토글)
-  String? wavPath; // 오리지널 WAV
-  AnalyzeResponse? analysis; // 최근 분석 결과
-  List<Note> notes = []; // 편집된 현재 노트
+  String? wavPath; // 마지막 녹음 원본 WAV (호환용 — 청크별 wav 는 Chunk.vocalWavPath)
+  AnalyzeResponse? analysis; // 최근 분석 결과(가장 최근 청크 메타)
+  List<Note> notes = []; // 전 청크의 모든 노트(원본 시간 보존)
+  List<Chunk> chunks = []; // 청크 메타(이동/트림). 노트들은 chunkId 로 참조됨.
   AnalyzeOptions options; // autoKey / pitchAssistant / key
 
-  // 보컬 전용 — 악기 변환 없이 목소리 그대로. 정리된 WAV + 표시용 파형.
-  String? vocalWavPath; // 노이즈 정리된 목소리(믹스/재생 소스)
+  // 호환용 — 신규 코드는 chunks 의 vocalWavPath 사용.
+  String? vocalWavPath;
   List<double> vocalPeaks = const [];
   double vocalDuration = 0;
 
   bool get isVocal => role == TrackRole.vocal;
-  bool get hasRecording => wavPath != null || vocalWavPath != null;
+  bool get hasRecording =>
+      chunks.isNotEmpty || wavPath != null || vocalWavPath != null;
+
+  Chunk? chunkById(int id) {
+    for (final c in chunks) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
 
   bool get isChordInstrument {
     for (final i in instrumentPalette[role] ?? const <Instrument>[]) {
@@ -51,6 +60,35 @@ class TrackData {
 
   /// 재생/내보내기에 쓸 노트 (코드 모드면 트라이어드 확장).
   List<Note> get renderNotes => expandChords(notes, analysis?.detectedKey, chordActive);
+
+  /// 청크의 timelineStart/inPoint/outPoint 를 적용한 "효과 시간" 기준 노트.
+  /// 가시 범위 밖 노트는 제외, 안쪽 노트는 (timelineStart - inPoint) 만큼 시프트.
+  /// 청크 메타가 비어있으면(레거시) renderNotes 그대로 반환.
+  List<Note> get effectiveRenderNotes {
+    if (chunks.isEmpty) return renderNotes;
+    final byId = {for (final c in chunks) c.id: c};
+    final out = <Note>[];
+    for (final n in renderNotes) {
+      final c = byId[n.chunkId];
+      if (c == null) {
+        out.add(n);
+        continue;
+      }
+      if (n.start < c.inPoint || n.start >= c.outPoint) continue;
+      final shift = c.timelineStart - c.inPoint;
+      if (shift == 0) {
+        out.add(n);
+      } else {
+        final clone = Note.fromJson(n.toJson())
+          ..start = n.start + shift
+          ..end = n.end + shift
+          ..chunkId = n.chunkId;
+        clone.duration = clone.end - clone.start;
+        out.add(clone);
+      }
+    }
+    return out;
+  }
 
   /// 직렬화 — 프로젝트 저장/복원용(현재 호출처 없음, #21~ 에서 사용 예정).
   Map<String, dynamic> toJson() => {
@@ -345,6 +383,18 @@ class ProjectStore extends ChangeNotifier {
         t.vocalDuration = v.duration;
         t.notes = []; // 보컬은 노트 없음
         t.analysis = null;
+        t.chunks
+          ..clear()
+          ..add(Chunk(
+            id: ++_chunkSeq,
+            timelineStart: 0,
+            inPoint: 0,
+            outPoint: v.duration,
+            originalLength: v.duration,
+            vocalWavPath: f.path,
+            vocalPeaks: v.peaks,
+            vocalDuration: v.duration,
+          ));
         debugPrint('[vocal] cleaned dur=${v.duration.toStringAsFixed(1)}s peaks=${v.peaks.length}');
       } catch (e) {
         error = '보컬 처리 실패: $e';
@@ -365,6 +415,18 @@ class ProjectStore extends ChangeNotifier {
       for (final n in t.notes) {
         n.chunkId = cid;
       }
+      final span = res.durationSec > 0
+          ? res.durationSec
+          : (res.notes.isEmpty ? 0.0 : res.notes.map((n) => n.end).reduce(math.max));
+      t.chunks
+        ..clear()
+        ..add(Chunk(
+          id: cid,
+          timelineStart: 0,
+          inPoint: 0,
+          outPoint: span,
+          originalLength: span,
+        ));
       // 드럼 트랙: 백엔드는 항상 멜로딕으로 분석(auto-percussive 제거됨).
       // 사용자가 드럼 슬롯에 녹음 = 명시적 드럼 의도 → pitch 기반 휴리스틱으로
       // GM 드럼 노트(36/38/42) + kind='percussive' 재라벨.
@@ -512,6 +574,18 @@ class ProjectStore extends ChangeNotifier {
       t.vocalDuration = p.vocalDuration;
       t.notes = [];
       t.analysis = null;
+      t.chunks
+        ..clear()
+        ..add(Chunk(
+          id: ++_chunkSeq,
+          timelineStart: 0,
+          inPoint: 0,
+          outPoint: p.vocalDuration,
+          originalLength: p.vocalDuration,
+          vocalWavPath: p.vocalWavPath,
+          vocalPeaks: p.vocalPeaks,
+          vocalDuration: p.vocalDuration,
+        ));
     } else {
       t.analysis = p.analysis;
       t.notes = p.notes;
@@ -519,6 +593,19 @@ class ProjectStore extends ChangeNotifier {
       for (final n in t.notes) {
         n.chunkId = cid;
       }
+      final span = p.analysis?.durationSec ?? 0.0;
+      final endSpan = span > 0
+          ? span
+          : (t.notes.isEmpty ? 0.0 : t.notes.map((n) => n.end).reduce(math.max));
+      t.chunks
+        ..clear()
+        ..add(Chunk(
+          id: cid,
+          timelineStart: 0,
+          inPoint: 0,
+          outPoint: endSpan,
+          originalLength: endSpan,
+        ));
       if (t.role == TrackRole.drum) {
         _relabelAsDrums(t.notes);
       }
@@ -902,84 +989,93 @@ class ProjectStore extends ChangeNotifier {
   // ── 청크 단위 ──
   void _deleteChunk(int id) {
     active.notes.removeWhere((n) => n.chunkId == id);
+    active.chunks.removeWhere((c) => c.id == id);
     selectedChunk = null;
     _audioChanged();
   }
 
   /// 청크 전체를 바로 뒤에 복제(= 청크 Loop/Copy). 새 청크로 선택 이동.
+  /// 노트의 절대 시간은 그대로 두고 새 청크 메타의 timelineStart 만 뒤로 이동.
   void _copyChunk(int id) {
+    final c = active.chunkById(id);
+    if (c == null) return;
     final ns = _chunkNotes(id);
-    if (ns.isEmpty) return;
-    final start = ns.map((n) => n.start).reduce(math.min);
-    final end = ns.map((n) => n.end).reduce(math.max);
-    final offset = end - start;
     final newId = ++_chunkSeq;
     for (final n in ns) {
-      active.notes.add(_clone(n)
-        ..start = n.start + offset
-        ..end = n.end + offset
-        ..chunkId = newId);
+      active.notes.add(_clone(n)..chunkId = newId);
     }
+    active.chunks.add(Chunk(
+      id: newId,
+      timelineStart: c.timelineEnd,
+      inPoint: c.inPoint,
+      outPoint: c.outPoint,
+      originalLength: c.originalLength,
+      vocalWavPath: c.vocalWavPath,
+      vocalPeaks: c.vocalPeaks,
+      vocalDuration: c.vocalDuration,
+    ));
     _resort();
     selectedChunk = newId;
     _audioChanged();
   }
 
-  /// 청크 전체를 dtSec 만큼 시간 이동(트랙 내 위치 변경). 시작이 0 미만이면 클램프.
+  /// 청크 전체를 dtSec 만큼 타임라인 위치 이동. 노트는 건드리지 않고
+  /// Chunk.timelineStart 만 변경. 시작이 0 미만이면 클램프.
   void moveChunkBy(int id, double dtSec) {
-    final ns = _chunkNotes(id);
-    if (ns.isEmpty || dtSec == 0) return;
-    final minStart = ns.map((n) => n.start).reduce(math.min);
-    final dt = (minStart + dtSec < 0) ? -minStart : dtSec; // 0 이하 방지
-    if (dt == 0) return;
-    for (final n in ns) {
-      n.start += dt;
-      n.end += dt;
-    }
-    _resort();
+    final c = active.chunkById(id);
+    if (c == null || dtSec == 0) return;
+    final next = math.max(0.0, c.timelineStart + dtSec);
+    if (next == c.timelineStart) return;
+    c.timelineStart = next;
     _audioChanged();
   }
 
-  /// 청크 양끝 트림(시간 스케일) — newEnd 지정 시 시작 고정, newStart 지정 시 끝 고정.
-  /// 노트를 제거하지 않고 늘리거나 줄여 길이를 조절(되돌리기 가능).
-  void resizeChunk(int id, {double? newStart, double? newEnd}) {
-    final ns = _chunkNotes(id);
-    if (ns.isEmpty) return;
-    final start = ns.map((n) => n.start).reduce(math.min);
-    final end = ns.map((n) => n.end).reduce(math.max);
-    final span = end - start;
-    if (span <= 0.02) return;
-    if (newEnd != null) {
-      final ne = math.max(newEnd, start + 0.12); // 최소 길이
-      final s = (ne - start) / span;
-      for (final n in ns) {
-        n.start = start + (n.start - start) * s;
-        n.end = start + (n.end - start) * s;
-        n.duration = n.end - n.start;
-      }
-    } else if (newStart != null) {
-      final nstart = math.max(0.0, math.min(newStart, end - 0.12));
-      final s = (end - nstart) / span;
-      for (final n in ns) {
-        n.start = end - (end - n.start) * s;
-        n.end = end - (end - n.end) * s;
-        n.duration = n.end - n.start;
-      }
+  /// 청크 양끝 트림 — 원본 청크의 [inPoint, outPoint] 윈도우만 좁힌다.
+  /// 노트는 절대 시간 그대로 보존되어 다시 늘리면 복원됨.
+  /// 좌측 핸들을 움직이면(newLeftTimeline) inPoint 조정 + timelineStart 보정해서
+  ///   "잘려나간 만큼 청크가 안쪽으로 들어오는" 시각 효과를 낸다.
+  /// 우측 핸들(newRightTimeline)은 outPoint 만 조정.
+  void resizeChunk(int id, {double? newLeftTimeline, double? newRightTimeline}) {
+    final c = active.chunkById(id);
+    if (c == null) return;
+    const minLen = 0.12;
+    if (newRightTimeline != null) {
+      final desiredLen = (newRightTimeline - c.timelineStart).clamp(minLen, c.originalLength - c.inPoint);
+      c.outPoint = c.inPoint + desiredLen;
+      _audioChanged();
+    } else if (newLeftTimeline != null) {
+      final fixedRight = c.timelineEnd;
+      final newLeft = math.min(newLeftTimeline, fixedRight - minLen);
+      final delta = newLeft - c.timelineStart; // (+) 좌측 안쪽으로 / (-) 좌측 바깥으로
+      final nextIn = (c.inPoint + delta).clamp(0.0, c.outPoint - minLen);
+      c.inPoint = nextIn;
+      c.timelineStart = fixedRight - (c.outPoint - c.inPoint);
+      _audioChanged();
     }
-    _resort();
-    _audioChanged();
   }
 
-  /// 청크를 atSec(플레이헤드)에서 둘로 분할 — 그 지점 이후 노트에 새 청크 ID 부여.
+  /// 청크를 atSec(타임라인 절대 시간 = 플레이헤드 위치)에서 둘로 분할.
+  /// 좌측은 원본 청크의 [inPoint, localCut), 우측은 새 청크 [localCut, outPoint).
   void _splitChunk(int id, double? atSec) {
-    final ns = _chunkNotes(id);
-    if (ns.isEmpty || atSec == null) return;
-    final start = ns.map((n) => n.start).reduce(math.min);
-    final end = ns.map((n) => n.end).reduce(math.max);
-    if (atSec <= start || atSec >= end) return; // 청크 밖이면 무시
+    final c = active.chunkById(id);
+    if (c == null || atSec == null) return;
+    if (atSec <= c.timelineStart || atSec >= c.timelineEnd) return;
+    final localCut = atSec - c.timelineStart + c.inPoint;
     final newId = ++_chunkSeq;
-    for (final n in ns) {
-      if (n.start >= atSec) n.chunkId = newId;
+    active.chunks.add(Chunk(
+      id: newId,
+      timelineStart: atSec,
+      inPoint: localCut,
+      outPoint: c.outPoint,
+      originalLength: c.originalLength,
+      vocalWavPath: c.vocalWavPath,
+      vocalPeaks: c.vocalPeaks,
+      vocalDuration: c.vocalDuration,
+    ));
+    c.outPoint = localCut;
+    // 우측 청크의 노트들을 재할당.
+    for (final n in active.notes) {
+      if (n.chunkId == id && n.start >= localCut) n.chunkId = newId;
     }
     selectedChunk = newId;
     _audioChanged();
@@ -1028,7 +1124,7 @@ class ProjectStore extends ChangeNotifier {
     final out = <({List<Note> notes, int program, bool isDrum})>[];
     for (final t in tracks) {
       if (!t.enabled || t.notes.isEmpty || t.isVocal) continue;
-      out.add((notes: t.renderNotes, program: t.program, isDrum: t.role == TrackRole.drum));
+      out.add((notes: t.effectiveRenderNotes, program: t.program, isDrum: t.role == TrackRole.drum));
     }
     return out;
   }
@@ -1038,7 +1134,7 @@ class ProjectStore extends ChangeNotifier {
     final out = <({List<Note> notes, int program, bool isDrum})>[];
     for (final t in tracks) {
       if (t.role == exclude || t.notes.isEmpty || t.isVocal) continue;
-      out.add((notes: t.renderNotes, program: t.program, isDrum: t.role == TrackRole.drum));
+      out.add((notes: t.effectiveRenderNotes, program: t.program, isDrum: t.role == TrackRole.drum));
     }
     return out;
   }
@@ -1055,6 +1151,23 @@ class ProjectStore extends ChangeNotifier {
     return v != null && v.enabled && v.vocalWavPath != null;
   }
   String? get vocalMixPath => hasVocalAudio ? _vocalTrack!.vocalWavPath : null;
+
+  /// 보컬 청크 재생 스케줄 — 각 enabled 보컬 트랙의 청크별 (path, timelineStart, inPoint, duration).
+  /// chunk meta 의 trim/move 를 그대로 반영.
+  List<({String path, double timelineStart, double inPoint, double duration})> vocalChunkSchedule() {
+    final out = <({String path, double timelineStart, double inPoint, double duration})>[];
+    for (final t in tracks) {
+      if (!t.isVocal || !t.enabled) continue;
+      for (final c in t.chunks) {
+        final path = c.vocalWavPath ?? t.vocalWavPath;
+        if (path == null) continue;
+        final dur = c.visibleLength;
+        if (dur <= 0) continue;
+        out.add((path: path, timelineStart: c.timelineStart, inPoint: c.inPoint, duration: dur));
+      }
+    }
+    return out;
+  }
   bool get hasPlayableMix => hasEnabledNotes || hasVocalAudio;
 
   /// 녹음 중 함께 들을 보컬(녹음 대상이 보컬이 아니고 보컬 오디오가 있을 때).
@@ -1072,7 +1185,7 @@ class ProjectStore extends ChangeNotifier {
   Future<Uint8List> renderMix() {
     final trs = tracks
         .where((t) => t.enabled && t.notes.isNotEmpty)
-        .map((t) => (notes: t.renderNotes, program: t.program))
+        .map((t) => (notes: t.effectiveRenderNotes, program: t.program))
         .toList();
     return _api.renderMix(trs);
   }
@@ -1087,14 +1200,14 @@ class ProjectStore extends ChangeNotifier {
   Future<Uint8List?> renderAccompaniment(TrackRole exclude) async {
     final trs = tracks
         .where((t) => t.role != exclude && t.notes.isNotEmpty)
-        .map((t) => (notes: t.renderNotes, program: t.program))
+        .map((t) => (notes: t.effectiveRenderNotes, program: t.program))
         .toList();
     if (trs.isEmpty) return null;
     return _api.renderMix(trs);
   }
 
   Future<Uint8List> exportMidiActive() =>
-      _api.exportMidi(active.renderNotes, program: active.program);
+      _api.exportMidi(active.effectiveRenderNotes, program: active.program);
 
   /// 재생 ▶ 와 동일한 WAV 믹스를 파일로 export — `renderMix()` 재사용.
   /// (보컬 오디오는 SoundFont 합성 결과가 아니므로 현재 포함되지 않음 —
@@ -1117,7 +1230,7 @@ class ProjectStore extends ChangeNotifier {
         melodicCh++;
         if (melodicCh == 9) melodicCh = 10; // 드럼 채널 회피
       }
-      list.add((notes: t.renderNotes, program: t.program, channel: ch));
+      list.add((notes: t.effectiveRenderNotes, program: t.program, channel: ch));
     }
     return _api.exportMidiMix(list);
   }
