@@ -57,8 +57,10 @@ class _EditScreenState extends State<EditScreen> {
 
   void _seek(double sec) {
     setState(() => _playheadSec = sec);
+    // synth: 재생/일시정지/정지 모두에서 위치를 동기화(정지 시엔 다음 ▶ 부터 적용).
+    // 보컬: 재생 중일 때만 의미. (audioplayers seek 은 정지 상태에서 효과 한정적)
+    _synth.seek(sec);
     if (_ps != _PlayState.stopped) {
-      // SynthPlayer 는 현재 seek 미지원 — 보컬 레이어만 보정. 후속에서 정밀 구현.
       _player.seek(Duration(milliseconds: (sec * 1000).round()));
     }
   }
@@ -128,15 +130,16 @@ class _EditScreenState extends State<EditScreen> {
   Future<void> _onPlayTap(ProjectStore store) async {
     switch (_ps) {
       case _PlayState.playing:
-        // SynthPlayer pause 는 현재 stop 과 동일 — 보컬 레이어만 진짜 pause.
-        // 일관성을 위해 양쪽 정지(노트 잔향 끊김) → resume 시 처음부터 재생.
+        // 위치 보존 일시정지 — synth/보컬 모두 현재 위치 기억.
         await _synth.pause();
         await _player.pause();
         setState(() => _ps = _PlayState.paused);
         break;
       case _PlayState.paused:
-        // SF2 재개는 미지원 — 처음부터 다시 재생(UX 후퇴 OK, 후속에서 정밀 구현).
-        await _playMix(store);
+        // 일시정지 위치부터 이어서 재생.
+        await _synth.resume();
+        await _player.resume();
+        if (mounted) setState(() => _ps = _PlayState.playing);
         break;
       case _PlayState.stopped:
         await _playMix(store);

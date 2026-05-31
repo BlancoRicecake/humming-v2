@@ -3,10 +3,11 @@
 // 백엔드 /render_mix 를 대체하는 온디바이스 재생 경로. 멀티트랙 동시 재생을 위해
 // 각 멜로딕 트랙에 채널을 할당(0,1,2,…, 드럼=9 회피)하고, percussive 노트는 ch9 로.
 //
-// 현재 범위(task #5):
-//   - play(tracks) / stop()        ← 정확히 구현
-//   - 일시정지/재개/seek           ← 미지원 (호출자 입장에선 stop 후 재생부터)
-// 후속에서 onPosition 스트림, pause/resume 정밀 구현 가능.
+// task #14 추가: 위치 보존 pause/resume + seek(점프). 구현 단순화를 위해
+//   - pause 시 모든 활성 노트를 stopAll 로 즉시 끄고 누적 진행 시간(_pausedAt) 만 보존
+//   - resume / seek 시 누적 진행 시각 이후 이벤트만 필터링해 재스케줄
+//   - pause 시점에 sustain 중이던 노트는 다시 발사되지 않음(음 끊김 OK)
+//   - envelope 정밀 복원은 미구현 (sf2/midi 한계 — 호출 시점에 다시 noteOn 만)
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
@@ -25,10 +26,17 @@ class SynthPlayer {
   // 진행 중 재생을 식별하는 토큰 — stop() 으로 무효화하면 진행 중 루프가 즉시 종료.
   int _playToken = 0;
   bool _playing = false;
+  bool _paused = false;
   Duration _lengthHint = Duration.zero;
   DateTime? _startedAt;
 
-  // 위치 통지(플레이헤드 갱신). 100ms 주기로 발행.
+  // 누적 진행 시간 — pause/seek 의 기준점. 재생 시각 = now - _startedAt + _pausedAt.
+  Duration _pausedAt = Duration.zero;
+
+  // 가장 최근 play() 호출의 이벤트(resume/seek 재스케줄용).
+  List<_Ev> _events = const [];
+
+  // 위치 통지(플레이헤드 갱신). 50ms 주기로 발행.
   final StreamController<Duration> _posCtl = StreamController<Duration>.broadcast();
   final StreamController<void> _doneCtl = StreamController<void>.broadcast();
   Timer? _posTimer;
@@ -36,10 +44,17 @@ class SynthPlayer {
   Stream<Duration> get onPosition => _posCtl.stream;
   Stream<void> get onComplete => _doneCtl.stream;
   bool get isPlaying => _playing;
+  bool get isPaused => _paused;
+  Duration get position {
+    if (_playing && _startedAt != null) {
+      return DateTime.now().difference(_startedAt!) + _pausedAt;
+    }
+    return _pausedAt;
+  }
 
   /// 멀티트랙 재생. 멜로딕 트랙은 ch 0,1,2 … 로 자동 배정(드럼 채널 9 회피).
-  /// 빈 입력이면 즉시 complete.
-  Future<void> play(List<SynthTrack> tracks) async {
+  /// [startAt] 부터 시작(기본 0). seek/resume 내부 호출에서도 사용.
+  Future<void> play(List<SynthTrack> tracks, {Duration startAt = Duration.zero}) async {
     await stop();
     if (tracks.isEmpty) {
       _doneCtl.add(null);
@@ -90,27 +105,48 @@ class SynthPlayer {
       return (a.isOn ? 1 : 0).compareTo(b.isOn ? 1 : 0);
     });
 
+    _events = events;
+    _lengthHint = Duration(milliseconds: (maxEnd * 1000).round());
+    _pausedAt = startAt;
+    await _startFrom(startAt);
+  }
+
+  /// 내부: 현재 _events 에서 [from] 이후만 골라 시퀀서 시작.
+  Future<void> _startFrom(Duration from) async {
+    final fromSec = from.inMilliseconds / 1000.0;
+    final filtered = _events.where((e) => e.time >= fromSec).toList();
+    if (filtered.isEmpty) {
+      // 재생할 게 없음 — tail 만 흘려보내고 complete.
+      _playing = false;
+      _paused = false;
+      _startedAt = null;
+      _posTimer?.cancel();
+      _posTimer = null;
+      _doneCtl.add(null);
+      return;
+    }
+
     final token = ++_playToken;
     _playing = true;
-    _lengthHint = Duration(milliseconds: (maxEnd * 1000).round());
+    _paused = false;
     _startedAt = DateTime.now();
 
-    // 100ms 주기 위치 통지.
+    // 50ms 주기 위치 통지.
+    _posTimer?.cancel();
     _posTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       if (!_playing || _startedAt == null) return;
-      final pos = DateTime.now().difference(_startedAt!);
+      final pos = DateTime.now().difference(_startedAt!) + _pausedAt;
       _posCtl.add(pos);
     });
 
-    // 비차단 시퀀서 — Future 체인으로 이벤트 발사.
-    unawaited(_runSequencer(events, token));
+    unawaited(_runSequencer(filtered, fromSec, token));
   }
 
-  Future<void> _runSequencer(List<_Ev> events, int token) async {
+  Future<void> _runSequencer(List<_Ev> events, double offsetSec, int token) async {
     final start = DateTime.now();
     for (final ev in events) {
-      if (token != _playToken) return; // stop 됨
-      final targetMs = (ev.time * 1000).round();
+      if (token != _playToken) return; // stop / pause / seek 됨
+      final targetMs = ((ev.time - offsetSec) * 1000).round();
       final elapsed = DateTime.now().difference(start).inMilliseconds;
       final wait = targetMs - elapsed;
       if (wait > 0) {
@@ -128,21 +164,84 @@ class SynthPlayer {
       }
     }
     // 마지막 noteOff release tail 위해 짧게 대기.
-    final tailMs = (_lengthHint.inMilliseconds - DateTime.now().difference(start).inMilliseconds);
-    if (tailMs > 0) {
-      await Future.delayed(Duration(milliseconds: tailMs.clamp(0, 800)));
+    final remainingMs = _lengthHint.inMilliseconds -
+        (offsetSec * 1000).round() -
+        DateTime.now().difference(start).inMilliseconds;
+    if (remainingMs > 0) {
+      await Future.delayed(Duration(milliseconds: remainingMs.clamp(0, 800)));
     }
     if (token != _playToken) return;
     _playing = false;
+    _paused = false;
+    _pausedAt = Duration.zero;
+    _startedAt = null;
     _posTimer?.cancel();
     _posTimer = null;
     _doneCtl.add(null);
   }
 
-  /// 즉시 정지 — 진행 중 시퀀서를 무효화하고 모든 노트 off.
+  /// 위치 보존 일시정지. 활성 노트는 모두 끄되 누적 진행 시간(_pausedAt) 보존.
+  Future<void> pause() async {
+    if (!_playing) return;
+    final pos = DateTime.now().difference(_startedAt!) + _pausedAt;
+    _pausedAt = pos;
+    _playToken++; // 진행 중 시퀀서 무효화
+    _playing = false;
+    _paused = true;
+    _startedAt = null;
+    _posTimer?.cancel();
+    _posTimer = null;
+    try {
+      await SynthEngine().stopAll();
+    } catch (e) {
+      debugPrint('[synth_player] pause stopAll failed: $e');
+    }
+  }
+
+  /// 일시정지된 위치부터 재개. paused 상태가 아니면 no-op.
+  Future<void> resume() async {
+    if (!_paused) return;
+    if (_events.isEmpty) {
+      _paused = false;
+      _doneCtl.add(null);
+      return;
+    }
+    await _startFrom(_pausedAt);
+  }
+
+  /// 특정 시각으로 점프.
+  ///   - 재생 중: 새 위치부터 이어서 재생
+  ///   - 일시정지: _pausedAt 만 갱신 (재생 시작은 resume 시)
+  ///   - 정지: _pausedAt 갱신, ▶ 누르면 그 위치부터 재생되도록 events 보존
+  Future<void> seek(double sec) async {
+    final target = Duration(milliseconds: (sec * 1000).round());
+    if (_playing) {
+      // 진행 중인 노트 모두 끄고 새 위치부터 재스케줄.
+      _playToken++;
+      _playing = false;
+      _startedAt = null;
+      _posTimer?.cancel();
+      _posTimer = null;
+      try {
+        await SynthEngine().stopAll();
+      } catch (e) {
+        debugPrint('[synth_player] seek stopAll failed: $e');
+      }
+      _pausedAt = target;
+      await _startFrom(target);
+    } else {
+      // 일시정지 / 정지 — 위치만 갱신.
+      _pausedAt = target;
+      _posCtl.add(target);
+    }
+  }
+
+  /// 즉시 정지 — 진행 중 시퀀서를 무효화하고 모든 노트 off. 누적 위치 초기화.
   Future<void> stop() async {
     _playToken++; // 진행 중 루프 무효화
     _playing = false;
+    _paused = false;
+    _pausedAt = Duration.zero;
     _startedAt = null;
     _posTimer?.cancel();
     _posTimer = null;
@@ -152,10 +251,6 @@ class SynthPlayer {
       debugPrint('[synth_player] stop failed: $e');
     }
   }
-
-  /// pause/resume 정밀 구현은 후속. 현재는 stop 과 동일(노트 모두 off).
-  /// 호출자는 paused 상태를 자체 관리하고, resume 시 처음부터 재생을 권장.
-  Future<void> pause() => stop();
 
   void dispose() {
     stop();
