@@ -331,10 +331,20 @@ class _EditScreenState extends State<EditScreen> {
     final t = store.active;
     final dk = t.analysis?.detectedKey;
 
+    // 컨텍스트 바 노출 여부 — FAB 위치를 컨텍스트 바 + 재생 바 위로 보정.
+    final hasNoteSel = store.selectedNote != null && !t.chordActive;
+    final hasChunkSel = store.selectedChunk != null && !t.chordActive;
+    final hasTrackSel = !hasNoteSel && !hasChunkSel && store.trackSelected && store.activeTrackId != null;
+    final ctxVisible = hasNoteSel || hasChunkSel || hasTrackSel;
+    // 재생 바(88) + 컨텍스트 바(62, 있을 때) 위에 약간의 여백.
+    final fabBottom = 88.0 + (ctxVisible ? 62.0 : 0.0) + 14.0;
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: Column(
+        child: Stack(
+          children: [
+            Column(
           children: [
             _header(store),
             _controls(store, t, dk),
@@ -384,6 +394,14 @@ class _EditScreenState extends State<EditScreen> {
             ),
             _contextActionBar(store, t),
             _transport(store, t),
+          ],
+            ),
+            // #27: 트랙 추가 FAB — 우측 하단, 재생 바 + (선택 시) 컨텍스트 바 위.
+            Positioned(
+              right: 16,
+              bottom: fabBottom,
+              child: _AddTrackFab(onTap: () => showAddTrackSheet(context, store)),
+            ),
           ],
         ),
       ),
@@ -791,6 +809,7 @@ class _EditScreenState extends State<EditScreen> {
     });
   }
 
+  // _AddTrackFab 는 클래스 외부 StatelessWidget — context.read 가 아닌 콜백 주입.
   Widget _miniBtn(IconData ic, String label, {required bool enabled, required VoidCallback onTap}) {
     // 비활성 시 아이콘만 dim, 라벨은 항상 readable.
     return GestureDetector(
@@ -803,6 +822,35 @@ class _EditScreenState extends State<EditScreen> {
         const SizedBox(height: 3),
         Text(label, style: T.label.copyWith(fontSize: 9, color: AppColors.textSecondary)),
       ]),
+    );
+  }
+}
+
+// 트랙 추가 FAB — 40×40 흰색 원형 + 다크 + 아이콘. 시안 docs/mockups/track-expansion.html.
+class _AddTrackFab extends StatelessWidget {
+  final VoidCallback onTap;
+  const _AddTrackFab({required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppColors.textPrimary,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: const Icon(Symbols.add, color: AppColors.bg, size: 22, weight: 700),
+      ),
     );
   }
 }

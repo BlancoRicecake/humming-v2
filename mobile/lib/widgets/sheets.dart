@@ -82,6 +82,180 @@ void showHelpSheet(BuildContext context, String title, String body) {
   );
 }
 
+// ─── 트랙 추가 (FAB → 카테고리별 악기 시트) ───────────────────────────
+// #27: 우측 하단 FAB 탭으로 열림. CHORDS / BASS / DRUM / VOCAL 4개 카테고리,
+// 각 카테고리는 2 컬럼 악기 그리드. 카드 탭 → store.addTrack(role, program)
+// + setActiveTrack → 사이드바/카드/녹음 pill 이 새 트랙으로 갱신.
+//
+// 표시용 카탈로그: 시안 docs/mockups/track-expansion.html Frame 5 와 1:1.
+// `_AddTrackItem.program` 은 표시용 GM program — 드럼/보컬은 가상 program
+// (kDrumKitProgram / kVocalProgram) 으로 아이콘만 결정되고, addTrack 시엔
+// 0 (드럼) / 0 (보컬) 으로 전달해 기존 합성/매핑 로직과 호환.
+class _AddTrackItem {
+  final String name;
+  final String sub;
+  final int program;     // 표시용(아이콘/저장)
+  final int? saveProgram; // store.addTrack 에 전달할 program (null = program 그대로)
+  const _AddTrackItem(this.name, this.sub, this.program, {this.saveProgram});
+}
+
+const Map<TrackRole, List<_AddTrackItem>> _addTrackCatalog = {
+  TrackRole.keys: [
+    _AddTrackItem('Piano', 'Acoustic Grand', 0),
+    _AddTrackItem('Guitar', 'Nylon', 24),
+    _AddTrackItem('E.Piano', 'Rhodes', 4),
+    _AddTrackItem('Strings', 'Ensemble', 48),
+    _AddTrackItem('Organ', 'Drawbar', 16),
+    _AddTrackItem('Synth Pad', 'Warm', 90),
+  ],
+  TrackRole.bass: [
+    _AddTrackItem('Acoustic Bass', 'Upright', 32),
+    _AddTrackItem('Synth Bass', '808', 39),
+  ],
+  TrackRole.drum: [
+    // 드럼은 program 이 의미 없음(자동 매핑). 아이콘만 드럼킷.
+    _AddTrackItem('Acoustic Kit', 'Standard GM', kDrumKitProgram, saveProgram: 0),
+    _AddTrackItem('808', 'Electronic', kDrumKitProgram, saveProgram: 0),
+  ],
+  TrackRole.vocal: [
+    _AddTrackItem('Original Vocal', '원본 그대로', kVocalProgram, saveProgram: 0),
+  ],
+};
+
+const Map<TrackRole, String> _categoryLabel = {
+  TrackRole.keys: 'CHORDS',
+  TrackRole.bass: 'BASS',
+  TrackRole.drum: 'DRUM',
+  TrackRole.vocal: 'VOCAL',
+};
+
+void showAddTrackSheet(BuildContext context, ProjectStore store) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (sheetCtx) {
+      final mq = MediaQuery.of(sheetCtx);
+      return Container(
+        decoration: _sheetDeco(),
+        padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
+        constraints: BoxConstraints(maxHeight: mq.size.height * 0.78),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _grabber(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('트랙 추가', style: T.h2.copyWith(fontSize: 17)),
+                GestureDetector(
+                  onTap: () => Navigator.pop(sheetCtx),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                    child: Text('닫기',
+                        style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final role in TrackRole.values) ...[
+                      _addTrackCategory(sheetCtx, store, role),
+                      const SizedBox(height: 14),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+Widget _addTrackCategory(BuildContext context, ProjectStore store, TrackRole role) {
+  final items = _addTrackCatalog[role] ?? const <_AddTrackItem>[];
+  if (items.isEmpty) return const SizedBox.shrink();
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 2, bottom: 8),
+        child: Text(
+          _categoryLabel[role] ?? role.label.toUpperCase(),
+          style: T.label.copyWith(fontSize: 10, letterSpacing: 0.8, color: AppColors.textSecondary),
+        ),
+      ),
+      // 2 컬럼 그리드 — LayoutBuilder 로 sheet 너비 기준 카드폭 계산.
+      LayoutBuilder(builder: (ctx, c) {
+        const gap = 8.0;
+        final cardW = (c.maxWidth - gap) / 2;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final it in items)
+              SizedBox(
+                width: cardW,
+                child: _addTrackCard(context, store, role, it),
+              ),
+          ],
+        );
+      }),
+    ],
+  );
+}
+
+Widget _addTrackCard(BuildContext context, ProjectStore store, TrackRole role, _AddTrackItem it) {
+  return GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: () {
+      final saveProg = it.saveProgram ?? it.program;
+      final added = store.addTrack(role, program: saveProg);
+      store.setActiveTrack(added.id);
+      Navigator.pop(context);
+    },
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          instrumentIcon(it.program, size: 20, color: AppColors.textPrimary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(it.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.body.copyWith(fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(it.sub,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.sub.copyWith(fontSize: 10, color: AppColors.textTertiary)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 // ─── 악기 선택 ─────────────────────────────────────────────────────────
 void showInstrumentPicker(BuildContext context, ProjectStore store) {
   showModalBottomSheet(
