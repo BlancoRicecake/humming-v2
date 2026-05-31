@@ -213,14 +213,15 @@ class _RecordingScreenState extends State<RecordingScreen> with WidgetsBindingOb
                         : Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (_recording)
-                                SizedBox(
-                                  height: 72,
-                                  width: 280,
-                                  child: CustomPaint(painter: _MeterPainter(_levels)),
-                                )
-                              else
-                                const Icon(Symbols.mic, size: 64, color: AppColors.lime),
+                              // 미터를 항상 같은 자리/크기로 유지해 녹음 시작 시 시각 점프 제거.
+                              // 준비 상태에선 회색 정적 막대, 녹음 시작과 함께 lime 으로 흐름.
+                              SizedBox(
+                                height: 72,
+                                width: 280,
+                                child: CustomPaint(
+                                  painter: _MeterPainter(_levels, active: _recording),
+                                ),
+                              ),
                               const SizedBox(height: 20),
                               Text(_recording ? _time : '0:00', style: T.h1.copyWith(fontSize: 56, fontWeight: FontWeight.w300)),
                               const SizedBox(height: 8),
@@ -267,9 +268,11 @@ class _RecordingScreenState extends State<RecordingScreen> with WidgetsBindingOb
 }
 
 /// 음량 바 미터 — 중앙 기준 대칭 막대.
+/// [active] 가 false 면 회색 톤의 정적 막대로 표시 (녹음 전 placeholder).
 class _MeterPainter extends CustomPainter {
-  _MeterPainter(this.levels);
+  _MeterPainter(this.levels, {this.active = true});
   final List<double> levels;
+  final bool active;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -277,7 +280,8 @@ class _MeterPainter extends CustomPainter {
     final slot = size.width / n;
     final barW = slot * 0.5;
     final cy = size.height / 2;
-    final paint = Paint()..color = AppColors.lime;
+    final paint = Paint()
+      ..color = active ? AppColors.lime : AppColors.lime.withValues(alpha: 0.18);
     for (int i = 0; i < n; i++) {
       final h = (levels[i] * size.height).clamp(3.0, size.height);
       final x = i * slot + (slot - barW) / 2;
