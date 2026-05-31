@@ -60,7 +60,6 @@ class _TimelineEditorState extends State<TimelineEditor> {
 
   // 청크 이동/트림 드래그 상태
   int? _moveChunk;
-  double _movePrevCum = 0;
   double? _resizeStart, _resizeEnd;
 
   // 제스처 콜백에서 쓰는 레이아웃 값(빌드 때 갱신).
@@ -372,7 +371,6 @@ class _TimelineEditorState extends State<TimelineEditor> {
         onHorizontalDragStart: (_) {
           if (!active) widget.onActivateRole?.call(role);
           _moveChunk = chunkId;
-          _movePrevCum = 0;
           widget.onChunkTap?.call(chunkId);
         },
         onHorizontalDragUpdate: (d) {
