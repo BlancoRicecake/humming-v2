@@ -207,6 +207,14 @@ def render_capabilities():
 
 @app.post("/render_audio")
 async def render_audio(payload: dict):
+    """단일 트랙 notes → SoundFont 합성 WAV.
+
+    역할 (Task 6-6, 2026-05-31): **WAV bounce / 호환 보조 전용**.
+    모바일 일상 재생·단음 미리듣기는 온디바이스 SoundFont 합성
+    (`SynthEngine`, `SynthPlayer`, 커밋 ``6de9bec``) 으로 이전됨.
+    클라이언트의 ``EngineApi.renderAudio`` 는 ``@Deprecated`` 마킹되어
+    실호출처가 없으며, 향후 제거 가능.
+    """
     if not render_mod.is_available():
         state = render_mod.get_state()
         raise HTTPException(503, state.error or "SoundFont preview unavailable")
@@ -229,7 +237,14 @@ async def render_audio(payload: dict):
 
 @app.post("/render_mix")
 async def render_mix(payload: dict):
-    """여러 트랙을 하나의 WAV로 믹스 렌더."""
+    """여러 트랙을 하나의 WAV로 믹스 렌더.
+
+    역할 (Task 6-6, 2026-05-31): **WAV export / 공유 전용**.
+    모바일 일상 재생은 온디바이스 ``SynthPlayer`` 가 처리하며 (커밋
+    ``6de9bec``), 본 엔드포인트는 ``ProjectStore.exportMixWav()`` 의 공유
+    시트 경로에서만 호출됨. 향후 export 도 온디바이스 PCM bounce 로 옮기면
+    deprecate 가능.
+    """
     if not render_mod.is_available():
         state = render_mod.get_state()
         raise HTTPException(503, state.error or "SoundFont preview unavailable")

@@ -280,10 +280,25 @@
 - 여러 채널 동시 합성 (`flutter_midi_pro`가 채널별 program_select 지원하는지 확인 필요)
 - 백엔드 `render_tracks_to_wav` 와 동등 결과를 내야 함
 
-#### 6-6. 백엔드 렌더 엔드포인트 역할 축소
-- `/render_audio`, `/render_mix` 는 "내보내기/공유용 WAV" 로만 유지 (혹은 deprecate)
-- `/export_midi` 는 그대로 외부 DAW용
-- 모바일 재생 경로에서 더 이상 호출 안 되는지 코드/로그로 검증
+#### 6-6. 백엔드 렌더 엔드포인트 역할 축소  ✅ **완료 — 2026-05-31** (Task #7)
+
+> **적용:** WAV export 전용으로 좁힘. 재생/단음 미리듣기는 이미 온디바이스
+> (`SynthEngine` / `SynthPlayer`, 커밋 `6de9bec`).
+>
+> **호출 표 (모바일 코드 grep 결과)**
+>
+> | 클라이언트 API | 살아있는 호출처 | 용도 |
+> |---|---|---|
+> | `EngineApi.renderAudio` | (없음) — `previewNote` 가 호환 호출하지만 둘 다 `@Deprecated` | — |
+> | `EngineApi.renderMix` | `ProjectStore.renderMix()` ← `exportMixWav()` ← `sheets.dart:_exportFile(midi: false)` | WAV bounce 공유 |
+> | `ProjectStore.renderActive` | (없음) | — (deprecated) |
+> | `ProjectStore.renderAccompaniment` | (없음) | — (deprecated, `accompanimentSynthTracks` + `SynthPlayer` 대체) |
+>
+> **변경:**
+> - `engine_api.dart`: `renderAudio` `@Deprecated` 마킹 + `renderMix` 역할 docstring (WAV export 전용)
+> - `project_store.dart`: 죽은 `renderActive`/`renderAccompaniment` `@Deprecated`, `renderMix` 역할 docstring
+> - `backend/app/main.py`: `/render_audio` `/render_mix` 엔드포인트 docstring 갱신 (역할 + deprecate 가능성)
+> - 실제 코드/엔드포인트 제거는 안 함 — WAV export 와 회귀 검증 위해 보존
 
 ### 회귀 검증 포인트
 - 같은 노트 시퀀스를 **백엔드 렌더 WAV** 와 **온디바이스 합성** 으로 만들어 파형/스펙트럼 비교
@@ -309,6 +324,7 @@
 | 4-A 사운드 미리듣기 | wheel picker 스피커 아이콘 + 백엔드 1-노트 렌더 |
 | 4-C 자유 편집 + 추천 배지 | wheel picker 전 음역대 + 별/원음 마커 |
 | 6-1 패키지 검토 | flutter_midi_pro 4대 제약 PASS (조건부 도입) |
+| 6-6 백엔드 렌더 역할 축소 | `/render_audio` `/render_mix` WAV export 전용으로 좁힘 + deprecate 마킹 |
 
 ### ⏳ 남은 항목
 | 우선 | 항목 | 이유 |
@@ -319,4 +335,4 @@
 | 낮음 | 4-B 그리드 시트(wheel로 사실상 대체) | 필요 시 보조 액션으로만 |
 | 미검증 | 5-4 Done 버튼 동작 | 동선 확인 필요 |
 | 별도 | 5-5 드럼 변환 경로 | 분석 파이프라인 후속, 모바일 UX 분리 |
-| **배포 전 필수** | **6-2 ~ 6-6 온디바이스 재생 구현** | SF2 번들·온디바이스 합성·트랙 재생 이전·백엔드 역할 축소. 6-1 검토 완료 |
+| **배포 전 필수** | **6-2 ~ 6-5 온디바이스 재생 구현** | SF2 번들·온디바이스 합성·트랙 재생 이전. 6-1·6-6 완료 |
