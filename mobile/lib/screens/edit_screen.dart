@@ -14,6 +14,7 @@ import '../audio/synth_player.dart';
 import '../models/models.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
+import '../widgets/active_track_cards.dart';
 import '../widgets/common.dart';
 import '../widgets/meter_painter.dart';
 import '../widgets/sheets.dart';
@@ -160,13 +161,6 @@ class _EditScreenState extends State<EditScreen> {
       if (t.vocalDuration > m) m = t.vocalDuration; // 보컬 길이도 포함
     }
     return m;
-  }
-
-  String _instrumentName(TrackData t) {
-    for (final i in instrumentPalette[t.role] ?? const <Instrument>[]) {
-      if (i.program == t.program) return i.label;
-    }
-    return t.role == TrackRole.drum ? '드럼 키트' : (t.role == TrackRole.vocal ? '원본 보컬' : '악기');
   }
 
   // ─── 인라인 녹음 (작업 동시성) ──────────────────────────────────────────
@@ -413,30 +407,28 @@ class _EditScreenState extends State<EditScreen> {
       );
 
   Widget _controls(ProjectStore store, TrackData t, DetectedKey? dk) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-      child: Column(
-        children: [
-          _roleChips(store),
-          const SizedBox(height: 12),
-          _instrumentRow(store, t),
-          const SizedBox(height: 12),
-          IntrinsicHeight(
-            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => showKeyPicker(context, store),
-                  child: _keyCard(dk, t.options.autoKey),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: _assistCard(store, t)),
+    // INSTRUMENT / KEY / 피치 어시스트 카드는 ActiveTrackCards 위젯이 담당(task #21).
+    // 단음/코드 모드 토글은 코드 픽커 액션바로 이전 예정(task #24) — 임시로 여기에 유지.
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: _roleChips(store),
+        ),
+        ActiveTrackCards(store: store),
+        if (t.isChordInstrument)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(children: [
+              const Spacer(),
+              _modeToggle(store, t),
             ]),
           ),
-          const SizedBox(height: 12),
-          _recordButton(store, t),
-        ],
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: _recordButton(store, t),
+        ),
+      ],
     );
   }
 
@@ -477,61 +469,6 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
-  Widget _instrumentRow(ProjectStore store, TrackData t) {
-    return Row(children: [
-      Expanded(
-        child: GestureDetector(
-          onTap: () => showInstrumentPicker(context, store),
-          child: Container(
-            height: 50,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(children: [
-              Icon(t.role.icon, size: 18, color: AppColors.lime),
-              const SizedBox(width: 10),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Text('INSTRUMENT', style: T.label.copyWith(fontSize: 8)),
-                    _helpIcon(
-                      title: 'INSTRUMENT',
-                      body:
-                          '이 트랙을 어떤 악기 소리로 재생할지 선택해요.\n\n'
-                          '분석된 음정에 SoundFont 악기 음색을 입혀 들려줘요. '
-                          '같은 멜로디라도 피아노·기타·베이스 등 자유롭게 바꿔 들어 볼 수 있어요.',
-                    ),
-                  ]),
-                  Text(_instrumentName(t), style: T.body.copyWith(fontWeight: FontWeight.w600)),
-                ],
-              ),
-              const Spacer(),
-              const Icon(Symbols.keyboard_arrow_down, size: 20, color: AppColors.textSecondary),
-            ]),
-          ),
-        ),
-      ),
-      if (t.isChordInstrument) ...[
-        const SizedBox(width: 6),
-        _helpIcon(
-          title: '단음 / 코드',
-          body:
-              '단음 = 부른 그대로 한 번에 한 음씩 재생.\n\n'
-              '코드 = 각 음을 다이아토닉 트라이어드(I·III·V 3화음)로 자동 확장. '
-              '키에 맞춰 화음을 깔아 줘요.\n\n'
-              '키보드·기타처럼 화음 가능 악기에서만 보여요.',
-        ),
-        const SizedBox(width: 4),
-        _modeToggle(store, t),
-      ],
-    ]);
-  }
-
   Widget _modeToggle(ProjectStore store, TrackData t) {
     Widget seg(String label, bool active, VoidCallback onTap) => GestureDetector(
           onTap: onTap,
@@ -559,116 +496,6 @@ class _EditScreenState extends State<EditScreen> {
         const SizedBox(width: 3),
         seg('코드', t.chordMode, () => store.setChordMode(true)),
       ]),
-    );
-  }
-
-  // 5-3: 헤더 라벨 옆 ⓘ — 탭 시 용어 설명 시트.
-  Widget _helpIcon({required String title, required String body}) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => showHelpSheet(context, title, body),
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Icon(Symbols.info, size: 13, color: AppColors.textTertiary),
-      ),
-    );
-  }
-
-  Widget _card({required Widget child}) => Container(
-        constraints: const BoxConstraints(minHeight: 86),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: child,
-      );
-
-  Widget _keyCard(DetectedKey? dk, bool isAuto) {
-    final tierLabel = dk?.keyTier == null ? '' : ' · ${dk!.keyTier}';
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Row(children: [
-              Text('KEY', style: T.label),
-              _helpIcon(
-                title: 'KEY · 키와 신뢰도',
-                body:
-                    '곡의 으뜸음(C, D…)과 모드(메이저/마이너)예요.\n\n'
-                    'AUTO = 분석이 자동 추정한 키. 카드를 탭하면 수동으로 바꿀 수 있어요.\n\n'
-                    '신뢰도 = 추정이 얼마나 확실한지 (0~1). '
-                    'high / mid / low 단계로 표시해요. 낮으면 수동 지정을 고려해 보세요.',
-              ),
-            ]),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: AppColors.activeLane, borderRadius: BorderRadius.circular(6)),
-              child: Text(isAuto ? 'AUTO' : '수동', style: T.label.copyWith(color: AppColors.lime, fontSize: 8)),
-            ),
-          ]),
-          const SizedBox(height: 4),
-          Text(dk?.label ?? '—', style: T.h2.copyWith(fontSize: 22)),
-          const Spacer(),
-          Row(children: [
-            Expanded(
-              child: Text(dk == null ? '녹음 후 분석' : '신뢰도 ${dk.confidence.toStringAsFixed(2)}$tierLabel',
-                  style: T.sub.copyWith(fontSize: 10), overflow: TextOverflow.ellipsis),
-            ),
-            const Icon(Symbols.keyboard_arrow_down, size: 14, color: AppColors.textSecondary),
-          ]),
-        ],
-      ),
-    );
-  }
-
-  Widget _assistCard(ProjectStore store, TrackData t) {
-    final count = t.analysis?.assistAppliedCount ?? 0;
-    final on = t.options.pitchAssistant;
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Row(children: [
-              Text('피치 어시스트', style: T.label),
-              _helpIcon(
-                title: '피치 어시스트',
-                body:
-                    '키 밖으로 살짝 빗나간 음을 가장 가까운 in-key 음으로 자동 보정해 줘요.\n\n'
-                    '“보정됨” 숫자 = 실제로 끌어당겨진 노트 개수.\n\n'
-                    '끄면 부른 음 그대로 유지돼요. 음정이 불안할 때 켜 보세요.',
-              ),
-            ]),
-            GestureDetector(
-              onTap: () => store.togglePitchAssistant(!on),
-              child: Container(
-                width: 38,
-                height: 22,
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: on ? AppColors.lime : AppColors.border,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Align(
-                  alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(width: 18, height: 18, decoration: const BoxDecoration(color: AppColors.bg, shape: BoxShape.circle)),
-                ),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 4),
-          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('$count', style: T.h2.copyWith(fontSize: 22, color: AppColors.lime)),
-            const SizedBox(width: 4),
-            Padding(padding: const EdgeInsets.only(bottom: 3), child: Text('보정됨', style: T.body.copyWith(fontWeight: FontWeight.w600))),
-          ]),
-          const Spacer(),
-          Text('키 밖 음 자동 정리', style: T.sub.copyWith(fontSize: 10)),
-        ],
-      ),
     );
   }
 
