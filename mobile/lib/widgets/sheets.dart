@@ -1,21 +1,20 @@
 // 바텀 시트 3종: 악기 선택 / 노트 후보 / 내보내기·공유.
 import 'dart:async';
 import 'dart:io';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../api/engine_api.dart';
+import '../audio/synth.dart';
 import '../models/models.dart';
 import '../music/chord_expand.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
 
-// 노트 보정 시트 전용 — 단음 미리듣기 (4-A). 시트가 닫혀도 재생 중이면 정지.
-final EngineApi _previewApi = EngineApi();
-final AudioPlayer _previewPlayer = AudioPlayer();
+// 노트 보정 시트 전용 — 단음 미리듣기 (6-3).
+// 기존 백엔드 /render_audio + audioplayers 경로를 온디바이스 SoundFont 합성으로 교체.
+// 200~500ms 네트워크 지연 → 즉시 응답 + 오프라인 동작.
 int _previewSeq = 0;
 
 BoxDecoration _sheetDeco() => const BoxDecoration(
@@ -307,7 +306,9 @@ void showNoteCandidate(BuildContext context, ProjectStore store, int index) {
   final program = t.program;
 
   // 시트 열릴 때 진행 중 미리듣기가 있으면 정리.
-  _previewPlayer.stop();
+  SynthEngine().stopAll();
+  // SoundFont 자산 lazy load 워밍업 — 첫 탭 응답 지연 제거.
+  unawaited(SynthEngine().ensureLoaded());
 
   final initialIndex = opts.indexOf(n.pitch).clamp(0, opts.length - 1);
 
@@ -328,7 +329,7 @@ void showNoteCandidate(BuildContext context, ProjectStore store, int index) {
     },
   ).whenComplete(() {
     // 시트 닫히면 진행 중 미리듣기 정지.
-    _previewPlayer.stop();
+    SynthEngine().stopAll();
   });
 }
 
@@ -378,10 +379,15 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
   Future<void> _preview(int pitch) async {
     final mySeq = ++_previewSeq;
     try {
-      await _previewPlayer.stop();
-      final wav = await _previewApi.previewNote(pitch, program: widget.program);
+      await SynthEngine().stopAll();
       if (mySeq != _previewSeq || !mounted) return;
-      await _previewPlayer.play(BytesSource(wav), volume: 1.0);
+      await SynthEngine().playNote(
+        channel: 0,
+        pitch: pitch,
+        velocity: 100,
+        program: widget.program,
+        release: const Duration(milliseconds: 500),
+      );
     } catch (_) {
       // 미리듣기는 부가 기능 — 실패해도 UI 영향 없음.
     }

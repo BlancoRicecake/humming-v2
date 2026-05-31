@@ -501,6 +501,30 @@ class ProjectStore extends ChangeNotifier {
   Future<Uint8List> renderActive() =>
       _api.renderAudio(active.renderNotes, program: active.program);
 
+  // ─── 온디바이스 재생용 트랙 페이로드 (백엔드 호출 없음, Task #5) ──────────
+  // SynthPlayer 가 소비. 보컬(원본 WAV) 은 SF2 합성 불가 → 제외 — 호출자가
+  // audioplayers 로 별도 레이어 재생.
+
+  /// 활성(enabled) + 노트 있는 비-보컬 트랙들의 (notes, program, isDrum) 목록.
+  List<({List<Note> notes, int program, bool isDrum})> playableSynthTracks() {
+    final out = <({List<Note> notes, int program, bool isDrum})>[];
+    for (final t in tracks.values) {
+      if (!t.enabled || t.notes.isEmpty || t.isVocal) continue;
+      out.add((notes: t.renderNotes, program: t.program, isDrum: t.role == TrackRole.drum));
+    }
+    return out;
+  }
+
+  /// 녹음 중 함께 들을 반주(녹음 대상 exclude). 노트 있는 비-보컬 트랙만.
+  List<({List<Note> notes, int program, bool isDrum})> accompanimentSynthTracks(TrackRole exclude) {
+    final out = <({List<Note> notes, int program, bool isDrum})>[];
+    for (final t in tracks.values) {
+      if (t.role == exclude || t.notes.isEmpty || t.isVocal) continue;
+      out.add((notes: t.renderNotes, program: t.program, isDrum: t.role == TrackRole.drum));
+    }
+    return out;
+  }
+
   /// 활성(enabled)이고 노트 있는 트랙만 하나로 믹스 렌더.
   bool get hasEnabledNotes => tracks.values.any((t) => t.enabled && t.notes.isNotEmpty);
 

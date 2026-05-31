@@ -10,6 +10,7 @@ import '../audio/audio_route.dart';
 import '../audio/metronome.dart';
 import '../audio/player.dart';
 import '../audio/recorder.dart';
+import '../audio/synth_player.dart';
 import '../models/models.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
@@ -28,11 +29,13 @@ class EditScreen extends StatefulWidget {
 }
 
 class _EditScreenState extends State<EditScreen> {
-  final _player = AudioPlayerService();
+  final _player = AudioPlayerService();      // 보컬(원본 WAV) 레이어 전용
+  final _synth = SynthPlayer();              // 악기 트랙(온디바이스 SF2 합성)
   _PlayState _ps = _PlayState.stopped;
   double? _playheadSec;
   int _lastEpoch = -1;
   StreamSubscription? _posSub, _compSub;
+  StreamSubscription? _synthPosSub, _synthCompSub;
 
   // 인라인 녹음(작업 동시성)
   final _rec = VoiceRecorder();
@@ -54,6 +57,7 @@ class _EditScreenState extends State<EditScreen> {
   void _seek(double sec) {
     setState(() => _playheadSec = sec);
     if (_ps != _PlayState.stopped) {
+      // SynthPlayer 는 현재 seek 미지원 — 보컬 레이어만 보정. 후속에서 정밀 구현.
       _player.seek(Duration(milliseconds: (sec * 1000).round()));
     }
   }
@@ -61,13 +65,30 @@ class _EditScreenState extends State<EditScreen> {
   @override
   void initState() {
     super.initState();
+    // 보컬 레이어(audioplayers) 위치/완료 — 악기 트랙이 없는 경우(보컬 단독)에 사용.
     _posSub = _player.onPosition.listen((d) {
-      if (mounted) {
-        setState(() => _playheadSec = d.inMilliseconds / 1000.0);
-      }
+      if (!mounted) return;
+      // SynthPlayer 가 재생 중이면 그 쪽이 타이밍 기준 — 무시.
+      if (_synth.isPlaying) return;
+      setState(() => _playheadSec = d.inMilliseconds / 1000.0);
     });
     _compSub = _player.onComplete.listen((_) {
       if (!mounted) return;
+      if (_synth.isPlaying) return; // synth 가 곧 complete 발행
+      setState(() {
+        _ps = _PlayState.stopped;
+        _playheadSec = null;
+      });
+    });
+    // SF2 트랙 재생(타이밍 기준).
+    _synthPosSub = _synth.onPosition.listen((d) {
+      if (!mounted) return;
+      setState(() => _playheadSec = d.inMilliseconds / 1000.0);
+    });
+    _synthCompSub = _synth.onComplete.listen((_) {
+      if (!mounted) return;
+      // 보컬 레이어가 더 길 수 있어, audioplayers 가 정지 상태일 때만 종료 처리.
+      if (_player.isPlaying) return;
       setState(() {
         _ps = _PlayState.stopped;
         _playheadSec = null;
@@ -79,19 +100,23 @@ class _EditScreenState extends State<EditScreen> {
   void dispose() {
     _posSub?.cancel();
     _compSub?.cancel();
+    _synthPosSub?.cancel();
+    _synthCompSub?.cancel();
     _recTimer?.cancel();
     _ampSub?.cancel();
     _rec.dispose();
     _metro.dispose();
     _player.dispose();
+    _synth.dispose();
     super.dispose();
   }
 
-  /// 편집(노트/악기/키 등)으로 오디오가 바뀌면 재생을 멈춰 다음 재생 시 재렌더.
+  /// 편집(노트/악기/키 등)으로 오디오가 바뀌면 재생을 멈춰 다음 재생 시 재시퀀스.
   void _syncEpoch(ProjectStore store) {
     if (store.editEpoch != _lastEpoch) {
       _lastEpoch = store.editEpoch;
       if (_ps != _PlayState.stopped) {
+        _synth.stop();
         _player.stop();
         _ps = _PlayState.stopped;
         _playheadSec = null;
@@ -102,12 +127,15 @@ class _EditScreenState extends State<EditScreen> {
   Future<void> _onPlayTap(ProjectStore store) async {
     switch (_ps) {
       case _PlayState.playing:
+        // SynthPlayer pause 는 현재 stop 과 동일 — 보컬 레이어만 진짜 pause.
+        // 일관성을 위해 양쪽 정지(노트 잔향 끊김) → resume 시 처음부터 재생.
+        await _synth.pause();
         await _player.pause();
         setState(() => _ps = _PlayState.paused);
         break;
       case _PlayState.paused:
-        await _player.resume();
-        setState(() => _ps = _PlayState.playing);
+        // SF2 재개는 미지원 — 처음부터 다시 재생(UX 후퇴 OK, 후속에서 정밀 구현).
+        await _playMix(store);
         break;
       case _PlayState.stopped:
         await _playMix(store);
@@ -161,14 +189,20 @@ class _EditScreenState extends State<EditScreen> {
     _recPlayingAudio = false;
     final headset = await AudioRoute.hasHeadset();
     try {
-      final backing = await store.renderAccompaniment(role); // 악기 트랙 믹스
+      // 악기 반주: 온디바이스 SF2 시퀀서.
+      final backingSynth = store.accompanimentSynthTracks(role)
+          .map((t) => SynthTrack(notes: t.notes, program: t.program, isDrum: t.isDrum))
+          .toList();
       final vocalBacking = store.accompanimentVocalPath(role); // 보컬도 함께
-      debugPrint('[rec] headset=$headset backing=${backing?.length ?? 0}B vocalBacking=${vocalBacking != null}');
-      if (backing != null || vocalBacking != null) {
+      debugPrint('[rec] headset=$headset synthTracks=${backingSynth.length} vocalBacking=${vocalBacking != null}');
+      if (backingSynth.isNotEmpty || vocalBacking != null) {
         _recHasBacking = true;
         if (headset) {
-          await _player.playLayered(mixBytes: backing, vocalPath: vocalBacking);
-          _recPlayingAudio = true; // 플레이어 위치가 플레이헤드를 구동
+          final futures = <Future<void>>[];
+          if (backingSynth.isNotEmpty) futures.add(_synth.play(backingSynth));
+          if (vocalBacking != null) futures.add(_player.playFile(vocalBacking));
+          await Future.wait(futures);
+          _recPlayingAudio = true; // 플레이어/시퀀서 위치가 플레이헤드를 구동
         }
       }
     } catch (e) {
@@ -225,6 +259,7 @@ class _EditScreenState extends State<EditScreen> {
     await _ampSub?.cancel();
     await _metro.stop();
     if (_recPlayingAudio) {
+      await _synth.stop();
       await _player.stop();
       if (mounted) _ps = _PlayState.stopped;
     }
@@ -250,11 +285,19 @@ class _EditScreenState extends State<EditScreen> {
       return;
     }
     try {
-      // 악기 믹스(변환 사운드) + 보컬(목소리 그대로)을 동시 재생.
-      final mix = store.hasEnabledNotes ? await store.renderMix() : null;
+      // 악기 트랙: 온디바이스 SF2 시퀀서(백엔드 호출 없음).
+      // 보컬: 원본 WAV 를 audioplayers 로 동시 레이어 재생.
+      final synthTracks = store.playableSynthTracks()
+          .map((t) => SynthTrack(notes: t.notes, program: t.program, isDrum: t.isDrum))
+          .toList();
       final vocalPath = store.vocalMixPath;
-      debugPrint('[play] mix=${mix?.length ?? 0}B vocal=${vocalPath != null}');
-      await _player.playLayered(mixBytes: mix, vocalPath: vocalPath);
+      debugPrint('[play] synthTracks=${synthTracks.length} vocal=${vocalPath != null}');
+      await _synth.stop();
+      await _player.stop();
+      final futures = <Future<void>>[];
+      if (synthTracks.isNotEmpty) futures.add(_synth.play(synthTracks));
+      if (vocalPath != null) futures.add(_player.playFile(vocalPath));
+      await Future.wait(futures);
       if (mounted) setState(() => _ps = _PlayState.playing);
     } catch (e, st) {
       debugPrint('[play] FAILED: $e\n$st');

@@ -85,7 +85,8 @@ class EngineApi {
   }
 
   /// 단음 미리듣기용 — pitch 1개를 짧은 길이(기본 0.5s)로 렌더해 WAV bytes 반환.
-  /// 노트 보정 시트의 스피커 아이콘에서 사용.
+  /// @deprecated 6-3 이후 온디바이스 합성(`SynthEngine`)으로 대체됨. 호환을 위해 잠시 유지.
+  @Deprecated('Use SynthEngine().playNote — backend round-trip removed in task 6-3')
   Future<Uint8List> previewNote(int pitch, {int program = 0, double duration = 0.5, int velocity = 100}) async {
     final note = Note(
       start: 0,
