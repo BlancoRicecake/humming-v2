@@ -485,8 +485,9 @@ class _NotesPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final geo = _Geo(notes, durationSec, size);
 
-    // 활성 레인: 청크 배경(반투명) — 선택된 청크는 강조. 노트 뒤에 먼저 그림.
-    if (active && notes.isNotEmpty) {
+    // CapCut 스타일: 모든 청크를 분리된 블록(lime tint bg + border)으로 표시.
+    // active 트랙은 진하게, idle 트랙은 흐릿하게. 선택된 청크는 강조.
+    if (notes.isNotEmpty) {
       final ranges = <int, List<double>>{};
       for (final n in notes) {
         final r = ranges.putIfAbsent(n.chunkId, () => [n.start, n.end]);
@@ -497,20 +498,21 @@ class _NotesPainter extends CustomPainter {
         final x0 = (r[0] / durationSec) * size.width;
         final x1 = (r[1] / durationSec) * size.width;
         final rect = Rect.fromLTRB(x0 - 2, 1, x1 + 2, size.height - 1);
-        final sel = id == selectedChunk;
+        final isSelected = id == selectedChunk;
+        final baseAlpha = isSelected ? 0.16 : (active ? 0.08 : 0.04);
+        final borderAlpha = isSelected ? 1.0 : (active ? 0.22 : 0.14);
+        final borderWidth = isSelected ? 1.5 : 1.0;
         canvas.drawRRect(
           RRect.fromRectAndRadius(rect, const Radius.circular(6)),
-          Paint()..color = (sel ? AppColors.lime : Colors.white).withValues(alpha: sel ? 0.14 : 0.05),
+          Paint()..color = AppColors.lime.withValues(alpha: baseAlpha),
         );
-        if (sel) {
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(rect, const Radius.circular(6)),
-            Paint()
-              ..color = AppColors.lime
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 1.5,
-          );
-        }
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect, const Radius.circular(6)),
+          Paint()
+            ..color = AppColors.lime.withValues(alpha: borderAlpha)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = borderWidth,
+        );
       });
     }
 
