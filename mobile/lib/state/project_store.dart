@@ -279,6 +279,8 @@ class ProjectStore extends ChangeNotifier {
 
   /// 노트 후보 선택(사용자 보정) — 즉시 시각 반영, 소리는 Play 시.
   /// pitchOriginal 로 되돌리면 source 도 'raw' 로 되돌려 색/상태가 원본으로 복귀.
+  /// 코드 멤버도 개별 편집 가능 — voice leading / inversion / suspension 등을
+  /// 자유롭게. 코드를 다른 코드로 통째 바꾸려면 Chord 버튼 → 코드 변환 시트.
   void applyCandidate(int noteIndex, int pitch) {
     final t = active;
     if (noteIndex < 0 || noteIndex >= t.notes.length) return;
@@ -294,51 +296,68 @@ class ProjectStore extends ChangeNotifier {
   // 이미 코드 묶음이면 루트(최저음)만 남기는 unchord 동작.
 
   /// 단음 노트(index)를 코드로 확장. 원본 노트는 결과 노트들로 교체.
-  /// 결과 노트는 새 chunkId 로 묶여 이동·트림·볼륨이 그룹 단위로 동작.
+  /// **원본 청크 멤버십(chunkId) 유지** — 같은 청크 안의 다른 노트와 함께 머무름.
+  /// 결과 노트들은 같은 (start, end) 를 가지므로 _chordSiblings 로 묶음 인식.
   void applyChord(int noteIndex, ChordType type) {
     final t = active;
     if (noteIndex < 0 || noteIndex >= t.notes.length) return;
     final n = t.notes[noteIndex];
     if (n.kind != 'pitched') return;
     final dk = t.analysis?.detectedKey;
-    final newId = ++_chunkSeq;
-    final chord = expandToChord(n, type, newId, tonic: dk?.tonic, scale: dk?.scale);
+    // 원본 노트의 chunkId 그대로 사용 → 청크 분리 X.
+    final chord = expandToChord(n, type, n.chunkId, tonic: dk?.tonic, scale: dk?.scale);
     t.notes.removeAt(noteIndex);
     t.notes.addAll(chord);
     _resort();
-    // 새 묶음을 선택 상태로 — 후속 액션(이동/볼륨/삭제)이 그룹에 적용.
-    selectedNote = null;
-    selectedChunk = newId;
+    // 루트(최저음)를 선택 — Unchord/추가 편집의 기준점.
+    chord.sort((a, b) => a.pitch.compareTo(b.pitch));
+    final root = chord.first;
+    selectedNote = t.notes.indexOf(root);
+    selectedChunk = null;
     _audioChanged();
   }
 
-  /// 코드 묶음(같은 chunkId · 동시 노트) → 최저음 1개만 남기고 제거.
+  /// 선택된 노트가 속한 코드 묶음(같은 chunkId + 같은 start/end) → 최저음만 남김.
   void unchordSelected() {
-    final id = selectedChunk;
-    if (id == null) return;
-    final ns = _chunkNotes(id);
-    if (!isChordChunk(ns)) return;
-    // 최저음 = 루트.
-    ns.sort((a, b) => a.pitch.compareTo(b.pitch));
-    final root = ns.first;
-    active.notes.removeWhere((n) => n.chunkId == id && !identical(n, root));
+    final t = active;
+    final i = selectedNote;
+    if (i == null || i < 0 || i >= t.notes.length) return;
+    final sibs = _chordSiblings(t.notes[i]);
+    if (sibs.length < 2) return;
+    sibs.sort((a, b) => a.pitch.compareTo(b.pitch));
+    final root = sibs.first;
+    t.notes.removeWhere((n) => sibs.contains(n) && !identical(n, root));
+    selectedNote = t.notes.indexOf(root);
     _audioChanged();
   }
 
-  /// 선택된 단일 노트가 코드화 가능한지(pitched + 코드 가능 악기 트랙).
+  /// 선택된 노트가 속한 "코드 묶음"(같은 chunkId · 같은 start/end 의 노트들).
+  /// 단음일 경우 자기 자신만 반환.
+  List<Note> _chordSiblings(Note n) {
+    return active.notes.where((m) =>
+      m.chunkId == n.chunkId &&
+      (m.start - n.start).abs() < 0.001 &&
+      (m.end - n.end).abs() < 0.001,
+    ).toList();
+  }
+
+  /// 선택된 단일 노트가 코드화 가능한지(pitched + 코드 가능 악기 + 아직 코드 아님).
   bool get canChordSelected {
     final t = active;
     if (!t.isChordInstrument) return false;
     final i = selectedNote;
     if (i == null || i < 0 || i >= t.notes.length) return false;
-    return t.notes[i].kind == 'pitched';
+    final n = t.notes[i];
+    if (n.kind != 'pitched') return false;
+    return _chordSiblings(n).length < 2; // 이미 코드면 unchord 만
   }
 
-  /// 선택된 청크가 사용자 코드 묶음(unchord 가능)인지.
+  /// 선택된 노트가 코드 묶음의 일원이면 unchord 가능.
   bool get canUnchordSelected {
-    final id = selectedChunk;
-    if (id == null) return false;
-    return isChordChunk(_chunkNotes(id));
+    final t = active;
+    final i = selectedNote;
+    if (i == null || i < 0 || i >= t.notes.length) return false;
+    return _chordSiblings(t.notes[i]).length >= 2;
   }
 
   // ─── 선택 & 편집 (노트 또는 청크에 Split/Copy/Loop/Delete/Volume) ────────

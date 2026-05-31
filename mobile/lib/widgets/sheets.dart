@@ -360,7 +360,6 @@ class _NoteWheelSheet extends StatefulWidget {
 class _NoteWheelSheetState extends State<_NoteWheelSheet> {
   late FixedExtentScrollController _wheelCtrl;
   late int _currentIdx;
-  Timer? _debounce;
 
   @override
   void initState() {
@@ -371,7 +370,6 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _wheelCtrl.dispose();
     super.dispose();
   }
@@ -393,14 +391,10 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
     }
   }
 
+  // 휠 위치는 적용 버튼을 눌렀을 때만 store 에 반영. 자동 반영은 사용자 의도와
+  // 다른 변경을 일으킬 수 있어 명시적 확정을 요구.
   void _onSelectedItemChanged(int i) {
     setState(() => _currentIdx = i);
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () {
-      // 휠이 멈춘 위치를 store에 디바운스로 반영 (즉시 적용 UX).
-      final pitch = widget.opts[i];
-      widget.store.applyCandidate(widget.noteIndex, pitch);
-    });
   }
 
   Widget _itemFor(int i) {
@@ -481,7 +475,6 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
               ]),
               GestureDetector(
                 onTap: () {
-                  _debounce?.cancel();
                   widget.store.applyCandidate(widget.noteIndex, centerPitch);
                   Navigator.pop(context);
                 },
@@ -588,74 +581,169 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
 
 // ─── 단일 노트 → 코드 선택 시트 ────────────────────────────────────────
 // Chord 툴바 버튼이 호출. 선택한 단음을 ChordType 으로 확장(per-note chord).
-// 키가 감지된 트랙에서는 Diatonic 이 첫 칩, 그 외엔 메이저/마이너/sus/7th.
+// 칩 탭 = 미리듣기 (SynthEngine 으로 코드 동시 발음), 적용 버튼 = 확정.
+// "원음" 칩(null) 은 단음 미리듣기 — 적용 시 unchord(코드면 단음 복원).
 void showChordPicker(BuildContext context, ProjectStore store) {
   final i = store.selectedNote;
   if (i == null) return;
-  final dk = store.active.analysis?.detectedKey;
-  final hasKey = dk?.tonic != null && dk?.scale != null;
-
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
-    builder: (_) {
-      Widget chip(ChordType type) => GestureDetector(
-            onTap: () {
-              store.applyChord(i, type);
-              Navigator.pop(context);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.bg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(type.label,
-                      style: T.body.copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(type.intervalsLabel,
-                      style: T.sub.copyWith(fontSize: 10, color: AppColors.textSecondary)),
-                ],
-              ),
-            ),
-          );
+    builder: (_) => _ChordPickerSheet(store: store, noteIndex: i),
+  ).whenComplete(() => SynthEngine().stopAll());
+}
 
-      final types = hasKey
-          ? ChordType.values
-          : ChordType.values.where((t) => t != ChordType.diatonic).toList();
+class _ChordPickerSheet extends StatefulWidget {
+  final ProjectStore store;
+  final int noteIndex;
+  const _ChordPickerSheet({required this.store, required this.noteIndex});
+  @override
+  State<_ChordPickerSheet> createState() => _ChordPickerSheetState();
+}
 
-      return Container(
-        decoration: _sheetDeco(),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _grabber(),
-            Text('코드 변환', style: T.h2.copyWith(fontSize: 18)),
-            const SizedBox(height: 4),
-            Text(
-              hasKey
-                  ? '루트: ${noteName(store.active.notes[i].pitch)} · 키: ${dk!.label}'
-                  : '루트: ${noteName(store.active.notes[i].pitch)} (키 미감지 — 절대 인터벌)',
-              style: T.sub,
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [for (final t in types) chip(t)],
-            ),
-          ],
+class _ChordPickerSheetState extends State<_ChordPickerSheet> {
+  // null = 원음(단음). 그 외 ChordType = 코드.
+  ChordType? _selected;
+  int _previewSeq = 0;
+
+  Future<void> _preview(ChordType? type) async {
+    final mySeq = ++_previewSeq;
+    final t = widget.store.active;
+    final n = t.notes[widget.noteIndex];
+    final dk = t.analysis?.detectedKey;
+    final pitches = type == null
+        ? [n.pitch]
+        : chordPitches(n.pitch, type, tonic: dk?.tonic, scale: dk?.scale);
+    try {
+      await SynthEngine().stopAll();
+      if (mySeq != _previewSeq || !mounted) return;
+      for (final p in pitches) {
+        // 동시 발음 — 각 pitch 가 독립 release 타이머.
+        SynthEngine().playNote(
+          channel: 0,
+          pitch: p,
+          velocity: 100,
+          program: t.program,
+          release: const Duration(milliseconds: 700),
+        );
+      }
+    } catch (_) {
+      // 미리듣기 실패해도 UI 영향 없음.
+    }
+  }
+
+  void _onSelect(ChordType? type) {
+    setState(() => _selected = type);
+    _preview(type);
+  }
+
+  void _onApply() {
+    final i = widget.noteIndex;
+    final wasChord = widget.store.canUnchordSelected;
+    if (_selected == null) {
+      // 원음 선택: 현재 코드면 unchord, 단음이면 변경 없음.
+      if (wasChord) widget.store.unchordSelected();
+    } else {
+      // 코드 선택: 현재 코드면 먼저 unchord 후 새 코드 적용 (이중 적용 방지).
+      if (wasChord) widget.store.unchordSelected();
+      // unchord 후 selectedNote 가 root 로 갱신됨 — 그 인덱스로 다시 chord 적용.
+      final newIdx = widget.store.selectedNote ?? i;
+      widget.store.applyChord(newIdx, _selected!);
+    }
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.store.active;
+    final n = t.notes[widget.noteIndex];
+    final dk = t.analysis?.detectedKey;
+    final hasKey = dk?.tonic != null && dk?.scale != null;
+    final isCurrentlyChord = widget.store.canUnchordSelected;
+
+    Widget chip(ChordType? type, String label, String sub) {
+      final active = _selected == type;
+      return GestureDetector(
+        onTap: () => _onSelect(type),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: active ? AppColors.activeLane : AppColors.bg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: active ? AppColors.lime : AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: T.body.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: active ? AppColors.lime : AppColors.textPrimary,
+                  )),
+              const SizedBox(height: 2),
+              Text(sub, style: T.sub.copyWith(fontSize: 10, color: AppColors.textSecondary)),
+            ],
+          ),
         ),
       );
-    },
-  );
+    }
+
+    final types = hasKey
+        ? ChordType.values
+        : ChordType.values.where((t) => t != ChordType.diatonic).toList();
+
+    return Container(
+      decoration: _sheetDeco(),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _grabber(),
+          // 헤더 — 취소 / 타이틀 / 적용.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  child: Text('취소', style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
+                ),
+              ),
+              Text('코드 변환', style: T.h2.copyWith(fontSize: 16)),
+              GestureDetector(
+                onTap: _onApply,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  child: Text('적용',
+                      style: T.body.copyWith(color: AppColors.lime, fontSize: 14, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            hasKey
+                ? '루트: ${noteName(n.pitch)} · 키: ${dk!.label}${isCurrentlyChord ? ' · 현재 코드' : ''}'
+                : '루트: ${noteName(n.pitch)} (키 미감지)${isCurrentlyChord ? ' · 현재 코드' : ''}',
+            style: T.sub,
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              chip(null, '원음', '단음 (코드 해제)'),
+              for (final type in types) chip(type, type.label, type.intervalsLabel),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ─── 내보내기 / 공유 ───────────────────────────────────────────────────

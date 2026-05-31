@@ -782,9 +782,10 @@ class _EditScreenState extends State<EditScreen> {
         item(Symbols.content_cut, 'Split', enabled: hasSel, onTap: () => store.splitSelectedAny(_playheadSec)),
         item(Symbols.content_copy, 'Copy', enabled: hasSel, onTap: store.copySelectedAny),
         item(Symbols.repeat, 'Loop', enabled: hasNotes, onTap: store.loopSelectedAny),
+        // 시트가 코드 ↔ 단음 토글을 통합 처리(미리듣기 포함). 항상 picker 열기.
         item(chordIcon, chordLabel,
             enabled: chordEnabled,
-            onTap: () => canUnchord ? store.unchordSelected() : showChordPicker(context, store)),
+            onTap: () => showChordPicker(context, store)),
         item(Symbols.delete, 'Delete', enabled: hasSel, onTap: store.deleteSelectedAny),
         item(Symbols.volume_up, 'Volume', enabled: hasSel, onTap: () => _showVolume(store)),
       ]),

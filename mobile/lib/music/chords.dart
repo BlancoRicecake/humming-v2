@@ -52,12 +52,34 @@ List<int> buildDiatonicTriad(int rootMidi, String? tonic, String? scale) {
 double _midiToHz(int m) => 440.0 * math.pow(2, (m - 69) / 12.0);
 
 /// 코드 모드일 때 각 pitched 노트를 트라이어드로 확장. percussive 는 그대로.
+/// 이미 사용자가 per-note 로 코드화한 묶음(같은 chunkId · 같은 start/end 의 2+ 노트)
+/// 은 그대로 통과시켜 이중 확장을 막는다.
 List<Note> expandChords(List<Note> notes, DetectedKey? key, bool chordMode) {
   if (!chordMode) return notes;
   final tonic = key?.tonic, scale = key?.scale;
+
+  // (chunkId, start, end) 키로 묶어 코드 묶음 식별.
+  bool hasSiblings(Note n) {
+    var count = 0;
+    for (final m in notes) {
+      if (m.chunkId != n.chunkId) continue;
+      if (m.kind != 'pitched') continue;
+      if ((m.start - n.start).abs() > 0.001) continue;
+      if ((m.end - n.end).abs() > 0.001) continue;
+      count++;
+      if (count >= 2) return true;
+    }
+    return false;
+  }
+
   final out = <Note>[];
   for (final n in notes) {
     if (n.kind != 'pitched' || tonic == null || scale == null) {
+      out.add(n);
+      continue;
+    }
+    if (hasSiblings(n)) {
+      // 이미 사용자 코드 묶음의 일원 — 추가 확장 없이 그대로.
       out.add(n);
       continue;
     }
