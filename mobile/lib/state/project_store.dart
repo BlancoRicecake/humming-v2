@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../api/engine_api.dart';
 import '../models/models.dart';
 import '../music/chords.dart';
+import '../music/chord_expand.dart';
 
 double _midiToHz(int m) => 440.0 * math.pow(2, (m - 69) / 12.0);
 
@@ -233,6 +234,58 @@ class ProjectStore extends ChangeNotifier {
     n.source = (pitch == n.pitchOriginal) ? 'raw' : 'user';
     n.pitchHz = _midiToHz(pitch);
     _audioChanged();
+  }
+
+  // ─── 단일 노트 → 코드 확장 (per-note chord) ───────────────────────────
+  // 선택된 단음을 ChordType 으로 확장 → 같은 시간대 여러 노트(새 chunkId 묶음).
+  // 이미 코드 묶음이면 루트(최저음)만 남기는 unchord 동작.
+
+  /// 단음 노트(index)를 코드로 확장. 원본 노트는 결과 노트들로 교체.
+  /// 결과 노트는 새 chunkId 로 묶여 이동·트림·볼륨이 그룹 단위로 동작.
+  void applyChord(int noteIndex, ChordType type) {
+    final t = active;
+    if (noteIndex < 0 || noteIndex >= t.notes.length) return;
+    final n = t.notes[noteIndex];
+    if (n.kind != 'pitched') return;
+    final dk = t.analysis?.detectedKey;
+    final newId = ++_chunkSeq;
+    final chord = expandToChord(n, type, newId, tonic: dk?.tonic, scale: dk?.scale);
+    t.notes.removeAt(noteIndex);
+    t.notes.addAll(chord);
+    _resort();
+    // 새 묶음을 선택 상태로 — 후속 액션(이동/볼륨/삭제)이 그룹에 적용.
+    selectedNote = null;
+    selectedChunk = newId;
+    _audioChanged();
+  }
+
+  /// 코드 묶음(같은 chunkId · 동시 노트) → 최저음 1개만 남기고 제거.
+  void unchordSelected() {
+    final id = selectedChunk;
+    if (id == null) return;
+    final ns = _chunkNotes(id);
+    if (!isChordChunk(ns)) return;
+    // 최저음 = 루트.
+    ns.sort((a, b) => a.pitch.compareTo(b.pitch));
+    final root = ns.first;
+    active.notes.removeWhere((n) => n.chunkId == id && !identical(n, root));
+    _audioChanged();
+  }
+
+  /// 선택된 단일 노트가 코드화 가능한지(pitched + 코드 가능 악기 트랙).
+  bool get canChordSelected {
+    final t = active;
+    if (!t.isChordInstrument) return false;
+    final i = selectedNote;
+    if (i == null || i < 0 || i >= t.notes.length) return false;
+    return t.notes[i].kind == 'pitched';
+  }
+
+  /// 선택된 청크가 사용자 코드 묶음(unchord 가능)인지.
+  bool get canUnchordSelected {
+    final id = selectedChunk;
+    if (id == null) return false;
+    return isChordChunk(_chunkNotes(id));
   }
 
   // ─── 선택 & 편집 (노트 또는 청크에 Split/Copy/Loop/Delete/Volume) ────────
@@ -482,4 +535,30 @@ class ProjectStore extends ChangeNotifier {
 
   Future<Uint8List> exportMidiActive() =>
       _api.exportMidi(active.renderNotes, program: active.program);
+
+  /// 재생 ▶ 와 동일한 WAV 믹스를 파일로 export — `renderMix()` 재사용.
+  /// (보컬 오디오는 SoundFont 합성 결과가 아니므로 현재 포함되지 않음 —
+  /// 재생 시점에서도 보컬은 별도 레이어로 동시재생이라 백엔드 mix 와는 무관.)
+  Future<Uint8List> exportMixWav() => renderMix();
+
+  /// 재생 ▶ 와 동일한 enabled 트랙 전부를 멀티트랙 MIDI 로 export.
+  /// 보컬은 MIDI 로 의미가 없어 제외. 드럼은 GM 채널 9, 나머지는 0,1,2 … 로 배정.
+  Future<Uint8List> exportMidiMix() {
+    final list = <({List<Note> notes, int program, int channel})>[];
+    int melodicCh = 0;
+    for (final t in tracks.values) {
+      if (!t.enabled || t.notes.isEmpty) continue;
+      if (t.isVocal) continue; // 보컬은 오디오 — MIDI 제외
+      int ch;
+      if (t.role == TrackRole.drum) {
+        ch = 9; // GM 드럼 채널
+      } else {
+        ch = melodicCh;
+        melodicCh++;
+        if (melodicCh == 9) melodicCh = 10; // 드럼 채널 회피
+      }
+      list.add((notes: t.renderNotes, program: t.program, channel: ch));
+    }
+    return _api.exportMidiMix(list);
+  }
 }

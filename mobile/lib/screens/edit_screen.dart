@@ -437,7 +437,16 @@ class _EditScreenState extends State<EditScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('INSTRUMENT', style: T.label.copyWith(fontSize: 8)),
+                  Row(children: [
+                    Text('INSTRUMENT', style: T.label.copyWith(fontSize: 8)),
+                    _helpIcon(
+                      title: 'INSTRUMENT',
+                      body:
+                          '이 트랙을 어떤 악기 소리로 재생할지 선택해요.\n\n'
+                          '분석된 음정에 SoundFont 악기 음색을 입혀 들려줘요. '
+                          '같은 멜로디라도 피아노·기타·베이스 등 자유롭게 바꿔 들어 볼 수 있어요.',
+                    ),
+                  ]),
                   Text(_instrumentName(t), style: T.body.copyWith(fontWeight: FontWeight.w600)),
                 ],
               ),
@@ -448,7 +457,16 @@ class _EditScreenState extends State<EditScreen> {
         ),
       ),
       if (t.isChordInstrument) ...[
-        const SizedBox(width: 10),
+        const SizedBox(width: 6),
+        _helpIcon(
+          title: '단음 / 코드',
+          body:
+              '단음 = 부른 그대로 한 번에 한 음씩 재생.\n\n'
+              '코드 = 각 음을 다이아토닉 트라이어드(I·III·V 3화음)로 자동 확장. '
+              '키에 맞춰 화음을 깔아 줘요.\n\n'
+              '키보드·기타처럼 화음 가능 악기에서만 보여요.',
+        ),
+        const SizedBox(width: 4),
         _modeToggle(store, t),
       ],
     ]);
@@ -484,6 +502,18 @@ class _EditScreenState extends State<EditScreen> {
     );
   }
 
+  // 5-3: 헤더 라벨 옆 ⓘ — 탭 시 용어 설명 시트.
+  Widget _helpIcon({required String title, required String body}) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => showHelpSheet(context, title, body),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Icon(Symbols.info, size: 13, color: AppColors.textTertiary),
+      ),
+    );
+  }
+
   Widget _card({required Widget child}) => Container(
         constraints: const BoxConstraints(minHeight: 86),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -502,7 +532,17 @@ class _EditScreenState extends State<EditScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('KEY', style: T.label),
+            Row(children: [
+              Text('KEY', style: T.label),
+              _helpIcon(
+                title: 'KEY · 키와 신뢰도',
+                body:
+                    '곡의 으뜸음(C, D…)과 모드(메이저/마이너)예요.\n\n'
+                    'AUTO = 분석이 자동 추정한 키. 카드를 탭하면 수동으로 바꿀 수 있어요.\n\n'
+                    '신뢰도 = 추정이 얼마나 확실한지 (0~1). '
+                    'high / mid / low 단계로 표시해요. 낮으면 수동 지정을 고려해 보세요.',
+              ),
+            ]),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(color: AppColors.activeLane, borderRadius: BorderRadius.circular(6)),
@@ -532,7 +572,16 @@ class _EditScreenState extends State<EditScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('피치 어시스트', style: T.label),
+            Row(children: [
+              Text('피치 어시스트', style: T.label),
+              _helpIcon(
+                title: '피치 어시스트',
+                body:
+                    '키 밖으로 살짝 빗나간 음을 가장 가까운 in-key 음으로 자동 보정해 줘요.\n\n'
+                    '“보정됨” 숫자 = 실제로 끌어당겨진 노트 개수.\n\n'
+                    '끄면 부른 음 그대로 유지돼요. 음정이 불안할 때 켜 보세요.',
+              ),
+            ]),
             GestureDetector(
               onTap: () => store.togglePitchAssistant(!on),
               child: Container(
@@ -631,6 +680,12 @@ class _EditScreenState extends State<EditScreen> {
     // 노트 또는 청크가 선택되면 활성. 선택 대상에 따라 동작이 자동 분기.
     final hasSel = store.hasSelection && !store.active.chordActive;
     final hasNotes = store.active.notes.isNotEmpty;
+    // Chord 버튼: 단음 선택 시 "Chord"(코드화 시트), 코드 묶음 선택 시 "Unchord".
+    final canChord = store.canChordSelected && !store.active.chordActive;
+    final canUnchord = store.canUnchordSelected && !store.active.chordActive;
+    final chordEnabled = canChord || canUnchord;
+    final chordLabel = canUnchord ? 'Unchord' : 'Chord';
+    final chordIcon = canUnchord ? Symbols.heart_broken : Symbols.queue_music;
 
     Widget item(IconData ic, String label, {required bool enabled, required VoidCallback onTap}) {
       // 비활성 시 아이콘만 dim 처리 — 라벨은 항상 readable 하게 유지해
@@ -652,11 +707,14 @@ class _EditScreenState extends State<EditScreen> {
     return Container(
       height: 62,
       color: AppColors.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
         item(Symbols.content_cut, 'Split', enabled: hasSel, onTap: () => store.splitSelectedAny(_playheadSec)),
         item(Symbols.content_copy, 'Copy', enabled: hasSel, onTap: store.copySelectedAny),
         item(Symbols.repeat, 'Loop', enabled: hasNotes, onTap: store.loopSelectedAny),
+        item(chordIcon, chordLabel,
+            enabled: chordEnabled,
+            onTap: () => canUnchord ? store.unchordSelected() : showChordPicker(context, store)),
         item(Symbols.delete, 'Delete', enabled: hasSel, onTap: store.deleteSelectedAny),
         item(Symbols.volume_up, 'Volume', enabled: hasSel, onTap: () => _showVolume(store)),
       ]),

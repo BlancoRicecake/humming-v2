@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../api/engine_api.dart';
 import '../models/models.dart';
+import '../music/chord_expand.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
@@ -30,6 +31,56 @@ Widget _grabber() => Center(
         decoration: BoxDecoration(color: const Color(0xFF3F3F46), borderRadius: BorderRadius.circular(2)),
       ),
     );
+
+// ─── 도움말 시트 ───────────────────────────────────────────────────────
+// 5-3: 음악·DSP 용어(키/AUTO/피치 어시스트/단음·코드 등)에 짧은 설명.
+// 카드 헤더의 ⓘ 아이콘 탭 → 이 시트가 모달로 노출. 닫기 버튼 1개.
+void showHelpSheet(BuildContext context, String title, String body) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (_) => Container(
+      decoration: _sheetDeco(),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _grabber(),
+          Row(
+            children: [
+              const Icon(Symbols.info, size: 18, color: AppColors.lime),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: T.h2.copyWith(fontSize: 17))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            body,
+            style: T.body.copyWith(fontSize: 13.5, height: 1.5, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                height: 46,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.bg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Text('닫기', style: T.body.copyWith(fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 // ─── 악기 선택 ─────────────────────────────────────────────────────────
 void showInstrumentPicker(BuildContext context, ProjectStore store) {
@@ -529,6 +580,78 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
   }
 }
 
+// ─── 단일 노트 → 코드 선택 시트 ────────────────────────────────────────
+// Chord 툴바 버튼이 호출. 선택한 단음을 ChordType 으로 확장(per-note chord).
+// 키가 감지된 트랙에서는 Diatonic 이 첫 칩, 그 외엔 메이저/마이너/sus/7th.
+void showChordPicker(BuildContext context, ProjectStore store) {
+  final i = store.selectedNote;
+  if (i == null) return;
+  final dk = store.active.analysis?.detectedKey;
+  final hasKey = dk?.tonic != null && dk?.scale != null;
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (_) {
+      Widget chip(ChordType type) => GestureDetector(
+            onTap: () {
+              store.applyChord(i, type);
+              Navigator.pop(context);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(type.label,
+                      style: T.body.copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(type.intervalsLabel,
+                      style: T.sub.copyWith(fontSize: 10, color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+          );
+
+      final types = hasKey
+          ? ChordType.values
+          : ChordType.values.where((t) => t != ChordType.diatonic).toList();
+
+      return Container(
+        decoration: _sheetDeco(),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _grabber(),
+            Text('코드 변환', style: T.h2.copyWith(fontSize: 18)),
+            const SizedBox(height: 4),
+            Text(
+              hasKey
+                  ? '루트: ${noteName(store.active.notes[i].pitch)} · 키: ${dk!.label}'
+                  : '루트: ${noteName(store.active.notes[i].pitch)} (키 미감지 — 절대 인터벌)',
+              style: T.sub,
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [for (final t in types) chip(t)],
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 // ─── 내보내기 / 공유 ───────────────────────────────────────────────────
 void showExportShare(BuildContext context, ProjectStore store) {
   showModalBottomSheet(
@@ -597,7 +720,8 @@ Widget _exportRow(IconData ic, String title, String sub, Color iconColor) {
 
 Future<void> _exportFile(BuildContext context, ProjectStore store, {required bool midi}) async {
   try {
-    final bytes = midi ? await store.exportMidiActive() : await store.renderActive();
+    // 재생 ▶ 와 동일한 결과: enabled 트랙 전부를 믹스/멀티트랙으로 export.
+    final bytes = midi ? await store.exportMidiMix() : await store.exportMixWav();
     final dir = await getTemporaryDirectory();
     final f = File('${dir.path}/humming_${DateTime.now().millisecondsSinceEpoch}.${midi ? 'mid' : 'wav'}');
     await f.writeAsBytes(bytes, flush: true);
