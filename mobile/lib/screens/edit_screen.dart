@@ -153,7 +153,7 @@ class _EditScreenState extends State<EditScreen> {
 
   double _projectDuration(ProjectStore store) {
     double m = 0;
-    for (final t in store.tracks.values) {
+    for (final t in store.tracks) {
       for (final n in t.notes) {
         if (n.end > m) m = n.end;
       }
@@ -336,8 +336,18 @@ class _EditScreenState extends State<EditScreen> {
             Expanded(
               child: TimelineEditor(
                 // 코드 모드 트랙은 확장된(화음) 노트를 표시 → 코드 변환이 시각적으로 보임.
-                tracks: {for (final r in TrackRole.values) r: _displayNotes(store.tracks[r]!)},
-                enabled: {for (final r in TrackRole.values) r: store.tracks[r]!.enabled},
+                // 멀티트랙 모델(#20) — 카테고리당 첫 트랙을 UI 에 노출(기존 동작 보존).
+                // 후속 task(#21~)에서 카테고리 안의 모든 트랙을 표시하도록 확장 예정.
+                tracks: {
+                  for (final r in TrackRole.values)
+                    if (store.firstByRole(r) != null)
+                      r: _displayNotes(store.firstByRole(r)!),
+                },
+                enabled: {
+                  for (final r in TrackRole.values)
+                    if (store.firstByRole(r) != null)
+                      r: store.firstByRole(r)!.enabled,
+                },
                 activeRole: store.activeRole,
                 durationSec: _projectDuration(store),
                 playheadSec: _playheadSec,
@@ -345,8 +355,11 @@ class _EditScreenState extends State<EditScreen> {
                 selectedChunk: t.chordActive ? null : store.selectedChunk,
                 waveforms: {
                   for (final r in TrackRole.values)
-                    if (store.tracks[r]!.vocalPeaks.isNotEmpty)
-                      r: (peaks: store.tracks[r]!.vocalPeaks, dur: store.tracks[r]!.vocalDuration),
+                    if ((store.firstByRole(r)?.vocalPeaks.isNotEmpty ?? false))
+                      r: (
+                        peaks: store.firstByRole(r)!.vocalPeaks,
+                        dur: store.firstByRole(r)!.vocalDuration,
+                      ),
                 },
                 onActivateRole: store.setActiveRole,
                 onToggleEnable: store.toggleEnabled,

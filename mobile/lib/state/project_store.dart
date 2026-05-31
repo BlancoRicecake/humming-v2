@@ -1,5 +1,7 @@
 // 앱 전역 상태 (provider/ChangeNotifier).
-// Project = 4개 트랙(Keys/Bass/Drum/Vocal). 각 트랙은 독립 녹음/분석.
+// Project = N개 트랙(카테고리 = TrackRole: Keys/Bass/Drum/Vocal). 한 카테고리당
+// 여러 트랙을 가질 수 있음(예: Chords 안에 Piano + Guitar). 각 트랙은 고유 id 로
+// 식별되며 독립적으로 녹음/분석/편집.
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -10,14 +12,16 @@ import '../music/chord_expand.dart';
 
 double _midiToHz(int m) => 440.0 * math.pow(2, (m - 69) / 12.0);
 
-/// 한 트랙의 상태.
+/// 한 트랙의 상태. `id` 는 ProjectStore 가 발급하는 고유 식별자(세션 단위).
 class TrackData {
-  TrackData(this.role)
-      : program = (instrumentPalette[role]?.isNotEmpty ?? false)
-            ? instrumentPalette[role]!.first.program
-            : 0,
+  TrackData(this.id, this.role, {int? program})
+      : program = program ??
+            ((instrumentPalette[role]?.isNotEmpty ?? false)
+                ? instrumentPalette[role]!.first.program
+                : 0),
         options = AnalyzeOptions();
 
+  final int id;
   final TrackRole role;
   int program; // 선택된 GM 악기
   bool chordMode = false;
@@ -47,33 +51,144 @@ class TrackData {
 
   /// 재생/내보내기에 쓸 노트 (코드 모드면 트라이어드 확장).
   List<Note> get renderNotes => expandChords(notes, analysis?.detectedKey, chordActive);
+
+  /// 직렬화 — 프로젝트 저장/복원용(현재 호출처 없음, #21~ 에서 사용 예정).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'role': role.name,
+        'program': program,
+        'chord_mode': chordMode,
+        'enabled': enabled,
+        'wav_path': wavPath,
+        'vocal_wav_path': vocalWavPath,
+        'vocal_peaks': vocalPeaks,
+        'vocal_duration': vocalDuration,
+        'notes': notes.map((n) => n.toJson()..['chunk_id'] = n.chunkId).toList(),
+        'options': options.toJson(),
+      };
+
+  static TrackData fromJson(Map<String, dynamic> j) {
+    final role = TrackRole.values.firstWhere(
+      (r) => r.name == (j['role'] as String?),
+      orElse: () => TrackRole.keys,
+    );
+    final t = TrackData(_i(j['id']), role, program: _i(j['program']))
+      ..chordMode = (j['chord_mode'] ?? false) as bool
+      ..enabled = (j['enabled'] ?? true) as bool
+      ..wavPath = j['wav_path'] as String?
+      ..vocalWavPath = j['vocal_wav_path'] as String?
+      ..vocalPeaks = ((j['vocal_peaks'] ?? []) as List).map((e) => (e as num).toDouble()).toList()
+      ..vocalDuration = (j['vocal_duration'] as num?)?.toDouble() ?? 0
+      ..notes = ((j['notes'] ?? []) as List).map((e) {
+        final m = e as Map<String, dynamic>;
+        final n = Note.fromJson(m);
+        n.chunkId = (m['chunk_id'] as num?)?.toInt() ?? 0;
+        return n;
+      }).toList();
+    final opt = (j['options'] ?? {}) as Map<String, dynamic>;
+    t.options = AnalyzeOptions(
+      autoKey: (opt['auto_key'] ?? true) as bool,
+      pitchAssistant: (opt['pitch_assistant'] ?? true) as bool,
+      keyTonic: opt['key_tonic'] as String?,
+      scale: opt['scale'] as String?,
+    );
+    return t;
+  }
 }
 
+int _i(dynamic v, [int def = 0]) => (v as num?)?.toInt() ?? def;
+
 class ProjectStore extends ChangeNotifier {
-  ProjectStore({EngineApi? api}) : _api = api ?? EngineApi();
+  ProjectStore({EngineApi? api}) : _api = api ?? EngineApi() {
+    _seedDefaultTracks();
+  }
   final EngineApi _api;
 
   String title = 'My Song';
-  final Map<TrackRole, TrackData> tracks = {
-    for (final r in TrackRole.values) r: TrackData(r),
-  };
-  TrackRole activeRole = TrackRole.keys;
+
+  /// 모든 트랙(카테고리당 N개 가능). 순서는 사이드바 표시 순서.
+  /// 처음에는 4개 카테고리 각 1개로 시작.
+  final List<TrackData> tracks = [];
+  int _trackSeq = 0; // 트랙 id 발급기
+  int? activeTrackId; // 현재 편집/녹음 대상 트랙
   bool busy = false;
   String? error;
   int editEpoch = 0; // 오디오 출력에 영향 주는 편집마다 증가(재렌더 트리거)
   int _chunkSeq = 0; // 청크 ID 발급기
 
-  TrackData get active => tracks[activeRole]!;
-  bool get hasAnyRecording => tracks.values.any((t) => t.hasRecording);
+  void _seedDefaultTracks() {
+    for (final r in TrackRole.values) {
+      tracks.add(TrackData(++_trackSeq, r));
+    }
+    activeTrackId = tracks.first.id;
+  }
+
+  // ─── 트랙 조회 ─────────────────────────────────────────────────────────
+  TrackData get active =>
+      tracks.firstWhere((t) => t.id == activeTrackId, orElse: () => tracks.first);
+
+  TrackRole get activeRole => active.role;
+
+  bool get hasAnyRecording => tracks.any((t) => t.hasRecording);
+
+  /// 카테고리(role)에 속한 모든 트랙(순서 보존).
+  Iterable<TrackData> tracksByRole(TrackRole r) => tracks.where((t) => t.role == r);
+
+  /// 카테고리의 첫 트랙(없으면 null).
+  TrackData? firstByRole(TrackRole r) {
+    for (final t in tracks) {
+      if (t.role == r) return t;
+    }
+    return null;
+  }
+
+  TrackData? trackById(int id) {
+    for (final t in tracks) {
+      if (t.id == id) return t;
+    }
+    return null;
+  }
 
   void _audioChanged() {
     editEpoch++;
     notifyListeners();
   }
 
-  void setActiveRole(TrackRole r) {
-    activeRole = r;
+  // ─── 활성 트랙 ──────────────────────────────────────────────────────────
+  void setActiveTrack(int trackId) {
+    if (trackById(trackId) == null) return;
+    activeTrackId = trackId;
     notifyListeners();
+  }
+
+  /// 호환용 — 카테고리 선택 시 그 카테고리의 첫 트랙을 active 로.
+  /// 멀티트랙 UI(#21~)가 들어오면 setActiveTrack(id) 로 대체될 예정.
+  void setActiveRole(TrackRole r) {
+    final t = firstByRole(r);
+    if (t == null) return;
+    activeTrackId = t.id;
+    notifyListeners();
+  }
+
+  // ─── 트랙 추가/삭제 ───────────────────────────────────────────────────
+  /// 새 트랙 추가 → 추가된 TrackData 반환. UI 는 아직 호출 안 함(#27 예정).
+  TrackData addTrack(TrackRole role, {int? program}) {
+    final t = TrackData(++_trackSeq, role, program: program);
+    tracks.add(t);
+    _audioChanged();
+    return t;
+  }
+
+  /// 트랙 삭제. 활성 트랙이면 활성을 같은 카테고리의 다른 트랙(없으면 첫 트랙)으로.
+  void removeTrack(int trackId) {
+    final i = tracks.indexWhere((t) => t.id == trackId);
+    if (i < 0) return;
+    final removed = tracks.removeAt(i);
+    if (activeTrackId == trackId) {
+      final fallback = firstByRole(removed.role) ?? (tracks.isNotEmpty ? tracks.first : null);
+      activeTrackId = fallback?.id;
+    }
+    _audioChanged();
   }
 
   // ─── 드럼 재라벨링 (백엔드 호출 없음) ────────────────────────────────────
@@ -123,26 +238,45 @@ class ProjectStore extends ChangeNotifier {
     _audioChanged();
   }
 
+  /// 카테고리 토글(호환) — 그 카테고리의 모든 트랙을 일괄 토글.
+  /// 멀티트랙 UI 가 들어오면 개별 트랙 토글(toggleTrackEnabled)로 대체될 예정.
   void toggleEnabled(TrackRole r) {
-    tracks[r]!.enabled = !tracks[r]!.enabled;
+    final list = tracksByRole(r).toList();
+    if (list.isEmpty) return;
+    // 하나라도 enabled 면 모두 disabled, 전부 disabled 면 모두 enabled.
+    final anyOn = list.any((t) => t.enabled);
+    for (final t in list) {
+      t.enabled = !anyOn;
+    }
+    _audioChanged();
+  }
+
+  void toggleTrackEnabled(int trackId) {
+    final t = trackById(trackId);
+    if (t == null) return;
+    t.enabled = !t.enabled;
     _audioChanged();
   }
 
   void newProject() {
     title = 'My Song';
-    for (final r in TrackRole.values) {
-      tracks[r] = TrackData(r);
-    }
-    activeRole = TrackRole.keys;
+    tracks.clear();
+    _trackSeq = 0;
+    _chunkSeq = 0;
+    _seedDefaultTracks();
     error = null;
     notifyListeners();
   }
 
   Future<bool> health() => _api.health();
 
-  /// 녹음 WAV → 분석 → 활성(또는 지정) 트랙에 반영.
-  Future<void> recordAnalyzed(String wavPath, {TrackRole? role}) async {
-    final t = tracks[role ?? activeRole]!;
+  /// 녹음 WAV → 분석 → 지정 트랙(또는 카테고리의 첫 트랙, 또는 active)에 반영.
+  /// 우선순위: trackId > role(의 첫 트랙) > active.
+  Future<void> recordAnalyzed(String wavPath, {TrackRole? role, int? trackId}) async {
+    TrackData? t;
+    if (trackId != null) t = trackById(trackId);
+    t ??= role != null ? firstByRole(role) : null;
+    t ??= active;
     t.wavPath = wavPath;
     busy = true;
     error = null;
@@ -234,14 +368,22 @@ class ProjectStore extends ChangeNotifier {
 
   Future<void> setMainKeyFromRole(TrackRole r) async {
     if (r == TrackRole.drum) return;
-    final dk = tracks[r]!.analysis?.detectedKey;
+    // 카테고리 안에 여러 트랙이 있을 수 있음 — 분석된 detectedKey 가 있는 첫 트랙을 기준.
+    TrackData? src;
+    for (final t in tracksByRole(r)) {
+      if (t.analysis?.detectedKey?.tonic != null) {
+        src = t;
+        break;
+      }
+    }
+    final dk = src?.analysis?.detectedKey;
     if (dk?.tonic == null || dk?.scale == null) {
       error = '${r.label} 트랙의 키가 아직 감지되지 않았습니다';
       notifyListeners();
       return;
     }
     mainKeyRole = r;
-    for (final t in tracks.values) {
+    for (final t in tracks) {
       // 드럼 제외. 기준 트랙(r)은 이미 이 키로 분석된 '근거'이므로 재보정하지
       // 않는다 — 수동키(conf=1.0)로 강제하면 보정 상한이 올라가 기준 트랙에
       // 원래보다 센 교정이 한 번 더 들어가는 모순이 생김.
@@ -647,7 +789,7 @@ class ProjectStore extends ChangeNotifier {
     _audioChanged();
   }
 
-  bool get hasAnyNotes => tracks.values.any((t) => t.notes.isNotEmpty);
+  bool get hasAnyNotes => tracks.any((t) => t.notes.isNotEmpty);
 
   /// 활성 트랙 1개만 백엔드에 보내 WAV 렌더.
   /// **Task 6-6 (2026-05-31) 기준 살아있는 호출처 없음** — 재생은
@@ -664,7 +806,7 @@ class ProjectStore extends ChangeNotifier {
   /// 활성(enabled) + 노트 있는 비-보컬 트랙들의 (notes, program, isDrum) 목록.
   List<({List<Note> notes, int program, bool isDrum})> playableSynthTracks() {
     final out = <({List<Note> notes, int program, bool isDrum})>[];
-    for (final t in tracks.values) {
+    for (final t in tracks) {
       if (!t.enabled || t.notes.isEmpty || t.isVocal) continue;
       out.add((notes: t.renderNotes, program: t.program, isDrum: t.role == TrackRole.drum));
     }
@@ -674,7 +816,7 @@ class ProjectStore extends ChangeNotifier {
   /// 녹음 중 함께 들을 반주(녹음 대상 exclude). 노트 있는 비-보컬 트랙만.
   List<({List<Note> notes, int program, bool isDrum})> accompanimentSynthTracks(TrackRole exclude) {
     final out = <({List<Note> notes, int program, bool isDrum})>[];
-    for (final t in tracks.values) {
+    for (final t in tracks) {
       if (t.role == exclude || t.notes.isEmpty || t.isVocal) continue;
       out.add((notes: t.renderNotes, program: t.program, isDrum: t.role == TrackRole.drum));
     }
@@ -682,17 +824,25 @@ class ProjectStore extends ChangeNotifier {
   }
 
   /// 활성(enabled)이고 노트 있는 트랙만 하나로 믹스 렌더.
-  bool get hasEnabledNotes => tracks.values.any((t) => t.enabled && t.notes.isNotEmpty);
+  bool get hasEnabledNotes => tracks.any((t) => t.enabled && t.notes.isNotEmpty);
 
   // 보컬(목소리 그대로) — 믹스에 별도 레이어로 동시재생.
-  TrackData get _vocalTrack => tracks[TrackRole.vocal]!;
-  bool get hasVocalAudio => _vocalTrack.enabled && _vocalTrack.vocalWavPath != null;
-  String? get vocalMixPath => hasVocalAudio ? _vocalTrack.vocalWavPath : null;
+  // 보컬 카테고리에 트랙이 여러 개라면 첫 번째 보컬 트랙을 사용(현재는 1개만 시드됨).
+  // 멀티 보컬 지원(#21~)이 들어오면 모든 보컬 트랙을 모아 mix 하도록 확장.
+  TrackData? get _vocalTrack => firstByRole(TrackRole.vocal);
+  bool get hasVocalAudio {
+    final v = _vocalTrack;
+    return v != null && v.enabled && v.vocalWavPath != null;
+  }
+  String? get vocalMixPath => hasVocalAudio ? _vocalTrack!.vocalWavPath : null;
   bool get hasPlayableMix => hasEnabledNotes || hasVocalAudio;
 
   /// 녹음 중 함께 들을 보컬(녹음 대상이 보컬이 아니고 보컬 오디오가 있을 때).
-  String? accompanimentVocalPath(TrackRole exclude) =>
-      (exclude != TrackRole.vocal && _vocalTrack.vocalWavPath != null) ? _vocalTrack.vocalWavPath : null;
+  String? accompanimentVocalPath(TrackRole exclude) {
+    if (exclude == TrackRole.vocal) return null;
+    final v = _vocalTrack;
+    return v?.vocalWavPath;
+  }
 
   /// 활성(enabled)이고 노트 있는 트랙들을 백엔드 `/render_mix` 로 합쳐 WAV bytes.
   ///
@@ -700,7 +850,7 @@ class ProjectStore extends ChangeNotifier {
   /// `playableSynthTracks()` + `SynthPlayer` 로 온디바이스 처리. 현재
   /// 살아있는 호출처는 `exportMixWav()` (→ `sheets.dart` 공유 시트) 뿐.
   Future<Uint8List> renderMix() {
-    final trs = tracks.values
+    final trs = tracks
         .where((t) => t.enabled && t.notes.isNotEmpty)
         .map((t) => (notes: t.renderNotes, program: t.program))
         .toList();
@@ -715,7 +865,7 @@ class ProjectStore extends ChangeNotifier {
   /// (커밋 `6de9bec`). 호환용으로만 유지.
   @Deprecated('Replaced by accompanimentSynthTracks() + SynthPlayer (task 6-4).')
   Future<Uint8List?> renderAccompaniment(TrackRole exclude) async {
-    final trs = tracks.values
+    final trs = tracks
         .where((t) => t.role != exclude && t.notes.isNotEmpty)
         .map((t) => (notes: t.renderNotes, program: t.program))
         .toList();
@@ -736,7 +886,7 @@ class ProjectStore extends ChangeNotifier {
   Future<Uint8List> exportMidiMix() {
     final list = <({List<Note> notes, int program, int channel})>[];
     int melodicCh = 0;
-    for (final t in tracks.values) {
+    for (final t in tracks) {
       if (!t.enabled || t.notes.isEmpty) continue;
       if (t.isVocal) continue; // 보컬은 오디오 — MIDI 제외
       int ch;
