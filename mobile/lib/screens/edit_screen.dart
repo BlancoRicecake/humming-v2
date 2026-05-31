@@ -683,8 +683,10 @@ class _EditScreenState extends State<EditScreen> {
           enabled: true,
           onTap: () => showNoteCandidate(context, store, store.selectedNote!)));
       if (t.isChordInstrument) {
-        items.add(item(Symbols.queue_music, '코드',
-            enabled: store.canChordSelected || store.canUnchordSelected,
+        final isChord = store.canUnchordSelected;
+        items.add(item(isChord ? Symbols.heart_broken : Symbols.queue_music,
+            isChord ? '코드 해제' : '코드',
+            enabled: store.canChordSelected || isChord,
             onTap: () => showChordPicker(context, store)));
       }
       items.addAll([
@@ -695,13 +697,19 @@ class _EditScreenState extends State<EditScreen> {
       // 청크: 분할 · 복사 · 루프 · (코드 — 코드 가능 악기만) · 볼륨 · 삭제
       items.addAll([
         item(Symbols.content_cut, '분할',
-            enabled: true, onTap: () => store.splitSelectedAny(_playheadSec)),
+            enabled: true, onTap: () {
+              if (!store.splitSelectedAny(_playheadSec)) {
+                comingSoon(context, '현재 위치에서는 분할할 수 없음');
+              }
+            }),
         item(Symbols.content_copy, '복사', enabled: true, onTap: store.copySelectedAny),
         item(Symbols.repeat, '루프', enabled: true, onTap: store.loopSelectedAny),
       ]);
       if (t.isChordInstrument) {
-        items.add(item(Symbols.queue_music, '코드',
-            enabled: store.canChordChunkSelected || store.canUnchordChunkSelected,
+        final isChunkChord = store.canUnchordChunkSelected;
+        items.add(item(isChunkChord ? Symbols.heart_broken : Symbols.queue_music,
+            isChunkChord ? '코드 해제' : '코드',
+            enabled: store.canChordChunkSelected || isChunkChord,
             onTap: () => showChordPicker(context, store)));
       }
       items.addAll([
@@ -717,17 +725,19 @@ class _EditScreenState extends State<EditScreen> {
           enabled: _recState == _RecState.idle,
           onTap: () => _startInlineRecord(store)));
       if (t.isChordInstrument) {
-        items.add(item(t.chordActive ? Symbols.heart_broken : Symbols.queue_music, '코드',
+        items.add(item(t.chordActive ? Symbols.heart_broken : Symbols.queue_music,
+            t.chordActive ? '코드 해제' : '코드',
             enabled: canTrackChord && trackHasNotes,
             onTap: () => store.setChordMode(!t.chordMode)));
       }
       items.addAll([
-        item(t.enabled ? Symbols.volume_off : Symbols.volume_up, '뮤트',
+        item(t.enabled ? Symbols.volume_up : Symbols.volume_off,
+            t.enabled ? '뮤트' : '뮤트 해제',
             enabled: true,
             onTap: () => store.toggleTrackEnabled(t.id)),
         item(Symbols.volume_up, '볼륨',
-            enabled: false, // 트랙 단위 볼륨 sheet 는 후속 task — 라벨만 유지
-            onTap: () => comingSoon(context, '트랙 볼륨')),
+            enabled: t.notes.isNotEmpty,
+            onTap: () => _showVolume(store)),
         item(Symbols.delete, '삭제',
             enabled: true,
             onTap: () => _confirmTrackDelete(store, t)),

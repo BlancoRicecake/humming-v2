@@ -62,7 +62,8 @@ class TrackData {
   List<Note> get renderNotes => expandChords(notes, analysis?.detectedKey, chordActive);
 
   /// 청크의 timelineStart/inPoint/outPoint 를 적용한 "효과 시간" 기준 노트.
-  /// 가시 범위 밖 노트는 제외, 안쪽 노트는 (timelineStart - inPoint) 만큼 시프트.
+  /// 청크의 가시 윈도우 [inPoint, outPoint) 와 노트 [start, end) 의 교집합만 재생되도록 클립.
+  /// 노트가 트림 경계를 가로지르면 잘려나간 부분은 무음 — 남은 구간만 발음.
   /// 청크 메타가 비어있으면(레거시) renderNotes 그대로 반환.
   List<Note> get effectiveRenderNotes {
     if (chunks.isEmpty) return renderNotes;
@@ -74,16 +75,22 @@ class TrackData {
         out.add(n);
         continue;
       }
-      if (n.start < c.inPoint || n.start >= c.outPoint) continue;
+      // 청크 가시 윈도우와 노트의 교집합.
+      final clipStart = n.start < c.inPoint ? c.inPoint : n.start;
+      final clipEnd = n.end > c.outPoint ? c.outPoint : n.end;
+      if (clipEnd - clipStart <= 0.001) continue; // 교집합 없음
       final shift = c.timelineStart - c.inPoint;
-      if (shift == 0) {
+      final newStart = clipStart + shift;
+      final newEnd = clipEnd + shift;
+      // 클립이 원본과 동일하면(start/end 모두 안쪽 + shift 0) clone 생략 가능.
+      if (shift == 0 && clipStart == n.start && clipEnd == n.end) {
         out.add(n);
       } else {
         final clone = Note.fromJson(n.toJson())
-          ..start = n.start + shift
-          ..end = n.end + shift
+          ..start = newStart
+          ..end = newEnd
           ..chunkId = n.chunkId;
-        clone.duration = clone.end - clone.start;
+        clone.duration = newEnd - newStart;
         out.add(clone);
       }
     }
@@ -711,6 +718,7 @@ class ProjectStore extends ChangeNotifier {
 
   void togglePitchAssistant(bool on) {
     active.options.pitchAssistant = on;
+    notifyListeners(); // 노트 없어 reassist 가 early-return 하는 트랙(드럼/보컬/빈)도 토글 시각 반영.
     reassist(active);
   }
 
@@ -920,30 +928,37 @@ class ProjectStore extends ChangeNotifier {
   void _resort() => active.notes.sort((a, b) => a.start.compareTo(b.start));
 
   // ── 통합 라우터 (하단 툴바가 호출) ──
-  void splitSelectedAny([double? atSec]) =>
+  /// 선택 대상을 atSec 에서 분할. 분할 가능했으면 true, 아니면 false.
+  bool splitSelectedAny([double? atSec]) =>
       selectedChunk != null ? _splitChunk(selectedChunk!, atSec) : _splitNote(atSec);
   void copySelectedAny() => selectedChunk != null ? _copyChunk(selectedChunk!) : _copyNote();
   void deleteSelectedAny() => selectedChunk != null ? _deleteChunk(selectedChunk!) : _deleteNote();
   void loopSelectedAny() => selectedChunk != null ? _copyChunk(selectedChunk!) : loopActive();
 
-  /// 선택된 대상의 현재 볼륨(velocity 0~127). 없으면 null.
+  /// 선택된 대상의 현재 볼륨(velocity 0~127). 트랙만 선택된 경우 active 트랙의 첫 노트.
   int? get selectedVelocity {
     if (selectedChunk != null) {
       final ns = _chunkNotes(selectedChunk!);
       return ns.isEmpty ? null : ns.first.velocity;
     }
-    return _selOr()?.velocity;
+    if (selectedNote != null) return _selOr()?.velocity;
+    if (trackSelected && active.notes.isNotEmpty) return active.notes.first.velocity;
+    return null;
   }
 
-  /// 선택된 노트/청크의 볼륨 설정(More 버튼).
+  /// 선택된 노트/청크/트랙의 볼륨 설정. 트랙만 선택된 경우 active 의 모든 노트에 적용.
   void setSelectedVolume(int velocity) {
     final v = velocity.clamp(1, 127);
     if (selectedChunk != null) {
       for (final n in _chunkNotes(selectedChunk!)) {
         n.velocity = v;
       }
-    } else {
+    } else if (selectedNote != null) {
       _selOr()?.velocity = v;
+    } else if (trackSelected) {
+      for (final n in active.notes) {
+        n.velocity = v;
+      }
     }
     _audioChanged();
   }
@@ -971,12 +986,12 @@ class ProjectStore extends ChangeNotifier {
     _audioChanged();
   }
 
-  void _splitNote([double? atSec]) {
+  bool _splitNote([double? atSec]) {
     final t = active, i = selectedNote;
     final n = _selOr();
-    if (n == null) return;
+    if (n == null) return false;
     final cut = (atSec != null && atSec > n.start && atSec < n.end) ? atSec : (n.start + n.end) / 2;
-    if (cut - n.start < 0.02 || n.end - cut < 0.02) return;
+    if (cut - n.start < 0.02 || n.end - cut < 0.02) return false;
     final right = _clone(n)
       ..start = cut
       ..duration = n.end - cut;
@@ -984,6 +999,7 @@ class ProjectStore extends ChangeNotifier {
     n.duration = cut - n.start;
     t.notes.insert(i! + 1, right);
     _audioChanged();
+    return true;
   }
 
   // ── 청크 단위 ──
@@ -1056,10 +1072,11 @@ class ProjectStore extends ChangeNotifier {
 
   /// 청크를 atSec(타임라인 절대 시간 = 플레이헤드 위치)에서 둘로 분할.
   /// 좌측은 원본 청크의 [inPoint, localCut), 우측은 새 청크 [localCut, outPoint).
-  void _splitChunk(int id, double? atSec) {
+  /// atSec 이 청크 구간 밖이면 false 반환(분할 불가).
+  bool _splitChunk(int id, double? atSec) {
     final c = active.chunkById(id);
-    if (c == null || atSec == null) return;
-    if (atSec <= c.timelineStart || atSec >= c.timelineEnd) return;
+    if (c == null || atSec == null) return false;
+    if (atSec <= c.timelineStart || atSec >= c.timelineEnd) return false;
     final localCut = atSec - c.timelineStart + c.inPoint;
     final newId = ++_chunkSeq;
     active.chunks.add(Chunk(
@@ -1079,6 +1096,7 @@ class ProjectStore extends ChangeNotifier {
     }
     selectedChunk = newId;
     _audioChanged();
+    return true;
   }
 
   /// 활성 트랙 전체를 한 번 더 이어붙여 루프(선택 없을 때 Loop).

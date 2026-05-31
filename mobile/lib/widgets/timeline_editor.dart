@@ -793,10 +793,8 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  if (!active) widget.onActivateTrack?.call(t.id);
-                  widget.onChunkTap?.call(null);
-                },
+                // 빈 영역 탭 → 트랙 선택(이미 active 여도 trackSelected=true 로 강제) → 액션 바 표시.
+                onTap: () => widget.onActivateTrack?.call(t.id),
               ),
             ),
 
@@ -809,17 +807,20 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
               width: _contentW,
               child: Stack(children: [
                 Positioned.fill(
-                  child: CustomPaint(
-                    painter: hasWave
-                        ? _WavePainter(peaks: t.vocalPeaks, vocalDur: t.vocalDuration, totalDur: _dur, active: active)
-                        : _NotesPainter(
-                            notes: notes,
-                            durationSec: _dur,
-                            active: active,
-                            chunkRanges: _chunkTimelineRanges(t),
-                            selectedNote: active ? widget.selectedNote : null,
-                            selectedChunk: active ? widget.selectedChunk : null,
-                          ),
+                  // 페인터는 시각만 — 빈 영역 탭이 Layer 0 (트랙 활성화) 으로 통과되도록.
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: hasWave
+                          ? _WavePainter(peaks: t.vocalPeaks, vocalDur: t.vocalDuration, totalDur: _dur, active: active)
+                          : _NotesPainter(
+                              notes: notes,
+                              durationSec: _dur,
+                              active: active,
+                              chunkRanges: _chunkTimelineRanges(t),
+                              selectedNote: active ? widget.selectedNote : null,
+                              selectedChunk: active ? widget.selectedChunk : null,
+                            ),
+                    ),
                   ),
                 ),
                 if (!hasWave)
