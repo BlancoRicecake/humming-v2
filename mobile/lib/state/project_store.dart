@@ -76,6 +76,53 @@ class ProjectStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ─── 드럼 재라벨링 (백엔드 호출 없음) ────────────────────────────────────
+  // 백엔드는 모든 입력을 멜로딕으로 분석(auto-percussive fallback 제거됨).
+  // 사용자가 드럼 슬롯에 녹음하면 = 명시적 드럼 의도 → 노트를 GM 드럼 채널(9)에서
+  // 의미 있는 키트 매핑(36 Kick / 38 Snare / 42 HiHat)으로 변환한다.
+  //
+  // 매핑 휴리스틱(pitch 기반):
+  //   - 트랙 평균보다 5 반음 이상 낮음 → Kick(36)
+  //   - 트랙 평균보다 5 반음 이상 높음 → HiHat(42)
+  //   - 그 외 → Snare(38)
+  // 정밀 분류(스펙트럼 기반 backend/app/drums.py)는 후속 task — 일단은
+  // 오프라인·즉시 동작이 우선.
+  //
+  // `pitchOriginal` 은 백엔드에서 받은 원래 멜로디 pitch — 보존되어 있어
+  // `restoreFromDrums()` 로 되돌릴 때 손실 없이 복원된다.
+  void _relabelAsDrums(List<Note> notes) {
+    if (notes.isEmpty) return;
+    final avg = notes.map((n) => n.pitch).reduce((a, b) => a + b) / notes.length;
+    for (final n in notes) {
+      // pitchOriginal 이 비어있으면(엣지) 현재 pitch 를 저장 — 복원 위해.
+      if (n.pitchOriginal == 0) n.pitchOriginal = n.pitch;
+      final diff = n.pitch - avg;
+      final drumPitch = diff <= -5 ? 36 : (diff >= 5 ? 42 : 38);
+      n.pitch = drumPitch;
+      n.kind = 'percussive';
+    }
+  }
+
+  /// 활성 트랙의 노트를 드럼으로 재라벨(수동 트리거). 일반적으로
+  /// `recordAnalyzed` 가 자동으로 처리하지만, 이미 멜로딕으로 분석된 트랙을
+  /// 드럼으로 강제 전환하고 싶을 때 호출.
+  void convertActiveToDrums() {
+    _relabelAsDrums(active.notes);
+    _audioChanged();
+  }
+
+  /// 드럼 재라벨을 되돌려 멜로딕 pitch 복원(`pitchOriginal` → `pitch`).
+  /// 드럼 슬롯의 노트라도 멜로딕으로 다시 듣고 싶을 때.
+  void restoreActiveFromDrums() {
+    for (final n in active.notes) {
+      if (n.kind == 'percussive' && n.pitchOriginal != 0) {
+        n.pitch = n.pitchOriginal;
+        n.kind = 'pitched';
+      }
+    }
+    _audioChanged();
+  }
+
   void toggleEnabled(TrackRole r) {
     tracks[r]!.enabled = !tracks[r]!.enabled;
     _audioChanged();
@@ -132,6 +179,12 @@ class ProjectStore extends ChangeNotifier {
       final cid = ++_chunkSeq; // 이번 녹음 = 하나의 청크
       for (final n in t.notes) {
         n.chunkId = cid;
+      }
+      // 드럼 트랙: 백엔드는 항상 멜로딕으로 분석(auto-percussive 제거됨).
+      // 사용자가 드럼 슬롯에 녹음 = 명시적 드럼 의도 → pitch 기반 휴리스틱으로
+      // GM 드럼 노트(36/38/42) + kind='percussive' 재라벨.
+      if (t.role == TrackRole.drum) {
+        _relabelAsDrums(t.notes);
       }
       final pitched = res.notes.where((n) => n.kind == 'pitched').length;
       debugPrint('[analyze] ${t.role.label} wav=${(sz / 1024).toStringAsFixed(0)}KB '
@@ -498,6 +551,11 @@ class ProjectStore extends ChangeNotifier {
 
   bool get hasAnyNotes => tracks.values.any((t) => t.notes.isNotEmpty);
 
+  /// 활성 트랙 1개만 백엔드에 보내 WAV 렌더.
+  /// **Task 6-6 (2026-05-31) 기준 살아있는 호출처 없음** — 재생은
+  /// `SynthPlayer`, export 는 `exportMixWav()` 가 담당. 호환용으로만 유지.
+  @Deprecated('No live callers; use exportMixWav() for WAV bounce or SynthPlayer for playback.')
+  // ignore: deprecated_member_use_from_same_package
   Future<Uint8List> renderActive() =>
       _api.renderAudio(active.renderNotes, program: active.program);
 
@@ -538,6 +596,11 @@ class ProjectStore extends ChangeNotifier {
   String? accompanimentVocalPath(TrackRole exclude) =>
       (exclude != TrackRole.vocal && _vocalTrack.vocalWavPath != null) ? _vocalTrack.vocalWavPath : null;
 
+  /// 활성(enabled)이고 노트 있는 트랙들을 백엔드 `/render_mix` 로 합쳐 WAV bytes.
+  ///
+  /// **Task 6-6 (2026-05-31) 기준 WAV export 전용 경로**. 일상 재생은
+  /// `playableSynthTracks()` + `SynthPlayer` 로 온디바이스 처리. 현재
+  /// 살아있는 호출처는 `exportMixWav()` (→ `sheets.dart` 공유 시트) 뿐.
   Future<Uint8List> renderMix() {
     final trs = tracks.values
         .where((t) => t.enabled && t.notes.isNotEmpty)
@@ -548,6 +611,11 @@ class ProjectStore extends ChangeNotifier {
 
   /// 녹음 중 함께 들을 반주 — 녹음 대상(exclude) 트랙은 빼고 노트 있는 트랙 믹스.
   /// 다른 트랙이 없으면 null (첫 녹음 → 반주 없음).
+  ///
+  /// **Task 6-6 (2026-05-31) 기준 살아있는 호출처 없음** — 인라인 녹음
+  /// 모니터링은 `accompanimentSynthTracks()` + `SynthPlayer` 로 대체됨
+  /// (커밋 `6de9bec`). 호환용으로만 유지.
+  @Deprecated('Replaced by accompanimentSynthTracks() + SynthPlayer (task 6-4).')
   Future<Uint8List?> renderAccompaniment(TrackRole exclude) async {
     final trs = tracks.values
         .where((t) => t.role != exclude && t.notes.isNotEmpty)
