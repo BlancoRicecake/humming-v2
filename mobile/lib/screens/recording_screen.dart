@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../audio/recorder.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../widgets/meter_painter.dart';
 
 /// 마이크 권한 상태 — UI 분기용.
 enum _MicPermState { unknown, granted, denied, permanentlyDenied, restricted }
@@ -219,7 +220,7 @@ class _RecordingScreenState extends State<RecordingScreen> with WidgetsBindingOb
                                 height: 72,
                                 width: 280,
                                 child: CustomPaint(
-                                  painter: _MeterPainter(_levels, active: _recording),
+                                  painter: MeterPainter(_levels, active: _recording),
                                 ),
                               ),
                               const SizedBox(height: 20),
@@ -267,31 +268,3 @@ class _RecordingScreenState extends State<RecordingScreen> with WidgetsBindingOb
   }
 }
 
-/// 음량 바 미터 — 중앙 기준 대칭 막대.
-/// [active] 가 false 면 회색 톤의 정적 막대로 표시 (녹음 전 placeholder).
-class _MeterPainter extends CustomPainter {
-  _MeterPainter(this.levels, {this.active = true});
-  final List<double> levels;
-  final bool active;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final n = levels.length;
-    final slot = size.width / n;
-    final barW = slot * 0.5;
-    final cy = size.height / 2;
-    final paint = Paint()
-      ..color = active ? AppColors.lime : AppColors.lime.withValues(alpha: 0.18);
-    for (int i = 0; i < n; i++) {
-      final h = (levels[i] * size.height).clamp(3.0, size.height);
-      final x = i * slot + (slot - barW) / 2;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(x, cy - h / 2, barW, h), const Radius.circular(2)),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _MeterPainter old) => true;
-}

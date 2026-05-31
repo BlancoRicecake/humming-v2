@@ -15,6 +15,7 @@ import '../models/models.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/meter_painter.dart';
 import '../widgets/sheets.dart';
 import '../widgets/timeline_editor.dart';
 
@@ -656,22 +657,42 @@ class _EditScreenState extends State<EditScreen> {
   }
 
   Widget _recordButton(ProjectStore store, TrackData t) {
-    // 처리 중: 같은 박스에 분석 진행 표시.
+    // 모든 상태에서 같은 박스(높이 64) 유지 — idle→recording→processing 전환 시
+    // 위치/크기 점프 없음. 미터는 항상 자리 차지(옵션 B): idle 시 lime 알파 0.18 정적,
+    // recording 시 lime 1.0 으로 흐름, processing 시 알파 0.5 + 스피너 오버레이.
+    const double boxH = 64;
+    Widget meter({required bool active, double alpha = 0.18}) => CustomPaint(
+          painter: MeterPainter(
+            _recLevels,
+            active: active,
+            inactiveAlpha: alpha,
+            barWidthRatio: 0.5,
+            barWidthMin: 1.5,
+            barWidthMax: 4.0,
+            minBarHeight: 2.0,
+          ),
+          size: Size.infinite,
+        );
+
+    // 처리 중
     if (_recState == _RecState.processing) {
       return Container(
-        height: 64,
+        height: boxH,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.border),
         ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
-          SizedBox(
+        child: Row(children: [
+          const SizedBox(
             width: 18, height: 18,
             child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.lime),
           ),
-          SizedBox(width: 12),
-          Text('변환 중…', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          const Text('변환 중…', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          Expanded(child: meter(active: false, alpha: 0.5)),
         ]),
       );
     }
@@ -680,7 +701,7 @@ class _EditScreenState extends State<EditScreen> {
       return GestureDetector(
         onTap: () => _stopInlineRecord(store),
         child: Container(
-          height: 64,
+          height: boxH,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             color: AppColors.surface,
@@ -692,28 +713,31 @@ class _EditScreenState extends State<EditScreen> {
             const SizedBox(width: 10),
             Text(_recTime, style: T.body.copyWith(fontWeight: FontWeight.w700, fontFeatures: const [])),
             const SizedBox(width: 12),
-            Expanded(child: CustomPaint(painter: _RecMeterPainter(_recLevels), size: Size.infinite)),
+            Expanded(child: meter(active: true)),
             const SizedBox(width: 10),
             if (_recHasBacking) const Icon(Symbols.headphones, size: 16, color: AppColors.textSecondary),
           ]),
         ),
       );
     }
-    // 대기: 녹음 시작.
+    // 대기: 같은 64px 박스 + always-on 미터(dim). 탭하면 녹음 시작.
     final label = t.hasRecording ? '${t.role.label.toUpperCase()} 다시 녹음' : '${t.role.label.toUpperCase()} 녹음';
     return GestureDetector(
       onTap: () => _startInlineRecord(store),
       child: Container(
-        height: 48,
+        height: boxH,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.dangerBorder),
         ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        child: Row(children: [
           Container(width: 12, height: 12, decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle)),
           const SizedBox(width: 8),
           Text(label, style: T.body.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          Expanded(child: meter(active: false)),
         ]),
       ),
     );
@@ -902,28 +926,3 @@ class _EditScreenState extends State<EditScreen> {
   }
 }
 
-/// 녹음 박스 안 음파 미터 — 중앙 기준 대칭 막대(좌→우 흐름).
-class _RecMeterPainter extends CustomPainter {
-  _RecMeterPainter(this.levels);
-  final List<double> levels;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final n = levels.length;
-    final slot = size.width / n;
-    final barW = (slot * 0.5).clamp(1.5, 4.0);
-    final cy = size.height / 2;
-    final paint = Paint()..color = AppColors.lime;
-    for (int i = 0; i < n; i++) {
-      final h = (levels[i] * size.height).clamp(2.0, size.height);
-      final x = i * slot + (slot - barW) / 2;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(x, cy - h / 2, barW, h), const Radius.circular(2)),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _RecMeterPainter old) => true;
-}
