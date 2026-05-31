@@ -132,11 +132,33 @@ class EngineApi {
     return Uint8List.fromList(r.data!);
   }
 
-  /// notes → .mid bytes.
+  /// notes → .mid bytes (단일 트랙).
   Future<Uint8List> exportMidi(List<Note> notes, {int program = 0, double tempoBpm = 120}) async {
     final r = await _dio.post<List<int>>(
       '/export_midi',
       data: {'notes': notes.map((n) => n.toJson()).toList(), 'program': program, 'tempo_bpm': tempoBpm},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(r.data!);
+  }
+
+  /// 여러 트랙을 한 .mid 로 export — 각 트랙이 별도 MidiTrack + channel.
+  Future<Uint8List> exportMidiMix(
+    List<({List<Note> notes, int program, int channel})> tracks, {
+    double tempoBpm = 120,
+  }) async {
+    final r = await _dio.post<List<int>>(
+      '/export_midi',
+      data: {
+        'tempo_bpm': tempoBpm,
+        'tracks': tracks
+            .map((t) => {
+                  'notes': t.notes.map((n) => n.toJson()).toList(),
+                  'program': t.program,
+                  'channel': t.channel,
+                })
+            .toList(),
+      },
       options: Options(responseType: ResponseType.bytes),
     );
     return Uint8List.fromList(r.data!);

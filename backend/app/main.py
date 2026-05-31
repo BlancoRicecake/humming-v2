@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, Response
 
 from .analyze import analyze_audio, process_vocal
 from .assistant import run_key_and_assistant
-from .midi_build import notes_to_midi_bytes
+from .midi_build import notes_to_midi_bytes, tracks_to_midi_bytes
 from . import render as render_mod
 from .schemas import AnalyzeOptions, AnalyzeResponse, DetectedKey, Note
 
@@ -254,16 +254,38 @@ async def render_mix(payload: dict):
 
 @app.post("/export_midi")
 async def export_midi(payload: dict):
-    notes_raw = payload.get("notes")
-    if not isinstance(notes_raw, list):
-        raise HTTPException(400, "missing notes[]")
-    try:
-        notes = [Note(**n) for n in notes_raw]
-    except Exception as e:
-        raise HTTPException(400, f"invalid note: {e}")
+    """MIDI 파일 빌드.
+
+    두 가지 페이로드 형식을 지원 (하위호환):
+    - 단일 트랙(legacy): ``{notes: [...], program: int, tempo_bpm?: float}``
+    - 멀티트랙(신규):    ``{tracks: [{notes: [...], program: int, channel: int}, ...],
+                            tempo_bpm?: float}``
+    """
     tempo = float(payload.get("tempo_bpm") or 120.0)
-    program = int(payload.get("program") or 0)
-    data = notes_to_midi_bytes(notes, program=program, tempo_bpm=tempo)
+    tracks_raw = payload.get("tracks")
+    if isinstance(tracks_raw, list):
+        tracks: list[dict] = []
+        try:
+            for tr in tracks_raw:
+                notes = [Note(**n) for n in (tr.get("notes") or [])]
+                tracks.append({
+                    "notes": notes,
+                    "program": int(tr.get("program") or 0),
+                    "channel": int(tr.get("channel") or 0),
+                })
+        except Exception as e:
+            raise HTTPException(400, f"invalid track: {e}")
+        data = tracks_to_midi_bytes(tracks, tempo_bpm=tempo)
+    else:
+        notes_raw = payload.get("notes")
+        if not isinstance(notes_raw, list):
+            raise HTTPException(400, "missing notes[] or tracks[]")
+        try:
+            notes = [Note(**n) for n in notes_raw]
+        except Exception as e:
+            raise HTTPException(400, f"invalid note: {e}")
+        program = int(payload.get("program") or 0)
+        data = notes_to_midi_bytes(notes, program=program, tempo_bpm=tempo)
     return Response(
         content=data,
         media_type="audio/midi",
