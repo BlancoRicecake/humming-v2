@@ -98,6 +98,36 @@ class TrackData {
 
 int _i(dynamic v, [int def = 0]) => (v as num?)?.toInt() ?? def;
 
+/// 녹음 종료 직후 분석 결과의 임시 보관소. 사용자가 트랙 안 다이얼로그에서
+/// "사용"을 누르기 전까지는 트랙에 commit 되지 않는다 (시안 Frame 1 SYNTH).
+///
+/// - 멜로딕(keys/bass/drum): notes/analysis 가 채워짐, vocalWav* 는 null.
+/// - 보컬: vocalWavPath/peaks/duration 이 채워짐, notes 는 항상 빈 리스트.
+class PendingRecording {
+  PendingRecording({
+    required this.trackId,
+    required this.role,
+    required this.wavPath,
+    this.notes = const [],
+    this.analysis,
+    this.vocalWavPath,
+    this.vocalPeaks = const [],
+    this.vocalDuration = 0,
+    this.pitchAssist = true,
+  });
+  final int trackId;
+  final TrackRole role;
+  final String wavPath; // 마이크 원본 WAV (analyze 입력)
+  List<Note> notes;
+  AnalyzeResponse? analysis;
+  // 보컬 전용 — 정리된 WAV / 표시용 파형.
+  String? vocalWavPath;
+  List<double> vocalPeaks;
+  double vocalDuration;
+  bool pitchAssist; // 다이얼로그 어시스트 토글의 현재 값
+  bool reassisting = false; // /assist 재호출 중 (다이얼로그 mini 로딩용)
+}
+
 class ProjectStore extends ChangeNotifier {
   ProjectStore({EngineApi? api}) : _api = api ?? EngineApi() {
     _seedDefaultTracks();
@@ -115,6 +145,10 @@ class ProjectStore extends ChangeNotifier {
   String? error;
   int editEpoch = 0; // 오디오 출력에 영향 주는 편집마다 증가(재렌더 트리거)
   int _chunkSeq = 0; // 청크 ID 발급기
+
+  /// 녹음 종료 후 사용자가 "사용/삭제"를 결정할 때까지의 임시 결과(트랙 미반영).
+  /// 활성 트랙의 다이얼로그(타임라인 레인 오버레이)로 표시된다.
+  PendingRecording? pendingRecording;
 
   void _seedDefaultTracks() {
     for (final r in TrackRole.values) {
@@ -347,6 +381,173 @@ class ProjectStore extends ChangeNotifier {
     } finally {
       busy = false;
       _audioChanged();
+    }
+  }
+
+  // ─── Pending Recording (사용/삭제 다이얼로그 흐름, task #26) ────────────
+  // 녹음 종료 → analyzeForPending 으로 분석만 수행하고 트랙엔 commit 하지 않음.
+  // 사용자가 트랙 안 다이얼로그에서 "사용"을 누르면 commitPendingRecording 으로
+  // 실제 트랙에 반영. "삭제"면 discardPendingRecording 으로 폐기.
+
+  /// 녹음 종료 후 호출. /analyze (or processVocal) 결과를 pending 으로 저장.
+  /// 트랙에는 commit 하지 않음 — 다이얼로그 사용자 승인 대기.
+  Future<void> analyzeForPending(String wavPath, int trackId) async {
+    final t = trackById(trackId);
+    if (t == null) return;
+    // 이전 pending 이 있으면 폐기(다른 트랙 녹음으로 진입한 경우 등).
+    if (pendingRecording != null && pendingRecording!.trackId != trackId) {
+      _deletePendingWav(pendingRecording!);
+    }
+    pendingRecording = PendingRecording(
+      trackId: trackId,
+      role: t.role,
+      wavPath: wavPath,
+      pitchAssist: t.options.pitchAssistant,
+    );
+    busy = true;
+    error = null;
+    notifyListeners();
+
+    if (t.isVocal) {
+      try {
+        final v = await _api.processVocal(wavPath);
+        final dir = await Directory.systemTemp.createTemp('vocal_');
+        final f = File('${dir.path}/vocal.wav');
+        await f.writeAsBytes(v.wav, flush: true);
+        pendingRecording!
+          ..vocalWavPath = f.path
+          ..vocalPeaks = v.peaks
+          ..vocalDuration = v.duration;
+      } catch (e) {
+        error = '보컬 처리 실패: $e';
+        debugPrint('[vocal-pending] FAILED: $e');
+        pendingRecording = null;
+      } finally {
+        busy = false;
+        notifyListeners();
+      }
+      return;
+    }
+
+    try {
+      // pending 의 어시스트 옵션으로 분석(트랙 옵션과 일시 분리).
+      final opt = AnalyzeOptions(
+        autoKey: t.options.autoKey,
+        pitchAssistant: pendingRecording!.pitchAssist,
+        keyTonic: t.options.keyTonic,
+        scale: t.options.scale,
+      );
+      final res = await _api.analyze(wavPath, opt);
+      pendingRecording!
+        ..analysis = res
+        ..notes = res.notes;
+      final pitched = res.notes.where((n) => n.kind == 'pitched').length;
+      debugPrint('[analyze-pending] ${t.role.label} dur=${res.durationSec.toStringAsFixed(1)}s '
+          'notes=${res.notes.length}(pitched=$pitched) assisted=${res.assistAppliedCount}');
+    } catch (e) {
+      error = '분석 실패: $e';
+      debugPrint('[analyze-pending] FAILED: $e');
+      pendingRecording = null;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// 다이얼로그의 어시스트 토글 변경 → 같은 notes 로 /assist 재계산.
+  /// 트랙에는 commit 하지 않음 — pending 만 갱신.
+  Future<void> togglePendingAssist(bool on) async {
+    final p = pendingRecording;
+    if (p == null) return;
+    p.pitchAssist = on;
+    if (p.notes.isEmpty) {
+      notifyListeners();
+      return;
+    }
+    final t = trackById(p.trackId);
+    if (t == null) return;
+    p.reassisting = true;
+    notifyListeners();
+    try {
+      final opt = AnalyzeOptions(
+        autoKey: t.options.autoKey,
+        pitchAssistant: on,
+        keyTonic: t.options.keyTonic,
+        scale: t.options.scale,
+      );
+      final r = await _api.assist(p.notes, opt);
+      p.notes = r.notes;
+      final prev = p.analysis;
+      p.analysis = AnalyzeResponse(
+        notes: r.notes,
+        detectedKey: r.detectedKey,
+        keyCandidates: r.keyCandidates,
+        assistAppliedCount: r.assistAppliedCount,
+        durationSec: prev?.durationSec ?? 0,
+        peaks: prev?.peaks ?? const [],
+      );
+    } catch (e) {
+      error = '보정 실패: $e';
+      debugPrint('[assist-pending] FAILED: $e');
+    } finally {
+      p.reassisting = false;
+      notifyListeners();
+    }
+  }
+
+  /// 사용자가 "사용" 탭 → pending 을 트랙에 실제 반영. 다이얼로그 닫힘.
+  void commitPendingRecording() {
+    final p = pendingRecording;
+    if (p == null) return;
+    final t = trackById(p.trackId);
+    if (t == null) {
+      pendingRecording = null;
+      notifyListeners();
+      return;
+    }
+    t.wavPath = p.wavPath;
+    if (t.isVocal) {
+      t.vocalWavPath = p.vocalWavPath;
+      t.vocalPeaks = p.vocalPeaks;
+      t.vocalDuration = p.vocalDuration;
+      t.notes = [];
+      t.analysis = null;
+    } else {
+      t.analysis = p.analysis;
+      t.notes = p.notes;
+      final cid = ++_chunkSeq;
+      for (final n in t.notes) {
+        n.chunkId = cid;
+      }
+      if (t.role == TrackRole.drum) {
+        _relabelAsDrums(t.notes);
+      }
+      // 어시스트 토글이 다이얼로그에서 바뀌었으면 트랙 옵션에도 동기화.
+      t.options.pitchAssistant = p.pitchAssist;
+    }
+    pendingRecording = null;
+    _audioChanged();
+  }
+
+  /// 사용자가 "삭제" 탭 → pending 폐기 + WAV 파일 정리. 트랙은 변동 없음.
+  void discardPendingRecording() {
+    final p = pendingRecording;
+    if (p == null) return;
+    _deletePendingWav(p);
+    pendingRecording = null;
+    notifyListeners();
+  }
+
+  void _deletePendingWav(PendingRecording p) {
+    try {
+      final f = File(p.wavPath);
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
+    if (p.vocalWavPath != null) {
+      try {
+        final f = File(p.vocalWavPath!);
+        if (f.existsSync()) f.deleteSync();
+      } catch (_) {}
     }
   }
 

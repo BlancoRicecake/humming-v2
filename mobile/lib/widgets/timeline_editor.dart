@@ -34,6 +34,10 @@ class TimelineEditor extends StatefulWidget {
     this.onChunkMove,
     this.onChunkResize,
     this.notesOverride,
+    this.pending,
+    this.onPendingUse,
+    this.onPendingDiscard,
+    this.onPendingToggleAssist,
   });
 
   /// 전체 트랙(카테고리당 N개). 사이드바와 레인 모두 이 순서를 카테고리로 그룹화해
@@ -57,6 +61,13 @@ class TimelineEditor extends StatefulWidget {
   /// 활성 트랙의 표시용 노트 오버라이드 (코드 모드 시 확장된 노트 등).
   /// null 이면 트랙의 `notes` 를 그대로 사용.
   final Map<int, List<Note>>? notesOverride;
+
+  /// 녹음 종료 직후 분석된 임시 결과 — 해당 트랙 레인 위에 사용/삭제 다이얼로그
+  /// 오버레이로 표시한다(task #26). null 이면 다이얼로그 미표시.
+  final PendingRecording? pending;
+  final VoidCallback? onPendingUse;
+  final VoidCallback? onPendingDiscard;
+  final void Function(bool on)? onPendingToggleAssist;
 
   @override
   State<TimelineEditor> createState() => _TimelineEditorState();
@@ -438,6 +449,7 @@ class _TimelineEditorState extends State<TimelineEditor> {
     // 빈 트랙(녹음/노트 없음) → 레인 중앙에 "● 녹음 시작" pill 표시(시안 track-expansion.html).
     // 노트 또는 보컬 파형이 생기면 자동으로 사라짐(청크 블록과 겹치지 않게).
     final isEmpty = notes.isEmpty && !hasWave && !t.hasRecording;
+    final hasPending = widget.pending != null && widget.pending!.trackId == t.id;
 
     return Container(
       decoration: BoxDecoration(
@@ -487,7 +499,12 @@ class _TimelineEditorState extends State<TimelineEditor> {
                 _noteHitWidget(t, active, i, geo.rectFor(notes[i])),
 
             // [Layer 3] 빈 트랙 인라인 녹음 pill — 노트/파형 위에 그릴 일 없음(isEmpty 가드).
-            if (isEmpty) Positioned.fill(child: Center(child: _recPill(t))),
+            // pending 이 떠있는 트랙은 pill 숨김 — 사용자가 사용/삭제 결정 전까지 새 녹음 금지.
+            if (isEmpty && !hasPending) Positioned.fill(child: Center(child: _recPill(t))),
+
+            // [Layer 4] 사용/삭제 다이얼로그 — 분석 끝난 pending 결과를 사용할지 결정(task #26).
+            if (hasPending)
+              Positioned.fill(child: _pendingDialog(widget.pending!)),
           ]);
         }),
       ),
@@ -517,6 +534,112 @@ class _TimelineEditorState extends State<TimelineEditor> {
           Text('녹음 시작',
               style: T.body.copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
         ]),
+      ),
+    );
+  }
+
+  // 녹음 종료 직후 분석 결과 사용/삭제 다이얼로그(시안 Frame 1 SYNTH 행).
+  // 트랙 레인 안 surface-2 박스: 메시지 + 어시스트 mini-toggle + [삭제][사용] 버튼.
+  // 보컬은 pitch assist 가 의미 없어 토글 자체를 숨긴다.
+  Widget _pendingDialog(PendingRecording p) {
+    final isVocal = p.role == TrackRole.vocal;
+    final notesCount = p.notes.length;
+    final msg = isVocal
+        ? '녹음 완료 — 보컬을 사용할까요?'
+        : (notesCount > 0
+            ? '녹음 완료 — 노트 $notesCount개를 사용할까요?'
+            : '녹음 완료 — 사용할까요?');
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1F27),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.lime, width: 1),
+      ),
+      child: Row(children: [
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(msg,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.body.copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
+              if (!isVocal) ...[
+                const SizedBox(height: 4),
+                _assistMiniToggle(p),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        _pendingBtn('삭제',
+            outlined: true, onTap: () => widget.onPendingDiscard?.call()),
+        const SizedBox(width: 6),
+        _pendingBtn('사용',
+            outlined: false, onTap: () => widget.onPendingUse?.call()),
+      ]),
+    );
+  }
+
+  Widget _assistMiniToggle(PendingRecording p) {
+    final on = p.pitchAssist;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: p.reassisting ? null : () => widget.onPendingToggleAssist?.call(!on),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 22, height: 12,
+          decoration: BoxDecoration(
+            color: on ? AppColors.lime : AppColors.border,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Align(
+            alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: Container(
+                width: 10, height: 10,
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text('피치 어시스트',
+            style: T.label.copyWith(
+                fontSize: 9,
+                color: on ? AppColors.lime : AppColors.textSecondary,
+                fontWeight: FontWeight.w600)),
+        if (p.reassisting) ...[
+          const SizedBox(width: 6),
+          const SizedBox(
+            width: 8, height: 8,
+            child: CircularProgressIndicator(strokeWidth: 1.2, color: AppColors.lime),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _pendingBtn(String label, {required bool outlined, required VoidCallback onTap}) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: outlined ? Colors.transparent : AppColors.lime,
+          border: outlined ? Border.all(color: AppColors.border) : null,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(label,
+            style: T.body.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: outlined ? AppColors.textPrimary : AppColors.bg)),
       ),
     );
   }

@@ -160,6 +160,13 @@ class _EditScreenState extends State<EditScreen> {
       }
       if (t.vocalDuration > m) m = t.vocalDuration; // 보컬 길이도 포함
     }
+    // pending 결과(아직 commit 전)의 길이도 반영 — 첫 녹음이면 트랙은 비어있고
+    // pending duration 이 사실상 프로젝트 길이.
+    final p = store.pendingRecording;
+    if (p != null) {
+      final pd = p.analysis?.durationSec ?? p.vocalDuration;
+      if (pd > m) m = pd;
+    }
     return m;
   }
 
@@ -268,7 +275,10 @@ class _EditScreenState extends State<EditScreen> {
       _playheadSec = null;
     });
     if (path != null) {
-      await store.recordAnalyzed(path, role: store.activeRole);
+      // 분석 결과를 트랙에 바로 commit 하지 않고 pending 으로 저장 — 트랙 안
+      // 다이얼로그(레인 오버레이)에서 "사용/삭제" 선택 후 반영(task #26).
+      final tid = store.activeTrackId ?? store.active.id;
+      await store.analyzeForPending(path, tid);
       // 녹음 직후엔 선택을 모두 해제 → 컨텍스트 액션 바 숨김(시안 Frame 1).
       store.clearSelection();
     }
@@ -365,6 +375,11 @@ class _EditScreenState extends State<EditScreen> {
                         store.selectNote(i);
                         showNoteCandidate(context, store, i);
                       },
+                // 녹음 종료 직후 분석 결과 사용/삭제 다이얼로그(task #26).
+                pending: store.pendingRecording,
+                onPendingUse: store.commitPendingRecording,
+                onPendingDiscard: store.discardPendingRecording,
+                onPendingToggleAssist: store.togglePendingAssist,
               ),
             ),
             _contextActionBar(store, t),
