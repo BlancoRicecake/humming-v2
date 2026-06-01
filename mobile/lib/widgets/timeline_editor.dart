@@ -52,6 +52,7 @@ class TimelineEditor extends StatefulWidget {
     this.recElapsedMs = 0,
     this.recLevels = const [],
     this.onStopRec,
+    this.projectEnd = 0,
   });
 
   /// 전체 트랙(카테고리당 N개). 사이드바와 레인 모두 이 순서를 카테고리로 그룹화해
@@ -92,6 +93,8 @@ class TimelineEditor extends StatefulWidget {
   final int recElapsedMs;
   final List<double> recLevels; // 최근 amplitude (0..1)
   final VoidCallback? onStopRec;
+  /// 루프 트랙의 반복 한계 — non-loop 트랙들의 가장 늦은 timelineEnd.
+  final double projectEnd;
 
   @override
   State<TimelineEditor> createState() => _TimelineEditorState();
@@ -335,15 +338,54 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
   List<Note> _notesFor(TrackData t) {
     final ov = widget.notesOverride?[t.id];
     if (ov != null) return ov;
-    // 청크 메타(timelineStart/inPoint/outPoint) 적용 후 효과 시간 기준 노트.
-    return t.effectiveRenderNotes;
+    final base = t.effectiveRenderNotes;
+    if (!t.looping || widget.projectEnd <= 0 || base.isEmpty || t.chunks.isEmpty) return base;
+    // 루프 주기 = 청크 timelineEnd 최대값 (노트 끝이 아니라 청크 가시 영역 끝).
+    final period = t.chunks.map((c) => c.timelineEnd).reduce(math.max);
+    if (period <= 0.01) return base;
+    final out = List<Note>.from(base);
+    double offset = period;
+    while (offset < widget.projectEnd) {
+      for (final n in base) {
+        if (n.start + offset >= widget.projectEnd) continue;
+        final clone = Note.fromJson(n.toJson())
+          ..start = n.start + offset
+          ..end = math.min(n.end + offset, widget.projectEnd)
+          ..chunkId = -n.chunkId - 1; // 반복본은 음수 chunkId 로 마킹.
+        clone.duration = clone.end - clone.start;
+        out.add(clone);
+      }
+      offset += period;
+    }
+    return out;
   }
 
-  /// 청크의 타임라인 시작/끝 — chunk 메타 우선, 없으면(레거시) 노트로부터 추정.
+  /// 청크의 타임라인 시작/끝 — 원본 청크 ID → [start, end].
   Map<int, List<double>> _chunkTimelineRanges(TrackData t) {
     final out = <int, List<double>>{};
     for (final c in t.chunks) {
       out[c.id] = [c.timelineStart, c.timelineEnd];
+    }
+    return out;
+  }
+
+  /// 루프 반복본 청크 범위 — looping 트랙만, 원본 다음 반복부터.
+  /// 주기는 청크 timelineEnd 최대값(가시 영역 끝).
+  List<List<double>> _loopReplicaRanges(TrackData t) {
+    if (!t.looping || widget.projectEnd <= 0 || t.chunks.isEmpty) return const [];
+    final base = t.chunks.map((c) => [c.timelineStart, c.timelineEnd]).toList();
+    final period = base.map((r) => r[1]).reduce(math.max);
+    if (period <= 0.01) return const [];
+    final out = <List<double>>[];
+    double offset = period;
+    while (offset < widget.projectEnd) {
+      for (final r in base) {
+        final s = r[0] + offset;
+        if (s >= widget.projectEnd) continue;
+        final e = math.min(r[1] + offset, widget.projectEnd);
+        out.add([s, e]);
+      }
+      offset += period;
     }
     return out;
   }
@@ -638,6 +680,29 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
               ),
             ),
             const Spacer(),
+            // 루프 뱃지 — looping=true 일 때만.
+            if (t.looping) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppColors.lime.withValues(alpha: 0.16),
+                  border: Border.all(color: AppColors.lime.withValues(alpha: 0.4), width: 1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.repeat, size: 9, color: AppColors.lime),
+                  const SizedBox(width: 3),
+                  Text('루프',
+                      style: T.label.copyWith(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.lime,
+                        height: 1.2,
+                      )),
+                ]),
+              ),
+              const SizedBox(width: 6),
+            ],
             // 뮤트 토글 — 사이드바 항시 표시(CapCut #6).
             GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -817,6 +882,7 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
                               durationSec: _dur,
                               active: active,
                               chunkRanges: _chunkTimelineRanges(t),
+                            loopReplicaRanges: _loopReplicaRanges(t),
                               selectedNote: active ? widget.selectedNote : null,
                               selectedChunk: active ? widget.selectedChunk : null,
                             ),
@@ -1255,6 +1321,7 @@ class _NotesPainter extends CustomPainter {
     required this.durationSec,
     required this.active,
     required this.chunkRanges,
+    this.loopReplicaRanges = const [],
     this.selectedNote,
     this.selectedChunk,
   });
@@ -1264,6 +1331,8 @@ class _NotesPainter extends CustomPainter {
   /// 청크 id → [timelineStart, timelineEnd] — 트림 핸들과 일치하는 좌표.
   /// 비어있으면(레거시) 노트 범위로 폴백.
   final Map<int, List<double>> chunkRanges;
+  /// 루프 반복본 청크 범위 — dashed border + 옅은 fill.
+  final List<List<double>> loopReplicaRanges;
   final int? selectedNote;
   final int? selectedChunk;
 
@@ -1286,7 +1355,8 @@ class _NotesPainter extends CustomPainter {
       ranges.forEach((id, r) {
         final x0 = (r[0] / durationSec) * size.width;
         final x1 = (r[1] / durationSec) * size.width;
-        final rect = Rect.fromLTRB(x0 - 2, 1, x1 + 2, size.height - 1);
+        // 양쪽 padding 없음 — 인접 청크끼리 border 가 겹쳐 두 줄로 보이는 문제 방지.
+        final rect = Rect.fromLTRB(x0, 1, x1, size.height - 1);
         final isSelected = id == selectedChunk;
         final baseAlpha = isSelected ? 0.16 : (active ? 0.08 : 0.04);
         final borderAlpha = isSelected ? 1.0 : (active ? 0.22 : 0.14);
@@ -1305,9 +1375,22 @@ class _NotesPainter extends CustomPainter {
       });
     }
 
+    // 루프 반복본 청크 — dashed border + 옅은 fill.
+    for (final r in loopReplicaRanges) {
+      final x0 = (r[0] / durationSec) * size.width;
+      final x1 = (r[1] / durationSec) * size.width;
+      final rect = Rect.fromLTRB(x0, 1, x1, size.height - 1);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(6)),
+        Paint()..color = AppColors.lime.withValues(alpha: 0.03),
+      );
+      _drawDashedRRect(canvas, rect, const Radius.circular(6), AppColors.lime.withValues(alpha: 0.5));
+    }
+
     for (int i = 0; i < notes.length; i++) {
       final n = notes[i];
       final r = geo.rectFor(n);
+      final isReplica = n.chunkId < 0; // 루프 반복본 마킹.
       Color col;
       if (n.source == 'user') {
         col = const Color(0xFF3FB950);
@@ -1316,6 +1399,7 @@ class _NotesPainter extends CustomPainter {
       } else {
         col = active ? AppColors.lime : AppColors.textSecondary;
       }
+      if (isReplica) col = col.withValues(alpha: 0.55);
       canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(2)), Paint()..color = col);
       if (i == selectedNote) {
         canvas.drawRRect(
@@ -1333,10 +1417,30 @@ class _NotesPainter extends CustomPainter {
   bool shouldRepaint(covariant _NotesPainter old) =>
       old.notes != notes ||
       old.chunkRanges != chunkRanges ||
+      old.loopReplicaRanges != loopReplicaRanges ||
       old.selectedNote != selectedNote ||
       old.selectedChunk != selectedChunk ||
       old.active != active ||
       old.durationSec != durationSec;
+}
+
+void _drawDashedRRect(Canvas canvas, Rect rect, Radius radius, Color color) {
+  final path = Path()..addRRect(RRect.fromRectAndRadius(rect, radius));
+  final metrics = path.computeMetrics();
+  const dashWidth = 4.0;
+  const dashGap = 3.0;
+  final paint = Paint()
+    ..color = color
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.2;
+  for (final m in metrics) {
+    double dist = 0;
+    while (dist < m.length) {
+      final next = (dist + dashWidth).clamp(0, m.length).toDouble();
+      canvas.drawPath(m.extractPath(dist, next), paint);
+      dist = next + dashGap;
+    }
+  }
 }
 
 String drumLabel(int pitch) => drumNames[pitch] ?? 'Drum $pitch';

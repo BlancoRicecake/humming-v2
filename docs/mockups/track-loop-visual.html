@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>트랙 루프 시각 표시 — 옵션 비교</title>
+<style>
+  :root {
+    --bg: #0B0B0F;
+    --surface: #15151B;
+    --border: #2A2A33;
+    --text: #E5E5E7;
+    --text-2: #8A8A93;
+    --text-3: #5A5A63;
+    --lime: #B6FF00;
+    --lime-dim: rgba(182,255,0,0.16);
+    --lime-faint: rgba(182,255,0,0.07);
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, system-ui, "Pretendard", sans-serif; }
+  .device { width: 1280px; margin: 24px auto; padding: 0; }
+
+  .frame { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 28px; }
+  .frame-title { padding: 10px 16px; background: var(--surface); font-size: 12px; color: var(--text-2); border-bottom: 1px solid var(--border); }
+
+  .ruler {
+    position: relative;
+    height: 22px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-2);
+    font-size: 9px;
+  }
+  .ruler .label { position: absolute; top: 2px; padding-left: 3px; }
+  .ruler .tick { position: absolute; top: 14px; bottom: 0; width: 1px; background: rgba(138,138,147,0.18); }
+
+  .cat-header {
+    padding: 10px 12px 4px 12px;
+    color: var(--text-2); font-weight: 700;
+    font-size: 11px; letter-spacing: 1.4px;
+  }
+  .track-row { padding: 4px 0 10px 0; }
+  .track-name {
+    font-size: 12px; color: var(--text);
+    padding: 0 12px 4px 12px;
+    display: flex; align-items: center; gap: 6px;
+    font-weight: 600;
+  }
+  .track-name .ico { color: var(--lime); }
+  .track-name .right { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--text-3); }
+  .loop-badge {
+    background: var(--lime-dim);
+    color: var(--lime);
+    font-size: 10px; font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 6px;
+    border: 1px solid rgba(182,255,0,0.4);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  .lane {
+    position: relative;
+    height: 56px;
+    background: var(--surface);
+    border-radius: 8px;
+    margin: 0 6px;
+    overflow: hidden;
+  }
+  .scroll {
+    position: absolute; top: 0; bottom: 0;
+    left: 86px;
+    right: 0;
+  }
+  .chunk {
+    position: absolute; top: 4px; bottom: 4px;
+    background: var(--lime-dim);
+    border: 1px solid rgba(182,255,0,0.45);
+    border-radius: 6px;
+  }
+  .chunk-loop {
+    /* 반복본 — 약간 흐리게 + 점선 테두리 */
+    opacity: 0.55;
+    border-style: dashed;
+    background: var(--lime-faint);
+  }
+  .chunk .notes { position: absolute; inset: 6px; }
+  .chunk .n { position: absolute; height: 5px; background: var(--lime); border-radius: 2px; }
+
+  /* 옵션 C — 트랙 전체에 깔리는 패턴 */
+  .loop-stripes {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(182,255,0,0.0) 0px,
+      rgba(182,255,0,0.0) 12px,
+      rgba(182,255,0,0.06) 12px,
+      rgba(182,255,0,0.06) 14px
+    );
+    pointer-events: none;
+  }
+
+  /* 플레이헤드 */
+  .playhead {
+    position: absolute; top: 0; bottom: 0; left: 86px; width: 2px;
+    background: #fff; pointer-events: none; z-index: 20;
+  }
+
+  .note-box { padding: 14px 24px; background: var(--surface); border-top: 1px solid var(--border); }
+  .note-box li { line-height: 1.6; font-size: 13px; color: var(--text-2); }
+  .note-box b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="device">
+
+  <h1 style="padding: 12px 24px; margin: 0;">트랙 루프 시각 표시</h1>
+  <p style="padding: 0 24px; color: var(--text-2); font-size: 13px;">
+    DRUM 트랙(원본 0~4s)이 looping=true → 가장 긴 다른 트랙(CHORDS, 0~14s)까지 자동 반복.
+    원본은 진한 청크, 반복본은 흐림/점선 처리.
+  </p>
+
+  <!-- ─────────── 옵션 A: 점선 반복 청크 + 라벨 뱃지 ─────────── -->
+  <div class="frame">
+    <div class="frame-title">옵션 A — 점선 반복 청크 (추천)</div>
+
+    <div class="ruler">
+      <div class="tick" style="left: 86px"></div><div class="label" style="left: 86px">0:00</div>
+      <div class="tick" style="left: 266px"></div><div class="label" style="left: 266px">0:02</div>
+      <div class="tick" style="left: 446px"></div><div class="label" style="left: 446px">0:04</div>
+      <div class="tick" style="left: 626px"></div><div class="label" style="left: 626px">0:06</div>
+      <div class="tick" style="left: 806px"></div><div class="label" style="left: 806px">0:08</div>
+      <div class="tick" style="left: 986px"></div><div class="label" style="left: 986px">0:10</div>
+      <div class="tick" style="left: 1166px"></div><div class="label" style="left: 1166px">0:12</div>
+    </div>
+
+    <div class="cat-header">CHORDS</div>
+    <div class="track-row">
+      <div class="track-name"><span class="ico">♪</span>피아노 <span class="right">🔊</span></div>
+      <div class="lane">
+        <div class="scroll">
+          <div class="chunk" style="left: 0; width: 1080px;">
+            <div class="notes">
+              <div class="n" style="left: 40px; top: 18px; width: 50px;"></div>
+              <div class="n" style="left: 130px; top: 22px; width: 60px;"></div>
+              <div class="n" style="left: 240px; top: 14px; width: 70px;"></div>
+              <div class="n" style="left: 360px; top: 20px; width: 50px;"></div>
+              <div class="n" style="left: 480px; top: 16px; width: 80px;"></div>
+              <div class="n" style="left: 620px; top: 24px; width: 60px;"></div>
+              <div class="n" style="left: 760px; top: 18px; width: 70px;"></div>
+              <div class="n" style="left: 880px; top: 14px; width: 90px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cat-header">DRUM</div>
+    <div class="track-row">
+      <div class="track-name">
+        <span class="ico">🥁</span>DRUM
+        <span class="right">
+          <span class="loop-badge">↻ 루프</span>
+          🔊
+        </span>
+      </div>
+      <div class="lane">
+        <div class="scroll">
+          <!-- 원본 청크 (0~4s = 0~360px) -->
+          <div class="chunk" style="left: 0; width: 360px;">
+            <div class="notes">
+              <div class="n" style="left: 20px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 80px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 140px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 200px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 260px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 320px; top: 28px; width: 10px;"></div>
+            </div>
+          </div>
+          <!-- 반복본 #2 (4~8s) -->
+          <div class="chunk chunk-loop" style="left: 360px; width: 360px;">
+            <div class="notes">
+              <div class="n" style="left: 20px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 80px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 140px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 200px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 260px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 320px; top: 28px; width: 10px;"></div>
+            </div>
+          </div>
+          <!-- 반복본 #3 (8~12s) -->
+          <div class="chunk chunk-loop" style="left: 720px; width: 360px;">
+            <div class="notes">
+              <div class="n" style="left: 20px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 80px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 140px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 200px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 260px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 320px; top: 28px; width: 10px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="playhead"></div>
+
+    <div class="note-box">
+      <ul>
+        <li><b>원본 청크</b>는 솔리드 lime tint + 솔리드 border.</li>
+        <li><b>반복본</b>은 opacity 0.55 + dashed border + 더 옅은 fill.</li>
+        <li>트랙 이름 옆 <span class="loop-badge">↻ 루프</span> 뱃지로 명확히 표시.</li>
+        <li>장점: 사용자가 "이게 반복되고 있구나" 한눈에 인지. 어디까지 반복되는지 정확히 보임.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────── 옵션 B: 사선 패턴 오버레이 ─────────── -->
+  <div class="frame">
+    <div class="frame-title">옵션 B — 사선 패턴 오버레이 (반복본 영역에 깔림)</div>
+
+    <div class="ruler">
+      <div class="tick" style="left: 86px"></div><div class="label" style="left: 86px">0:00</div>
+      <div class="tick" style="left: 266px"></div><div class="label" style="left: 266px">0:02</div>
+      <div class="tick" style="left: 446px"></div><div class="label" style="left: 446px">0:04</div>
+      <div class="tick" style="left: 626px"></div><div class="label" style="left: 626px">0:06</div>
+      <div class="tick" style="left: 806px"></div><div class="label" style="left: 806px">0:08</div>
+      <div class="tick" style="left: 986px"></div><div class="label" style="left: 986px">0:10</div>
+      <div class="tick" style="left: 1166px"></div><div class="label" style="left: 1166px">0:12</div>
+    </div>
+
+    <div class="cat-header">DRUM</div>
+    <div class="track-row">
+      <div class="track-name">
+        <span class="ico">🥁</span>DRUM
+        <span class="right">
+          <span class="loop-badge">↻ 루프</span>
+          🔊
+        </span>
+      </div>
+      <div class="lane">
+        <div class="scroll">
+          <!-- 원본 청크 -->
+          <div class="chunk" style="left: 0; width: 360px;">
+            <div class="notes">
+              <div class="n" style="left: 20px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 80px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 140px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 200px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 260px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 320px; top: 28px; width: 10px;"></div>
+            </div>
+          </div>
+          <!-- 반복본 영역: 사선 패턴만 + 청크는 흐리게 -->
+          <div style="position: absolute; left: 360px; top: 0; width: 720px; bottom: 0; opacity: 0.5;">
+            <div class="loop-stripes"></div>
+            <div class="chunk chunk-loop" style="left: 0; width: 360px;">
+              <div class="notes">
+                <div class="n" style="left: 20px; top: 28px; width: 10px;"></div>
+                <div class="n" style="left: 80px; top: 28px; width: 10px;"></div>
+                <div class="n" style="left: 140px; top: 28px; width: 10px;"></div>
+                <div class="n" style="left: 200px; top: 28px; width: 10px;"></div>
+                <div class="n" style="left: 260px; top: 28px; width: 10px;"></div>
+                <div class="n" style="left: 320px; top: 28px; width: 10px;"></div>
+              </div>
+            </div>
+            <div class="chunk chunk-loop" style="left: 360px; width: 360px;">
+              <div class="notes">
+                <div class="n" style="left: 20px; top: 28px; width: 10px;"></div>
+                <div class="n" style="left: 80px; top: 28px; width: 10px;"></div>
+                <div class="n" style="left: 140px; top: 28px; width: 10px;"></div>
+                <div class="n" style="left: 200px; top: 28px; width: 10px;"></div>
+                <div class="n" style="left: 260px; top: 28px; width: 10px;"></div>
+                <div class="n" style="left: 320px; top: 28px; width: 10px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="playhead"></div>
+
+    <div class="note-box">
+      <ul>
+        <li>반복본 청크에 사선 패턴 오버레이 — "이 영역은 자동 생성됨" 강한 시각 단서.</li>
+        <li>원본만 편집 가능 영역, 반복본은 read-only 한 느낌.</li>
+        <li>단점: 노트가 가려져 조금 답답해 보일 수 있음.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────── 옵션 C: 미니멀 — 원본만 표시 + 루프 뱃지만 ─────────── -->
+  <div class="frame">
+    <div class="frame-title">옵션 C — 미니멀 (반복본 그리지 않음, 뱃지로만 표시)</div>
+
+    <div class="ruler">
+      <div class="tick" style="left: 86px"></div><div class="label" style="left: 86px">0:00</div>
+      <div class="tick" style="left: 266px"></div><div class="label" style="left: 266px">0:02</div>
+      <div class="tick" style="left: 446px"></div><div class="label" style="left: 446px">0:04</div>
+      <div class="tick" style="left: 626px"></div><div class="label" style="left: 626px">0:06</div>
+      <div class="tick" style="left: 806px"></div><div class="label" style="left: 806px">0:08</div>
+      <div class="tick" style="left: 986px"></div><div class="label" style="left: 986px">0:10</div>
+      <div class="tick" style="left: 1166px"></div><div class="label" style="left: 1166px">0:12</div>
+    </div>
+
+    <div class="cat-header">DRUM</div>
+    <div class="track-row">
+      <div class="track-name">
+        <span class="ico">🥁</span>DRUM
+        <span class="right">
+          <span class="loop-badge">↻ 루프 · ∞</span>
+          🔊
+        </span>
+      </div>
+      <div class="lane">
+        <div class="scroll">
+          <div class="chunk" style="left: 0; width: 360px;">
+            <div class="notes">
+              <div class="n" style="left: 20px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 80px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 140px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 200px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 260px; top: 28px; width: 10px;"></div>
+              <div class="n" style="left: 320px; top: 28px; width: 10px;"></div>
+            </div>
+            <!-- 원본 청크 우측에 ⋯↻ 표시 -->
+            <div style="position: absolute; right: -22px; top: 0; bottom: 0; display: flex; align-items: center; color: var(--lime); font-size: 16px;">↻</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="playhead"></div>
+
+    <div class="note-box">
+      <ul>
+        <li>반복본 청크는 화면에 그리지 않음. 원본 청크 우측에 ↻ 화살표만.</li>
+        <li>가장 깔끔하지만 "이게 어디까지 반복되는지" 시각적으로 안 보임.</li>
+        <li>드럼/베이스처럼 짧은 패턴 반복 케이스엔 충분, 멜로딕 반복엔 부족.</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

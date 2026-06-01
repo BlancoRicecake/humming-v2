@@ -9,6 +9,7 @@
 //   - pause 시점에 sustain 중이던 노트는 다시 발사되지 않음(음 끊김 OK)
 //   - envelope 정밀 복원은 미구현 (sf2/midi 한계 — 호출 시점에 다시 noteOn 만)
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import 'synth.dart';
@@ -54,7 +55,11 @@ class SynthPlayer {
 
   /// 멀티트랙 재생. 멜로딕 트랙은 ch 0,1,2 … 로 자동 배정(드럼 채널 9 회피).
   /// [startAt] 부터 시작(기본 0). seek/resume 내부 호출에서도 사용.
-  Future<void> play(List<SynthTrack> tracks, {Duration startAt = Duration.zero}) async {
+  Future<void> play(
+    List<SynthTrack> tracks, {
+    Duration startAt = Duration.zero,
+    Duration? endAt, // 명시 종료 시각 — 마지막 노트 뒤 빈 여백 포함해 재생 길이 결정.
+  }) async {
     await stop();
     if (tracks.isEmpty) {
       _doneCtl.add(null);
@@ -106,7 +111,11 @@ class SynthPlayer {
     });
 
     _events = events;
-    _lengthHint = Duration(milliseconds: (maxEnd * 1000).round());
+    // endAt 명시 시 그 값 사용 — 노트 뒤 빈 여백/루프 패딩까지 포함해 재생.
+    final endMs = endAt != null
+        ? endAt.inMilliseconds
+        : (maxEnd * 1000).round();
+    _lengthHint = Duration(milliseconds: math.max(endMs, (maxEnd * 1000).round()));
     _pausedAt = startAt;
     await _startFrom(startAt);
   }
@@ -168,7 +177,8 @@ class SynthPlayer {
         (offsetSec * 1000).round() -
         DateTime.now().difference(start).inMilliseconds;
     if (remainingMs > 0) {
-      await Future.delayed(Duration(milliseconds: remainingMs.clamp(0, 800)));
+      // 마지막 noteOff 이후 _lengthHint 끝까지 대기 — 청크의 빈 여백/루프 패딩 동안 무음 재생.
+      await Future.delayed(Duration(milliseconds: remainingMs));
     }
     if (token != _playToken) return;
     _playing = false;

@@ -26,6 +26,7 @@ class TrackData {
   int program; // 선택된 GM 악기
   bool chordMode = false;
   bool enabled = true; // 믹스 재생 포함 여부(사이드바 토글)
+  bool looping = false; // 트랙 루프 — 가장 긴 non-loop 트랙 끝까지 컨텐츠 반복
   String? wavPath; // 마지막 녹음 원본 WAV (호환용 — 청크별 wav 는 Chunk.vocalWavPath)
   AnalyzeResponse? analysis; // 최근 분석 결과(가장 최근 청크 메타)
   List<Note> notes = []; // 전 청크의 모든 노트(원본 시간 보존)
@@ -303,11 +304,17 @@ class ProjectStore extends ChangeNotifier {
   // `restoreFromDrums()` 로 되돌릴 때 손실 없이 복원된다.
   void _relabelAsDrums(List<Note> notes) {
     if (notes.isEmpty) return;
-    final avg = notes.map((n) => n.pitch).reduce((a, b) => a + b) / notes.length;
-    for (final n in notes) {
-      // pitchOriginal 이 비어있으면(엣지) 현재 pitch 를 저장 — 복원 위해.
+    // 이미 percussive 로 재라벨된 노트는 평균이 36/38/42 의 좁은 범위라
+    // 두 번째 호출 시 분류가 무너짐 → idempotent 가드.
+    if (notes.every((n) => n.kind == 'percussive')) return;
+    // 원본 pitch 기준 평균 ±5 반음 휴리스틱.
+    // 정밀 분류는 task #38 (backend/app/drums.py 스펙트럼 기반) 에서 처리 예정.
+    final orig = notes.map((n) => n.pitchOriginal != 0 ? n.pitchOriginal : n.pitch).toList();
+    final avg = orig.reduce((a, b) => a + b) / orig.length;
+    for (int i = 0; i < notes.length; i++) {
+      final n = notes[i];
       if (n.pitchOriginal == 0) n.pitchOriginal = n.pitch;
-      final diff = n.pitch - avg;
+      final diff = orig[i] - avg;
       final drumPitch = diff <= -5 ? 36 : (diff >= 5 ? 42 : 38);
       n.pitch = drumPitch;
       n.kind = 'percussive';
@@ -352,6 +359,47 @@ class ProjectStore extends ChangeNotifier {
     if (t == null) return;
     t.enabled = !t.enabled;
     _audioChanged();
+  }
+
+  void toggleTrackLooping(int trackId) {
+    final t = trackById(trackId);
+    if (t == null) return;
+    t.looping = !t.looping;
+    _audioChanged();
+  }
+
+  /// non-loop 트랙들의 가장 늦은 컨텐츠 끝 — looping 트랙이 여기까지 반복.
+  double get projectEnd => _projectEnd;
+  double get _projectEnd {
+    double m = 0;
+    for (final t in tracks) {
+      if (t.looping) continue;
+      for (final c in t.chunks) {
+        if (c.timelineEnd > m) m = c.timelineEnd;
+      }
+    }
+    return m;
+  }
+
+  /// notes 를 [period] 주기로 targetEnd 까지 반복해서 펼친다.
+  /// period 는 청크 timelineEnd 의 최대값(가시 영역 끝) — 노트 끝이 아니라 청크 경계.
+  List<Note> _loopNotesUntil(List<Note> notes, double targetEnd, double period) {
+    if (notes.isEmpty || targetEnd <= 0 || period <= 0.01) return notes;
+    final out = <Note>[];
+    double offset = 0;
+    while (offset < targetEnd) {
+      for (final n in notes) {
+        if (n.start + offset >= targetEnd) continue;
+        final clone = Note.fromJson(n.toJson())
+          ..start = n.start + offset
+          ..end = math.min(n.end + offset, targetEnd)
+          ..chunkId = n.chunkId;
+        clone.duration = clone.end - clone.start;
+        out.add(clone);
+      }
+      offset += period;
+    }
+    return out;
   }
 
   void newProject() {
@@ -510,6 +558,10 @@ class ProjectStore extends ChangeNotifier {
       pendingRecording!
         ..analysis = res
         ..notes = res.notes;
+      // 드럼은 preview 와 commit 결과가 동일하도록 분석 직후 GM 드럼 매핑(36/38/42) 적용.
+      if (t.role == TrackRole.drum) {
+        _relabelAsDrums(pendingRecording!.notes);
+      }
       final pitched = res.notes.where((n) => n.kind == 'pitched').length;
       debugPrint('[analyze-pending] ${t.role.label} dur=${res.durationSec.toStringAsFixed(1)}s '
           'notes=${res.notes.length}(pitched=$pitched) assisted=${res.assistAppliedCount}');
@@ -1138,11 +1190,18 @@ class ProjectStore extends ChangeNotifier {
   // audioplayers 로 별도 레이어 재생.
 
   /// 활성(enabled) + 노트 있는 비-보컬 트랙들의 (notes, program, isDrum) 목록.
+  /// looping=true 트랙은 컨텐츠를 _projectEnd 까지 반복 펼침.
   List<({List<Note> notes, int program, bool isDrum})> playableSynthTracks() {
     final out = <({List<Note> notes, int program, bool isDrum})>[];
+    final end = _projectEnd;
     for (final t in tracks) {
       if (!t.enabled || t.notes.isEmpty || t.isVocal) continue;
-      out.add((notes: t.effectiveRenderNotes, program: t.program, isDrum: t.role == TrackRole.drum));
+      var notes = t.effectiveRenderNotes;
+      if (t.looping && end > 0 && t.chunks.isNotEmpty) {
+        final period = t.chunks.map((c) => c.timelineEnd).reduce(math.max);
+        notes = _loopNotesUntil(notes, end, period);
+      }
+      out.add((notes: notes, program: t.program, isDrum: t.role == TrackRole.drum));
     }
     return out;
   }
@@ -1171,17 +1230,40 @@ class ProjectStore extends ChangeNotifier {
   String? get vocalMixPath => hasVocalAudio ? _vocalTrack!.vocalWavPath : null;
 
   /// 보컬 청크 재생 스케줄 — 각 enabled 보컬 트랙의 청크별 (path, timelineStart, inPoint, duration).
-  /// chunk meta 의 trim/move 를 그대로 반영.
+  /// chunk meta 의 trim/move 를 반영. looping 트랙은 _projectEnd 까지 스케줄을 반복.
   List<({String path, double timelineStart, double inPoint, double duration})> vocalChunkSchedule() {
     final out = <({String path, double timelineStart, double inPoint, double duration})>[];
+    final end = _projectEnd;
     for (final t in tracks) {
       if (!t.isVocal || !t.enabled) continue;
+      final base = <({String path, double timelineStart, double inPoint, double duration})>[];
       for (final c in t.chunks) {
         final path = c.vocalWavPath ?? t.vocalWavPath;
         if (path == null) continue;
         final dur = c.visibleLength;
         if (dur <= 0) continue;
-        out.add((path: path, timelineStart: c.timelineStart, inPoint: c.inPoint, duration: dur));
+        base.add((path: path, timelineStart: c.timelineStart, inPoint: c.inPoint, duration: dur));
+      }
+      if (!t.looping || end <= 0 || base.isEmpty) {
+        out.addAll(base);
+        continue;
+      }
+      // 청크 timelineEnd 최대값(가시 영역 끝) 단위로 반복 — 트림 후 빈 여백도 보존.
+      final period = t.chunks.map((c) => c.timelineEnd).reduce(math.max);
+      if (period <= 0.01) {
+        out.addAll(base);
+        continue;
+      }
+      double offset = 0;
+      while (offset < end) {
+        for (final e in base) {
+          final newStart = e.timelineStart + offset;
+          if (newStart >= end) continue;
+          final clippedDur = math.min(e.duration, end - newStart);
+          if (clippedDur <= 0) continue;
+          out.add((path: e.path, timelineStart: newStart, inPoint: e.inPoint, duration: clippedDur));
+        }
+        offset += period;
       }
     }
     return out;

@@ -366,7 +366,13 @@ class _EditScreenState extends State<EditScreen> {
       await _player.stop();
       final futures = <Future<void>>[];
       if (synthTracks.isNotEmpty) {
-        futures.add(_synth.play(synthTracks, startAt: Duration(milliseconds: (startSec * 1000).round())));
+        // endAt = 프로젝트 끝(가장 늦은 청크 timelineEnd) — 청크의 빈 여백/루프 패딩까지 재생 시간 유지.
+        final endSec = store.projectEnd;
+        futures.add(_synth.play(
+          synthTracks,
+          startAt: Duration(milliseconds: (startSec * 1000).round()),
+          endAt: endSec > 0 ? Duration(milliseconds: (endSec * 1000).round()) : null,
+        ));
       }
       if (vocalSchedule.isNotEmpty) {
         futures.add(_player.playVocalChunks(vocalSchedule, startFromSec: startSec));
@@ -463,6 +469,7 @@ class _EditScreenState extends State<EditScreen> {
                 recElapsedMs: _recMs,
                 recLevels: _recLevels,
                 onStopRec: () => _stopInlineRecord(store),
+                projectEnd: store.projectEnd,
               ),
             ),
             _contextActionBar(store, t),
@@ -508,21 +515,29 @@ class _EditScreenState extends State<EditScreen> {
       );
 
   Widget _controls(ProjectStore store, TrackData t, DetectedKey? dk) {
+    // 카테고리 chips 는 제거 — 트랙 활성화는 lane 탭으로 (멀티트랙 모델).
     // INSTRUMENT / KEY / 피치 어시스트 카드는 ActiveTrackCards 위젯이 담당(task #21).
-    // 단음/코드 모드 토글(_modeToggle)은 #24 에서 컨텍스트 액션 바의 "코드"로 통합 — 제거됨.
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: _roleChips(store),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+          child: Text(
+            '트랙 정보',
+            style: T.label.copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.2,
+              color: AppColors.textSecondary,
+            ),
+          ),
         ),
         ActiveTrackCards(store: store),
-        // 녹음 진행 UI(카운트다운/녹음중/정지)는 트랙 레인 안 인라인으로 이동(task #35).
-        // 상단 카드 영역엔 더 이상 녹음 상태 박스를 띄우지 않는다.
       ],
     );
   }
 
+  // ignore: unused_element
   Widget _roleChips(ProjectStore store) {
     Widget chip(TrackRole r) {
       final active = store.activeRole == r;
@@ -694,7 +709,7 @@ class _EditScreenState extends State<EditScreen> {
         item(Symbols.delete, '삭제', enabled: true, onTap: store.deleteSelectedAny),
       ]);
     } else if (hasChunk) {
-      // 청크: 분할 · 복사 · 루프 · (코드 — 코드 가능 악기만) · 볼륨 · 삭제
+      // 청크: 분할 · 복사 · (코드 — 코드 가능 악기만) · 볼륨 · 삭제 (루프는 트랙으로 이동)
       items.addAll([
         item(Symbols.content_cut, '분할',
             enabled: true, onTap: () {
@@ -703,7 +718,6 @@ class _EditScreenState extends State<EditScreen> {
               }
             }),
         item(Symbols.content_copy, '복사', enabled: true, onTap: store.copySelectedAny),
-        item(Symbols.repeat, '루프', enabled: true, onTap: store.loopSelectedAny),
       ]);
       if (t.isChordInstrument) {
         final isChunkChord = store.canUnchordChunkSelected;
@@ -717,13 +731,15 @@ class _EditScreenState extends State<EditScreen> {
         item(Symbols.delete, '삭제', enabled: true, onTap: store.deleteSelectedAny),
       ]);
     } else {
-      // 트랙: 재녹음 · 코드 · 뮤트 · 볼륨 · 삭제
-      // (트랙 코드 = chordMode 토글, 시트 없이 즉시. 비-코드 악기/키 미정이면 disabled)
+      // 트랙: 재녹음 · 루프 · 코드 · 뮤트 · 볼륨 · 삭제
       final canTrackChord = t.isChordInstrument && t.analysis?.detectedKey?.tonic != null;
       final trackHasNotes = t.notes.isNotEmpty;
       items.add(item(Symbols.mic, '재녹음',
           enabled: _recState == _RecState.idle,
           onTap: () => _startInlineRecord(store)));
+      items.add(item(Symbols.repeat, t.looping ? '루프 해제' : '루프',
+          enabled: trackHasNotes,
+          onTap: () => store.toggleTrackLooping(t.id)));
       if (t.isChordInstrument) {
         items.add(item(t.chordActive ? Symbols.heart_broken : Symbols.queue_music,
             t.chordActive ? '코드 해제' : '코드',
