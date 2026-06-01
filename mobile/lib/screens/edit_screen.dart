@@ -2,6 +2,7 @@
 // 녹음은 화면 이동 없이 녹음 버튼 박스 안에서 진행(작업 동시성): 녹음 중 기존 트랙을
 // 함께 재생해 흥얼거릴 수 있고, 같은 박스에서 타이머·음파·처리과정을 보여준다.
 import 'dart:async';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
@@ -57,8 +58,6 @@ class _EditScreenState extends State<EditScreen> {
 
   // 메트로놈
   final _metro = Metronome();
-  bool _metroOn = false;
-  int _bpm = 90;
 
   void _seek(double sec) {
     setState(() => _playheadSec = sec);
@@ -200,7 +199,8 @@ class _EditScreenState extends State<EditScreen> {
       _recCountdownN = 3;
       _recCountdownProgress = 0;
     });
-    final ok = await _runCountdown();
+    // 카운트다운 한 박 = 1초 / (BPM/60). store.bpm 기본 90 → 666ms.
+    final ok = await _runCountdown(store.bpm);
     if (!ok || !mounted) {
       setState(() => _recState = _RecState.idle);
       return;
@@ -209,9 +209,9 @@ class _EditScreenState extends State<EditScreen> {
     await _startActualRecording(store);
   }
 
-  /// 카운트다운 실행 — 사용자가 lane 재탭으로 취소하면 false 반환.
-  Future<bool> _runCountdown() async {
-    const beatMs = 400;
+  /// 카운트다운 실행 — bpm 기준 한 박 길이로 3→2→1. 사용자가 취소하면 false.
+  Future<bool> _runCountdown(int bpm) async {
+    final beatMs = (60000 / bpm).round().clamp(150, 2000);
     const stepMs = 16;
     final completer = Completer<bool>();
     int elapsed = 0;
@@ -302,9 +302,9 @@ class _EditScreenState extends State<EditScreen> {
         _recLevels.add(level);
       });
     });
-    if (_metroOn) {
+    if (store.metroOn) {
       try {
-        await _metro.start(_bpm);
+        await _metro.start(store.bpm);
       } catch (e) {
         debugPrint('[metro] start failed: $e');
       }
@@ -851,65 +851,47 @@ class _EditScreenState extends State<EditScreen> {
   }
 
   Widget _metroBtn() {
-    final color = _metroOn ? AppColors.lime : AppColors.textPrimary;
+    final store = context.watch<ProjectStore>();
+    final on = store.metroOn;
+    final color = on ? AppColors.lime : AppColors.textPrimary;
     return GestureDetector(
-      onTap: () async {
-        setState(() => _metroOn = !_metroOn);
-        if (_recState == _RecState.recording) {
-          _metroOn ? await _metro.start(_bpm) : await _metro.stop();
-        }
-      },
-      onLongPress: _pickBpm,
+      // 탭 → 메트로놈 시트(BPM + on/off). 토글은 시트 안에서.
+      onTap: () => showMetronomeSheet(
+        context,
+        store,
+        onToggle: (next) async {
+          store.setMetroOn(next);
+          if (next) {
+            await _metro.start(store.bpm);
+          } else {
+            await _metro.stop();
+          }
+        },
+        onBpmChanged: () async {
+          // 메트로놈 켜진 상태에서 BPM 바뀌면 즉시 재시작 → 새 박자 반영.
+          if (store.metroOn) {
+            await _metro.stop();
+            await _metro.start(store.bpm);
+          }
+        },
+      ),
       child: SizedBox(
         width: 44,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Symbols.timer, size: 24, color: color),
+          SvgPicture.asset(
+            'assets/icons/metronome.svg',
+            width: 24,
+            height: 24,
+            colorFilter: ColorFilter.mode(
+              on ? color : color.withValues(alpha: 0.55),
+              BlendMode.srcIn,
+            ),
+          ),
           const SizedBox(height: 3),
-          Text('♩$_bpm', style: T.label.copyWith(fontSize: 9, color: color)),
+          Text('${store.bpm} BPM', style: T.label.copyWith(fontSize: 9, color: color)),
         ]),
       ),
     );
-  }
-
-  void _pickBpm() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
-      builder: (_) => StatefulBuilder(
-        builder: (c, setS) {
-          Widget step(IconData ic, VoidCallback on) => GestureDetector(
-                onTap: () => setS(on),
-                child: Container(
-                  width: 48, height: 48,
-                  decoration: BoxDecoration(
-                    color: AppColors.bg, borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Icon(ic, color: AppColors.textPrimary),
-                ),
-              );
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text('메트로놈 템포', style: T.title),
-              const SizedBox(height: 18),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                step(Symbols.remove, () => _bpm = (_bpm - 5).clamp(40, 240)),
-                const SizedBox(width: 28),
-                Text('$_bpm', style: T.h1.copyWith(fontSize: 44)),
-                const SizedBox(width: 6),
-                Text('BPM', style: T.sub),
-                const SizedBox(width: 28),
-                step(Symbols.add, () => _bpm = (_bpm + 5).clamp(40, 240)),
-              ]),
-            ]),
-          );
-        },
-      ),
-    ).then((_) {
-      if (mounted) setState(() {});
-    });
   }
 
   // _AddTrackFab 는 클래스 외부 StatelessWidget — context.read 가 아닌 콜백 주입.

@@ -37,6 +37,8 @@ class ActiveTrackCards extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 8),
+          _QuantizeCard(store: store, track: t),
         ],
       ),
     );
@@ -277,6 +279,120 @@ class _AssistCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text('키 밖 음 자동 정리', style: T.sub.copyWith(fontSize: 11, color: AppColors.textSecondary)),
         ],
+      ),
+    );
+  }
+}
+
+// ─── 박자 보정 카드 ─────────────────────────────────────────────────────
+class _QuantizeCard extends StatelessWidget {
+  const _QuantizeCard({required this.store, required this.track});
+  final ProjectStore store;
+  final TrackData track;
+
+  @override
+  Widget build(BuildContext context) {
+    final on = track.quantizeEnabled;
+    final summary = on
+        ? '1/${track.quantizeGrid} · ${(track.quantizeStrength * 100).round()}% · BPM ${store.bpm}'
+        : 'off';
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => showQuantizeSheet(context, store),
+      child: Container(
+        padding: const EdgeInsets.all(_cardPad),
+        decoration: _cardDecoration(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(children: [
+                  Text('박자 보정', style: _labelStyle),
+                  _helpIcon(
+                    context,
+                    title: '박자 보정',
+                    body:
+                        '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요. '
+                        '원본 timing 은 그대로 보존돼, 토글을 꺼면 원래대로 돌아옵니다.',
+                  ),
+                ]),
+                Row(children: [
+                  if (on) _PulseDot(bpm: store.bpm),
+                  if (on) const SizedBox(width: 8),
+                  _MiniToggle(on: on, onTap: () => store.toggleTrackQuantize(track.id, !on)),
+                ]),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              summary,
+              style: T.body.copyWith(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: on ? AppColors.textPrimary : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PulseDot extends StatefulWidget {
+  const _PulseDot({required this.bpm});
+  final int bpm;
+  @override
+  State<_PulseDot> createState() => _PulseDotState();
+}
+
+class _PulseDotState extends State<_PulseDot> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: _period())..repeat();
+    _pulse = _buildPulse();
+  }
+
+  Duration _period() => Duration(milliseconds: (60000 / widget.bpm).round().clamp(150, 2000));
+
+  /// 비트 시작 시 즉시 피크, 이후 감쇠 — 메트로놈 클릭과 위상 일치.
+  Animation<double> _buildPulse() => Tween<double>(begin: 1, end: 0)
+      .chain(CurveTween(curve: Curves.easeIn))
+      .animate(_ctrl);
+
+  @override
+  void didUpdateWidget(covariant _PulseDot old) {
+    super.didUpdateWidget(old);
+    if (old.bpm != widget.bpm) {
+      _ctrl.duration = _period();
+      _ctrl.stop();
+      _ctrl.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (_, __) => Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(
+          color: AppColors.lime.withValues(alpha: 0.2 + 0.8 * _pulse.value),
+          shape: BoxShape.circle,
+        ),
       ),
     );
   }

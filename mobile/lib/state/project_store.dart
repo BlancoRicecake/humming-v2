@@ -27,6 +27,11 @@ class TrackData {
   bool chordMode = false;
   bool enabled = true; // 믹스 재생 포함 여부(사이드바 토글)
   bool looping = false; // 트랙 루프 — 가장 긴 non-loop 트랙 끝까지 컨텐츠 반복
+  // 박자 보정(quantize) — 노트 start 를 그리드(BPM 기반)에 끌어당김.
+  // 비-파괴적: store.effectiveRenderNotesFor() 에서 렌더 시 적용. 원본 timing 보존.
+  bool quantizeEnabled = false;
+  int quantizeGrid = 16;          // 4/8/16/32 분음
+  double quantizeStrength = 0.75; // 0..1
   String? wavPath; // 마지막 녹음 원본 WAV (호환용 — 청크별 wav 는 Chunk.vocalWavPath)
   AnalyzeResponse? analysis; // 최근 분석 결과(가장 최근 청크 메타)
   List<Note> notes = []; // 전 청크의 모든 노트(원본 시간 보존)
@@ -191,6 +196,60 @@ class ProjectStore extends ChangeNotifier {
   String? error;
   int editEpoch = 0; // 오디오 출력에 영향 주는 편집마다 증가(재렌더 트리거)
   int _chunkSeq = 0; // 청크 ID 발급기
+  // 프로젝트 단일 BPM — quantize 그리드 + 메트로놈 클릭 양쪽에서 사용.
+  int bpm = 90;
+  // 메트로놈 클릭 on/off — 트랜스포트/메트로놈 시트 양쪽에서 토글.
+  bool metroOn = false;
+
+  void setMetroOn(bool on) {
+    if (on == metroOn) return;
+    metroOn = on;
+    notifyListeners();
+  }
+
+  void setBpm(int v) {
+    final next = v.clamp(40, 240);
+    if (next == bpm) return;
+    bpm = next;
+    _audioChanged();
+  }
+
+  void toggleTrackQuantize(int trackId, bool on) {
+    final t = trackById(trackId);
+    if (t == null) return;
+    t.quantizeEnabled = on;
+    _audioChanged();
+  }
+
+  void setTrackQuantize(int trackId, {int? grid, double? strength}) {
+    final t = trackById(trackId);
+    if (t == null) return;
+    if (grid != null) t.quantizeGrid = grid;
+    if (strength != null) t.quantizeStrength = strength.clamp(0.0, 1.0);
+    _audioChanged();
+  }
+
+  /// quantize 적용된 트랙 노트 — t.effectiveRenderNotes 를 wrap.
+  /// 각 노트의 start 를 그리드 cellSec 의 가장 가까운 라인으로 strength 만큼 당김.
+  /// 토글 off 면 원본 그대로.
+  List<Note> effectiveRenderNotesFor(TrackData t) {
+    final base = t.effectiveRenderNotes;
+    if (!t.quantizeEnabled || t.quantizeGrid <= 0) return base;
+    final beatSec = 60.0 / bpm;
+    final cellSec = beatSec * 4 / t.quantizeGrid;
+    if (cellSec <= 0) return base;
+    return base.map((n) {
+      final snapped = (n.start / cellSec).round() * cellSec;
+      final delta = (snapped - n.start) * t.quantizeStrength;
+      if (delta.abs() < 1e-4) return n;
+      final clone = Note.fromJson(n.toJson())
+        ..start = n.start + delta
+        ..end = n.end + delta
+        ..chunkId = n.chunkId;
+      clone.duration = clone.end - clone.start;
+      return clone;
+    }).toList();
+  }
 
   /// 녹음 종료 후 사용자가 "사용/삭제"를 결정할 때까지의 임시 결과(트랙 미반영).
   /// 활성 트랙의 다이얼로그(타임라인 레인 오버레이)로 표시된다.
@@ -1196,7 +1255,7 @@ class ProjectStore extends ChangeNotifier {
     final end = _projectEnd;
     for (final t in tracks) {
       if (!t.enabled || t.notes.isEmpty || t.isVocal) continue;
-      var notes = t.effectiveRenderNotes;
+      var notes = effectiveRenderNotesFor(t);
       if (t.looping && end > 0 && t.chunks.isNotEmpty) {
         final period = t.chunks.map((c) => c.timelineEnd).reduce(math.max);
         notes = _loopNotesUntil(notes, end, period);
@@ -1211,7 +1270,7 @@ class ProjectStore extends ChangeNotifier {
     final out = <({List<Note> notes, int program, bool isDrum})>[];
     for (final t in tracks) {
       if (t.role == exclude || t.notes.isEmpty || t.isVocal) continue;
-      out.add((notes: t.effectiveRenderNotes, program: t.program, isDrum: t.role == TrackRole.drum));
+      out.add((notes: effectiveRenderNotesFor(t), program: t.program, isDrum: t.role == TrackRole.drum));
     }
     return out;
   }
@@ -1285,7 +1344,7 @@ class ProjectStore extends ChangeNotifier {
   Future<Uint8List> renderMix() {
     final trs = tracks
         .where((t) => t.enabled && t.notes.isNotEmpty)
-        .map((t) => (notes: t.effectiveRenderNotes, program: t.program))
+        .map((t) => (notes: effectiveRenderNotesFor(t), program: t.program))
         .toList();
     return _api.renderMix(trs);
   }
@@ -1300,14 +1359,14 @@ class ProjectStore extends ChangeNotifier {
   Future<Uint8List?> renderAccompaniment(TrackRole exclude) async {
     final trs = tracks
         .where((t) => t.role != exclude && t.notes.isNotEmpty)
-        .map((t) => (notes: t.effectiveRenderNotes, program: t.program))
+        .map((t) => (notes: effectiveRenderNotesFor(t), program: t.program))
         .toList();
     if (trs.isEmpty) return null;
     return _api.renderMix(trs);
   }
 
   Future<Uint8List> exportMidiActive() =>
-      _api.exportMidi(active.effectiveRenderNotes, program: active.program);
+      _api.exportMidi(effectiveRenderNotesFor(active), program: active.program);
 
   /// 재생 ▶ 와 동일한 WAV 믹스를 파일로 export — `renderMix()` 재사용.
   /// (보컬 오디오는 SoundFont 합성 결과가 아니므로 현재 포함되지 않음 —
@@ -1330,7 +1389,7 @@ class ProjectStore extends ChangeNotifier {
         melodicCh++;
         if (melodicCh == 9) melodicCh = 10; // 드럼 채널 회피
       }
-      list.add((notes: t.effectiveRenderNotes, program: t.program, channel: ch));
+      list.add((notes: effectiveRenderNotesFor(t), program: t.program, channel: ch));
     }
     return _api.exportMidiMix(list);
   }

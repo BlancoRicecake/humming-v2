@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -42,6 +43,7 @@ void showHelpSheet(BuildContext context, String title, String body) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
+    useSafeArea: true,
     builder: (_) => Container(
       decoration: _sheetDeco(),
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -92,6 +94,7 @@ void showPendingRecordingSheet(BuildContext context, ProjectStore store) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
+    useSafeArea: true,
     isScrollControlled: true,
     isDismissible: false, // 사용/삭제 버튼으로만 닫힘 (실수 dismiss 방지)
     enableDrag: false,
@@ -427,6 +430,7 @@ void showAddTrackSheet(BuildContext context, ProjectStore store) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
+    useSafeArea: true,
     isScrollControlled: true,
     builder: (sheetCtx) {
       final mq = MediaQuery.of(sheetCtx);
@@ -555,6 +559,7 @@ void showInstrumentPicker(BuildContext context, ProjectStore store) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
+    useSafeArea: true,
     builder: (_) {
       final t = store.active;
       final options = instrumentPalette[t.role] ?? const <Instrument>[];
@@ -686,6 +691,7 @@ void showKeyPicker(BuildContext context, ProjectStore store) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
+    useSafeArea: true,
     builder: (_) {
       Widget chip(String label, bool active, VoidCallback onTap) => GestureDetector(
             onTap: () {
@@ -788,6 +794,7 @@ void showNoteCandidate(BuildContext context, ProjectStore store, int index) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
+    useSafeArea: true,
     isScrollControlled: true,
     builder: (_) {
       return _NoteWheelSheet(
@@ -1064,6 +1071,7 @@ void showChordPicker(BuildContext context, ProjectStore store) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
+    useSafeArea: true,
     builder: (_) => _ChordPickerSheet(store: store, noteIndex: noteIdx, chunkId: chunkId),
   ).whenComplete(() => SynthEngine().stopAll());
 }
@@ -1261,6 +1269,7 @@ void showExportShare(BuildContext context, ProjectStore store) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
+    useSafeArea: true,
     builder: (_) => Container(
       decoration: _sheetDeco(),
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
@@ -1333,5 +1342,400 @@ Future<void> _exportFile(BuildContext context, ProjectStore store, {required boo
     await SharePlus.instance.share(ShareParams(files: [XFile(f.path)], text: store.title));
   } catch (e) {
     if (context.mounted) comingSoon(context, '내보내기 실패: $e');
+  }
+}
+
+// ─── 박자 보정 시트 ─────────────────────────────────────────────────────
+// BPM stepper + 메트로놈 자동 클릭(시청각 보조) + 그리드 chips + 강도 슬라이더.
+// 시트 열려있는 동안 메트로놈 켜져 BPM 빠르기를 귀로 확인 가능.
+// ─── 메트로놈 시트 ─────────────────────────────────────────────────────
+// 트랜스포트 메트로놈 버튼 → BPM stepper + on/off 토글. 박자보정 시트와 기능 분리:
+// 박자보정 = 노트 정렬(그리드/강도) / 메트로놈 = 청각 클릭 + BPM 설정(공통 store.bpm).
+void showMetronomeSheet(
+  BuildContext context,
+  ProjectStore store, {
+  required Future<void> Function(bool on) onToggle,
+  required Future<void> Function() onBpmChanged,
+}) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    useSafeArea: true,
+    isScrollControlled: true,
+    builder: (_) => _MetroSheetBody(store: store, onToggle: onToggle, onBpmChanged: onBpmChanged),
+  );
+}
+
+class _MetroSheetBody extends StatefulWidget {
+  const _MetroSheetBody({required this.store, required this.onToggle, required this.onBpmChanged});
+  final ProjectStore store;
+  final Future<void> Function(bool on) onToggle;
+  final Future<void> Function() onBpmChanged;
+  @override
+  State<_MetroSheetBody> createState() => _MetroSheetBodyState();
+}
+
+class _MetroSheetBodyState extends State<_MetroSheetBody> {
+  DateTime? _anchor;
+
+  String _tempoHint(int bpm) {
+    if (bpm < 70) return '느린 발라드';
+    if (bpm < 95) return '보통 발라드';
+    if (bpm < 115) return '팝/미디엄';
+    if (bpm < 135) return '댄스/업비트';
+    if (bpm < 160) return '빠른 곡';
+    return '매우 빠름';
+  }
+
+  void _refreshAnchor() {
+    // 메트로놈 켜진 동안엔 시각 펄스를 BPM 변경 시 매번 새로 anchor → drift 없는 sync.
+    _anchor = DateTime.now();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    return AnimatedBuilder(
+      animation: widget.store,
+      builder: (_, __) {
+        final store = widget.store;
+        return Container(
+          decoration: _sheetDeco(),
+          padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _grabber(),
+              Row(children: [
+                Text('메트로놈', style: T.h2.copyWith(fontSize: 18)),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Text('완료',
+                        style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 14),
+              // BPM + 시각 펄스 (메트로놈 켜져 있을 때만 anchor 활성)
+              Row(children: [
+                _PulseLarge(bpm: store.bpm, anchor: store.metroOn ? _anchor : null),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                        Text('${store.bpm}',
+                            style: T.h1.copyWith(fontSize: 38, fontFeatures: const [FontFeature.tabularFigures()])),
+                        const SizedBox(width: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text('BPM', style: T.label.copyWith(color: AppColors.textSecondary)),
+                        ),
+                      ]),
+                      Text(_tempoHint(store.bpm),
+                          style: T.body.copyWith(fontSize: 12, color: AppColors.textSecondary)),
+                      Text('1박 = ${(60 / store.bpm).toStringAsFixed(2)}초',
+                          style: T.label.copyWith(fontSize: 10, color: AppColors.textTertiary)),
+                    ],
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 14),
+              Row(children: [
+                _metroStep(Symbols.fast_rewind, () async {
+                  store.setBpm(store.bpm - 5);
+                  await widget.onBpmChanged();
+                  setState(_refreshAnchor);
+                }),
+                const SizedBox(width: 6),
+                _metroStep(Symbols.remove, () async {
+                  store.setBpm(store.bpm - 1);
+                  await widget.onBpmChanged();
+                  setState(_refreshAnchor);
+                }),
+                const Spacer(),
+                _metroStep(Symbols.add, () async {
+                  store.setBpm(store.bpm + 1);
+                  await widget.onBpmChanged();
+                  setState(_refreshAnchor);
+                }),
+                const SizedBox(width: 6),
+                _metroStep(Symbols.fast_forward, () async {
+                  store.setBpm(store.bpm + 5);
+                  await widget.onBpmChanged();
+                  setState(_refreshAnchor);
+                }),
+              ]),
+              const SizedBox(height: 18),
+              // 메트로놈 on/off 토글 — 큰 버튼.
+              GestureDetector(
+                onTap: () async {
+                  final next = !store.metroOn;
+                  await widget.onToggle(next);
+                  if (next) {
+                    setState(_refreshAnchor);
+                  } else {
+                    setState(() => _anchor = null);
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: store.metroOn ? AppColors.lime : Colors.transparent,
+                    border: Border.all(
+                      color: store.metroOn ? AppColors.lime : AppColors.border,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(
+                      store.metroOn ? Symbols.stop : Symbols.play_arrow,
+                      size: 20,
+                      color: store.metroOn ? AppColors.bg : AppColors.textPrimary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      store.metroOn ? '메트로놈 끄기' : '메트로놈 켜기',
+                      style: T.body.copyWith(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: store.metroOn ? AppColors.bg : AppColors.textPrimary,
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'BPM 은 프로젝트 전체에 적용돼요. 박자 보정 카드의 그리드도 이 BPM 을 기준으로 정렬합니다.',
+                style: T.body.copyWith(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _metroStep(IconData ic, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Icon(ic, size: 18, color: AppColors.textPrimary),
+      ),
+    );
+  }
+}
+
+void showQuantizeSheet(BuildContext context, ProjectStore store) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    useSafeArea: true,
+    isScrollControlled: true,
+    builder: (sheetCtx) => _QuantizeSheetBody(store: store),
+  );
+}
+
+class _QuantizeSheetBody extends StatefulWidget {
+  const _QuantizeSheetBody({required this.store});
+  final ProjectStore store;
+  @override
+  State<_QuantizeSheetBody> createState() => _QuantizeSheetBodyState();
+}
+
+class _QuantizeSheetBodyState extends State<_QuantizeSheetBody> {
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    return AnimatedBuilder(
+      animation: widget.store,
+      builder: (_, __) {
+        final store = widget.store;
+        final t = store.active;
+        return Container(
+          decoration: _sheetDeco(),
+          padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _grabber(),
+              Row(children: [
+                Text('박자 보정', style: T.h2.copyWith(fontSize: 18)),
+                const Spacer(),
+                Text('BPM ${store.bpm}',
+                    style: T.label.copyWith(fontSize: 11, color: AppColors.textSecondary)),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Text('완료',
+                        style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 14),
+              Text(
+                'BPM 은 전체 프로젝트 설정이라 트랜스포트의 메트로놈 버튼에서 조정해요.',
+                style: T.body.copyWith(fontSize: 11, color: AppColors.textTertiary),
+              ),
+              const Divider(height: 28, color: Color(0xFF222229)),
+              // 박자 단위 (그리드)
+              Text('박자 단위',
+                  style: T.label.copyWith(
+                      fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+              const SizedBox(height: 8),
+              Row(children: [
+                for (final g in [4, 8, 16, 32]) ...[
+                  _gridChip(g, t.quantizeGrid, () => store.setTrackQuantize(t.id, grid: g)),
+                  if (g != 32) const SizedBox(width: 8),
+                ],
+              ]),
+              const SizedBox(height: 6),
+              Text('1박을 ${t.quantizeGrid ~/ 4}등분',
+                  style: T.label.copyWith(fontSize: 10, color: AppColors.textTertiary)),
+              const SizedBox(height: 18),
+              // 강도
+              Row(children: [
+                Text('강도',
+                    style: T.label.copyWith(
+                        fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+                const Spacer(),
+                Text('${(t.quantizeStrength * 100).round()}%',
+                    style: T.body.copyWith(fontWeight: FontWeight.w700)),
+              ]),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  activeTrackColor: AppColors.lime,
+                  inactiveTrackColor: AppColors.border,
+                  thumbColor: AppColors.lime,
+                  overlayColor: AppColors.lime.withValues(alpha: 0.2),
+                ),
+                child: Slider(
+                  value: t.quantizeStrength,
+                  min: 0,
+                  max: 1,
+                  divisions: 20,
+                  onChanged: (v) => store.setTrackQuantize(t.id, strength: v),
+                ),
+              ),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text('0%: 원본 그대로',
+                    style: T.label.copyWith(fontSize: 10, color: AppColors.textTertiary)),
+                Text('100%: 완벽 정렬',
+                    style: T.label.copyWith(fontSize: 10, color: AppColors.textTertiary)),
+              ]),
+              const SizedBox(height: 14),
+              Text(
+                '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요.',
+                style: T.body.copyWith(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+
+  Widget _gridChip(int grid, int current, VoidCallback onTap) {
+    final active = grid == current;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? AppColors.lime : Colors.transparent,
+          border: Border.all(color: active ? AppColors.lime : AppColors.border),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text('1/$grid',
+            style: T.body.copyWith(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: active ? AppColors.bg : AppColors.textPrimary,
+            )),
+      ),
+    );
+  }
+}
+
+class _PulseLarge extends StatefulWidget {
+  const _PulseLarge({required this.bpm, required this.anchor});
+  final int bpm;
+  final DateTime? anchor; // 메트로놈 첫 클릭 기준점 — 펄스 위상을 여기에 락.
+  @override
+  State<_PulseLarge> createState() => _PulseLargeState();
+}
+
+class _PulseLargeState extends State<_PulseLarge> with SingleTickerProviderStateMixin {
+  late Ticker _ticker;
+  double _v = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker(_onTick)..start();
+  }
+
+  void _onTick(Duration _) {
+    final anchor = widget.anchor;
+    if (anchor == null) {
+      if (_v != 0) setState(() => _v = 0);
+      return;
+    }
+    final periodMs = (60000 / widget.bpm).clamp(150.0, 2000.0);
+    final elapsedMs = DateTime.now().difference(anchor).inMicroseconds / 1000.0;
+    if (elapsedMs < 0) {
+      if (_v != 0) setState(() => _v = 0);
+      return;
+    }
+    final phase = (elapsedMs % periodMs) / periodMs; // 0..1
+    // 비트 시작 시 1.0 피크, easeIn 으로 감쇠 → 다음 비트 직전 0.
+    final next = (1.0 - phase) * (1.0 - phase); // easeIn 근사 (x→x^2 decay)
+    if ((next - _v).abs() > 0.005) setState(() => _v = next);
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = _v;
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: AppColors.lime.withValues(alpha: 0.15 + 0.6 * v),
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.lime.withValues(alpha: 0.45 * v),
+            blurRadius: 20 * v,
+            spreadRadius: 2 * v,
+          ),
+        ],
+      ),
+    );
   }
 }
