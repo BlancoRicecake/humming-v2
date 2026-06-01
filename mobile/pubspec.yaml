@@ -84,6 +84,7 @@ flutter:
     - assets/icon/
     - assets/sounds/TimGM6mb.sf2
     - assets/icons/instruments/
+    - assets/icons/metronome.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

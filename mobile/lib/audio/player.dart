@@ -20,11 +20,18 @@ class AudioPlayerService {
       android: const AudioContextAndroid(
         contentType: AndroidContentType.music,
         usageType: AndroidUsageType.media,
-        audioFocus: AndroidAudioFocus.none,
+        // gain = 우리 앱이 재생 시 다른 앱(YouTube/Spotify 등) 정지 — 음악 작업 앱의 표준 동작.
+        audioFocus: AndroidAudioFocus.gain,
       ),
       iOS: AudioContextIOS(
         category: AVAudioSessionCategory.playAndRecord,
-        options: const {AVAudioSessionOptions.mixWithOthers, AVAudioSessionOptions.defaultToSpeaker},
+        // BT 헤드셋/이어폰 자동 라우팅 + 다른 앱과 독점(mixWithOthers 제거).
+        // allowBluetooth(SCO, BT mic 포함) + allowBluetoothA2DP(스테레오 재생).
+        options: const {
+          AVAudioSessionOptions.allowBluetooth,
+          AVAudioSessionOptions.allowBluetoothA2DP,
+          AVAudioSessionOptions.allowAirPlay,
+        },
       ),
     );
     _player.setAudioContext(ctx);
@@ -83,8 +90,15 @@ class AudioPlayerService {
   }
 
   Future<void> seek(Duration pos) async {
-    await _player.seek(pos);
-    await _vocal.seek(pos);
+    // audioplayers seek 은 source 가 로딩 안 됐을 때 내부에서 무한 대기 → 짧은 타임아웃 + 상태 가드.
+    Future<void> safe(AudioPlayer p) async {
+      if (p.state == PlayerState.disposed || p.source == null) return;
+      try {
+        await p.seek(pos).timeout(const Duration(milliseconds: 800), onTimeout: () {});
+      } catch (_) {}
+    }
+    await safe(_player);
+    await safe(_vocal);
   }
 
   Future<void> stop() async {
