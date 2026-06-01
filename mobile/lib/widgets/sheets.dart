@@ -1,13 +1,25 @@
 // 바텀 시트 3종: 악기 선택 / 노트 후보 / 내보내기·공유.
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../audio/player.dart';
+import '../audio/synth.dart';
+import '../audio/synth_player.dart';
 import '../models/models.dart';
+import '../music/chord_expand.dart';
+import '../music/instrument_icons.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
+
+// 노트 보정 시트 전용 — 단음 미리듣기 (6-3).
+// 기존 백엔드 /render_audio + audioplayers 경로를 온디바이스 SoundFont 합성으로 교체.
+// 200~500ms 네트워크 지연 → 즉시 응답 + 오프라인 동작.
+int _previewSeq = 0;
 
 BoxDecoration _sheetDeco() => const BoxDecoration(
       color: AppColors.surface,
@@ -22,6 +34,521 @@ Widget _grabber() => Center(
         decoration: BoxDecoration(color: const Color(0xFF3F3F46), borderRadius: BorderRadius.circular(2)),
       ),
     );
+
+// ─── 도움말 시트 ───────────────────────────────────────────────────────
+// 5-3: 음악·DSP 용어(키/AUTO/피치 어시스트/단음·코드 등)에 짧은 설명.
+// 카드 헤더의 ⓘ 아이콘 탭 → 이 시트가 모달로 노출. 닫기 버튼 1개.
+void showHelpSheet(BuildContext context, String title, String body) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (_) => Container(
+      decoration: _sheetDeco(),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _grabber(),
+          Row(
+            children: [
+              const Icon(Symbols.info, size: 18, color: AppColors.lime),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: T.h2.copyWith(fontSize: 17))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            body,
+            style: T.body.copyWith(fontSize: 13.5, height: 1.5, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                height: 46,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.bg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Text('닫기', style: T.body.copyWith(fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+// ─── 녹음 결과 사용/삭제 시트 ──────────────────────────────────────────
+// 녹음 종료 → 분석/정리 결과 미리보기 + 사용/삭제. 어시스트 토글 포함(보컬 제외).
+// 기존 인라인 트랙 박스에서 모달 시트로 승격 — 좁은 공간에 다 안 들어가는 문제 해결.
+void showPendingRecordingSheet(BuildContext context, ProjectStore store) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    isDismissible: false, // 사용/삭제 버튼으로만 닫힘 (실수 dismiss 방지)
+    enableDrag: false,
+    builder: (sheetCtx) {
+      return AnimatedBuilder(
+        animation: store,
+        builder: (_, __) {
+          final p = store.pendingRecording;
+          if (p == null) {
+            // commit/discard 후 자동 닫힘.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (Navigator.canPop(sheetCtx)) Navigator.pop(sheetCtx);
+            });
+            return const SizedBox.shrink();
+          }
+          return _PendingSheetBody(store: store, p: p);
+        },
+      );
+    },
+  );
+}
+
+class _PendingSheetBody extends StatefulWidget {
+  const _PendingSheetBody({required this.store, required this.p});
+  final ProjectStore store;
+  final PendingRecording p;
+
+  @override
+  State<_PendingSheetBody> createState() => _PendingSheetBodyState();
+}
+
+class _PendingSheetBodyState extends State<_PendingSheetBody> {
+  final SynthPlayer _synth = SynthPlayer();
+  final AudioPlayerService _audio = AudioPlayerService();
+  bool _previewPlaying = false;
+  StreamSubscription? _doneSub;
+
+  @override
+  void dispose() {
+    _doneSub?.cancel();
+    _synth.stop();
+    _audio.stop();
+    super.dispose();
+  }
+
+  Future<void> _togglePreview() async {
+    final p = widget.p;
+    if (_previewPlaying) {
+      await _synth.stop();
+      await _audio.stop();
+      if (mounted) setState(() => _previewPlaying = false);
+      return;
+    }
+    final isVocal = p.role == TrackRole.vocal;
+    setState(() => _previewPlaying = true);
+    _doneSub?.cancel();
+    if (isVocal) {
+      if (p.vocalWavPath == null) {
+        setState(() => _previewPlaying = false);
+        return;
+      }
+      await _audio.playFile(p.vocalWavPath!);
+      // audioplayers 완료 시점 stream 이 따로 있지만 간단히 duration 후 reset.
+      Future.delayed(Duration(milliseconds: (p.vocalDuration * 1000).toInt() + 200), () {
+        if (mounted) setState(() => _previewPlaying = false);
+      });
+    } else {
+      final tr = widget.store.trackById(p.trackId);
+      final program = tr?.program ?? 0;
+      final isDrum = tr?.role == TrackRole.drum;
+      _doneSub = _synth.onComplete.listen((_) {
+        if (mounted) setState(() => _previewPlaying = false);
+      });
+      await _synth.play([SynthTrack(notes: p.notes, program: program, isDrum: isDrum)]);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.p;
+    final store = widget.store;
+    final mq = MediaQuery.of(context);
+    final isVocal = p.role == TrackRole.vocal;
+    final analyzing = store.busy && p.analysis == null && p.vocalWavPath == null;
+    final notesCount = p.notes.length;
+    final dur = p.analysis?.durationSec ?? p.vocalDuration;
+    final canPreview = !analyzing && (isVocal ? p.vocalWavPath != null : p.notes.isNotEmpty);
+    return Container(
+      decoration: _sheetDeco(),
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _grabber(),
+          Text('녹음 완료', style: T.h2.copyWith(fontSize: 18)),
+          const SizedBox(height: 4),
+          Text(
+            analyzing
+                ? '분석 중…'
+                : (isVocal
+                    ? '${dur.toStringAsFixed(1)}초 보컬을 사용할까요?'
+                    : '${dur.toStringAsFixed(1)}초 · 노트 $notesCount개를 사용할까요?'),
+            style: T.body.copyWith(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            height: 110,
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: analyzing
+                ? const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.2, color: AppColors.lime),
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: CustomPaint(
+                      painter: isVocal
+                          ? _PendingWavePainter(peaks: p.vocalPeaks)
+                          : _PendingNotesPainter(notes: p.notes),
+                      size: Size.infinite,
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 12),
+          _previewButton(canPreview),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(
+              child: _pendingSheetBtn(
+                '삭제',
+                outlined: true,
+                onTap: () async {
+                  await _synth.stop();
+                  await _audio.stop();
+                  store.discardPendingRecording();
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _pendingSheetBtn(
+                '사용',
+                outlined: false,
+                onTap: analyzing
+                    ? null
+                    : () async {
+                        await _synth.stop();
+                        await _audio.stop();
+                        store.commitPendingRecording();
+                      },
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewButton(bool enabled) {
+    final color = enabled
+        ? (_previewPlaying ? AppColors.lime : AppColors.textPrimary)
+        : AppColors.textTertiary;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: enabled ? _togglePreview : null,
+      child: Container(
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _previewPlaying ? AppColors.lime : AppColors.border),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(_previewPlaying ? Symbols.stop : Symbols.play_arrow, size: 18, color: color),
+            const SizedBox(width: 6),
+            Text(_previewPlaying ? '정지' : '미리듣기',
+                style: T.body.copyWith(fontSize: 14, fontWeight: FontWeight.w600, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Widget _pendingSheetBtn(String label, {required bool outlined, VoidCallback? onTap}) {
+  final disabled = onTap == null;
+  return GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: onTap,
+    child: Container(
+      height: 48,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: outlined ? Colors.transparent : (disabled ? AppColors.border : AppColors.lime),
+        border: outlined ? Border.all(color: AppColors.border) : null,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(label,
+          style: T.body.copyWith(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: outlined ? AppColors.textPrimary : AppColors.bg)),
+    ),
+  );
+}
+
+class _PendingWavePainter extends CustomPainter {
+  _PendingWavePainter({required this.peaks});
+  final List<double> peaks;
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (peaks.isEmpty) return;
+    final w = size.width, h = size.height;
+    final pad = 8.0;
+    final innerH = h - pad * 2;
+    final mid = h / 2;
+    final paint = Paint()..color = AppColors.lime..strokeWidth = 1.4..strokeCap = StrokeCap.round;
+    final n = peaks.length;
+    for (int i = 0; i < n; i++) {
+      final x = (i / (n - 1)) * w;
+      final a = peaks[i].clamp(0.0, 1.0) * innerH / 2;
+      canvas.drawLine(Offset(x, mid - a), Offset(x, mid + a), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PendingWavePainter old) => old.peaks != peaks;
+}
+
+class _PendingNotesPainter extends CustomPainter {
+  _PendingNotesPainter({required this.notes});
+  final List<Note> notes;
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (notes.isEmpty) return;
+    final w = size.width, h = size.height;
+    final minT = notes.map((n) => n.start).reduce(math.min);
+    final maxT = notes.map((n) => n.end).reduce(math.max);
+    final span = math.max(maxT - minT, 0.05);
+    final pitched = notes.where((n) => n.kind == 'pitched').toList();
+    int minP = 60, maxP = 72;
+    if (pitched.isNotEmpty) {
+      minP = pitched.map((n) => n.pitch).reduce((a, b) => a < b ? a : b) - 1;
+      maxP = pitched.map((n) => n.pitch).reduce((a, b) => a > b ? a : b) + 1;
+    }
+    final range = (maxP - minP).clamp(1, 127);
+    final paint = Paint()..color = AppColors.lime;
+    final bh = (h / range).clamp(4.0, 10.0);
+    for (final n in notes) {
+      final x = ((n.start - minT) / span) * w;
+      final bw = math.max(((n.end - n.start) / span) * w, 3.0);
+      if (n.kind == 'percussive') {
+        canvas.drawRect(Rect.fromLTWH(x, h / 2 - 2, bw.clamp(3.0, 12.0), 4), paint);
+        continue;
+      }
+      final tt = 1 - (n.pitch - minP) / range;
+      final y = (tt * (h - bh)).clamp(0.0, h - bh);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTWH(x, y, bw, bh), const Radius.circular(2)),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PendingNotesPainter old) => old.notes != notes;
+}
+
+// ─── 트랙 추가 (FAB → 카테고리별 악기 시트) ───────────────────────────
+// #27: 우측 하단 FAB 탭으로 열림. CHORDS / BASS / DRUM / VOCAL 4개 카테고리,
+// 각 카테고리는 2 컬럼 악기 그리드. 카드 탭 → store.addTrack(role, program)
+// + setActiveTrack → 사이드바/카드/녹음 pill 이 새 트랙으로 갱신.
+//
+// 표시용 카탈로그: 시안 docs/mockups/track-expansion.html Frame 5 와 1:1.
+// `_AddTrackItem.program` 은 표시용 GM program — 드럼/보컬은 가상 program
+// (kDrumKitProgram / kVocalProgram) 으로 아이콘만 결정되고, addTrack 시엔
+// 0 (드럼) / 0 (보컬) 으로 전달해 기존 합성/매핑 로직과 호환.
+class _AddTrackItem {
+  final String name;
+  final String sub;
+  final int program;     // 표시용(아이콘/저장)
+  final int? saveProgram; // store.addTrack 에 전달할 program (null = program 그대로)
+  const _AddTrackItem(this.name, this.sub, this.program, {this.saveProgram});
+}
+
+// instrumentPalette 와 1:1 일치. 신규 악기는 팔레트에 추가된 후 함께 노출.
+const Map<TrackRole, List<_AddTrackItem>> _addTrackCatalog = {
+  TrackRole.keys: [
+    _AddTrackItem('피아노', 'Acoustic Grand', 0),
+    _AddTrackItem('신스', 'Synth Pad', 90),
+    _AddTrackItem('어쿠스틱 기타', 'Acoustic', 25),
+    _AddTrackItem('일렉 기타', 'Electric', 27),
+    // 추후 추가 검토:
+    // _AddTrackItem('일렉 피아노', 'Rhodes', 4),
+    // _AddTrackItem('오르간', 'Drawbar', 16),
+    // _AddTrackItem('클래식 기타', 'Nylon', 24),
+    // _AddTrackItem('스트링', 'Ensemble', 48),
+  ],
+  TrackRole.bass: [
+    _AddTrackItem('베이스 기타', 'Electric Bass', 33),
+    _AddTrackItem('신스 베이스', '808', 39),
+    // 추후 추가 검토:
+    // _AddTrackItem('어쿠스틱 베이스', 'Upright', 32),
+  ],
+  TrackRole.drum: [
+    // 드럼은 program 이 의미 없음(자동 매핑). 아이콘만 드럼킷.
+    _AddTrackItem('드럼 키트', 'Standard GM', kDrumKitProgram, saveProgram: 0),
+  ],
+  TrackRole.vocal: [
+    _AddTrackItem('원본 보컬', '원본 그대로', kVocalProgram, saveProgram: 0),
+  ],
+};
+
+const Map<TrackRole, String> _categoryLabel = {
+  TrackRole.keys: 'CHORDS',
+  TrackRole.bass: 'BASS',
+  TrackRole.drum: 'DRUM',
+  TrackRole.vocal: 'VOCAL',
+};
+
+void showAddTrackSheet(BuildContext context, ProjectStore store) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (sheetCtx) {
+      final mq = MediaQuery.of(sheetCtx);
+      return Container(
+        decoration: _sheetDeco(),
+        padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
+        constraints: BoxConstraints(maxHeight: mq.size.height * 0.78),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _grabber(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('트랙 추가', style: T.h2.copyWith(fontSize: 17)),
+                GestureDetector(
+                  onTap: () => Navigator.pop(sheetCtx),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                    child: Text('닫기',
+                        style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final role in TrackRole.values) ...[
+                      _addTrackCategory(sheetCtx, store, role),
+                      const SizedBox(height: 14),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+Widget _addTrackCategory(BuildContext context, ProjectStore store, TrackRole role) {
+  final items = _addTrackCatalog[role] ?? const <_AddTrackItem>[];
+  if (items.isEmpty) return const SizedBox.shrink();
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 2, bottom: 8),
+        child: Text(
+          _categoryLabel[role] ?? role.label.toUpperCase(),
+          style: T.label.copyWith(fontSize: 10, letterSpacing: 0.8, color: AppColors.textSecondary),
+        ),
+      ),
+      // 2 컬럼 그리드 — LayoutBuilder 로 sheet 너비 기준 카드폭 계산.
+      LayoutBuilder(builder: (ctx, c) {
+        const gap = 8.0;
+        final cardW = (c.maxWidth - gap) / 2;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final it in items)
+              SizedBox(
+                width: cardW,
+                child: _addTrackCard(context, store, role, it),
+              ),
+          ],
+        );
+      }),
+    ],
+  );
+}
+
+Widget _addTrackCard(BuildContext context, ProjectStore store, TrackRole role, _AddTrackItem it) {
+  return GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: () {
+      final saveProg = it.saveProgram ?? it.program;
+      final added = store.addTrack(role, program: saveProg);
+      store.setActiveTrack(added.id);
+      Navigator.pop(context);
+    },
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          instrumentIcon(it.program, size: 20, color: AppColors.textPrimary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(it.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.body.copyWith(fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(it.sub,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.sub.copyWith(fontSize: 10, color: AppColors.textTertiary)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 // ─── 악기 선택 ─────────────────────────────────────────────────────────
 void showInstrumentPicker(BuildContext context, ProjectStore store) {
@@ -62,7 +589,11 @@ void showInstrumentPicker(BuildContext context, ProjectStore store) {
                         border: Border.all(color: sel ? AppColors.lime : AppColors.border, width: sel ? 1.5 : 1),
                       ),
                       child: Row(children: [
-                        Icon(t.role.icon, size: 18, color: sel ? AppColors.lime : AppColors.textSecondary),
+                        instrumentIcon(
+                          inst.program,
+                          size: 18,
+                          color: sel ? AppColors.lime : AppColors.textSecondary,
+                        ),
                         const SizedBox(width: 10),
                         Text(inst.label, style: T.body.copyWith(fontWeight: FontWeight.w600)),
                         const Spacer(),
@@ -231,17 +762,445 @@ void showKeyPicker(BuildContext context, ProjectStore store) {
 }
 
 // ─── 노트 후보 ─────────────────────────────────────────────────────────
+// 4-D: iOS Cupertino-style wheel picker — 룰렛 머신처럼 휠을 굴려 음을 선택.
+// 전체 피아노 음역대(MIDI 21~108)를 다루고, 추천 후보엔 별/원음엔 알약 배지.
+// 가운데 항목 = 선택값, lime divider로 시각화. 멈춘 위치를 디바운스로 store 반영.
 void showNoteCandidate(BuildContext context, ProjectStore store, int index) {
   final t = store.active;
   if (index < 0 || index >= t.notes.length) return;
   final n = t.notes[index];
   if (n.kind != 'pitched') return;
-  final opts = {n.pitchOriginal, ...n.candidates}.toList()..sort();
+
+  // 전체 피아노 음역대 — 높은 음이 위 (피아노 관습, 휠은 위로 갈수록 high pitch).
+  const midiLo = 21;
+  const midiHi = 108;
+  final opts = [for (int p = midiHi; p >= midiLo; p--) p];
+  final candidateSet = n.candidates.toSet();
+  final program = t.program;
+
+  // 시트 열릴 때 진행 중 미리듣기가 있으면 정리.
+  SynthEngine().stopAll();
+  // SoundFont 자산 lazy load 워밍업 — 첫 탭 응답 지연 제거.
+  unawaited(SynthEngine().ensureLoaded());
+
+  final initialIndex = opts.indexOf(n.pitch).clamp(0, opts.length - 1);
 
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
-    builder: (_) => Container(
+    isScrollControlled: true,
+    builder: (_) {
+      return _NoteWheelSheet(
+        opts: opts,
+        candidateSet: candidateSet,
+        originalPitch: n.pitchOriginal,
+        initialIndex: initialIndex,
+        program: program,
+        noteIndex: index,
+        store: store,
+      );
+    },
+  ).whenComplete(() {
+    // 시트 닫히면 진행 중 미리듣기 정지.
+    SynthEngine().stopAll();
+  });
+}
+
+// 휠 피커 시트 본체 — StatefulWidget으로 분리해서 controller / debounce 깔끔 관리.
+class _NoteWheelSheet extends StatefulWidget {
+  final List<int> opts;
+  final Set<int> candidateSet;
+  final int originalPitch;
+  final int initialIndex;
+  final int program;
+  final int noteIndex;
+  final ProjectStore store;
+
+  const _NoteWheelSheet({
+    required this.opts,
+    required this.candidateSet,
+    required this.originalPitch,
+    required this.initialIndex,
+    required this.program,
+    required this.noteIndex,
+    required this.store,
+  });
+
+  @override
+  State<_NoteWheelSheet> createState() => _NoteWheelSheetState();
+}
+
+class _NoteWheelSheetState extends State<_NoteWheelSheet> {
+  late FixedExtentScrollController _wheelCtrl;
+  late int _currentIdx;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIdx = widget.initialIndex;
+    _wheelCtrl = FixedExtentScrollController(initialItem: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _wheelCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _preview(int pitch) async {
+    final mySeq = ++_previewSeq;
+    try {
+      await SynthEngine().stopAll();
+      if (mySeq != _previewSeq || !mounted) return;
+      await SynthEngine().playNote(
+        channel: 0,
+        pitch: pitch,
+        velocity: 100,
+        program: widget.program,
+        release: const Duration(milliseconds: 500),
+      );
+    } catch (_) {
+      // 미리듣기는 부가 기능 — 실패해도 UI 영향 없음.
+    }
+  }
+
+  // 휠 위치는 적용 버튼을 눌렀을 때만 store 에 반영. 자동 반영은 사용자 의도와
+  // 다른 변경을 일으킬 수 있어 명시적 확정을 요구.
+  void _onSelectedItemChanged(int i) {
+    setState(() => _currentIdx = i);
+  }
+
+  Widget _itemFor(int i) {
+    final p = widget.opts[i];
+    final isCenter = i == _currentIdx;
+    final isOriginal = p == widget.originalPitch;
+    final isCandidate = widget.candidateSet.contains(p);
+    // 가운데에서 떨어진 정도에 따라 폰트/투명도 살짝 변화.
+    final dist = (i - _currentIdx).abs();
+    final fontSize = isCenter ? 26.0 : (dist == 1 ? 19.0 : 16.0);
+    final color = isCenter
+        ? AppColors.textPrimary
+        : (dist == 1 ? AppColors.textSecondary : AppColors.textTertiary);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (isCandidate) ...[
+          Icon(Symbols.star,
+              color: isCenter ? AppColors.lime : AppColors.lime.withValues(alpha: 0.55),
+              size: isCenter ? 18 : 14),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          noteName(p),
+          style: T.body.copyWith(
+            fontSize: fontSize,
+            fontWeight: isCenter ? FontWeight.w700 : FontWeight.w500,
+            color: color,
+          ),
+        ),
+        if (isOriginal) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text('원음',
+                style: T.label.copyWith(fontSize: 10, color: AppColors.textSecondary)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    const wheelHeight = 240.0;
+    const itemExtent = 44.0;
+    final centerPitch = widget.opts[_currentIdx];
+
+    return Container(
+      decoration: _sheetDeco(),
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
+      constraints: BoxConstraints(maxHeight: mq.size.height * 0.75),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _grabber(),
+          // 헤더 — 취소 / 타이틀 / 적용.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  child: Text('취소', style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
+                ),
+              ),
+              Column(children: [
+                Text('노트 보정 · #${widget.noteIndex + 1}',
+                    style: T.h2.copyWith(fontSize: 16)),
+              ]),
+              GestureDetector(
+                onTap: () {
+                  widget.store.applyCandidate(widget.noteIndex, centerPitch);
+                  Navigator.pop(context);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  child: Text('적용',
+                      style: T.body.copyWith(color: AppColors.lime, fontSize: 14, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // 범례.
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Symbols.star, color: AppColors.lime, size: 13),
+            const SizedBox(width: 4),
+            Text('추천', style: T.sub.copyWith(fontSize: 11)),
+            const SizedBox(width: 14),
+            Text('원음 = 부른 그대로', style: T.sub.copyWith(fontSize: 11)),
+          ]),
+          const SizedBox(height: 8),
+          // 휠 영역 — ListWheelScrollView + 가운데 lime divider + 위/아래 fade.
+          SizedBox(
+            height: wheelHeight,
+            child: Stack(
+              children: [
+                // 위/아래 fade 마스크.
+                Positioned.fill(
+                  child: ShaderMask(
+                    shaderCallback: (rect) => const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black,
+                        Colors.black,
+                        Colors.transparent,
+                      ],
+                      stops: [0.0, 0.18, 0.82, 1.0],
+                    ).createShader(rect),
+                    blendMode: BlendMode.dstIn,
+                    child: ListWheelScrollView.useDelegate(
+                      controller: _wheelCtrl,
+                      itemExtent: itemExtent,
+                      diameterRatio: 1.6,
+                      perspective: 0.0025,
+                      physics: const FixedExtentScrollPhysics(),
+                      overAndUnderCenterOpacity: 0.85,
+                      onSelectedItemChanged: _onSelectedItemChanged,
+                      childDelegate: ListWheelChildBuilderDelegate(
+                        childCount: widget.opts.length,
+                        builder: (_, i) => _itemFor(i),
+                      ),
+                    ),
+                  ),
+                ),
+                // 가운데 선택 인디케이터 — lime 상하 divider.
+                IgnorePointer(
+                  child: Center(
+                    child: Container(
+                      height: itemExtent,
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          top: BorderSide(color: AppColors.lime, width: 1.2),
+                          bottom: BorderSide(color: AppColors.lime, width: 1.2),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // 가운데 음 미리듣기 (스피커) — 휠 회전 중엔 자동 재생 X, 탭으로만.
+          Center(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _preview(centerPitch),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.activeLane,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppColors.lime, width: 1.2),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Symbols.volume_up, color: AppColors.lime, size: 22),
+                  const SizedBox(width: 8),
+                  Text(noteName(centerPitch),
+                      style: T.body.copyWith(fontWeight: FontWeight.w700, fontSize: 15)),
+                  const SizedBox(width: 6),
+                  Text('미리듣기',
+                      style: T.sub.copyWith(fontSize: 11, color: AppColors.textSecondary)),
+                ]),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── 단일 노트 → 코드 선택 시트 ────────────────────────────────────────
+// Chord 툴바 버튼이 호출. 선택한 단음을 ChordType 으로 확장(per-note chord).
+// 칩 탭 = 미리듣기 (SynthEngine 으로 코드 동시 발음), 적용 버튼 = 확정.
+// "원음" 칩(null) 은 단음 미리듣기 — 적용 시 unchord(코드면 단음 복원).
+// 단일 진입점. selectedChunk 가 있으면 청크 모드, 아니면 selectedNote 기준.
+void showChordPicker(BuildContext context, ProjectStore store) {
+  final chunkId = store.selectedChunk;
+  final noteIdx = store.selectedNote;
+  if (chunkId == null && noteIdx == null) return;
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _ChordPickerSheet(store: store, noteIndex: noteIdx, chunkId: chunkId),
+  ).whenComplete(() => SynthEngine().stopAll());
+}
+
+class _ChordPickerSheet extends StatefulWidget {
+  final ProjectStore store;
+  // 둘 중 하나만 non-null. chunkId 우선.
+  final int? noteIndex;
+  final int? chunkId;
+  const _ChordPickerSheet({required this.store, required this.noteIndex, required this.chunkId});
+  @override
+  State<_ChordPickerSheet> createState() => _ChordPickerSheetState();
+}
+
+class _ChordPickerSheetState extends State<_ChordPickerSheet> {
+  // null = 원음(단음). 그 외 ChordType = 코드.
+  ChordType? _selected;
+  int _previewSeq = 0;
+
+  bool get _isChunkMode => widget.chunkId != null;
+
+  // 미리듣기용 대표 루트 pitch — 청크 모드면 청크 안 첫 멜로딕 단음, 노트 모드면 선택 노트.
+  Note? _previewRootNote() {
+    final t = widget.store.active;
+    if (_isChunkMode) {
+      for (final n in t.notes) {
+        if (n.chunkId == widget.chunkId && n.kind == 'pitched') return n;
+      }
+      return null;
+    }
+    final i = widget.noteIndex!;
+    if (i < 0 || i >= t.notes.length) return null;
+    return t.notes[i];
+  }
+
+  Future<void> _preview(ChordType? type) async {
+    final mySeq = ++_previewSeq;
+    final t = widget.store.active;
+    final n = _previewRootNote();
+    if (n == null) return;
+    final dk = t.analysis?.detectedKey;
+    final pitches = type == null
+        ? [n.pitch]
+        : chordPitches(n.pitch, type, tonic: dk?.tonic, scale: dk?.scale);
+    try {
+      await SynthEngine().stopAll();
+      if (mySeq != _previewSeq || !mounted) return;
+      for (final p in pitches) {
+        // 동시 발음 — 각 pitch 가 독립 release 타이머.
+        SynthEngine().playNote(
+          channel: 0,
+          pitch: p,
+          velocity: 100,
+          program: t.program,
+          release: const Duration(milliseconds: 700),
+        );
+      }
+    } catch (_) {
+      // 미리듣기 실패해도 UI 영향 없음.
+    }
+  }
+
+  void _onSelect(ChordType? type) {
+    setState(() => _selected = type);
+    _preview(type);
+  }
+
+  void _onApply() {
+    final store = widget.store;
+    if (_isChunkMode) {
+      final id = widget.chunkId!;
+      if (_selected == null) {
+        if (store.canUnchordChunkSelected) store.unchordChunk(id);
+      } else {
+        // 이미 일부 코드 묶음이 있어도 OK — applyChordToChunk 는 chord 멤버 스킵.
+        // 동일 코드로 통일하려면 먼저 unchord 후 적용.
+        if (store.canUnchordChunkSelected) store.unchordChunk(id);
+        store.applyChordToChunk(id, _selected!);
+      }
+    } else {
+      final i = widget.noteIndex!;
+      final wasChord = store.canUnchordSelected;
+      if (_selected == null) {
+        if (wasChord) store.unchordSelected();
+      } else {
+        if (wasChord) store.unchordSelected();
+        final newIdx = store.selectedNote ?? i;
+        store.applyChord(newIdx, _selected!);
+      }
+    }
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.store.active;
+    final dk = t.analysis?.detectedKey;
+    final hasKey = dk?.tonic != null && dk?.scale != null;
+    final isCurrentlyChord = _isChunkMode
+        ? widget.store.canUnchordChunkSelected
+        : widget.store.canUnchordSelected;
+    final rootNote = _previewRootNote();
+
+    Widget chip(ChordType? type, String label, String sub) {
+      final active = _selected == type;
+      return GestureDetector(
+        onTap: () => _onSelect(type),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: active ? AppColors.activeLane : AppColors.bg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: active ? AppColors.lime : AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: T.body.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: active ? AppColors.lime : AppColors.textPrimary,
+                  )),
+              const SizedBox(height: 2),
+              Text(sub, style: T.sub.copyWith(fontSize: 10, color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final types = hasKey
+        ? ChordType.values
+        : ChordType.values.where((t) => t != ChordType.diatonic).toList();
+
+    return Container(
       decoration: _sheetDeco(),
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       child: Column(
@@ -249,50 +1208,52 @@ void showNoteCandidate(BuildContext context, ProjectStore store, int index) {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _grabber(),
-          Text('노트 보정', style: T.h2.copyWith(fontSize: 18)),
-          Text('${t.role.label.toUpperCase()} · ${n.start.toStringAsFixed(1)}s', style: T.sub),
-          const SizedBox(height: 16),
-          ...opts.map((p) {
-            final isCurrent = p == n.pitch;
-            final isOriginal = p == n.pitchOriginal;
-            final tag = isOriginal ? '원본 유지' : '후보';
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: GestureDetector(
-                onTap: () {
-                  store.applyCandidate(index, p);
-                  Navigator.pop(context);
-                },
-                child: Container(
-                  height: 58,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: isCurrent ? AppColors.activeLane : AppColors.bg,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: isCurrent ? AppColors.lime : AppColors.border, width: isCurrent ? 1.5 : 1),
-                  ),
-                  child: Row(children: [
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${noteName(p)}  ·  $tag',
-                            style: T.body.copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
-                        Text(isOriginal ? '부른 그대로' : '키 안 후보',
-                            style: T.sub.copyWith(fontSize: 11, color: isCurrent ? AppColors.lime : AppColors.textSecondary)),
-                      ],
-                    ),
-                    const Spacer(),
-                    if (isCurrent) const Icon(Symbols.check_circle, color: AppColors.lime, size: 24),
-                  ]),
+          // 헤더 — 취소 / 타이틀 / 적용.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  child: Text('취소', style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
                 ),
               ),
-            );
-          }),
+              Text('코드 변환', style: T.h2.copyWith(fontSize: 16)),
+              GestureDetector(
+                onTap: _onApply,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  child: Text('적용',
+                      style: T.body.copyWith(color: AppColors.lime, fontSize: 14, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            () {
+              final rootLabel = rootNote != null ? noteName(rootNote.pitch) : '—';
+              final scope = _isChunkMode ? '청크' : '루트';
+              final keyPart = hasKey ? ' · 키: ${dk!.label}' : ' (키 미감지)';
+              final chordPart = isCurrentlyChord ? ' · 현재 코드' : '';
+              return '$scope: $rootLabel$keyPart$chordPart';
+            }(),
+            style: T.sub,
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              chip(null, '원음', '단음 (코드 해제)'),
+              for (final type in types) chip(type, type.label, type.intervalsLabel),
+            ],
+          ),
         ],
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ─── 내보내기 / 공유 ───────────────────────────────────────────────────
@@ -363,7 +1324,8 @@ Widget _exportRow(IconData ic, String title, String sub, Color iconColor) {
 
 Future<void> _exportFile(BuildContext context, ProjectStore store, {required bool midi}) async {
   try {
-    final bytes = midi ? await store.exportMidiActive() : await store.renderActive();
+    // 재생 ▶ 와 동일한 결과: enabled 트랙 전부를 믹스/멀티트랙으로 export.
+    final bytes = midi ? await store.exportMidiMix() : await store.exportMixWav();
     final dir = await getTemporaryDirectory();
     final f = File('${dir.path}/humming_${DateTime.now().millisecondsSinceEpoch}.${midi ? 'mid' : 'wav'}');
     await f.writeAsBytes(bytes, flush: true);

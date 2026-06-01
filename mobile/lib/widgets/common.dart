@@ -42,7 +42,8 @@ class LimeButton extends StatelessWidget {
   }
 }
 
-/// 미연결(40% dim) 래퍼 — 탭 시 준비중 안내.
+/// 미연결 래퍼 — 탭 시 준비중 안내. 라벨 가독성 위해 opacity 0.55 사용
+/// (0.4 는 텍스트가 surface(#16161E) 위에서 2:1 이하로 떨어져 안 읽힘).
 class Disabled extends StatelessWidget {
   const Disabled({super.key, required this.child, required this.label});
   final Widget child;
@@ -50,7 +51,7 @@ class Disabled extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Opacity(
-      opacity: 0.4,
+      opacity: 0.55,
       child: GestureDetector(
         onTap: () => comingSoon(context, label),
         child: AbsorbPointer(child: child),

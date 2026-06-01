@@ -43,6 +43,8 @@ dependencies:
   share_plus: ^12.0.2
   provider: ^6.1.5+1
   audioplayers: ^6.6.0
+  flutter_midi_pro: ^3.1.6
+  flutter_svg: ^2.0.10+1
 
 dev_dependencies:
   flutter_test:
@@ -80,6 +82,8 @@ flutter:
 
   assets:
     - assets/icon/
+    - assets/sounds/TimGM6mb.sf2
+    - assets/icons/instruments/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

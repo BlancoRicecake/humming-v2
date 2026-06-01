@@ -84,7 +84,40 @@ class EngineApi {
     );
   }
 
+  /// 단음 미리듣기용 — pitch 1개를 짧은 길이(기본 0.5s)로 렌더해 WAV bytes 반환.
+  /// @deprecated 6-3 이후 온디바이스 합성(`SynthEngine`)으로 대체됨. 호환을 위해 잠시 유지.
+  @Deprecated('Use SynthEngine().playNote — backend round-trip removed in task 6-3')
+  Future<Uint8List> previewNote(int pitch, {int program = 0, double duration = 0.5, int velocity = 100}) async {
+    final note = Note(
+      start: 0,
+      end: duration,
+      duration: duration,
+      pitch: pitch,
+      pitchRaw: pitch.toDouble(),
+      pitchHz: 0, // 백엔드는 pitch(MIDI) 로 합성. Hz 는 미리듣기 페이로드에 불필요.
+      velocity: velocity,
+      confidence: 1.0,
+      voicedRatio: 1.0,
+      kind: 'pitched',
+      pitchOriginal: pitch,
+      assisted: false,
+      candidates: const [],
+      source: 'user',
+      inKey: true,
+      correctionCents: 0,
+    );
+    return renderAudio([note], program: program);
+  }
+
   /// notes → SoundFont 렌더 WAV bytes (program = GM 악기 번호).
+  ///
+  /// 역할: **Task 6-6 (2026-05-31) 기준 일상 재생 경로에서 호출되지 않음**.
+  /// 단음 미리듣기·트랙 재생은 모두 온디바이스 `SynthEngine` / `SynthPlayer` 가
+  /// 처리하며 (커밋 `6de9bec`), 모바일 코드에서 살아있는 호출처는 사실상
+  /// 없음 (`previewNote` 가 호환 보조용으로만 호출). 호환 + 회귀 검증용으로
+  /// 보존하나 신규 호출처 금지.
+  @Deprecated('On-device SynthEngine replaces /render_audio playback (task 6-6). '
+      'Kept for backward-compat only — do not add new call sites.')
   Future<Uint8List> renderAudio(List<Note> notes, {int program = 0}) async {
     final r = await _dio.post<List<int>>(
       '/render_audio',
@@ -95,6 +128,12 @@ class EngineApi {
   }
 
   /// 여러 트랙을 하나로 믹스 렌더 → WAV bytes.
+  ///
+  /// 역할: **Task 6-6 (2026-05-31) 기준 WAV export(공유) 전용**.
+  /// 모바일 재생(▶, 인라인 녹음 모니터링)은 `SynthPlayer` 로 온디바이스 합성
+  /// (커밋 `6de9bec`). 현재 살아있는 호출처는 `ProjectStore.exportMixWav()`
+  /// → `sheets.dart` 의 `_exportFile(midi: false)` 뿐.
+  /// 향후 export 도 온디바이스 PCM bounce 로 옮기면 deprecate 가능.
   Future<Uint8List> renderMix(List<({List<Note> notes, int program})> tracks) async {
     final r = await _dio.post<List<int>>(
       '/render_mix',
@@ -108,11 +147,33 @@ class EngineApi {
     return Uint8List.fromList(r.data!);
   }
 
-  /// notes → .mid bytes.
+  /// notes → .mid bytes (단일 트랙).
   Future<Uint8List> exportMidi(List<Note> notes, {int program = 0, double tempoBpm = 120}) async {
     final r = await _dio.post<List<int>>(
       '/export_midi',
       data: {'notes': notes.map((n) => n.toJson()).toList(), 'program': program, 'tempo_bpm': tempoBpm},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(r.data!);
+  }
+
+  /// 여러 트랙을 한 .mid 로 export — 각 트랙이 별도 MidiTrack + channel.
+  Future<Uint8List> exportMidiMix(
+    List<({List<Note> notes, int program, int channel})> tracks, {
+    double tempoBpm = 120,
+  }) async {
+    final r = await _dio.post<List<int>>(
+      '/export_midi',
+      data: {
+        'tempo_bpm': tempoBpm,
+        'tracks': tracks
+            .map((t) => {
+                  'notes': t.notes.map((n) => n.toJson()).toList(),
+                  'program': t.program,
+                  'channel': t.channel,
+                })
+            .toList(),
+      },
       options: Options(responseType: ResponseType.bytes),
     );
     return Uint8List.fromList(r.data!);

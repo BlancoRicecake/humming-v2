@@ -30,7 +30,7 @@ from app.schemas import AnalyzeOptions
 from app.assistant import run_key_and_assistant
 from app.key_detect import score_keys, KEY_CONF_HIGH, KEY_CONF_LOW
 
-SAMPLES_DIR = Path(os.environ.get("HUMMING_SAMPLES_DIR", r"C:\Users\jlion\Downloads\soundsample"))
+SAMPLES_DIR = Path(os.environ.get("HUMMING_SAMPLES_DIR", str(Path(__file__).resolve().parent / "samples")))
 OUT = Path(__file__).resolve().parent.parent / "docs" / "experiments" / "keyassist_diag.txt"
 PC = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
