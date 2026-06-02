@@ -1,0 +1,1 @@
+- Initial release: humming analysis, multi-track editor, metronome, beat quantize

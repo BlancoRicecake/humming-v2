@@ -45,6 +45,13 @@ dependencies:
   audioplayers: ^6.6.0
   flutter_midi_pro: ^3.1.6
   flutter_svg: ^2.0.10+1
+  # ── 외부 SDK (신규: 2026-06-02) ──
+  # 인증/DB: Supabase. IAP: in_app_purchase.
+  # sentry_flutter: Xcode 26 호환성 이슈로 다음 배치에서 추가 예정.
+  # posthog_flutter: MVP1 스킵 (#44 task pending).
+  # 모두 graceful-degrade — env 키 미설정 시 초기화 스킵, mock 분기 유지.
+  supabase_flutter: ^2.5.0
+  in_app_purchase: ^3.2.0
 
 dev_dependencies:
   flutter_test:

@@ -1,12 +1,15 @@
 // 녹음 화면 — 들어오면 '준비' 상태, 버튼 한 번 더 눌러야 녹음 시작, 다시 누르면 정지.
-// 오리지널은 무조건 WAV. 정지 시 wavPath 를 pop 으로 반환.
+// 원본 컨테이너: iOS=CAF(.caf), Android=Ogg(.ogg) — Opus payload (record 6.2.1 분기).
+// 정지 시 파일 경로를 pop 으로 반환(필드명 wavPath 는 레거시; 실제 payload 는 Opus).
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../audio/container.dart';
 import '../audio/recorder.dart';
 import '../models/models.dart';
+import '../services/analytics_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/meter_painter.dart';
 
@@ -92,8 +95,9 @@ class _RecordingScreenState extends State<RecordingScreen> with WidgetsBindingOb
   Future<void> _start() async {
     if (!_ready || _recording) return;
     final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.wav';
+    final path = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}${audioContainerExt()}';
     await _rec.start(path);
+    AnalyticsService.instance.recordingStarted(role: widget.role.name);
     setState(() => _recording = true);
     _timer = Timer.periodic(const Duration(milliseconds: 100), (_) => setState(() => _ms += 100));
     _ampSub = _rec.amplitude().listen((a) {

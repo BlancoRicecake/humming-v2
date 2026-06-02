@@ -1,4 +1,4 @@
-package com.humming.humming
+package com.humtrack.app
 
 import android.media.AudioDeviceInfo
 import android.media.AudioManager

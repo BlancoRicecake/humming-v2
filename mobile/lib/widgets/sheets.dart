@@ -12,6 +12,7 @@ import '../audio/synth.dart';
 import '../audio/synth_player.dart';
 import '../models/models.dart';
 import '../music/chord_expand.dart';
+import '../services/analytics_service.dart';
 import '../music/instrument_icons.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
@@ -1339,6 +1340,7 @@ Future<void> _exportFile(BuildContext context, ProjectStore store, {required boo
     final f = File('${dir.path}/humming_${DateTime.now().millisecondsSinceEpoch}.${midi ? 'mid' : 'wav'}');
     await f.writeAsBytes(bytes, flush: true);
     if (context.mounted) Navigator.pop(context);
+    AnalyticsService.instance.songExported(format: midi ? 'midi' : 'wav');
     await SharePlus.instance.share(ShareParams(files: [XFile(f.path)], text: store.title));
   } catch (e) {
     if (context.mounted) comingSoon(context, '내보내기 실패: $e');

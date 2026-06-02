@@ -7,8 +7,12 @@ import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 
 class EngineConfig {
-  // Android 에뮬레이터의 호스트 루프백 기본값. 실기기는 LAN IP 로 override.
-  static const baseUrl = String.fromEnvironment('ENGINE_URL', defaultValue: 'http://10.0.2.2:8000');
+  // 운영 도메인 기본값 (api.hum-track.com). 로컬 dev 빌드는 LAN IP 로 override:
+  //   flutter run --dart-define=ENGINE_URL=http://192.168.0.x:8000
+  static const baseUrl = String.fromEnvironment(
+    'ENGINE_URL',
+    defaultValue: 'https://api.hum-track.com',
+  );
 }
 
 class AssistResult {
@@ -35,6 +39,9 @@ class EngineApi {
   }
   final Dio _dio;
 
+  /// 외부 서비스(IapService.configureVerify 등) 가 같은 백엔드를 공유할 때 사용.
+  Dio get dio => _dio;
+
   Future<bool> health() async {
     try {
       final r = await _dio.get('/health');
@@ -44,10 +51,11 @@ class EngineApi {
     }
   }
 
-  /// 녹음 WAV 파일 경로 → 분석 결과(notes, 추천 key, 보정 개수 …).
+  /// 녹음 파일 경로 → 분석 결과(notes, 추천 key, 보정 개수 …).
+  /// 컨테이너는 Opus(.caf/.ogg) 또는 AAC(.m4a). 서버 ffmpeg pipe 가 magic bytes 로 판별 — filename 무시.
   Future<AnalyzeResponse> analyze(String wavPath, AnalyzeOptions options) async {
     final form = FormData.fromMap({
-      'audio': await MultipartFile.fromFile(wavPath, filename: 'input.wav'),
+      'audio': await MultipartFile.fromFile(wavPath, filename: 'input.opus'),
       'options': jsonEncode(options.toJson()),
     });
     final r = await _dio.post<Map<String, dynamic>>('/analyze', data: form);
@@ -55,9 +63,10 @@ class EngineApi {
   }
 
   /// 보컬 — 악기 변환 없이 목소리 그대로. 가벼운 정리된 WAV bytes + 표시용 파형 peaks + 길이.
+  /// 입력 컨테이너는 Opus(.caf/.ogg)/AAC(.m4a). 서버는 magic bytes 로 판별.
   Future<({Uint8List wav, List<double> peaks, double duration})> processVocal(String wavPath) async {
     final form = FormData.fromMap({
-      'audio': await MultipartFile.fromFile(wavPath, filename: 'vocal.wav'),
+      'audio': await MultipartFile.fromFile(wavPath, filename: 'vocal.opus'),
       'denoise': '1',
     });
     final r = await _dio.post<Map<String, dynamic>>('/process_vocal', data: form);

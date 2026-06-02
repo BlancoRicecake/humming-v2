@@ -8,11 +8,14 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../audio/audio_route.dart';
+import '../audio/container.dart';
 import '../audio/metronome.dart';
 import '../audio/player.dart';
 import '../audio/recorder.dart';
 import '../audio/synth_player.dart';
 import '../models/models.dart';
+import '../services/analytics_service.dart';
+import '../state/local_storage.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/active_track_cards.dart';
@@ -31,7 +34,7 @@ class EditScreen extends StatefulWidget {
   State<EditScreen> createState() => _EditScreenState();
 }
 
-class _EditScreenState extends State<EditScreen> {
+class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   final _player = AudioPlayerService();      // 보컬(원본 WAV) 레이어 전용
   final _synth = SynthPlayer();              // 악기 트랙(온디바이스 SF2 합성)
   _PlayState _ps = _PlayState.stopped;
@@ -58,6 +61,36 @@ class _EditScreenState extends State<EditScreen> {
 
   // 메트로놈
   final _metro = Metronome();
+
+  // 자동 저장 — 30초 주기 + dispose 시 1회 + AppLifecycle inactive/paused/hidden.
+  Timer? _autoSaveTimer;
+  // 인디케이터 텍스트 갱신용 — 1초 tick(rebuild 는 _SaveIndicator 만).
+  final ValueNotifier<int> _saveTick = ValueNotifier(0);
+  Timer? _saveTickTimer;
+  ProjectStore? _storeRef;
+  // _saveNow 동시 호출 가드 — lifecycle + periodic 이 겹쳐도 한 번만 실행.
+  bool _savingInflight = false;
+  Future<void> _saveNow() async {
+    final s = _storeRef;
+    if (s == null) return;
+    if (_savingInflight) return;
+    // dirty 가 없으면 디스크 쓰기 스킵(periodic tick 보호).
+    if (!s.hasUnsavedChanges && s.lastSavedAt != null) return;
+    _savingInflight = true;
+    // 디스크 쓰기 중 사용자가 추가 변경하면 _hasUnsavedChanges 가 다시 true 가
+    // 되어야 함. markSavingStart 호출 직전에 한 번 false 로 클리어해 두면,
+    // 쓰기 동안의 변경은 notifyListeners 에 의해 자연스럽게 true 가 된다.
+    s.markSavingStart();
+    bool ok = false;
+    try {
+      await LocalStorage.instance.saveProject(s);
+      ok = true;
+    } catch (_) {/* 저장 실패는 무시 — 다음 주기에 재시도 */}
+    finally {
+      s.markSavingEnd(ok: ok);
+      _savingInflight = false;
+    }
+  }
 
   void _seek(double sec) {
     setState(() => _playheadSec = sec);
@@ -101,10 +134,41 @@ class _EditScreenState extends State<EditScreen> {
         _playheadSec = null;
       });
     });
+    // 30초 자동 저장.
+    _autoSaveTimer = Timer.periodic(const Duration(seconds: 30), (_) => _saveNow());
+    // 인디케이터 시간 텍스트(초/분 단위)를 갱신하기 위해 1초마다 tick — 전체
+    // 화면이 아니라 _SaveIndicator 안의 ValueListenableBuilder 만 rebuild.
+    _saveTickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _saveTick.value = _saveTick.value + 1;
+    });
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _storeRef = context.read<ProjectStore>();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 백그라운드 진입/숨김 시 즉시 디스크 flush — OS-kill 직전 데이터 보호.
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      // fire-and-forget — lifecycle 콜백은 await 불가(시스템이 곧 sleep).
+      // ignore: discarded_futures
+      _saveNow();
+    }
   }
 
   @override
   void dispose() {
+    _autoSaveTimer?.cancel();
+    _saveTickTimer?.cancel();
+    _saveTick.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    // 편집 종료 시 1회 저장 — Songs 화면 리스트 즉시 갱신을 위함.
+    // 비동기지만 fire-and-forget OK (Documents 디렉터리에 즉시 flush).
+    // ignore: discarded_futures
+    _saveNow();
     _posSub?.cancel();
     _compSub?.cancel();
     _synthPosSub?.cancel();
@@ -270,8 +334,9 @@ class _EditScreenState extends State<EditScreen> {
     _recBackingDur = _projectDuration(store);
 
     final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.wav';
+    final path = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}${audioContainerExt()}';
     await _rec.start(path);
+    AnalyticsService.instance.recordingStarted(role: role.name);
     _recMs = 0;
     _recWatch
       ..reset()
@@ -389,7 +454,12 @@ class _EditScreenState extends State<EditScreen> {
     final wav = store.active.wavPath;
     if (wav == null) return;
     try {
-      await _player.playFile(wav); // 원본(내가 부른 WAV)
+      // 레거시 빌드에서 `.wav` 로 저장된 Opus payload, 혹은 인코더 폴백으로
+      // 확장자가 달라진 경우(.caf↔.ogg↔.m4a) graceful 매칭.
+      final dot = wav.lastIndexOf('.');
+      final base = dot > 0 ? wav.substring(0, dot) : wav;
+      final resolved = (await findExistingByExt(base))?.path ?? wav;
+      await _player.playFile(resolved); // 원본(녹음 그대로 — Opus/AAC)
     } catch (e) {
       if (mounted) comingSoon(context, '원본 재생 실패');
     }
@@ -490,26 +560,36 @@ class _EditScreenState extends State<EditScreen> {
 
   Widget _header(ProjectStore store) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            GestureDetector(
-              onTap: () => Navigator.of(context).maybePop(),
-              child: const Icon(Symbols.chevron_left, color: AppColors.textPrimary, size: 26),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.of(context).maybePop(),
+                  child: const Icon(Symbols.chevron_left, color: AppColors.textPrimary, size: 26),
+                ),
+                Text(store.title, style: T.title),
+                Row(children: [
+                  GestureDetector(
+                    onTap: store.active.notes.isEmpty ? null : () => showExportShare(context, store),
+                    child: Icon(Symbols.ios_share, size: 22,
+                        color: store.active.notes.isEmpty ? AppColors.textTertiary : AppColors.textPrimary),
+                  ),
+                  const SizedBox(width: 16),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).maybePop(),
+                    child: Text('완료', style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w600)),
+                  ),
+                ]),
+              ],
             ),
-            Text(store.title, style: T.title),
-            Row(children: [
-              GestureDetector(
-                onTap: store.active.notes.isEmpty ? null : () => showExportShare(context, store),
-                child: Icon(Symbols.ios_share, size: 22,
-                    color: store.active.notes.isEmpty ? AppColors.textTertiary : AppColors.textPrimary),
-              ),
-              const SizedBox(width: 16),
-              GestureDetector(
-                onTap: () => Navigator.of(context).maybePop(),
-                child: Text('완료', style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w600)),
-              ),
-            ]),
+            // 곡 제목 아래 작은 행 — 저장 상태 인디케이터(subtle).
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: _SaveIndicator(tick: _saveTick),
+            ),
           ],
         ),
       );
@@ -907,6 +987,69 @@ class _EditScreenState extends State<EditScreen> {
         const SizedBox(height: 3),
         Text(label, style: T.label.copyWith(fontSize: 9, color: AppColors.textSecondary)),
       ]),
+    );
+  }
+}
+
+// 저장 상태 인디케이터 — 곡 제목 아래의 작은 행. 시각이 자주 변하지만 전체
+// 화면을 rebuild 하지 않도록, ProjectStore 의 변경은 Selector 로, 시간 텍스트
+// 갱신은 _saveTick(ValueNotifier<int>) 로 격리.
+class _SaveIndicator extends StatelessWidget {
+  final ValueNotifier<int> tick;
+  const _SaveIndicator({required this.tick});
+
+  String _fmtAgo(DateTime saved) {
+    final diff = DateTime.now().difference(saved);
+    if (diff.inSeconds < 5) return '방금 저장됨';
+    if (diff.inSeconds < 60) return '${diff.inSeconds}초 전';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
+    final hh = saved.hour.toString().padLeft(2, '0');
+    final mm = saved.minute.toString().padLeft(2, '0');
+    return '$hh:$mm 저장됨';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // saving / lastSavedAt 만 구독 — 다른 store 변경은 rebuild 안 함.
+    return Selector<ProjectStore, ({bool saving, DateTime? savedAt, bool dirty})>(
+      selector: (_, s) => (saving: s.isSaving, savedAt: s.lastSavedAt, dirty: s.hasUnsavedChanges),
+      builder: (_, v, __) {
+        if (v.saving) {
+          return Row(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.lime),
+            ),
+            const SizedBox(width: 6),
+            Text('저장 중...',
+                style: T.label.copyWith(
+                    fontSize: 10, color: AppColors.lime, fontWeight: FontWeight.w600)),
+          ]);
+        }
+        if (v.savedAt == null) {
+          // 첫 저장 전 — 표시 없음(공간만 유지).
+          return const SizedBox(height: 14);
+        }
+        // ValueListenableBuilder 로 1초 tick 만 받아 텍스트 재계산.
+        return SizedBox(
+          height: 14,
+          child: ValueListenableBuilder<int>(
+            valueListenable: tick,
+            builder: (_, __, ___) => Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Symbols.check_circle,
+                  size: 11,
+                  color: v.dirty
+                      ? AppColors.textTertiary.withValues(alpha: 0.5)
+                      : AppColors.textTertiary),
+              const SizedBox(width: 4),
+              Text(_fmtAgo(v.savedAt!),
+                  style: T.label.copyWith(
+                      fontSize: 10, color: AppColors.textTertiary, fontWeight: FontWeight.w500)),
+            ]),
+          ),
+        );
+      },
     );
   }
 }

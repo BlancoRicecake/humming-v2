@@ -1,0 +1,6 @@
+app_identifier("com.humtrack.app")
+apple_id("heobusy@gmail.com")
+team_id("V7XPTJL83T")
+# itc_team_id is auto-detected via ASC API key once `fastlane` runs.
+# Set ITC_TEAM_ID env var to override if needed.
+itc_team_id(ENV["ITC_TEAM_ID"]) if ENV["ITC_TEAM_ID"]

@@ -2,13 +2,19 @@
 // Project = N개 트랙(카테고리 = TrackRole: Keys/Bass/Drum/Vocal). 한 카테고리당
 // 여러 트랙을 가질 수 있음(예: Chords 안에 Piano + Guitar). 각 트랙은 고유 id 로
 // 식별되며 독립적으로 녹음/분석/편집.
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../api/engine_api.dart';
 import '../models/models.dart';
 import '../music/chords.dart';
 import '../music/chord_expand.dart';
+import '../services/analytics_service.dart';
+import '../services/auth_service.dart';
+import '../services/iap_service.dart';
+import '../services/observability_service.dart';
 
 double _midiToHz(int m) => 440.0 * math.pow(2, (m - 69) / 12.0);
 
@@ -179,13 +185,211 @@ class PendingRecording {
   bool reassisting = false; // /assist 재호출 중 (다이얼로그 mini 로딩용)
 }
 
+/// 결제/구독 상태 — 시안 ⑥/⑦/⑧/⑨/⑩ 분기.
+enum SubscriptionStatus {
+  anonymous,  // 로그인 X — 결제 정보 없음
+  trial,      // 무료 체험 중
+  active,     // 유효한 결제 구독
+  cancelled,  // 해지 예약 — 만료 전까지는 active 와 동일 권한
+  expired,    // 만료 — 클라우드 read-only / export gated
+}
+
+extension SubscriptionStatusX on SubscriptionStatus {
+  bool get hasProAccess =>
+      this == SubscriptionStatus.trial ||
+      this == SubscriptionStatus.active ||
+      this == SubscriptionStatus.cancelled;
+  String get label {
+    switch (this) {
+      case SubscriptionStatus.anonymous: return 'Anonymous';
+      case SubscriptionStatus.trial: return 'Trial';
+      case SubscriptionStatus.active: return 'Active';
+      case SubscriptionStatus.cancelled: return 'Cancelled';
+      case SubscriptionStatus.expired: return 'Expired';
+    }
+  }
+}
+
 class ProjectStore extends ChangeNotifier {
   ProjectStore({EngineApi? api}) : _api = api ?? EngineApi() {
+    projectId = 'p_${DateTime.now().millisecondsSinceEpoch}';
     _seedDefaultTracks();
+    _attachExternalServices();
   }
   final EngineApi _api;
 
+  /// 백엔드 dio 노출 — IapService.configureVerify(store.engineDio) 용.
+  Dio get engineDio => _api.dio;
+
+  // ─── 외부 SDK 리스너 (AuthService / IapService) ──────────────────────
+  StreamSubscription? _authSub;
+  StreamSubscription? _iapSub;
+
+  void _attachExternalServices() {
+    // Supabase 세션 변경 → accountEmail / subscription 미러링.
+    _authSub = AuthService.instance.onSession.listen((s) {
+      if (s.isSignedIn) {
+        accountEmail = s.email;
+        accountProvider = s.provider;
+        if (subscription == SubscriptionStatus.anonymous) {
+          subscription = SubscriptionStatus.trial;
+          subscriptionRenewsAt = DateTime.now().add(const Duration(days: 7));
+        }
+        ObservabilityService.instance.setUser(id: s.userId, email: s.email);
+        if (s.userId != null) AnalyticsService.instance.identify(s.userId!);
+        AnalyticsService.instance.userSignedUp(
+          provider: s.provider ?? 'unknown',
+          email: s.email,
+        );
+      } else {
+        accountEmail = null;
+        accountProvider = null;
+        subscription = SubscriptionStatus.anonymous;
+        subscriptionRenewsAt = null;
+        ObservabilityService.instance.clearUser();
+        AnalyticsService.instance.reset();
+      }
+      notifyListeners();
+    });
+    // IAP 결제 결과 → subscription 갱신.
+    _iapSub = IapService.instance.onPurchaseResult.listen((r) {
+      if (!r.ok) return;
+      subscription = SubscriptionStatus.active;
+      final isYearly = r.productId == kProductYearly;
+      subscriptionRenewsAt = r.renewsAt ??
+          DateTime.now().add(Duration(days: isYearly ? 365 : 30));
+      AnalyticsService.instance.subscriptionStarted(
+        productId: r.productId,
+        plan: isYearly ? 'yearly' : 'monthly',
+      );
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    _iapSub?.cancel();
+    super.dispose();
+  }
+
+  /// 로컬 파일 경로 식별자 — 처음 newProject 시 발급, loadProject 시 교체.
+  String projectId = '';
+
+  // ─── 저장 상태 (EditScreen 인디케이터용) ──────────────────────────────
+  // notifyListeners() 호출 시 _hasUnsavedChanges = true 로 마킹 → 자동 저장이
+  // 완료되면 markSaved() 가 false 로 되돌림. 디스크 쓰기는 EditScreen 의
+  // periodic timer / lifecycle hook 가 트리거 — 여기서는 플래그만 관리.
+  DateTime? _lastSavedAt;
+  bool _isSaving = false;
+  bool _hasUnsavedChanges = false;
+  // notify 재진입 가드 — markSaved 안에서 notifyListeners() 호출 시 다시 dirty
+  // 로 마킹되는 것을 막는다.
+  bool _suppressDirtyMark = false;
+
+  DateTime? get lastSavedAt => _lastSavedAt;
+  bool get isSaving => _isSaving;
+  bool get hasUnsavedChanges => _hasUnsavedChanges;
+
+  @override
+  void notifyListeners() {
+    if (!_suppressDirtyMark) _hasUnsavedChanges = true;
+    super.notifyListeners();
+  }
+
+  /// EditScreen 의 _saveNow() 가 LocalStorage.saveProject() 호출 직전에 호출.
+  /// dirty 를 여기서 false 로 클리어 → 디스크 쓰기 동안 발생한 변경은 자연스럽게
+  /// 다시 true 가 되어 다음 주기에 저장된다.
+  void markSavingStart() {
+    _isSaving = true;
+    _hasUnsavedChanges = false;
+    _suppressDirtyMark = true;
+    super.notifyListeners();
+    _suppressDirtyMark = false;
+  }
+
+  /// 디스크 쓰기 성공 후 호출 — lastSavedAt 갱신.
+  /// (dirty 는 markSavingStart 에서 이미 클리어됨)
+  void markSavingEnd({required bool ok}) {
+    _isSaving = false;
+    if (ok) {
+      _lastSavedAt = DateTime.now();
+    } else {
+      // 실패 — 다음 주기 재시도 위해 dirty 복원.
+      _hasUnsavedChanges = true;
+    }
+    _suppressDirtyMark = true;
+    super.notifyListeners();
+    _suppressDirtyMark = false;
+  }
+
+  // ─── 계정 / 구독 (시안 ⑥ ⑦ ⑧ ⑨ ⑩) ─────────────────────────────────
+  // 백엔드 verify 전까지는 클라이언트 상태만으로 동작 — UI 흐름 검증용.
+  SubscriptionStatus subscription = SubscriptionStatus.anonymous;
+  String? accountEmail;       // 로그인 후 표시
+  String? accountProvider;    // 'apple' / 'google'
+  DateTime? subscriptionRenewsAt;
+
+  void mockLogin({required String provider, required String email}) {
+    accountProvider = provider;
+    accountEmail = email;
+    // 가입 직후 무료 체험 — 시안 ⑥/Trial 상태.
+    if (subscription == SubscriptionStatus.anonymous) {
+      subscription = SubscriptionStatus.trial;
+      subscriptionRenewsAt = DateTime.now().add(const Duration(days: 7));
+    }
+    notifyListeners();
+  }
+
+  void mockLogout() {
+    accountProvider = null;
+    accountEmail = null;
+    subscription = SubscriptionStatus.anonymous;
+    subscriptionRenewsAt = null;
+    notifyListeners();
+  }
+
+  /// 개발자 모드 — 디버그 토글로 임의 상태 전환.
+  void devSetSubscription(SubscriptionStatus s) {
+    subscription = s;
+    if (s == SubscriptionStatus.active || s == SubscriptionStatus.trial) {
+      subscriptionRenewsAt = DateTime.now().add(const Duration(days: 30));
+    } else if (s == SubscriptionStatus.cancelled) {
+      subscriptionRenewsAt = DateTime.now().add(const Duration(days: 12));
+    } else {
+      subscriptionRenewsAt = null;
+    }
+    notifyListeners();
+  }
+
+  /// 모의 IAP — sandbox 미통과 환경에서 UI 흐름만 검증.
+  Future<bool> mockPurchase({String plan = 'monthly'}) async {
+    await Future.delayed(const Duration(milliseconds: 600));
+    subscription = SubscriptionStatus.active;
+    subscriptionRenewsAt = DateTime.now().add(
+      Duration(days: plan == 'yearly' ? 365 : 30),
+    );
+    notifyListeners();
+    return true;
+  }
+
+  /// 구독 해지 (만료 전까지 권한 유지).
+  void mockCancel() {
+    if (subscription == SubscriptionStatus.active ||
+        subscription == SubscriptionStatus.trial) {
+      subscription = SubscriptionStatus.cancelled;
+      notifyListeners();
+    }
+  }
+
   String title = 'My Song';
+
+  void setTitle(String v) {
+    final s = v.trim();
+    if (s.isEmpty || s == title) return;
+    title = s;
+    notifyListeners();
+  }
 
   /// 모든 트랙(카테고리당 N개 가능). 순서는 사이드바 표시 순서.
   /// 처음에는 4개 카테고리 각 1개로 시작.
@@ -462,12 +666,47 @@ class ProjectStore extends ChangeNotifier {
   }
 
   void newProject() {
+    projectId = 'p_${DateTime.now().millisecondsSinceEpoch}';
     title = 'My Song';
     tracks.clear();
     _trackSeq = 0;
     _chunkSeq = 0;
+    selectedNote = null;
+    selectedChunk = null;
+    trackSelected = false;
+    pendingRecording = null;
     _seedDefaultTracks();
     error = null;
+    notifyListeners();
+  }
+
+  /// LocalStorage.loadProject 가 호출 — 트랙/시퀀스/메타를 한 번에 교체.
+  void adoptLoaded({
+    required String projectId,
+    required String title,
+    required int bpm,
+    required List<TrackData> tracks,
+    required int trackSeq,
+    required int chunkSeq,
+  }) {
+    this.projectId = projectId;
+    this.title = title;
+    this.bpm = bpm;
+    this.tracks
+      ..clear()
+      ..addAll(tracks);
+    _trackSeq = trackSeq;
+    _chunkSeq = chunkSeq;
+    selectedNote = null;
+    selectedChunk = null;
+    trackSelected = false;
+    pendingRecording = null;
+    error = null;
+    if (this.tracks.isEmpty) {
+      _seedDefaultTracks();
+    } else {
+      activeTrackId = this.tracks.first.id;
+    }
     notifyListeners();
   }
 
@@ -522,7 +761,14 @@ class ProjectStore extends ChangeNotifier {
 
     try {
       final sz = await File(wavPath).length();
+      final sw = Stopwatch()..start();
       final res = await _api.analyze(wavPath, t.options);
+      sw.stop();
+      AnalyticsService.instance.analyzeCompleted(
+        role: t.role.name,
+        durationMs: sw.elapsedMilliseconds,
+        noteCount: res.notes.length,
+      );
       t.analysis = res;
       t.notes = res.notes;
       final cid = ++_chunkSeq; // 이번 녹음 = 하나의 청크
@@ -613,7 +859,14 @@ class ProjectStore extends ChangeNotifier {
         keyTonic: t.options.keyTonic,
         scale: t.options.scale,
       );
+      final sw = Stopwatch()..start();
       final res = await _api.analyze(wavPath, opt);
+      sw.stop();
+      AnalyticsService.instance.analyzeCompleted(
+        role: t.role.name,
+        durationMs: sw.elapsedMilliseconds,
+        noteCount: res.notes.length,
+      );
       pendingRecording!
         ..analysis = res
         ..notes = res.notes;
