@@ -32,15 +32,21 @@ class _IconSpec {
 _IconSpec _specFor(int program) {
   switch (program) {
     // Piano family + organ.
-    case 0: // Acoustic Grand Piano
-    case 4: // Electric Piano
-    case 16: // Drawbar Organ
+    case 0: // Piano 1 (Acoustic Grand)
+    case 1: // Piano 2 (Bright)
+    case 2: // Piano 3 (Electric Grand)
+    case 4: // Electric Piano 1
+    case 16: // Organ 1 (Drawbar)
       return const _IconSpec.material(Icons.piano);
 
-    // Guitars (nylon / acoustic / electric).
+    // Guitars (nylon / steel / jazz / clean / muted / overdrive / distortion).
     case 24:
     case 25:
+    case 26:
     case 27:
+    case 28:
+    case 29:
+    case 30:
       return const _IconSpec.material(Icons.music_note);
 
     // Bass.

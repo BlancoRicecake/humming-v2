@@ -87,12 +87,18 @@ def notes_to_midi_bytes(
     program: int = 0,         # 0 = Acoustic Grand Piano (GM)
     tempo_bpm: float = 120.0,
     ticks_per_beat: int = 480,
+    bank: int = 0,            # SF2 bank (0 = GM melodic, 128 = drum kits)
 ) -> bytes:
     """Build a Type-1 MIDI file from analyzed notes.
 
     Times in ``Note`` are absolute seconds; we convert to MIDI ticks using
     ``ticks_per_beat`` and ``tempo_bpm``. We do NOT emit pitch bends — Phase F
     decided velocity + integer pitch is enough; bend can be added later.
+
+    ``bank`` mirrors the SoundFont selection: a melodic variation bank
+    (8/11/12) is emitted as a Bank-Select MSB (CC0) before the program change;
+    ``bank == 128`` means a drum kit, so notes go to channel 9 and the kit
+    number is the program change there.
     """
     mid = mido.MidiFile(type=1, ticks_per_beat=ticks_per_beat)
 
@@ -104,11 +110,16 @@ def notes_to_midi_bytes(
     tempo_track.append(mido.MetaMessage("end_of_track", time=0))
     mid.tracks.append(tempo_track)
 
-    # --- instrument track. Melodic notes → channel 0 (selected program);
-    # percussive notes → channel 9 (GM drum channel 10, bank is implicit).
+    # --- instrument track. Melodic notes → channel 0 (selected bank+program);
+    # percussive notes (and any drum-kit selection) → channel 9 (GM drum).
+    drum_kit = int(bank) == 128
+    inst_ch = 9 if drum_kit else 0
     inst_track = mido.MidiTrack()
+    if not drum_kit and int(bank) > 0:
+        inst_track.append(mido.Message("control_change", control=0,
+                                       value=int(bank) & 0x7F, channel=0, time=0))
     inst_track.append(mido.Message("program_change", program=int(program),
-                                   channel=0, time=0))
+                                   channel=inst_ch, time=0))
 
     sec_per_tick = 60.0 / (tempo_bpm * ticks_per_beat)
     # Sort by start so we can emit deltas in order. We need to interleave
@@ -119,7 +130,7 @@ def notes_to_midi_bytes(
             continue
         pitch = max(0, min(127, int(n.pitch)))
         vel = max(1, min(127, int(n.velocity)))
-        ch = 9 if getattr(n, "kind", "pitched") == "percussive" else 0
+        ch = 9 if (drum_kit or getattr(n, "kind", "pitched") == "percussive") else 0
         events.append((float(n.start), 1, pitch, vel, ch))    # note_on
         events.append((float(n.end),   0, pitch, 0,  ch))     # note_off (rank 0 before note_on so same-time release first)
     events.sort(key=lambda e: (e[0], e[1]))

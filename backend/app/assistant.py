@@ -29,6 +29,7 @@ W_NEXT = 0.25        # voice-leading to the next note's raw pitch
 # 이탈(≈1st 반음 = 의도한 다른 음)은 건드리지 않음 → "실수만 잡고 의도는 유지".
 MAX_CORRECTION_ST = 0.7   # hard cap on auto-correction (semitones)
 WEAK_MAX_ST = 0.5         # mid-confidence tier cap
+AGGRESSIVE_MAX_ST = 99.0  # aggressive mode: effectively no cap → snap every off-scale note to scale
 LOW_PITCH_CONF = 0.2      # below this note confidence → don't trust the pitch
 
 # 오토키는 곡의 시작/초반부를 더 신뢰(보통 토닉·조성을 여기서 제시).
@@ -78,6 +79,7 @@ def apply_assistant(
     scale: Optional[str],
     enabled: bool,
     key_confidence: float = 1.0,
+    aggressive: bool = False,
     debug_out: Optional[list] = None,
 ) -> int:
     """Annotate + (optionally) correct notes in place. Returns applied count.
@@ -97,7 +99,11 @@ def apply_assistant(
     if not has_key:
         max_correction = 0.0
     elif key_confidence < KEY_CONF_LOW:
-        max_correction = -1.0  # suppressed entirely
+        max_correction = -1.0  # key too unreliable to correct against (even when aggressive)
+    elif aggressive:
+        # snap every off-scale note to the nearest in-key pitch (tone-deaf safety
+        # net once the project key is locked). Still gated by pitch confidence.
+        max_correction = AGGRESSIVE_MAX_ST
     elif key_confidence < KEY_CONF_HIGH:
         max_correction = WEAK_MAX_ST
     else:
@@ -190,6 +196,7 @@ def run_key_and_assistant(
     pitch_assistant: bool,
     key_tonic: Optional[str],
     scale: Optional[str],
+    assist_aggressive: bool = False,
     debug_out: Optional[list] = None,
 ) -> dict:
     """Single source of truth for Stage 7 (key detect + assistant).
@@ -220,7 +227,8 @@ def run_key_and_assistant(
             tonic, scl = key_tonic, scale
             conf = 1.0 if (key_tonic and scale) else 0.0
     applied = apply_assistant(
-        notes, tonic, scl, pitch_assistant, key_confidence=conf, debug_out=debug_out,
+        notes, tonic, scl, pitch_assistant, key_confidence=conf,
+        aggressive=assist_aggressive, debug_out=debug_out,
     )
 
     if tonic is None:

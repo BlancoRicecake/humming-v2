@@ -14,6 +14,7 @@ import '../models/models.dart';
 import '../music/chord_expand.dart';
 import '../services/analytics_service.dart';
 import '../music/instrument_icons.dart';
+import '../music/strum.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
@@ -169,7 +170,9 @@ class _PendingSheetBodyState extends State<_PendingSheetBody> {
       _doneSub = _synth.onComplete.listen((_) {
         if (mounted) setState(() => _previewPlaying = false);
       });
-      await _synth.play([SynthTrack(notes: p.notes, program: program, isDrum: isDrum)]);
+      // 커밋 후 렌더와 동일하게 변환된 노트로 미리듣기(베이스 저음역 배치 등).
+      final notes = widget.store.pendingRenderNotes(p);
+      await _synth.play([SynthTrack(notes: notes, program: program, isDrum: isDrum)]);
     }
   }
 
@@ -222,7 +225,7 @@ class _PendingSheetBodyState extends State<_PendingSheetBody> {
                     child: CustomPaint(
                       painter: isVocal
                           ? _PendingWavePainter(peaks: p.vocalPeaks)
-                          : _PendingNotesPainter(notes: p.notes),
+                          : _PendingNotesPainter(notes: widget.store.pendingRenderNotes(p)),
                       size: Size.infinite,
                     ),
                   ),
@@ -392,28 +395,24 @@ class _AddTrackItem {
   const _AddTrackItem(this.name, this.sub, this.program, {this.saveProgram});
 }
 
-// instrumentPalette 와 1:1 일치. 신규 악기는 팔레트에 추가된 후 함께 노출.
+// 트랙 추가 카탈로그 — instrumentPalette 의 패밀리당 "대표 1개"(첫 프리셋)만 노출.
+// 세부 프리셋(P02, AG03 …)은 트랙 생성 후 악기 선택 시트(showInstrumentPicker)에서 고른다.
 const Map<TrackRole, List<_AddTrackItem>> _addTrackCatalog = {
   TrackRole.keys: [
-    _AddTrackItem('피아노', 'Acoustic Grand', 0),
-    _AddTrackItem('신스', 'Synth Pad', 90),
-    _AddTrackItem('어쿠스틱 기타', 'Acoustic', 25),
-    _AddTrackItem('일렉 기타', 'Electric', 27),
-    // 추후 추가 검토:
-    // _AddTrackItem('일렉 피아노', 'Rhodes', 4),
-    // _AddTrackItem('오르간', 'Drawbar', 16),
-    // _AddTrackItem('클래식 기타', 'Nylon', 24),
-    // _AddTrackItem('스트링', 'Ensemble', 48),
+    _AddTrackItem('피아노', 'Piano 1', 0),
+    _AddTrackItem('어쿠스틱 기타', 'Nylon Guitar', 24),
+    _AddTrackItem('일렉 기타', 'Overdrive Guitar', 29),
+    _AddTrackItem('신스', 'Poly Synth', 90),
+    _AddTrackItem('오르간', 'Organ 1', 16),
+    _AddTrackItem('스트링', 'Strings CLP', 48),
   ],
   TrackRole.bass: [
-    _AddTrackItem('베이스 기타', 'Electric Bass', 33),
-    _AddTrackItem('신스 베이스', '808', 39),
-    // 추후 추가 검토:
-    // _AddTrackItem('어쿠스틱 베이스', 'Upright', 32),
+    _AddTrackItem('베이스 기타', 'Fingered Bass', 33),
+    _AddTrackItem('신스 베이스', 'Synth Bass 2', 39),
   ],
   TrackRole.drum: [
-    // 드럼은 program 이 의미 없음(자동 매핑). 아이콘만 드럼킷.
-    _AddTrackItem('드럼 키트', 'Standard GM', kDrumKitProgram, saveProgram: 0),
+    // 드럼 키트 — 기본 Standard(0). 아이콘만 드럼킷, 저장 program 은 0.
+    _AddTrackItem('드럼 키트', 'Standard', kDrumKitProgram, saveProgram: 0),
   ],
   TrackRole.vocal: [
     _AddTrackItem('원본 보컬', '원본 그대로', kVocalProgram, saveProgram: 0),
@@ -512,14 +511,112 @@ Widget _addTrackCategory(BuildContext context, ProjectStore store, TrackRole rol
   );
 }
 
+// ─── 앵커 키 확인 시트 ───────────────────────────────────────────────────
+// 기준 트랙에서 검출한 키 + 상대조 + top3 후보를 보여주고 1탭 확정 → 프로젝트 키 잠금.
+const _kPcNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+({String tonic, String scale})? _relativeKey(String tonic, String scale) {
+  final pc = _kPcNames.indexOf(tonic);
+  if (pc < 0) return null;
+  if (scale == 'major') return (tonic: _kPcNames[(pc - 3 + 12) % 12], scale: 'minor');
+  if (scale == 'minor') return (tonic: _kPcNames[(pc + 3) % 12], scale: 'major');
+  return null;
+}
+
+String _scaleKo(String s) => s == 'major' ? '장조' : (s == 'minor' ? '단조' : s);
+
+/// 전환 시점에 호출 — 키 앵커 후보가 있으면 확인 시트를 띄워 프로젝트 키 잠금.
+/// 첫 트랙이 드럼이라 키가 없으면 조용히 건너뜀(키는 첫 멜로딕에서 잠김).
+Future<void> maybeConfirmAnchorKey(BuildContext context, ProjectStore store) async {
+  final prop = store.anchorKeyProposal();
+  if (prop == null) return;
+  final chosen = await showModalBottomSheet<({String tonic, String scale})>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (ctx) => _AnchorKeySheet(
+        tonic: prop.tonic, scale: prop.scale, candidates: prop.candidates),
+  );
+  if (chosen != null && context.mounted) {
+    store.confirmAnchorKey(chosen.tonic, chosen.scale);
+  }
+}
+
+class _AnchorKeySheet extends StatelessWidget {
+  const _AnchorKeySheet({required this.tonic, required this.scale, required this.candidates});
+  final String tonic, scale;
+  final List<KeyCandidate> candidates;
+
+  @override
+  Widget build(BuildContext context) {
+    final opts = <({String tonic, String scale, String tag})>[];
+    final seen = <String>{};
+    void add(String t, String s, String tag) {
+      if (seen.add('$t $s')) opts.add((tonic: t, scale: s, tag: tag));
+    }
+    add(tonic, scale, '감지됨');
+    final rel = _relativeKey(tonic, scale);
+    if (rel != null) add(rel.tonic, rel.scale, '상대조');
+    for (final c in candidates.take(3)) {
+      add(c.tonic, c.scale, '후보');
+    }
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('프로젝트 키 정하기', style: T.h2),
+            const SizedBox(height: 4),
+            Text('이 키로 모든 트랙을 자동 정리합니다. 맞는 키를 골라주세요.', style: T.sub),
+            const SizedBox(height: 16),
+            ...opts.map((o) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.pop(context, (tonic: o.tonic, scale: o.scale)),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.bg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: o.tag == '감지됨' ? AppColors.lime : AppColors.border),
+                    ),
+                    child: Row(children: [
+                      Text('${o.tonic} ${_scaleKo(o.scale)}',
+                          style: T.label.copyWith(fontSize: 16)),
+                      const Spacer(),
+                      Text(o.tag,
+                          style: T.sub.copyWith(
+                              color: o.tag == '감지됨'
+                                  ? AppColors.lime
+                                  : AppColors.textSecondary)),
+                    ]),
+                  ),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 Widget _addTrackCard(BuildContext context, ProjectStore store, TrackRole role, _AddTrackItem it) {
   return GestureDetector(
     behavior: HitTestBehavior.opaque,
-    onTap: () {
+    onTap: () async {
+      // 기준(첫) 트랙을 마치고 다음 트랙으로 넘어가는 시점 → 앵커 잠금.
+      // 그루브를 먼저 잠그고, 키는 검출값+상대조를 1탭 확인받아 잠근다.
+      if (store.needsAnchorLock) {
+        store.lockGroove();
+        await maybeConfirmAnchorKey(context, store);
+      }
       final saveProg = it.saveProgram ?? it.program;
       final added = store.addTrack(role, program: saveProg);
       store.setActiveTrack(added.id);
-      Navigator.pop(context);
+      if (context.mounted) Navigator.pop(context);
     },
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -561,12 +658,16 @@ void showInstrumentPicker(BuildContext context, ProjectStore store) {
     context: context,
     backgroundColor: Colors.transparent,
     useSafeArea: true,
-    builder: (_) {
+    isScrollControlled: true, // 악기 수가 늘어나도 시트가 스크롤되도록(오버플로우 방지)
+    builder: (sheetCtx) {
+      final mq = MediaQuery.of(sheetCtx);
       final t = store.active;
-      final options = instrumentPalette[t.role] ?? const <Instrument>[];
+      final families = instrumentPalette[t.role] ?? const <InstrumentFamily>[];
+      final isDrum = t.role == TrackRole.drum;
       return Container(
         decoration: _sheetDeco(),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
+        constraints: BoxConstraints(maxHeight: mq.size.height * 0.78),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -574,51 +675,146 @@ void showInstrumentPicker(BuildContext context, ProjectStore store) {
             _grabber(),
             Text('악기 선택 · ${t.role.label.toUpperCase()}', style: T.h2.copyWith(fontSize: 18)),
             const SizedBox(height: 16),
-            if (options.isEmpty)
-              Text(t.role == TrackRole.drum ? '드럼은 자동(Kick/Snare/HiHat)으로 매핑됩니다' : '원본 보컬 트랙입니다', style: T.sub)
-            else
-              ...options.map((inst) {
-                final sel = inst.program == t.program;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: GestureDetector(
-                    onTap: () {
-                      store.setInstrument(inst.program);
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      height: 54,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: sel ? AppColors.activeLane : AppColors.bg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: sel ? AppColors.lime : AppColors.border, width: sel ? 1.5 : 1),
-                      ),
-                      child: Row(children: [
-                        instrumentIcon(
-                          inst.program,
-                          size: 18,
-                          color: sel ? AppColors.lime : AppColors.textSecondary,
+            // 헤더는 고정, 패밀리(그룹) + 프리셋 목록 + 코드 모드 행만 스크롤.
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (families.isEmpty)
+                      Text('원본 보컬 트랙입니다', style: T.sub)
+                    else
+                      for (final fam in families) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(left: 2, bottom: 8),
+                          child: Text(fam.label,
+                              style: T.label.copyWith(
+                                  fontSize: 11, letterSpacing: 0.6, color: AppColors.textSecondary)),
                         ),
-                        const SizedBox(width: 10),
-                        Text(inst.label, style: T.body.copyWith(fontWeight: FontWeight.w600)),
-                        const Spacer(),
-                        if (inst.chordCapable)
-                          Text('코드 가능', style: T.label.copyWith(color: AppColors.textSecondary)),
-                      ]),
-                    ),
-                  ),
-                );
-              }),
-            if (t.isChordInstrument) ...[
-              const SizedBox(height: 6),
-              _chordModeRow(context, store),
-            ],
+                        for (final inst in fam.instruments)
+                          _instrumentRow(context, store, inst, t.program, isDrum),
+                        const SizedBox(height: 8),
+                      ],
+                    if (t.isChordInstrument) ...[
+                      const SizedBox(height: 2),
+                      _chordModeRow(context, store),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       );
     },
   );
+}
+
+/// 악기 선택 시트의 한 프리셋 행. [isDrum] 이면 아이콘을 드럼킷으로 고정
+/// (드럼 program 0/8/16… 이 멜로딕 아이콘으로 보이는 것 방지).
+Widget _instrumentRow(
+    BuildContext context, ProjectStore store, Instrument inst, int selectedProgram, bool isDrum) {
+  final sel = inst.program == selectedProgram;
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: GestureDetector(
+      onTap: () {
+        store.setInstrument(inst.program);
+        Navigator.pop(context);
+      },
+      child: Container(
+        height: 54,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: sel ? AppColors.activeLane : AppColors.bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: sel ? AppColors.lime : AppColors.border, width: sel ? 1.5 : 1),
+        ),
+        child: Row(children: [
+          instrumentIcon(
+            isDrum ? kDrumKitProgram : inst.program,
+            size: 18,
+            color: sel ? AppColors.lime : AppColors.textSecondary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text('${inst.code} · ${inst.label}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: T.body.copyWith(fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(width: 8),
+          // 미리듣기 — 선택/닫기 없이 소리만 재생(내부 GestureDetector 가 탭을 가로챔).
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _previewInstrument(inst, isDrum),
+            child: Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Icon(Symbols.play_arrow, size: 18, color: AppColors.textPrimary),
+            ),
+          ),
+        ]),
+      ),
+    ),
+  );
+}
+
+// 악기 미리듣기 — 중복 호출 시 마지막 것만 유효(시퀀스 가드).
+int _instPreviewSeq = 0;
+
+/// 선택/닫기 없이 해당 프리셋 소리만 잠깐 재생.
+/// 멜로딕은 짧은 분산화음(또는 베이스 단음), 드럼은 킥/하이햇/스네어 패턴.
+Future<void> _previewInstrument(Instrument inst, bool isDrum) async {
+  final mySeq = ++_instPreviewSeq;
+  try {
+    await SynthEngine().stopAll();
+    if (mySeq != _instPreviewSeq) return;
+    if (isDrum) {
+      await SynthEngine().ensureDrumKit(inst.program);
+      if (mySeq != _instPreviewSeq) return;
+      const hits = [36, 42, 38, 42]; // Kick · HiHat · Snare · HiHat
+      for (final h in hits) {
+        if (mySeq != _instPreviewSeq) return;
+        SynthEngine().noteOn(channel: SynthEngine.drumChannel, pitch: h, velocity: 112);
+        final p = h;
+        Future<void>.delayed(const Duration(milliseconds: 220), () {
+          SynthEngine().noteOff(channel: SynthEngine.drumChannel, pitch: p);
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+      }
+    } else if (inst.chordCapable) {
+      const pitches = [60, 64, 67]; // C-E-G 분산화음
+      for (final p in pitches) {
+        if (mySeq != _instPreviewSeq) return;
+        SynthEngine().playNote(
+          channel: 0,
+          pitch: p,
+          velocity: 100,
+          program: inst.program,
+          release: const Duration(milliseconds: 800),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+    } else {
+      // 베이스 등 단음 악기 — 낮은 음 한 번.
+      SynthEngine().playNote(
+        channel: 0,
+        pitch: 40,
+        velocity: 105,
+        program: inst.program,
+        release: const Duration(milliseconds: 900),
+      );
+    }
+  } catch (_) {
+    // 미리듣기 실패는 UI 에 영향 없음.
+  }
 }
 
 Widget _chordModeRow(BuildContext context, ProjectStore store) {
@@ -1120,15 +1316,35 @@ class _ChordPickerSheetState extends State<_ChordPickerSheet> {
     try {
       await SynthEngine().stopAll();
       if (mySeq != _previewSeq || !mounted) return;
-      for (final p in pitches) {
-        // 동시 발음 — 각 pitch 가 독립 release 타이머.
-        SynthEngine().playNote(
-          channel: 0,
-          pitch: p,
-          velocity: 100,
-          program: t.program,
-          release: const Duration(milliseconds: 700),
-        );
+      // 기타(25/27) 코드는 줄을 시간차로 긁듯 staggering, 그 외엔 동시 발음.
+      if (isGuitarProgram(t.program) && pitches.length > 1) {
+        final schedule =
+            strumPreviewSchedule(pitches, 100, bpm: widget.store.bpm, atSec: n.start);
+        for (final s in schedule) {
+          if (s.delaySec > 0) {
+            await Future<void>.delayed(
+                Duration(milliseconds: (s.delaySec * 1000).round()));
+            if (mySeq != _previewSeq || !mounted) return;
+          }
+          SynthEngine().playNote(
+            channel: 0,
+            pitch: s.pitch,
+            velocity: s.velocity,
+            program: t.program,
+            release: const Duration(milliseconds: 700),
+          );
+        }
+      } else {
+        for (final p in pitches) {
+          // 동시 발음 — 각 pitch 가 독립 release 타이머.
+          SynthEngine().playNote(
+            channel: 0,
+            pitch: p,
+            velocity: 100,
+            program: t.program,
+            release: const Duration(milliseconds: 700),
+          );
+        }
       }
     } catch (_) {
       // 미리듣기 실패해도 UI 영향 없음.

@@ -1,4 +1,4 @@
-import type { AnalyzeOptions, AnalyzeResponse, AssistResponse, Note, RenderCapabilities } from "../types";
+import type { AnalyzeOptions, AnalyzeResponse, AssistResponse, Note, RenderCapabilities, SoundfontPreset } from "../types";
 
 const BASE = "/api";
 
@@ -32,11 +32,12 @@ export async function exportMidi(
   notes: Note[],
   tempoBpm = 120,
   program = 0,
+  bank = 0,
 ): Promise<Blob> {
   const res = await fetch(`${BASE}/export_midi`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ notes, tempo_bpm: tempoBpm, program }),
+    body: JSON.stringify({ notes, tempo_bpm: tempoBpm, program, bank }),
   });
   if (!res.ok) throw new Error(`export failed: ${res.status} ${await res.text()}`);
   return res.blob();
@@ -67,15 +68,37 @@ export async function getRenderCapabilities(): Promise<RenderCapabilities> {
   return res.json();
 }
 
+export async function listSoundfontPresets(): Promise<SoundfontPreset[]> {
+  const res = await fetch(`${BASE}/soundfont_presets`);
+  if (!res.ok) throw new Error(`soundfont_presets failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  return data.presets as SoundfontPreset[];
+}
+
+export async function renderDemo(
+  bank: number,
+  program: number,
+  sampleRate = 44100,
+): Promise<Blob> {
+  const res = await fetch(`${BASE}/render_demo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bank, program, sample_rate: sampleRate }),
+  });
+  if (!res.ok) throw new Error(`render_demo failed: ${res.status} ${await res.text()}`);
+  return res.blob();
+}
+
 export async function renderAudio(
   notes: Note[],
   program = 0,
+  bank = 0,
   sampleRate = 44100,
 ): Promise<Blob> {
   const res = await fetch(`${BASE}/render_audio`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ notes, program, sample_rate: sampleRate }),
+    body: JSON.stringify({ notes, program, bank, sample_rate: sampleRate }),
   });
   if (!res.ok) throw new Error(`render failed: ${res.status} ${await res.text()}`);
   return res.blob();

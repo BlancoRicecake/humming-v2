@@ -3,17 +3,17 @@ SAMPLE: 1. 왈츠.wav
 ==============================================================================
 pitch-class histogram (weighted):
     C   C#    D   D#    E    F   F#    G   G#    A   A#    B
-  0.0  0.0  0.0  0.0  0.1  0.3  0.1  0.0  0.1  0.6  0.1  0.2
+  0.0  0.0  0.0  0.0  0.2  0.5  0.1  0.0  0.1  0.6  0.1  0.3
 
 top-3 key candidates:
-   A minor  corr=+0.583
-   A major  corr=+0.515
-  F# minor  corr=+0.401
-  margin(1st-2nd) = 0.068
+   A minor  corr=+0.554
+   A major  corr=+0.437
+   F major  corr=+0.423
+  margin(1st-2nd) = 0.117
 
 n_pitched=18  unique_pc=8  total_dur=3.80s
-detected: A minor  confidence=0.068  tier=mid
-assist_applied=2
+detected: A minor  confidence=0.117  tier=mid
+assist_applied=0
 
 per-note:
    #    rawF  raw inK  sel  cents       src  cand(cost)  reason
@@ -24,16 +24,16 @@ per-note:
    4   52.29   E3 True   E3    -29       raw  E3:3.79  in_key
    5   46.39  A#2 False  A#2    -39       raw  A2:5.79 A#2:keep B2:3.81  low_pitch_confidence
    6   52.79   F3 True   F3     21       raw  F3:3.31  in_key
-   7   55.59  G#3 False   G3    -59 assistant  G3:2.39 G#3:keep A3:3.41  None
-   8   59.39   B3 True   B3    -39       raw  B3:2.27  in_key
+   7   55.59  G#3 False  G#3     41       raw  G3:2.39 G#3:keep A3:3.41  correction_too_large
+   8   59.39   B3 True   B3    -39       raw  B3:1.92  in_key
    9   57.09   A3 True   A3     -9       raw  A3:1.54  in_key
   10   53.99  F#3 False  F#3      1       raw  F3:3.44 F#3:keep G3:2.26  correction_too_large
   11   57.19   A3 True   A3    -19       raw  A3:2.16  in_key
   12   53.34   F3 True   F3    -34       raw  F3:2.69  in_key
   13   56.79   A3 True   A3     21       raw  A3:2.56  in_key
   14   53.19   F3 True   F3    -19       raw  F3:2.02  in_key
-  15   51.29  D#3 False   E3     71 assistant  D3:3.37 D#3:keep E3:1.58  None
-  16   54.09  F#3 False  F#3     -9       raw  F3:2.92 F#3:keep G3:3.93  correction_too_large
+  15   51.29  D#3 False  D#3    -29       raw  D3:3.37 D#3:keep E3:1.58  correction_too_large
+  16   54.09  F#3 False  F#3     -9       raw  F3:3.27 F#3:keep G3:4.28  correction_too_large
   17   47.09   B2 True   B2     -9       raw  B2:2.54  in_key
 
 ==============================================================================
@@ -41,16 +41,16 @@ SAMPLE: 2. 연음.wav
 ==============================================================================
 pitch-class histogram (weighted):
     C   C#    D   D#    E    F   F#    G   G#    A   A#    B
-  0.0  0.0  0.0  0.1  0.3  0.0  0.6  0.0  0.5  0.0  0.1  0.0
+  0.0  0.0  0.0  0.1  0.3  0.0  0.7  0.0  0.5  0.0  0.2  0.0
 
 top-3 key candidates:
-  F# major  corr=+0.481
-  F# minor  corr=+0.424
-   B major  corr=+0.418
-  margin(1st-2nd) = 0.057
+  F# major  corr=+0.491
+   B major  corr=+0.415
+  G# minor  corr=+0.415
+  margin(1st-2nd) = 0.077
 
 n_pitched=7  unique_pc=5  total_dur=4.02s
-detected: F# major  confidence=0.057  tier=mid
+detected: F# major  confidence=0.077  tier=mid
 assist_applied=0
 
 per-note:
@@ -68,32 +68,32 @@ SAMPLE: 3. take 5.wav
 ==============================================================================
 pitch-class histogram (weighted):
     C   C#    D   D#    E    F   F#    G   G#    A   A#    B
-  0.0  0.2  0.0  0.0  0.3  0.1  0.0  0.0  0.1  0.0  0.1  0.0
+  0.0  0.3  0.0  0.0  0.4  0.1  0.0  0.0  0.1  0.0  0.1  0.0
 
 top-3 key candidates:
-  C# minor  corr=+0.732
-   E major  corr=+0.560
-   A major  corr=+0.355
-  margin(1st-2nd) = 0.172
+  C# minor  corr=+0.749
+   E major  corr=+0.571
+   A major  corr=+0.382
+  margin(1st-2nd) = 0.177
 
 n_pitched=16  unique_pc=6  total_dur=3.61s
-detected: C# minor  confidence=0.172  tier=high
-assist_applied=2
+detected: C# minor  confidence=0.177  tier=high
+assist_applied=0
 
 per-note:
    #    rawF  raw inK  sel  cents       src  cand(cost)  reason
-   0   48.69  C#3 True  C#3     31       raw  C#3:1.08  in_key
+   0   48.59  C#3 True  C#3     41       raw  C#3:1.18  in_key
    1   52.09   E3 True   E3     -9       raw  E3:1.74  in_key
-   2   49.59   D3 False  D#3    141 assistant  C#3:2.48 D3:keep D#3:2.09  None
-   3   52.34   E3 True   E3    -34       raw  E3:2.66  in_key
+   2   49.59   D3 False   D3     41       raw  C#3:2.48 D3:keep D#3:2.09  correction_too_large
+   3   52.34   E3 True   E3    -34       raw  E3:3.01  in_key
    4   44.14  G#2 True  G#2    -14       raw  G#2:3.50  in_key
    5   46.24  A#2 False  A#2    -24       raw  A2:2.57 A#2:keep B2:2.28  low_pitch_confidence
    6   48.89  C#3 True  C#3     11       raw  C#3:1.88  in_key
    7   51.89   E3 True   E3     11       raw  E3:1.96  in_key
    8   48.79  C#3 True  C#3     21       raw  C#3:2.21  in_key
-   9   52.79   F3 False   E3    -79 assistant  E3:3.79 F3:keep F#3:5.41  None
-  10   44.19  G#2 True  G#2    -19       raw  G#2:3.52  in_key
-  11   46.09  A#2 False  A#2     -9       raw  A2:2.42 A#2:keep B2:2.43  low_pitch_confidence
+   9   52.79   F3 False   F3     21       raw  E3:3.79 F3:keep F#3:5.41  correction_too_large
+  10   44.19  G#2 True  G#2    -19       raw  G#2:3.84  in_key
+  11   45.99  A#2 False  A#2      1       raw  A2:2.32 A#2:keep B2:2.53  low_pitch_confidence
   12   48.89  C#3 True  C#3     11       raw  C#3:1.94  in_key
   13   52.14   E3 True   E3    -14       raw  E3:1.98  in_key
   14   48.84  C#3 True  C#3     16       raw  C#3:2.06  in_key
@@ -104,17 +104,17 @@ SAMPLE: 4. Du.wav
 ==============================================================================
 pitch-class histogram (weighted):
     C   C#    D   D#    E    F   F#    G   G#    A   A#    B
-  0.0  0.1  0.1  0.1  0.0  0.1  0.0  0.0  0.0  0.0  0.0  0.0
+  0.0  0.1  0.1  0.1  0.0  0.1  0.0  0.1  0.0  0.0  0.0  0.0
 
 top-3 key candidates:
-   D minor  corr=+0.549
-   D major  corr=+0.248
-   G major  corr=+0.163
-  margin(1st-2nd) = 0.301
+   D minor  corr=+0.607
+   G major  corr=+0.299
+  A# major  corr=+0.267
+  margin(1st-2nd) = 0.308
 
-n_pitched=24  unique_pc=11  total_dur=3.31s
-detected: D minor  confidence=0.301  tier=high
-assist_applied=3
+n_pitched=23  unique_pc=11  total_dur=3.31s
+detected: D minor  confidence=0.308  tier=high
+assist_applied=0
 
 per-note:
    #    rawF  raw inK  sel  cents       src  cand(cost)  reason
@@ -125,26 +125,52 @@ per-note:
    4   49.89   D3 True   D3     11       raw  D3:2.21  in_key
    5   45.79  A#2 True  A#2     21       raw  A#2:3.46  in_key
    6   53.39   F3 True   F3    -39       raw  F3:3.94  in_key
-   7   48.59  C#3 False   D3    141 assistant  C3:3.19 C#3:keep D3:2.81  None
-   8   51.39  D#3 False   D3   -139 assistant  D3:1.67 D#3:keep E3:2.08  None
-   9   48.89  C#3 False   C3    -89 assistant  C3:2.39 C#3:keep D3:2.41  None
-  10   44.79   A2 True   A2     21       raw  A2:2.88  in_key
+   7   48.59  C#3 False  C#3     41       raw  C3:3.19 C#3:keep D3:2.81  correction_too_large
+   8   51.39  D#3 False  D#3    -39       raw  D3:2.02 D#3:keep E3:2.43  correction_too_large
+   9   48.89  C#3 False  C#3     11       raw  C3:2.74 C#3:keep D3:2.76  correction_too_large
+  10   44.79   A2 True   A2     21       raw  A2:3.23  in_key
   11   51.49  D#3 False  D#3    -49       raw  D3:3.84 D#3:keep E3:4.06  low_pitch_confidence
   12   47.59   C3 True   C3     41       raw  C3:2.41  in_key
   13   44.19  G#2 False  G#2    -19       raw  G2:5.22 G#2:keep A2:3.63  low_pitch_confidence
-  14   52.09   E3 True   E3     -9       raw  E3:4.66  in_key
-  15   44.94   A2 True   A2      6       raw  A2:4.31  in_key
-  16   37.79   D2 True   D2     21       raw  D2:4.12  in_key
-  17   43.84  G#2 False  G#2     16       raw  G2:2.80 G#2:keep A2:3.90  low_pitch_confidence
-  18   43.84  G#2 False  G#2     16       raw  G2:2.92 G#2:keep A2:2.73  low_pitch_confidence
+  14   52.09   E3 True   E3     -9       raw  E3:6.92  in_key
+  15   35.89   C2 True   C2     11       raw  C2:6.13  in_key
+  16   37.69   D2 True   D2     31       raw  D2:2.46  in_key
+  17   43.79  G#2 False  G#2     21       raw  G2:2.74 G#2:keep A2:3.96  low_pitch_confidence
+  18   43.79  G#2 False  G#2     21       raw  G2:2.87 G#2:keep A2:2.78  low_pitch_confidence
   19   49.89   D3 True   D3     11       raw  D3:2.88  in_key
-  20   47.29   B2 False   B2    -29       raw  A#2:3.27 B2:keep C3:2.48  low_pitch_confidence
-  21   43.69  G#2 False  G#2     31       raw  G2:3.67 G#2:keep A2:3.08  low_pitch_confidence
-  22   49.29  C#3 False  C#3    -29       raw  C3:3.54 C#3:keep D3:4.16  low_pitch_confidence
-  23   44.59   A2 True   A2     41       raw  A2:1.81  in_key
+  20   47.29   B2 False   B2    -29       raw  A#2:3.29 B2:keep C3:2.51  low_pitch_confidence
+  21   43.59  G#2 False  G#2     41       raw  G2:2.39 G#2:keep A2:2.21  low_pitch_confidence
+  22   44.59   A2 True   A2     41       raw  A2:0.76  in_key
 
 ==============================================================================
 SAMPLE: 5. 비트.wav
 ==============================================================================
-(no pitched notes — percussive or empty)
+pitch-class histogram (weighted):
+    C   C#    D   D#    E    F   F#    G   G#    A   A#    B
+  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.0  0.1  0.1
+
+top-3 key candidates:
+  A# minor  corr=+0.581
+  F# major  corr=+0.380
+  A# major  corr=+0.320
+  margin(1st-2nd) = 0.201
+
+n_pitched=12  unique_pc=6  total_dur=1.88s
+detected: A# minor  confidence=0.201  tier=high
+assist_applied=0
+
+per-note:
+   #    rawF  raw inK  sel  cents       src  cand(cost)  reason
+   0   46.99   B2 False   B2      1       raw  A#2:1.99 B2:keep C3:2.51  low_pitch_confidence
+   1   41.99  F#2 True  F#2      1       raw  F#2:3.01  in_key
+   2   36.99  C#2 True  C#2      1       raw  C#2:2.94  in_key
+   3   41.74  F#2 True  F#2     26       raw  F#2:3.13  in_key
+   4   46.49  A#2 True  A#2    -49       raw  A#2:3.09  in_key
+   5   41.19   F2 True   F2    -19       raw  F2:3.22  in_key
+   6   35.89   C2 True   C2     11       raw  C2:3.11  in_key
+   7   40.99   F2 True   F2      1       raw  F2:3.03  in_key
+   8   46.09  A#2 True  A#2     -9       raw  A#2:3.09  in_key
+   9   40.99   F2 True   F2      1       raw  F2:1.76  in_key
+  10   40.99   F2 True   F2      1       raw  F2:0.01  in_key
+  11   40.99   F2 True   F2      1       raw  F2:0.01  in_key
 

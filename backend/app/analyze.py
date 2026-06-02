@@ -44,6 +44,8 @@ from .envelope import (
 )
 from .pitch import extract_pitch_pyin, hz_to_midi_float
 from .assistant import run_key_and_assistant
+from .drums import classify_features
+from .drum_onset import build_drum_notes
 
 
 TARGET_SR = 22050
@@ -374,6 +376,12 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
     y, sr = _load_audio(file_bytes)
     duration = len(y) / sr if sr else 0.0
 
+    # ---- Drum mode: skip the melodic pipeline entirely -----------------------
+    # Notes come from onsets (not pYIN pitch), so unpitched percussion no longer
+    # vanishes. The melodic path below is untouched → no auto-percussive misfire.
+    if opts.as_drums:
+        return _analyze_drums(y, sr, duration, opts)
+
     # ---- Stage 3: voice region detection (RMS envelope + adaptive thresholds)
     env_times, rms = compute_rms_envelope(y, sr, hop=HOP)
     th = compute_thresholds(
@@ -509,9 +517,27 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
         ))
     notes.sort(key=lambda n: n.start)
 
+    # ---- Drum timbre classification (Stage 6 add-on) -------------------------
+    # Classify each note's onset segment into a GM kit piece by SPECTRUM
+    # (kick/snare/hi-hat). Done for every note and exposed for debug; the
+    # client applies `drum` only for drum-role tracks. Cheap: one rfft per hit.
+    for n in notes:
+        a = max(0, int(round(n.start * sr)))
+        b = min(len(y), int(round(n.end * sr)))
+        hit = classify_features(y[a:b], sr)
+        n.drum = hit.gm_note
+        n.drum_name = hit.name
+        n.drum_centroid = hit.centroid
+        n.drum_low_ratio = hit.low_ratio
+        n.drum_high_ratio = hit.high_ratio
+        n.drum_zcr = hit.zcr
+        n.drum_rolloff = hit.rolloff
+        n.drum_flatness = hit.flatness
+
     # ---- Stage 7: Auto Key + Pitch Assistant (shared with /assist + diagnose) -
     res = run_key_and_assistant(
         notes, opts.auto_key, opts.pitch_assistant, opts.key_tonic, opts.scale,
+        assist_aggressive=opts.assist_aggressive,
     )
     assist_count = res["applied"]
     detected_key = DetectedKey(
@@ -520,14 +546,64 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
     )
     key_candidates = [KeyCandidate(**c) for c in res["top3"]]
 
-    # ---- Pack response -------------------------------------------------------
-    def _safe(arr: np.ndarray) -> List[float]:
-        return [float(x) if math.isfinite(x) else float("nan") for x in arr.tolist()]
+    return _pack_response(
+        notes=notes,
+        chunks=[Chunk(**c) for c in chunks_final],
+        y=y, sr=sr, duration=duration, opts=opts,
+        env_times=env_times, rms=rms, th=th,
+        pitch_track=PitchTrack(
+            times=[float(x) for x in p_times.tolist()],
+            hz=_safe(p_hz),
+            midi=_safe(p_midi),
+            voiced_prob=[float(x) for x in p_prob.tolist()],
+        ),
+        detected_key=detected_key,
+        assist_count=assist_count,
+        key_candidates=key_candidates,
+    )
 
+
+# ============================================================================
+# Drum mode — onset-based, timbre-classified (as_drums); pitch-independent
+# ============================================================================
+def _analyze_drums(y: np.ndarray, sr: int, duration: float, opts: AnalyzeOptions) -> AnalyzeResponse:
+    """One note per onset, classified by timbre (drum_onset.build_drum_notes).
+
+    Does NOT run the melodic pitch/recovery/key path — drums have no pitch or
+    key. Envelope is still computed for the debug overlay; pitch_track is empty.
+    """
+    env_times, rms = compute_rms_envelope(y, sr, hop=HOP)
+    th = compute_thresholds(rms, enter_ratio=opts.enter_ratio, exit_ratio=opts.exit_ratio)
+    global_peak_rms = float(np.max(rms)) if rms.size else 1.0
+    notes = build_drum_notes(y, sr, classify_features, hop=HOP, global_peak_rms=global_peak_rms)
+    return _pack_response(
+        notes=notes,
+        chunks=[],
+        y=y, sr=sr, duration=duration, opts=opts,
+        env_times=env_times, rms=rms, th=th,
+        pitch_track=PitchTrack(times=[], hz=[], midi=[], voiced_prob=[]),
+        detected_key=None,
+        assist_count=0,
+        key_candidates=[],
+    )
+
+
+def _safe(arr: np.ndarray) -> List[float]:
+    return [float(x) if math.isfinite(x) else float("nan") for x in arr.tolist()]
+
+
+def _pack_response(
+    *, notes, chunks, y, sr, duration, opts,
+    env_times, rms, th, pitch_track, detected_key, assist_count, key_candidates,
+) -> AnalyzeResponse:
+    """Assemble the AnalyzeResponse. Shared by the melodic and drum paths so the
+    response shape never drifts between them. Decode debug metadata (codec/sr/
+    channels/bitrate/via) is sourced from module-level _LAST_DECODE_INFO populated
+    by _load_audio."""
     decode_info = dict(_LAST_DECODE_INFO)
     return AnalyzeResponse(
         notes=notes,
-        chunks=[Chunk(**c) for c in chunks_final],
+        chunks=chunks,
         input_codec=decode_info.get("input_codec"),
         input_sr=decode_info.get("input_sr"),
         input_channels=decode_info.get("input_channels"),
@@ -541,12 +617,7 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
             enter_threshold=th["enter"],
             exit_threshold=th["exit"],
         ),
-        pitch_track=PitchTrack(
-            times=[float(x) for x in p_times.tolist()],
-            hz=_safe(p_hz),
-            midi=_safe(p_midi),
-            voiced_prob=[float(x) for x in p_prob.tolist()],
-        ),
+        pitch_track=pitch_track,
         waveform=Waveform(
             sample_rate=sr,
             duration=duration,

@@ -47,7 +47,7 @@ class HummingApp extends StatelessWidget {
         return store;
       },
       child: MaterialApp(
-        title: 'Humming',
+        title: 'HumTrack',
         theme: hummingTheme(),
         debugShowCheckedModeBanner: false,
         home: const SongsScreen(),
