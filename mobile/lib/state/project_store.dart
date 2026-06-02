@@ -9,29 +9,61 @@ import '../api/engine_api.dart';
 import '../models/models.dart';
 import '../music/chords.dart';
 import '../music/chord_expand.dart';
+import '../music/strum.dart';
+import '../music/bass_placement.dart';
 
 double _midiToHz(int m) => 440.0 * math.pow(2, (m - 69) / 12.0);
+
+/// 드럼 일관 볼륨 — 모든 드럼 노트 렌더 시 이 velocity 로 통일(강약 제거).
+const int kDrumFlatVelocity = 100;
+
+/// 트랙 onset 들의 그리드 phase(포켓) 추정 — `start % cellSec` 의 원형평균.
+/// 일관된 러시/레이백을 흡수해 그리드를 연주자에 맞춘다(그루브 보존). O(n).
+double estimateGridPhase(List<Note> notes, double cellSec) {
+  if (notes.isEmpty || cellSec <= 0) return 0.0;
+  double s = 0, c = 0;
+  for (final n in notes) {
+    final th = 2 * math.pi * ((n.start % cellSec) / cellSec);
+    s += math.sin(th);
+    c += math.cos(th);
+  }
+  var ph = cellSec * math.atan2(s, c) / (2 * math.pi);
+  if (ph < 0) ph += cellSec;
+  return ph;
+}
 
 /// 한 트랙의 상태. `id` 는 ProjectStore 가 발급하는 고유 식별자(세션 단위).
 class TrackData {
   TrackData(this.id, this.role, {int? program})
       : program = program ??
-            ((instrumentPalette[role]?.isNotEmpty ?? false)
-                ? instrumentPalette[role]!.first.program
+            (instrumentsForRole(role).isNotEmpty
+                ? instrumentsForRole(role).first.program
                 : 0),
-        options = AnalyzeOptions();
+        options = AnalyzeOptions() {
+    // 드럼 트랙은 백엔드 onset 기반 드럼 분석을 요청 (단일 진실원).
+    options.asDrums = role == TrackRole.drum;
+    // 박자 보정 기본 on(보컬 제외). 사용자가 시트에서 끄기/그리드/세기 조절 가능.
+    if (role != TrackRole.vocal) {
+      quantizeEnabled = true;
+    }
+  }
 
   final int id;
   final TrackRole role;
   int program; // 선택된 GM 악기
   bool chordMode = false;
+  // 베이스 저음역 자동 배치(role==bass 에서만 의미). 흥얼거린 베이스 라인을 윤곽 보존한
+  // 채 저음역으로 통째 옥타브 이동 + 멜로디 분리. bassOctaveShift 는 파생 캐시값으로
+  // _recomputeBassPlacement 가 채운다(저장 안 함 — 로드 후 재계산).
+  bool bassPlacement = true;
+  int bassOctaveShift = 0;
   bool enabled = true; // 믹스 재생 포함 여부(사이드바 토글)
   bool looping = false; // 트랙 루프 — 가장 긴 non-loop 트랙 끝까지 컨텐츠 반복
   // 박자 보정(quantize) — 노트 start 를 그리드(BPM 기반)에 끌어당김.
   // 비-파괴적: store.effectiveRenderNotesFor() 에서 렌더 시 적용. 원본 timing 보존.
   bool quantizeEnabled = false;
-  int quantizeGrid = 16;          // 4/8/16/32 분음
-  double quantizeStrength = 0.75; // 0..1
+  int quantizeGrid = 4;           // 4/8/16/32 분음 — 기본 1/4(quarter)
+  double quantizeStrength = 1.0;  // 0..1 — 기본 100%(완전 스냅)
   String? wavPath; // 마지막 녹음 원본 WAV (호환용 — 청크별 wav 는 Chunk.vocalWavPath)
   AnalyzeResponse? analysis; // 최근 분석 결과(가장 최근 청크 메타)
   List<Note> notes = []; // 전 청크의 모든 노트(원본 시간 보존)
@@ -55,7 +87,7 @@ class TrackData {
   }
 
   bool get isChordInstrument {
-    for (final i in instrumentPalette[role] ?? const <Instrument>[]) {
+    for (final i in instrumentsForRole(role)) {
       if (i.program == program) return i.chordCapable;
     }
     return false;
@@ -64,8 +96,12 @@ class TrackData {
   bool get chordActive =>
       chordMode && isChordInstrument && (analysis?.detectedKey?.tonic != null);
 
-  /// 재생/내보내기에 쓸 노트 (코드 모드면 트라이어드 확장).
-  List<Note> get renderNotes => expandChords(notes, analysis?.detectedKey, chordActive);
+  /// 재생/내보내기에 쓸 노트.
+  /// - 베이스(배치 on): 저음역 옥타브 이동(bassOctaveShift, 사전 계산값) 적용.
+  /// - 그 외: 코드 모드면 트라이어드 확장.
+  List<Note> get renderNotes => (role == TrackRole.bass && bassPlacement)
+      ? applyOctaveShift(notes, bassOctaveShift)
+      : expandChords(notes, analysis?.detectedKey, chordActive);
 
   /// 청크의 timelineStart/inPoint/outPoint 를 적용한 "효과 시간" 기준 노트.
   /// 청크의 가시 윈도우 [inPoint, outPoint) 와 노트 [start, end) 의 교집합만 재생되도록 클립.
@@ -109,6 +145,7 @@ class TrackData {
         'role': role.name,
         'program': program,
         'chord_mode': chordMode,
+        'bass_placement': bassPlacement,
         'enabled': enabled,
         'wav_path': wavPath,
         'vocal_wav_path': vocalWavPath,
@@ -125,6 +162,7 @@ class TrackData {
     );
     final t = TrackData(_i(j['id']), role, program: _i(j['program']))
       ..chordMode = (j['chord_mode'] ?? false) as bool
+      ..bassPlacement = (j['bass_placement'] ?? true) as bool
       ..enabled = (j['enabled'] ?? true) as bool
       ..wavPath = j['wav_path'] as String?
       ..vocalWavPath = j['vocal_wav_path'] as String?
@@ -142,6 +180,7 @@ class TrackData {
       pitchAssistant: (opt['pitch_assistant'] ?? true) as bool,
       keyTonic: opt['key_tonic'] as String?,
       scale: opt['scale'] as String?,
+      asDrums: role == TrackRole.drum,
     );
     return t;
   }
@@ -201,6 +240,35 @@ class ProjectStore extends ChangeNotifier {
   // 메트로놈 클릭 on/off — 트랜스포트/메트로놈 시트 양쪽에서 토글.
   bool metroOn = false;
 
+  // ─── 프로젝트 앵커 (기준 트랙으로 키·그루브 잠금) ─────────────────────────
+  // 그루브 앵커 = 노트 있는 첫 트랙(드럼 포함) → 전 노트 트랙이 이 phase 공유.
+  // 키 앵커 = 키가 잡힌 첫 멜로딕 트랙 → projectKey 로 전 트랙 적극 보정.
+  int? grooveAnchorTrackId;
+  int? keyAnchorTrackId;
+  String? projectKeyTonic;
+  String? projectKeyScale;
+  bool anchorLocked = false; // 키 잠금 완료(사용자 확인) 여부
+
+  /// 노트가 있는 첫 트랙(그루브 앵커 후보).
+  TrackData? firstTrackWithNotes() {
+    for (final t in tracks) {
+      if (t.notes.isNotEmpty) return t;
+    }
+    return null;
+  }
+
+  /// 키가 감지된 첫 멜로딕(비드럼·비보컬) 트랙(키 앵커 후보).
+  TrackData? firstTrackWithKey() {
+    for (final t in tracks) {
+      if (t.role == TrackRole.drum || t.isVocal) continue;
+      if (t.analysis?.detectedKey?.tonic != null) return t;
+    }
+    return null;
+  }
+
+  /// 아직 앵커가 안 잡혔고, 잠글 만한 녹음 트랙이 있으면 true(전환 시점에 체크).
+  bool get needsAnchorLock => !anchorLocked && firstTrackWithNotes() != null;
+
   void setMetroOn(bool on) {
     if (on == metroOn) return;
     metroOn = on;
@@ -233,22 +301,101 @@ class ProjectStore extends ChangeNotifier {
   /// 각 노트의 start 를 그리드 cellSec 의 가장 가까운 라인으로 strength 만큼 당김.
   /// 토글 off 면 원본 그대로.
   List<Note> effectiveRenderNotesFor(TrackData t) {
-    final base = t.effectiveRenderNotes;
-    if (!t.quantizeEnabled || t.quantizeGrid <= 0) return base;
-    final beatSec = 60.0 / bpm;
-    final cellSec = beatSec * 4 / t.quantizeGrid;
+    final isDrum = t.role == TrackRole.drum;
+    // 박자 보정(start·end 를 그리드에 스냅 → 위치+길이 이동). 에디터 표시와 동일 경로.
+    List<Note> quantized = quantizeNotes(t, t.effectiveRenderNotes);
+    // 드럼은 강약 없이 일관된 볼륨 — 렌더 노트 velocity 를 상수로 통일(비파괴).
+    if (isDrum) {
+      quantized = quantized.map((n) {
+        if (n.velocity == kDrumFlatVelocity) return n;
+        final clone = Note.fromJson(n.toJson())..chunkId = n.chunkId;
+        clone.velocity = kDrumFlatVelocity;
+        return clone;
+      }).toList();
+    }
+    // quantize 이후(코드 onset 이 그리드에 정렬된 뒤) 기타 스트럼 + 링아웃 적용.
+    // 기타(25/27) 아니면 그대로 통과.
+    return applyGuitarStrum(quantized, program: t.program, bpm: bpm);
+  }
+
+  /// 박자 보정 — 노트 start·end 를 (포켓에 맞춘) 그리드에 스냅. start 와 end 를
+  /// 각각 스냅하므로 위치뿐 아니라 **길이**도 그리드에 맞게 변한다. strength 로 블렌드.
+  /// 렌더(재생/내보내기)와 에디터 표시가 같은 결과를 보도록 단일 경로로 사용.
+  List<Note> quantizeNotes(TrackData t, List<Note> base) {
+    if (!t.quantizeEnabled || t.quantizeGrid <= 0 || base.isEmpty) return base;
+    final cellSec = (60.0 / bpm) * 4 / t.quantizeGrid;
     if (cellSec <= 0) return base;
+    final phase = _groovePhase(cellSec, base);
+    final str = t.quantizeStrength;
     return base.map((n) {
-      final snapped = (n.start / cellSec).round() * cellSec;
-      final delta = (snapped - n.start) * t.quantizeStrength;
-      if (delta.abs() < 1e-4) return n;
+      final sStart = ((n.start - phase) / cellSec).round() * cellSec + phase;
+      final sEnd = ((n.end - phase) / cellSec).round() * cellSec + phase;
+      var newStart = n.start + (sStart - n.start) * str;
+      var newEnd = n.end + (sEnd - n.end) * str;
+      // 길이가 너무 짧게 붕괴하면 최소 한 셀 보장(짧은 노트도 보이게).
+      if (newEnd - newStart < cellSec * 0.5) newEnd = newStart + cellSec;
+      if ((newStart - n.start).abs() < 1e-4 && (newEnd - n.end).abs() < 1e-4) return n;
       final clone = Note.fromJson(n.toJson())
-        ..start = n.start + delta
-        ..end = n.end + delta
+        ..start = newStart
+        ..end = newEnd
         ..chunkId = n.chunkId;
       clone.duration = clone.end - clone.start;
       return clone;
     }).toList();
+  }
+
+  /// 그루브 phase — 앵커 잠금이면 그루브 앵커 트랙에서 1회 추정해 전 트랙 공유,
+  /// 아니면 트랙 자체에서. 앵커 그루브 지터가 과도하면 메트로놈 정박(0)으로 폴백.
+  double _groovePhase(double cellSec, List<Note> trackBase) {
+    List<Note> src = trackBase;
+    final anchor = grooveAnchorTrackId == null ? null : trackById(grooveAnchorTrackId!);
+    if (anchor != null && anchor.notes.isNotEmpty) src = anchor.effectiveRenderNotes;
+    if (src.isEmpty) return 0;
+    final phase = estimateGridPhase(src, cellSec);
+    final jit = src
+            .map((n) {
+              final r = (n.start - phase) % cellSec;
+              return math.min(r.abs(), (cellSec - r).abs());
+            })
+            .fold<double>(0, (a, b) => a + b) /
+        src.length;
+    return jit > cellSec / 2 ? 0.0 : phase; // garbage-in 가드
+  }
+
+
+  // ─── 시작점 정렬(박자 보정 v1) ──────────────────────────────────────────
+  // 새 녹음을 커밋할 때 첫 유의미 노트를 timeline 0 에 맞춤(리딩 무음/반응지연 트림).
+  // 비파괴적: 노트는 보존하고 Chunk.inPoint 만 lead 로 세팅 →
+  //   effectiveStart = note.start - inPoint + timelineStart = 0.
+  // inPoint 앞쪽의 짧은 노이즈 노트는 effectiveRenderNotes 클립이 자동 제거.
+  static const double _kMinAlignNoteSec = 0.06; // 숨소리/노이즈 제외 최소 노트 길이
+  static const double _kVocalOnsetRatio = 0.15; // 최댓 peak 대비 온셋 임계(스케일 무관)
+
+  /// 멜로딕/드럼 — duration 임계를 넘는 첫 노트의 start. 없으면 0(정렬 미적용).
+  double _firstMeaningfulNoteStart(List<Note> notes, double span) {
+    double best = double.infinity;
+    for (final n in notes) {
+      if (n.duration < _kMinAlignNoteSec) continue;
+      if (n.start < best) best = n.start;
+    }
+    if (!best.isFinite || best <= 0) return 0.0;
+    return span > 0 ? math.min(best, span) : best;
+  }
+
+  /// 보컬 — peaks 의 최댓값 대비 비율을 처음 넘는 인덱스의 시간. 없으면 0.
+  /// peaks 값 범위가 백엔드(SoundLab)에 따라 달라질 수 있어 절대 임계 대신 상대 임계 사용.
+  double _firstMeaningfulVocalStart(List<double> peaks, double duration) {
+    if (peaks.isEmpty || duration <= 0) return 0.0;
+    double maxPeak = 0.0;
+    for (final p in peaks) {
+      if (p > maxPeak) maxPeak = p;
+    }
+    if (maxPeak <= 0) return 0.0;
+    final thresh = maxPeak * _kVocalOnsetRatio;
+    for (int i = 0; i < peaks.length; i++) {
+      if (peaks[i] > thresh) return (i / peaks.length) * duration;
+    }
+    return 0.0;
   }
 
   /// 녹음 종료 후 사용자가 "사용/삭제"를 결정할 때까지의 임시 결과(트랙 미반영).
@@ -290,7 +437,50 @@ class ProjectStore extends ChangeNotifier {
 
   void _audioChanged() {
     editEpoch++;
+    _recomputeBassPlacement();
     notifyListeners();
+  }
+
+  /// 베이스 트랙들의 저음역 배치 옥타브 오프셋을 재계산해 캐시한다.
+  /// 멜로디(keys) 최저음은 크로스-트랙 정보라 게터에서 못 보므로 여기서 한 번 계산해
+  /// TrackData.bassOctaveShift 에 저장 → renderNotes 게터가 그 값만 적용(표시=소리 일치).
+  /// 순수 계산만 — notifyListeners 호출 안 함(재진입 방지).
+  void _recomputeBassPlacement() {
+    final melodyLow = _melodyLowPitch();
+    for (final t in tracks) {
+      if (t.role != TrackRole.bass) continue;
+      t.bassOctaveShift = (t.bassPlacement && t.notes.isNotEmpty)
+          ? bestBassOctaveShift(t.notes, melodyLowPitch: melodyLow)
+          : 0;
+    }
+  }
+
+  /// keys 역할 트랙들의 pitched 최저음(베이스 분리 기준). 없으면 null.
+  int? _melodyLowPitch() {
+    int? low;
+    for (final t in tracks) {
+      if (t.role != TrackRole.keys) continue;
+      for (final n in t.notes) {
+        if (n.kind != 'pitched') continue;
+        if (low == null || n.pitch < low) low = n.pitch;
+      }
+    }
+    return low;
+  }
+
+  /// 미리듣기(pending) 재생용 노트 — 커밋 후 렌더와 동일하게 변환해 들려준다.
+  /// 베이스(배치 on)면 저음역 옥타브 이동을 적용(키 보정은 이미 p.notes 에 반영됨).
+  /// 그 외 역할은 p.notes 그대로(코드 모드는 커밋된 트랙 토글이라 미리듣기엔 미적용).
+  List<Note> pendingRenderNotes(PendingRecording p) {
+    final t = trackById(p.trackId);
+    if (t != null &&
+        t.role == TrackRole.bass &&
+        t.bassPlacement &&
+        p.notes.isNotEmpty) {
+      final shift = bestBassOctaveShift(p.notes, melodyLowPitch: _melodyLowPitch());
+      return applyOctaveShift(p.notes, shift);
+    }
+    return p.notes;
   }
 
   // ─── 활성 트랙 ──────────────────────────────────────────────────────────
@@ -330,6 +520,8 @@ class ProjectStore extends ChangeNotifier {
   /// 새 트랙 추가 → 추가된 TrackData 반환. UI 는 아직 호출 안 함(#27 예정).
   TrackData addTrack(TrackRole role, {int? program}) {
     final t = TrackData(++_trackSeq, role, program: program);
+    // 앵커 잠금 후 추가되는 노트 트랙은 박자 보정 on(공유 그루브에 맞물림).
+    if (anchorLocked && !t.isVocal) t.quantizeEnabled = true;
     tracks.add(t);
     _audioChanged();
     return t;
@@ -344,6 +536,16 @@ class ProjectStore extends ChangeNotifier {
       final fallback = firstByRole(removed.role) ?? (tracks.isNotEmpty ? tracks.first : null);
       activeTrackId = fallback?.id;
     }
+    // 앵커 유실 승계 — 가공된(이미 앵커 키/그루브로 보정된) 다음 트랙이 기준을 이어받음.
+    // projectKey 는 유지(승계 트랙이 그 키로 보정돼 있어 자기일관).
+    if (grooveAnchorTrackId == trackId) grooveAnchorTrackId = firstTrackWithNotes()?.id;
+    if (keyAnchorTrackId == trackId) keyAnchorTrackId = firstTrackWithKey()?.id;
+    if (firstTrackWithNotes() == null) {
+      // 녹음 트랙이 모두 사라지면 앵커 완전 리셋.
+      anchorLocked = false;
+      projectKeyTonic = projectKeyScale = null;
+      grooveAnchorTrackId = keyAnchorTrackId = null;
+    }
     _audioChanged();
   }
 
@@ -352,29 +554,34 @@ class ProjectStore extends ChangeNotifier {
   // 사용자가 드럼 슬롯에 녹음하면 = 명시적 드럼 의도 → 노트를 GM 드럼 채널(9)에서
   // 의미 있는 키트 매핑(36 Kick / 38 Snare / 42 HiHat)으로 변환한다.
   //
-  // 매핑 휴리스틱(pitch 기반):
-  //   - 트랙 평균보다 5 반음 이상 낮음 → Kick(36)
-  //   - 트랙 평균보다 5 반음 이상 높음 → HiHat(42)
-  //   - 그 외 → Snare(38)
-  // 정밀 분류(스펙트럼 기반 backend/app/drums.py)는 후속 task — 일단은
-  // 오프라인·즉시 동작이 우선.
+  // 매핑 우선순위:
+  //   1) 백엔드 스펙트럼 분류(note.drum, drums.py) — 음색으로 Kick/Snare/HiHat 판별.
+  //   2) 백엔드 값이 없는 노트만 pitch 폴백:
+  //        - 트랙 평균보다 5 반음 이상 낮음 → Kick(36)
+  //        - 트랙 평균보다 5 반음 이상 높음 → HiHat(42)
+  //        - 그 외 → Snare(38)
   //
   // `pitchOriginal` 은 백엔드에서 받은 원래 멜로디 pitch — 보존되어 있어
-  // `restoreFromDrums()` 로 되돌릴 때 손실 없이 복원된다.
+  // `restoreFromDrums()` 로 되돌릴 때 손실 없이 복원된다. `note.drum` 도
+  // 보존되므로 재호출 시 동일 결과(idempotent).
   void _relabelAsDrums(List<Note> notes) {
     if (notes.isEmpty) return;
-    // 이미 percussive 로 재라벨된 노트는 평균이 36/38/42 의 좁은 범위라
-    // 두 번째 호출 시 분류가 무너짐 → idempotent 가드.
+    // 이미 percussive 로 재라벨된 노트는 pitch 가 36/38/42 의 좁은 범위라
+    // pitch 폴백이 무너짐 → idempotent 가드 (백엔드 분류는 note.drum 에 보존됨).
     if (notes.every((n) => n.kind == 'percussive')) return;
-    // 원본 pitch 기준 평균 ±5 반음 휴리스틱.
-    // 정밀 분류는 task #38 (backend/app/drums.py 스펙트럼 기반) 에서 처리 예정.
+    // pitch 폴백용 평균(원본 pitch 기준). 백엔드 분류가 있으면 사용 안 함.
     final orig = notes.map((n) => n.pitchOriginal != 0 ? n.pitchOriginal : n.pitch).toList();
     final avg = orig.reduce((a, b) => a + b) / orig.length;
     for (int i = 0; i < notes.length; i++) {
       final n = notes[i];
       if (n.pitchOriginal == 0) n.pitchOriginal = n.pitch;
-      final diff = orig[i] - avg;
-      final drumPitch = diff <= -5 ? 36 : (diff >= 5 ? 42 : 38);
+      final int drumPitch;
+      if (n.drum != null) {
+        drumPitch = n.drum!; // 백엔드 스펙트럼 분류 우선
+      } else {
+        final diff = orig[i] - avg; // 폴백: pitch ±5 반음
+        drumPitch = diff <= -5 ? 36 : (diff >= 5 ? 42 : 38);
+      }
       n.pitch = drumPitch;
       n.kind = 'percussive';
     }
@@ -497,12 +704,14 @@ class ProjectStore extends ChangeNotifier {
         t.vocalDuration = v.duration;
         t.notes = []; // 보컬은 노트 없음
         t.analysis = null;
+        final lead = _firstMeaningfulVocalStart(v.peaks, v.duration);
+        debugPrint('[align] ${t.role.label}(vocal) lead=${lead.toStringAsFixed(2)}s');
         t.chunks
           ..clear()
           ..add(Chunk(
             id: ++_chunkSeq,
             timelineStart: 0,
-            inPoint: 0,
+            inPoint: lead,
             outPoint: v.duration,
             originalLength: v.duration,
             vocalWavPath: f.path,
@@ -521,6 +730,7 @@ class ProjectStore extends ChangeNotifier {
     }
 
     try {
+      _inheritAnchorIfLocked(t); // 앵커 잠금 후면 프로젝트 키 + 적극 보정 상속
       final sz = await File(wavPath).length();
       final res = await _api.analyze(wavPath, t.options);
       t.analysis = res;
@@ -532,12 +742,14 @@ class ProjectStore extends ChangeNotifier {
       final span = res.durationSec > 0
           ? res.durationSec
           : (res.notes.isEmpty ? 0.0 : res.notes.map((n) => n.end).reduce(math.max));
+      final lead = _firstMeaningfulNoteStart(t.notes, span);
+      debugPrint('[align] ${t.role.label} lead=${lead.toStringAsFixed(2)}s');
       t.chunks
         ..clear()
         ..add(Chunk(
           id: cid,
           timelineStart: 0,
-          inPoint: 0,
+          inPoint: lead,
           outPoint: span,
           originalLength: span,
         ));
@@ -606,12 +818,15 @@ class ProjectStore extends ChangeNotifier {
     }
 
     try {
+      _inheritAnchorIfLocked(t); // 앵커 잠금 후면 프로젝트 키 + 적극 보정 상속
       // pending 의 어시스트 옵션으로 분석(트랙 옵션과 일시 분리).
       final opt = AnalyzeOptions(
         autoKey: t.options.autoKey,
         pitchAssistant: pendingRecording!.pitchAssist,
         keyTonic: t.options.keyTonic,
         scale: t.options.scale,
+        asDrums: t.role == TrackRole.drum,
+        assistAggressive: t.options.assistAggressive,
       );
       final res = await _api.analyze(wavPath, opt);
       pendingRecording!
@@ -692,12 +907,14 @@ class ProjectStore extends ChangeNotifier {
       t.vocalDuration = p.vocalDuration;
       t.notes = [];
       t.analysis = null;
+      final lead = _firstMeaningfulVocalStart(p.vocalPeaks, p.vocalDuration);
+      debugPrint('[align] ${t.role.label}(vocal) lead=${lead.toStringAsFixed(2)}s');
       t.chunks
         ..clear()
         ..add(Chunk(
           id: ++_chunkSeq,
           timelineStart: 0,
-          inPoint: 0,
+          inPoint: lead,
           outPoint: p.vocalDuration,
           originalLength: p.vocalDuration,
           vocalWavPath: p.vocalWavPath,
@@ -715,12 +932,15 @@ class ProjectStore extends ChangeNotifier {
       final endSpan = span > 0
           ? span
           : (t.notes.isEmpty ? 0.0 : t.notes.map((n) => n.end).reduce(math.max));
+      // 정렬: timing 은 드럼 재라벨과 무관하므로 노트 그대로에서 lead 계산.
+      final lead = _firstMeaningfulNoteStart(t.notes, endSpan);
+      debugPrint('[align] ${t.role.label} lead=${lead.toStringAsFixed(2)}s');
       t.chunks
         ..clear()
         ..add(Chunk(
           id: cid,
           timelineStart: 0,
-          inPoint: 0,
+          inPoint: lead,
           outPoint: endSpan,
           originalLength: endSpan,
         ));
@@ -819,6 +1039,51 @@ class ProjectStore extends ChangeNotifier {
     _audioChanged();
   }
 
+  // ─── 프로젝트 앵커 잠금 ──────────────────────────────────────────────────
+
+  /// 그루브 잠금 — 노트 있는 첫 트랙을 그루브 앵커로 지정만 한다.
+  /// 기준 트랙·기존 트랙은 건드리지 않음(소급 강제 금지). 잠금 이후 (재)녹음되는
+  /// 트랙이 _inheritAnchorIfLocked 에서 quantize on + 공유 그루브를 상속한다.
+  void lockGroove() {
+    final a = firstTrackWithNotes();
+    if (a == null) return;
+    grooveAnchorTrackId = a.id;
+    _audioChanged();
+  }
+
+  /// 키 앵커 후보(검출 키 + 상대조 + top3 후보) — 확인 시트용. 없으면 null.
+  ({String tonic, String scale, List<KeyCandidate> candidates})? anchorKeyProposal() {
+    final src = firstTrackWithKey();
+    final dk = src?.analysis?.detectedKey;
+    if (dk?.tonic == null || dk?.scale == null) return null;
+    return (tonic: dk!.tonic!, scale: dk.scale!, candidates: src!.analysis!.keyCandidates);
+  }
+
+  /// 사용자가 확정한 키로 프로젝트 키 잠금. 기준 트랙·기존 트랙은 **소급 보정하지
+  /// 않는다**(녹음한 그대로 = 키의 근거). 잠금 이후 (재)녹음되는 트랙만 이 키를
+  /// 상속해 적극 보정된다(_inheritAnchorIfLocked).
+  void confirmAnchorKey(String tonic, String scale) {
+    projectKeyTonic = tonic;
+    projectKeyScale = scale;
+    keyAnchorTrackId = firstTrackWithKey()?.id;
+    anchorLocked = true;
+    _audioChanged();
+  }
+
+  /// 앵커 잠금 후, (재)녹음 직전 멜로딕 트랙이 프로젝트 키 + 적극 보정 + 박자 보정을
+  /// 상속하게. 기준 트랙 자신은 잠금 전 녹음이라 영향 없음(이후 재녹음 시에만 적용).
+  void _inheritAnchorIfLocked(TrackData t) {
+    if (!anchorLocked) return;
+    if (t.role == TrackRole.drum || t.isVocal) return;
+    if (projectKeyTonic != null) {
+      t.options.autoKey = false;
+      t.options.keyTonic = projectKeyTonic;
+      t.options.scale = projectKeyScale;
+      t.options.assistAggressive = true;
+    }
+    t.quantizeEnabled = true; // 공유 그루브에 맞물림(전진 적용)
+  }
+
   void setAutoKey(bool auto, {String? tonic, String? scale}) {
     mainKeyRole = null;
     active.options.autoKey = auto;
@@ -840,6 +1105,13 @@ class ProjectStore extends ChangeNotifier {
 
   void setChordMode(bool on) {
     active.chordMode = on;
+    _audioChanged();
+  }
+
+  /// 베이스 저음역 자동 배치 토글. off 면 _recomputeBassPlacement 가 shift=0 으로
+  /// 되돌려 원래 흥얼 음역으로 즉시 복귀.
+  void setBassPlacement(bool on) {
+    active.bassPlacement = on;
     _audioChanged();
   }
 

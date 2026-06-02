@@ -25,6 +25,15 @@ class Note {
     required this.source,
     required this.inKey,
     required this.correctionCents,
+    this.drum,
+    this.drumName,
+    this.drumCentroid = 0,
+    this.drumLowRatio = 0,
+    this.drumHighRatio = 0,
+    this.drumZcr = 0,
+    this.drumRolloff = 0,
+    this.drumFlatness = 0,
+    this.onsetStrength = 0,
   });
 
   double start, end, duration, pitchRaw, pitchHz, confidence, voicedRatio, correctionCents;
@@ -34,6 +43,11 @@ class Note {
   bool assisted, inKey;
   List<int> candidates;
   int chunkId = 0; // 클라이언트 전용 — 같은 녹음/구간 묶음(청크 편집용). 백엔드 미전송.
+  // 백엔드 스펙트럼 드럼 분류(drums.py) — 모든 노트에 채워짐. 드럼 트랙에서만 사용.
+  int? drum;          // GM 드럼 노트 36/38/42
+  String? drumName;   // Kick | Snare | HiHat
+  double drumCentroid, drumLowRatio, drumHighRatio, drumZcr; // 디버그 특징값
+  double drumRolloff, drumFlatness, onsetStrength; // 디버그 — rolloff/flatness/onset 세기
 
   factory Note.fromJson(Map<String, dynamic> j) => Note(
         start: _d(j['start']),
@@ -52,6 +66,15 @@ class Note {
         source: (j['source'] ?? 'raw') as String,
         inKey: (j['in_key'] ?? true) as bool,
         correctionCents: _d(j['correction_cents']),
+        drum: (j['drum'] as num?)?.toInt(),
+        drumName: j['drum_name'] as String?,
+        drumCentroid: _d(j['drum_centroid']),
+        drumLowRatio: _d(j['drum_low_ratio']),
+        drumHighRatio: _d(j['drum_high_ratio']),
+        drumZcr: _d(j['drum_zcr']),
+        drumRolloff: _d(j['drum_rolloff']),
+        drumFlatness: _d(j['drum_flatness']),
+        onsetStrength: _d(j['onset_strength']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -71,6 +94,15 @@ class Note {
         'source': source,
         'in_key': inKey,
         'correction_cents': correctionCents,
+        if (drum != null) 'drum': drum,
+        if (drumName != null) 'drum_name': drumName,
+        'drum_centroid': drumCentroid,
+        'drum_low_ratio': drumLowRatio,
+        'drum_high_ratio': drumHighRatio,
+        'drum_zcr': drumZcr,
+        'drum_rolloff': drumRolloff,
+        'drum_flatness': drumFlatness,
+        'onset_strength': onsetStrength,
       };
 
   Note copyWith({int? pitch, String? source}) => Note.fromJson(toJson())
@@ -162,15 +194,26 @@ class KeyCandidate {
 
 /// 앱이 보내는 분석/보정 옵션. 미지정 필드는 백엔드 기본값 사용.
 class AnalyzeOptions {
-  AnalyzeOptions({this.autoKey = true, this.pitchAssistant = true, this.keyTonic, this.scale});
+  AnalyzeOptions({
+    this.autoKey = true,
+    this.pitchAssistant = true,
+    this.keyTonic,
+    this.scale,
+    this.asDrums = false,
+    this.assistAggressive = false,
+  });
   bool autoKey, pitchAssistant;
   String? keyTonic, scale;
+  bool asDrums; // 드럼 트랙 → 백엔드 onset 기반 드럼 분석 요청
+  bool assistAggressive; // 잠긴 키 트랙 → 스케일 밖 음을 적극 스냅(음치 안전장치)
 
   Map<String, dynamic> toJson() => {
         'auto_key': autoKey,
         'pitch_assistant': pitchAssistant,
         if (keyTonic != null) 'key_tonic': keyTonic,
         if (scale != null) 'scale': scale,
+        if (asDrums) 'as_drums': asDrums,
+        if (assistAggressive) 'assist_aggressive': assistAggressive,
       };
 }
 
@@ -217,35 +260,86 @@ enum TrackRole {
   final IconData icon;
 }
 
+/// 한 프리셋. `code` 는 카테고리별 업로드(=bank,program 정렬) 순 고유번호(P01, AG03, D05…).
+/// 멜로딕은 전부 bank 0 → program 만으로 식별. 드럼은 bank 128(역할에서 파생).
 class Instrument {
-  const Instrument(this.label, this.program, {this.chordCapable = false});
+  const Instrument(this.code, this.label, this.program, {this.chordCapable = false});
+  final String code;
   final String label;
-  final int program; // GM program (bank 0)
+  final int program; // GM program (드럼은 bank128 program)
   final bool chordCapable;
 }
 
-/// 역할별 선택 가능한 악기 (instruments.ts 미러). drum/vocal 은 자동.
-const Map<TrackRole, List<Instrument>> instrumentPalette = {
+/// 악기 패밀리(피아노/어쿠스틱 기타/…) — 그 안에 여러 프리셋.
+/// 웹 frontend/src/lib/instruments.ts 의 InstrumentRole 미러.
+class InstrumentFamily {
+  const InstrumentFamily(this.label, this.instruments, {this.chordCapable = false});
+  final String label;
+  final bool chordCapable;
+  final List<Instrument> instruments;
+}
+
+/// 역할별 선택 가능한 악기 — 웹 instruments.ts 규칙을 번들 SF2(TimGM6mb.sf2)에 적용해
+/// 산출한 결과를 하드코딩(번들 SF2 고정이라 런타임 파서 불필요).
+/// 재현법: backend/app/render.py:list_presets() 의 phdr 파싱 + instruments.ts CATEGORIES.
+/// 코드는 카테고리별 (bank,program) 정렬 순 P01.., AG01.., LG01.., SM01.., BG01.., SB01.., D01...
+const Map<TrackRole, List<InstrumentFamily>> instrumentPalette = {
   TrackRole.keys: [
-    Instrument('피아노', 0, chordCapable: true),
-    Instrument('신스', 90, chordCapable: true),
-    Instrument('어쿠스틱 기타', 25, chordCapable: true),
-    Instrument('일렉 기타', 27, chordCapable: true),
-    // 추후 추가 검토:
-    // Instrument('일렉 피아노', 4, chordCapable: true),
-    // Instrument('오르간', 16, chordCapable: true),
-    // Instrument('클래식 기타', 24, chordCapable: true),
-    // Instrument('스트링', 48, chordCapable: true),
+    InstrumentFamily('피아노', [
+      Instrument('P01', 'Piano 1', 0, chordCapable: true),
+      Instrument('P02', 'Piano 2', 1, chordCapable: true),
+      Instrument('P03', 'Piano 3', 2, chordCapable: true),
+      Instrument('P04', 'E.Piano 1', 4, chordCapable: true),
+    ], chordCapable: true),
+    InstrumentFamily('어쿠스틱 기타', [
+      Instrument('AG01', 'Nylon Guitar', 24, chordCapable: true),
+      Instrument('AG02', 'Steel Guitar', 25, chordCapable: true),
+      Instrument('AG03', 'Jazz Guitar', 26, chordCapable: true),
+      Instrument('AG04', 'Clean Guitar', 27, chordCapable: true),
+      Instrument('AG05', 'Guitar Mutes', 28, chordCapable: true),
+    ], chordCapable: true),
+    InstrumentFamily('일렉 기타', [
+      Instrument('LG01', 'Overdrive Guitar', 29, chordCapable: true),
+      Instrument('LG02', 'Distortion Guitar', 30, chordCapable: true),
+    ], chordCapable: true),
+    InstrumentFamily('신스', [
+      Instrument('SM01', 'Poly Synth', 90, chordCapable: true),
+    ], chordCapable: true),
+    // 웹 규칙 외 — 사용자 요청으로 유지.
+    InstrumentFamily('오르간', [
+      Instrument('O01', 'Organ 1', 16, chordCapable: true),
+    ], chordCapable: true),
+    InstrumentFamily('스트링', [
+      Instrument('ST01', 'Strings CLP', 48, chordCapable: true),
+    ], chordCapable: true),
   ],
   TrackRole.bass: [
-    Instrument('베이스 기타', 33),
-    Instrument('신스 베이스', 39),
-    // 추후 추가 검토:
-    // Instrument('어쿠스틱 베이스', 32),
+    InstrumentFamily('베이스 기타', [
+      Instrument('BG01', 'Fingered Bass', 33),
+      Instrument('BG02', 'Acoustic Bass', 32), // 웹 규칙 외 — 유지
+    ]),
+    InstrumentFamily('신스 베이스', [
+      Instrument('SB01', 'Synth Bass 2', 39),
+    ]),
   ],
-  TrackRole.drum: [],
+  TrackRole.drum: [
+    // bank 128 드럼 키트(웹 규칙 prog ∈ {0,1,2,8,16,24,25,26,32,40} ∩ 실존).
+    InstrumentFamily('드럼 키트', [
+      Instrument('D01', 'Standard', 0),
+      Instrument('D02', 'Room', 8),
+      Instrument('D03', 'Power', 16),
+      Instrument('D04', 'Electronic', 24),
+      Instrument('D05', 'TR 808', 25),
+      Instrument('D06', 'Jazz', 32),
+      Instrument('D07', 'Brush', 40),
+    ]),
+  ],
   TrackRole.vocal: [],
 };
+
+/// 역할의 모든 프리셋을 평면화(패밀리 구분 없이).
+List<Instrument> instrumentsForRole(TrackRole role) =>
+    [for (final f in instrumentPalette[role] ?? const <InstrumentFamily>[]) ...f.instruments];
 
 const Map<int, String> drumNames = {36: 'Kick', 38: 'Snare', 42: 'HiHat'};
 

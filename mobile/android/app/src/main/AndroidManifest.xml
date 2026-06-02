@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <application
-        android:label="Humming"
+        android:label="HumTrack"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

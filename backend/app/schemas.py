@@ -39,12 +39,24 @@ class AnalyzeOptions(BaseModel):
     # raw phone humming with amplitude tremolo). 1.2 keeps all 5 samples intact.
     rms_dip_max_pitch_span_st: float = Field(1.2, ge=0.0)
 
+    # Stage 4b — drum mode (onset-based; bypasses the pitch gate, classifies by timbre)
+    # Set true by the client when the track role is "drum". Notes come from onsets,
+    # not pYIN pitch locks, so unpitched percussion (hi-hats) no longer vanishes.
+    as_drums: bool = False
+
     # Stage 5 — per-chunk analysis
     voiced_prob_threshold: float = Field(0.45, ge=0.0, le=1.0)
 
     # Stage 7 — key/scale (instrument lives client-side in Stage 8)
     auto_key: bool = True                 # detect key from the hummed pitches
     pitch_assistant: bool = True          # auto-correct off-scale notes to in-key
+    # Aggressive mode: when a key is present, snap EVERY off-scale note to the
+    # nearest in-key pitch (raises the correction cap past a semitone). This is
+    # the tone-deaf safety net the client turns on for tracks that inherit the
+    # LOCKED project key (after the user confirms it). Default False so the first
+    # auto-key analysis stays conservative — we don't aggressively correct
+    # against an unconfirmed key. False = "only fix small slips, keep intent".
+    assist_aggressive: bool = False
     key_tonic: Optional[str] = None       # "C", "F#", ... (used when auto_key=False)
     scale: Optional[Scale] = None         # used when auto_key=False
     quantize_strength: float = Field(1.0, ge=0.0, le=1.0)
@@ -73,6 +85,19 @@ class Note(BaseModel):
     source: Literal["raw", "assistant", "user"] = "raw"  # provenance of `pitch`
     in_key: bool = True                     # pitch_original is in the detected key
     correction_cents: float = 0.0           # (pitch - pitch_raw) * 100, for diagnostics
+    # --- Drum timbre classification (Stage 6 add-on; see drums.py) ---
+    # Computed for EVERY note from its onset segment's spectrum so a drum-role
+    # track maps to a real GM kit by SOUND, not pitch. Always populated for
+    # debug visibility; the client applies `drum` only when role == "drum".
+    drum: Optional[int] = None              # GM percussion note (36 Kick / 38 Snare / 42 HiHat)
+    drum_name: Optional[str] = None         # "Kick" | "Snare" | "HiHat"
+    drum_centroid: float = 0.0              # spectral centroid (Hz) — debug
+    drum_low_ratio: float = 0.0             # energy fraction < 150Hz — debug (phone-stripped; not used in decision)
+    drum_high_ratio: float = 0.0            # energy fraction > 5kHz — debug
+    drum_zcr: float = 0.0                   # zero-crossing rate (0-1) — debug
+    drum_rolloff: float = 0.0               # spectral rolloff 85% (Hz) — debug (hi-hat high / kick low)
+    drum_flatness: float = 0.0              # spectral flatness 0-1 — debug (snare noisy / kick tonal: kick↔snare axis)
+    onset_strength: float = 0.0             # spectral-flux onset envelope at the hit — debug (0 for melodic notes)
 
 
 # --- Debug surfaces (one per inspectable stage) -------------------------------

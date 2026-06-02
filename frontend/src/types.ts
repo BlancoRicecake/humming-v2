@@ -45,6 +45,16 @@ export interface Note {
   source: "raw" | "assistant" | "user";
   in_key: boolean;
   correction_cents: number;
+  // Drum timbre classification (backend drums.py) — populated for every note.
+  drum: number | null;          // GM percussion note 36/38/42
+  drum_name: string | null;     // "Kick" | "Snare" | "HiHat"
+  drum_centroid: number;        // spectral centroid (Hz)
+  drum_low_ratio: number;       // energy fraction < 150Hz (debug only — phone-stripped)
+  drum_high_ratio: number;      // energy fraction > 5kHz
+  drum_zcr: number;             // zero-crossing rate (0-1)
+  drum_rolloff: number;         // spectral rolloff 85% (Hz)
+  drum_flatness: number;        // spectral flatness 0-1 (kick↔snare axis)
+  onset_strength: number;       // spectral-flux onset envelope at the hit
 }
 
 export interface DetectedKey {
@@ -107,6 +117,12 @@ export interface AssistResponse {
   detected_key: DetectedKey;
   assist_applied_count: number;
   key_candidates: KeyCandidate[];
+}
+
+export interface SoundfontPreset {
+  bank: number;
+  program: number;
+  name: string;
 }
 
 export interface RenderCapabilities {

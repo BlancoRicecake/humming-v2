@@ -32,6 +32,7 @@ export function NoteTable({ notes, highlight, selected, onHover, onSelect }: Pro
           <tr>
             <th>#</th><th>start</th><th>dur</th><th>pitch</th><th>orig</th><th>src</th>
             <th>cents</th><th>raw</th><th>Hz</th><th>vel</th><th>conf</th><th>voiced</th>
+            <th>drum</th><th>cntr</th><th>roll</th><th>flat</th><th>zcr</th><th>onset</th><th>lo%</th><th>hi%</th>
           </tr>
         </thead>
         <tbody>
@@ -59,6 +60,14 @@ export function NoteTable({ notes, highlight, selected, onHover, onSelect }: Pro
                 <td>{n.velocity}</td>
                 <td>{n.confidence.toFixed(2)}</td>
                 <td>{(n.voiced_ratio * 100).toFixed(0)}%</td>
+                <td>{n.drum != null ? `${n.drum_name ?? DRUM_NAMES[n.drum] ?? n.drum}` : "—"}</td>
+                <td>{n.drum_centroid ? n.drum_centroid.toFixed(0) : "—"}</td>
+                <td>{n.drum_rolloff ? n.drum_rolloff.toFixed(0) : "—"}</td>
+                <td>{n.drum_flatness ? n.drum_flatness.toFixed(3) : "—"}</td>
+                <td>{n.drum_zcr ? n.drum_zcr.toFixed(2) : "—"}</td>
+                <td>{n.onset_strength ? n.onset_strength.toFixed(2) : "—"}</td>
+                <td>{n.drum_low_ratio ? (n.drum_low_ratio * 100).toFixed(0) : "—"}</td>
+                <td>{n.drum_high_ratio ? (n.drum_high_ratio * 100).toFixed(0) : "—"}</td>
               </tr>
             );
           })}

@@ -151,10 +151,6 @@ class _EditScreenState extends State<EditScreen> {
     }
   }
 
-  // 새 리스트 참조를 반환해 _NotesPainter.shouldRepaint(reference equality)가 통과하게 한다.
-  // applyCandidate 같은 in-place 변경 후에도 페인트가 발생함.
-  List<Note> _displayNotes(TrackData t) => List<Note>.of(t.chordActive ? t.renderNotes : t.notes);
-
   double _projectDuration(ProjectStore store) {
     double m = 0;
     for (final t in store.tracks) {
@@ -191,6 +187,18 @@ class _EditScreenState extends State<EditScreen> {
     if (!await _rec.hasPermission()) {
       if (mounted) comingSoon(context, '마이크 권한이 필요합니다');
       return;
+    }
+    // 기준(첫) 트랙을 마치고 *다른* 트랙 녹음으로 넘어가는 순간 → 앵커 잠금.
+    // 그루브를 잠그고, 키는 검출값+상대조를 1탭 확인받아 프로젝트 키로 고정 →
+    // 이후 이 녹음이 그 키를 상속해 적극 보정된다. (같은 트랙 재녹음은 잠그지 않음.)
+    final anchor = store.firstTrackWithNotes();
+    if (mounted &&
+        store.needsAnchorLock &&
+        anchor != null &&
+        anchor.id != store.activeTrackId) {
+      store.lockGroove();
+      await maybeConfirmAnchorKey(context, store);
+      if (!mounted) return;
     }
     // 카운트다운 시작 — 3→2→1 (각 400ms). 종료 후 실제 녹음 진입.
     setState(() {
@@ -425,8 +433,13 @@ class _EditScreenState extends State<EditScreen> {
                 // 사이드바는 카테고리별로 그룹화해 표시, 레인은 트랙 단위로 1행씩.
                 tracks: store.tracks,
                 activeTrackId: store.activeTrackId,
-                // 코드 모드 활성 트랙은 확장된(화음) 노트를 표시 → 코드 변환이 시각적으로 보임.
-                notesOverride: t.chordActive ? {t.id: _displayNotes(t)} : null,
+                // 표시는 항상 effectiveRenderNotes(timeline_editor._notesFor) 단일 경로로.
+                // 코드 모드의 화음 확장 + 청크 inPoint/timelineStart 시프트 + 루프 반복본을
+                // 모두 그 경로가 처리하므로 별도 override 불필요(과거 override 는 시프트 누락
+                // → 코드 모드에서 첫 노트 앞 리딩 빈공간이 되살아나는 버그가 있었음).
+                notesOverride: null,
+                // 박자 보정 결과를 타임라인에 표시(노트 위치·길이가 그리드로 이동).
+                quantizeDisplay: store.quantizeNotes,
                 durationSec: _projectDuration(store),
                 playheadSec: _playheadSec,
                 selectedNote: t.chordActive ? null : store.selectedNote,
@@ -745,6 +758,12 @@ class _EditScreenState extends State<EditScreen> {
             t.chordActive ? '코드 해제' : '코드',
             enabled: canTrackChord && trackHasNotes,
             onTap: () => store.setChordMode(!t.chordMode)));
+      }
+      if (t.role == TrackRole.bass) {
+        items.add(item(Symbols.south,
+            t.bassPlacement ? '배치 해제' : '저음 배치',
+            enabled: trackHasNotes,
+            onTap: () => store.setBassPlacement(!t.bassPlacement)));
       }
       items.addAll([
         item(t.enabled ? Symbols.volume_up : Symbols.volume_off,

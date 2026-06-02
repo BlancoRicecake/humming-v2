@@ -63,3 +63,31 @@ export async function playAudioBlob(blob: Blob): Promise<HTMLAudioElement> {
   audio.addEventListener("ended", () => URL.revokeObjectURL(url));
   return audio;
 }
+
+// Sequential audition: play a blob and resolve only when it finishes (or is
+// stopped via stopAudition). Used by the "audition all presets" button so we
+// can chain hundreds of demos one after another.
+let auditionAudio: HTMLAudioElement | null = null;
+
+export function playAudioBlobToEnd(blob: Blob): Promise<void> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    auditionAudio = audio;
+    const done = () => {
+      URL.revokeObjectURL(url);
+      if (auditionAudio === audio) auditionAudio = null;
+      resolve();
+    };
+    audio.addEventListener("ended", done);
+    audio.addEventListener("error", done);
+    audio.play().catch(done);
+  });
+}
+
+export function stopAudition() {
+  if (auditionAudio) {
+    auditionAudio.pause();
+    auditionAudio.dispatchEvent(new Event("ended"));
+  }
+}

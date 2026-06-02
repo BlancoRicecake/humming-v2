@@ -41,6 +41,7 @@ class TimelineEditor extends StatefulWidget {
     this.onChunkMove,
     this.onChunkResize,
     this.notesOverride,
+    this.quantizeDisplay,
     this.pending,
     this.onPendingUse,
     this.onPendingDiscard,
@@ -77,6 +78,10 @@ class TimelineEditor extends StatefulWidget {
   /// 활성 트랙의 표시용 노트 오버라이드 (코드 모드 시 확장된 노트 등).
   /// null 이면 트랙의 `notes` 를 그대로 사용.
   final Map<int, List<Note>>? notesOverride;
+
+  /// 박자 보정 표시 — 트랙의 base 노트를 그리드 스냅한 결과를 반환(없으면 그대로).
+  /// 에디터가 quantize 결과(위치·길이 이동)를 보이도록 store.quantizeNotes 를 연결.
+  final List<Note> Function(TrackData t, List<Note> base)? quantizeDisplay;
 
   /// 녹음 종료 직후 분석된 임시 결과 — 해당 트랙 레인 위에 사용/삭제 다이얼로그
   /// 오버레이로 표시한다(task #26). null 이면 다이얼로그 미표시.
@@ -137,10 +142,10 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
   // 청크 이동/트림 드래그 시 다른 청크 경계 + 플레이헤드 + 0초 에 자석처럼 붙는다.
   // 임계값: 화면상 10px (현재 zoom 의 _pxPerSec 기준 초로 환산).
 
-  /// 스냅 후보 — 모든 트랙의 청크 경계 + 0. excludeChunkId 제외.
-  /// 앵커 모델에선 playheadSec === scrollX/pxPerSec 라 청크 드래그 시 자동 스크롤이
-  /// playheadSec 를 같이 움직여 청크가 그 근처에 영구 snap 되어 못 넘어가는 문제 발생 →
-  /// playhead 는 snap 타겟에서 제외.
+  /// 스냅 후보 — 모든 트랙의 청크 경계 + 0 + 플레이헤드(흰색 선). excludeChunkId 제외.
+  /// 플레이헤드 시간 === _pxToSec(_scrollX) (앵커에 시각 고정된 흰색 선 아래의 시간).
+  /// 단, 자동 스크롤 중에는 playhead 가 scroll 과 함께 움직여 청크가 그 근처에 영구
+  /// snap 되어 못 넘어가는 피드백이 생기므로 그때만 제외한다.
   List<double> _snapTargets({int? excludeChunkId}) {
     final out = <double>[0.0];
     for (final t in widget.tracks) {
@@ -149,6 +154,9 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
         out.add(c.timelineStart);
         out.add(c.timelineEnd);
       }
+    }
+    if (_autoScrollDir == 0 && _contentW > 0) {
+      out.add(_pxToSec(_scrollX)); // 흰색 선(플레이헤드)
     }
     return out;
   }
@@ -338,7 +346,9 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
   List<Note> _notesFor(TrackData t) {
     final ov = widget.notesOverride?[t.id];
     if (ov != null) return ov;
-    final base = t.effectiveRenderNotes;
+    var base = t.effectiveRenderNotes;
+    // 박자 보정 결과를 표시(위치·길이 이동이 눈에 보이게). 루프 반복본도 스냅본 기준.
+    if (widget.quantizeDisplay != null) base = widget.quantizeDisplay!(t, base);
     if (!t.looping || widget.projectEnd <= 0 || base.isEmpty || t.chunks.isEmpty) return base;
     // 루프 주기 = 청크 timelineEnd 최대값 (노트 끝이 아니라 청크 가시 영역 끝).
     final period = t.chunks.map((c) => c.timelineEnd).reduce(math.max);
@@ -606,7 +616,7 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
   String _trackDisplayName(TrackData t) {
     if (t.role == TrackRole.drum) return 'DRUM';
     if (t.role == TrackRole.vocal) return 'VOCAL';
-    for (final i in instrumentPalette[t.role] ?? const <Instrument>[]) {
+    for (final i in instrumentsForRole(t.role)) {
       if (i.program == t.program) return i.label.toUpperCase();
     }
     return t.role.label.toUpperCase();

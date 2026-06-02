@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRecorder } from "./hooks/useRecorder";
 import { blobToMonoPcm, encodeWav } from "./lib/wav";
 import {
@@ -6,17 +6,26 @@ import {
   assistNotes,
   exportMidi,
   getRenderCapabilities,
+  listSoundfontPresets,
   renderAudio,
+  renderDemo,
 } from "./lib/api";
-import { playAudioBlob, playNotes, stopPlayback, type OscType } from "./lib/playback";
-import type { RenderCapabilities } from "./types";
+import {
+  playAudioBlob,
+  playAudioBlobToEnd,
+  playNotes,
+  stopAudition,
+  stopPlayback,
+  type OscType,
+} from "./lib/playback";
+import type { RenderCapabilities, SoundfontPreset } from "./types";
 import { WaveformView } from "./components/Waveform";
 import { PianoRoll } from "./components/PianoRoll";
 import { ControlPanel } from "./components/ControlPanel";
 import { NoteTable } from "./components/NoteTable";
 import { SamplePicker } from "./components/SamplePicker";
 import { CandidatePicker } from "./components/CandidatePicker";
-import { INSTRUMENT_ROLES, isChordCapable } from "./lib/instruments";
+import { buildInstrumentPalette, instrumentKey } from "./lib/instruments";
 import { expandChords } from "./lib/chords";
 import type { AnalyzeOptions, AnalyzeResponse, Scale } from "./types";
 
@@ -59,14 +68,28 @@ export default function App() {
   const [osc, setOsc] = useState<OscType>("triangle");
   const [showEnvelope, setShowEnvelope] = useState(true);
   const [caps, setCaps] = useState<RenderCapabilities | null>(null);
-  const [sfProgram, setSfProgram] = useState<number>(0);
+  const [instKey, setInstKey] = useState<string>("");
   const [chordMode, setChordMode] = useState(false);
   const [rendering, setRendering] = useState(false);
+  const [auditioning, setAuditioning] = useState(false);
+  const [auditionStatus, setAuditionStatus] = useState<string>("");
+  const auditionCancel = useRef(false);
+  const [presets, setPresets] = useState<SoundfontPreset[]>([]);
+  const [selectedPresetKey, setSelectedPresetKey] = useState<string>("");
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
-    getRenderCapabilities().then(setCaps).catch((e) =>
-      console.warn("render capabilities unavailable:", e),
-    );
+    getRenderCapabilities().then((c) => {
+      setCaps(c);
+      if (c.soundfont_available) {
+        listSoundfontPresets()
+          .then((ps) => {
+            setPresets(ps);
+            if (ps.length) setSelectedPresetKey(`${ps[0].bank}:${ps[0].program}`);
+          })
+          .catch((e) => console.warn("preset list unavailable:", e));
+      }
+    }).catch((e) => console.warn("render capabilities unavailable:", e));
   }, []);
 
   // Stage 2 boundary — try to decode in browser to WAV; fall back to raw blob
@@ -116,8 +139,27 @@ export default function App() {
     await runAnalyze(blob, label);
   }, [recorder, runAnalyze]);
 
+  // Instrument palette is built from the SF2 preset list (P01/AG03/D05 codes,
+  // per-category banks). Selection is tracked by "bank:program".
+  const palette = useMemo(() => buildInstrumentPalette(presets), [presets]);
+  const selectedInst = useMemo(() => {
+    for (const r of palette) for (const i of r.instruments)
+      if (instrumentKey(i.bank, i.program) === instKey) return i;
+    return undefined;
+  }, [palette, instKey]);
+  // Default the selection to the first instrument once the palette is ready.
+  useEffect(() => {
+    if (!instKey && palette.length && palette[0].instruments.length) {
+      const first = palette[0].instruments[0];
+      setInstKey(instrumentKey(first.bank, first.program));
+    }
+  }, [palette, instKey]);
+  const sfProgram = selectedInst?.program ?? 0;
+  const sfBank = selectedInst?.bank ?? 0;
+  const sfChordCapable = !!selectedInst?.chordCapable;
+
   // chord mode only applies to a chord-capable instrument on a take with a key
-  const chordActive = chordMode && isChordCapable(sfProgram) && !!result?.detected_key?.tonic;
+  const chordActive = chordMode && sfChordCapable && !!result?.detected_key?.tonic;
   const renderNotes = useMemo(() => {
     if (!result) return [];
     return chordActive ? expandChords(result.notes, result.detected_key) : result.notes;
@@ -135,12 +177,12 @@ export default function App() {
   // Stage 9 — MIDI export
   const onDownloadMidi = useCallback(async () => {
     if (!renderNotes.length) return;
-    const blob = await exportMidi(renderNotes, 120, sfProgram);
+    const blob = await exportMidi(renderNotes, 120, sfProgram, sfBank);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = "soundlab.mid"; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, [renderNotes, sfProgram]);
+  }, [renderNotes, sfProgram, sfBank]);
 
   // Stage 8 — SoundFont render & play
   const onPlaySoundFont = useCallback(async () => {
@@ -148,20 +190,20 @@ export default function App() {
     setRendering(true);
     setError(null);
     try {
-      const blob = await renderAudio(renderNotes, sfProgram);
+      const blob = await renderAudio(renderNotes, sfProgram, sfBank);
       await playAudioBlob(blob);
     } catch (e: any) {
       setError(`SoundFont render failed: ${e?.message ?? e}`);
     } finally {
       setRendering(false);
     }
-  }, [renderNotes, caps, sfProgram]);
+  }, [renderNotes, caps, sfProgram, sfBank]);
 
   const onDownloadRenderedWav = useCallback(async () => {
     if (!renderNotes.length || !caps?.soundfont_available) return;
     setRendering(true);
     try {
-      const blob = await renderAudio(renderNotes, sfProgram);
+      const blob = await renderAudio(renderNotes, sfProgram, sfBank);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = "soundlab.wav"; a.click();
@@ -171,7 +213,80 @@ export default function App() {
     } finally {
       setRendering(false);
     }
-  }, [renderNotes, caps, sfProgram]);
+  }, [renderNotes, caps, sfProgram, sfBank]);
+
+  // Presets grouped by bank for the picker's optgroups (bank 0 = GM melodic,
+  // 128 = drum kits, others = variation banks). Input is already sorted.
+  const presetGroups = useMemo(() => {
+    const groups: { bank: number; label: string; items: SoundfontPreset[] }[] = [];
+    for (const p of presets) {
+      let g = groups.find((x) => x.bank === p.bank);
+      if (!g) {
+        const label = p.bank === 0 ? "GM 멜로딕" : p.bank === 128 ? "드럼 키트" : `Bank ${p.bank}`;
+        g = { bank: p.bank, label, items: [] };
+        groups.push(g);
+      }
+      g.items.push(p);
+    }
+    return groups;
+  }, [presets]);
+
+  // Play just the one preset the user picked.
+  const onPlaySelectedPreset = useCallback(async () => {
+    if (!caps?.soundfont_available || !selectedPresetKey) return;
+    const [bank, program] = selectedPresetKey.split(":").map((s) => parseInt(s, 10));
+    setPreviewing(true);
+    setError(null);
+    try {
+      const blob = await renderDemo(bank, program);
+      await playAudioBlob(blob);
+    } catch (e: any) {
+      setError(`preset preview failed: ${e?.message ?? e}`);
+    } finally {
+      setPreviewing(false);
+    }
+  }, [caps, selectedPresetKey]);
+
+  // SoundFont audition — render a fixed demo phrase through every preset in
+  // the SF2 and play them back-to-back so the user can hear the whole bank.
+  const onAuditionAll = useCallback(async () => {
+    if (auditioning) {
+      auditionCancel.current = true;
+      stopAudition();
+      return;
+    }
+    if (!caps?.soundfont_available) return;
+    setError(null);
+    setAuditioning(true);
+    auditionCancel.current = false;
+    try {
+      setAuditionStatus("프리셋 목록 불러오는 중…");
+      const presets = await listSoundfontPresets();
+      if (!presets.length) {
+        setAuditionStatus("프리셋이 없습니다.");
+        return;
+      }
+      for (let i = 0; i < presets.length; i++) {
+        if (auditionCancel.current) break;
+        const p = presets[i];
+        const tag = p.bank === 128 ? "드럼" : `bank ${p.bank}`;
+        setAuditionStatus(`${i + 1}/${presets.length} · ${p.name} (${tag}, prog ${p.program})`);
+        try {
+          const blob = await renderDemo(p.bank, p.program);
+          if (auditionCancel.current) break;
+          await playAudioBlobToEnd(blob);
+        } catch (e: any) {
+          console.warn(`demo failed for ${p.name}:`, e);
+        }
+      }
+      setAuditionStatus(auditionCancel.current ? "중지됨" : "전체 재생 완료");
+    } catch (e: any) {
+      setError(`SoundFont audition failed: ${e?.message ?? e}`);
+      setAuditionStatus("");
+    } finally {
+      setAuditioning(false);
+    }
+  }, [auditioning, caps]);
 
   const recordLabel = useMemo(() => {
     switch (recorder.state) {
@@ -310,29 +425,63 @@ export default function App() {
         <label>
           악기
           <select
-            value={sfProgram}
-            onChange={(e) => setSfProgram(parseInt(e.target.value, 10))}
-            disabled={!caps?.soundfont_available || rendering || analyzing}
+            value={instKey}
+            onChange={(e) => setInstKey(e.target.value)}
+            disabled={!caps?.soundfont_available || !palette.length || rendering || analyzing}
           >
-            {INSTRUMENT_ROLES.map((r) => (
+            {palette.map((r) => (
               <optgroup key={r.role} label={r.label}>
                 {r.instruments.map((inst) => (
-                  <option key={inst.program} value={inst.program}>{inst.label}</option>
+                  <option key={instrumentKey(inst.bank, inst.program)} value={instrumentKey(inst.bank, inst.program)}>
+                    {inst.code} · {inst.label}
+                  </option>
                 ))}
               </optgroup>
             ))}
           </select>
         </label>
-        <label className="checkbox" title={isChordCapable(sfProgram) ? undefined : "이 악기는 코드 모드를 지원하지 않습니다"}>
+        <label className="checkbox" title={sfChordCapable ? undefined : "이 악기는 코드 모드를 지원하지 않습니다"}>
           <input
             type="checkbox"
             checked={chordMode}
-            disabled={!isChordCapable(sfProgram) || rendering || analyzing}
+            disabled={!sfChordCapable || rendering || analyzing}
             onChange={(e) => setChordMode(e.target.checked)}
           />
           코드 모드 {chordActive && "(다이아토닉 트라이어드)"}
         </label>
         <span className="meta">드럼은 비트(퍼커션) 입력에서 자동으로 Kick/Snare/HiHat로 재생됩니다.</span>
+        <button
+          onClick={onAuditionAll}
+          disabled={!caps?.soundfont_available || analyzing}
+          title="SoundFont에 들어있는 모든 프리셋을 종류별로 순서대로 데모 재생"
+        >
+          {auditioning ? "⏹ 오디션 중지" : "🔊 SF2 전체 듣기"}
+        </button>
+        <label title="SF2 안의 프리셋을 직접 골라 데모 재생">
+          프리셋
+          <select
+            value={selectedPresetKey}
+            onChange={(e) => setSelectedPresetKey(e.target.value)}
+            disabled={!caps?.soundfont_available || !presets.length || auditioning || analyzing}
+          >
+            {presetGroups.map((g) => (
+              <optgroup key={g.bank} label={`${g.label} (${g.items.length})`}>
+                {g.items.map((p) => (
+                  <option key={`${p.bank}:${p.program}`} value={`${p.bank}:${p.program}`}>
+                    prog {p.program} · {p.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        <button
+          onClick={onPlaySelectedPreset}
+          disabled={!caps?.soundfont_available || !selectedPresetKey || auditioning || previewing || analyzing}
+        >
+          {previewing ? "재생 중…" : "▶ 골라 듣기"}
+        </button>
+        {auditionStatus && <span className="meta">{auditionStatus}</span>}
         {!caps?.soundfont_available && (
           <span className="meta" style={{ color: "var(--warn)" }}>
             SoundFont 미가용 — {caps?.error ?? "백엔드 미초기화"}

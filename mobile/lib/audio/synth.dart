@@ -100,18 +100,23 @@ class SynthEngine {
 
   static const int drumChannel = 9;
 
-  /// 드럼 채널을 GM bank 128 / program 0 으로 1회 셋업.
-  Future<void> ensureDrumChannel() async {
+  /// 드럼 채널(9)을 GM bank 128 / 지정 키트 program 으로 셋업.
+  /// 캐시는 `1000+program`(멜로딕 0..127 과 비충돌)으로 같은 키트 재선택을 회피.
+  Future<void> ensureDrumKit(int program) async {
     final sfId = await ensureLoaded();
-    if (_channelProgram[drumChannel] == -1) return;
+    final marker = 1000 + program;
+    if (_channelProgram[drumChannel] == marker) return;
     try {
       await _midi.selectInstrument(
-          sfId: sfId, channel: drumChannel, bank: 128, program: 0);
-      _channelProgram[drumChannel] = -1; // 마커 — 재선택 회피
+          sfId: sfId, channel: drumChannel, bank: 128, program: program);
+      _channelProgram[drumChannel] = marker;
     } catch (e) {
-      debugPrint('[synth] drum select failed: $e');
+      debugPrint('[synth] drum select failed (kit=$program): $e');
     }
   }
+
+  /// 하위호환 — 기본 Standard 키트(program 0).
+  Future<void> ensureDrumChannel() => ensureDrumKit(0);
 
   /// 노트온. release 타이머 없음 — 호출자가 noteOff 책임.
   /// [program] 이 주어지면 멜로딕 채널의 악기를 설정한다(드럼 채널 무시).
@@ -123,7 +128,9 @@ class SynthEngine {
   }) async {
     final sfId = await ensureLoaded();
     if (channel == drumChannel) {
-      await ensureDrumChannel();
+      // 키트 선택은 play() 프리앰블에서 1회 수행. 시퀀서 per-note noteOn 은 program 을
+      // 넘기지 않으므로(null) 여기서 재선택하지 않아 선택된 키트를 유지한다.
+      if (program != null) await ensureDrumKit(program);
     } else if (program != null) {
       await _ensureProgram(sfId, channel, program);
     }

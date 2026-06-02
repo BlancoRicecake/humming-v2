@@ -80,10 +80,12 @@ class SynthPlayer {
         melodicCh++;
         if (melodicCh == SynthEngine.drumChannel) melodicCh++; // 9 회피
       }
-      // 멜로딕은 트랙 첫 이벤트 직전에 program select. ensureLoaded 직후에 한 번.
-      if (!tr.isDrum) {
-        // 백그라운드로 program 셋업 — 첫 noteOn 시점에 캐시되어 있을 가능성↑
-        // 정확성을 위해 await 으로 sync.
+      // 트랙 첫 이벤트 직전에 악기 select(시퀀서 per-note noteOn 은 program 미전달).
+      if (tr.isDrum) {
+        // 드럼: bank128 키트(program) 1회 선택.
+        await SynthEngine().ensureDrumKit(tr.program);
+      } else {
+        // 멜로딕: program select 트리거용 무음 noteOn/off.
         await SynthEngine().noteOn(
           channel: ch,
           pitch: 60,

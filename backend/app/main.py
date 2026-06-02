@@ -181,6 +181,7 @@ async def assist(payload: dict):
         bool(opts_raw.get("pitch_assistant", True)),
         opts_raw.get("key_tonic"),
         opts_raw.get("scale"),
+        assist_aggressive=bool(opts_raw.get("assist_aggressive", True)),
     )
     return {
         "notes": [n.model_dump() for n in notes],
@@ -205,6 +206,32 @@ def render_capabilities():
     }
 
 
+@app.get("/soundfont_presets")
+def soundfont_presets():
+    """Every preset present in the loaded SF2 (for the 'audition all' button)."""
+    if not render_mod.is_available():
+        state = render_mod.get_state()
+        raise HTTPException(503, state.error or "SoundFont preview unavailable")
+    return {"presets": render_mod.list_presets()}
+
+
+@app.post("/render_demo")
+async def render_demo(payload: dict):
+    """Render the fixed audition phrase through one SF2 preset → WAV."""
+    if not render_mod.is_available():
+        state = render_mod.get_state()
+        raise HTTPException(503, state.error or "SoundFont preview unavailable")
+    bank = int(payload.get("bank") or 0)
+    program = int(payload.get("program") or 0)
+    sample_rate = int(payload.get("sample_rate") or 44100)
+    try:
+        wav = render_mod.render_demo_to_wav(bank, program, sample_rate=sample_rate)
+    except Exception as e:
+        logger.exception("render_demo failed")
+        raise HTTPException(500, f"render_demo failed: {e}")
+    return Response(content=wav, media_type="audio/wav")
+
+
 @app.post("/render_audio")
 async def render_audio(payload: dict):
     """단일 트랙 notes → SoundFont 합성 WAV.
@@ -226,9 +253,10 @@ async def render_audio(payload: dict):
     except Exception as e:
         raise HTTPException(400, f"invalid note: {e}")
     program = int(payload.get("program") or 0)
+    bank = int(payload.get("bank") or 0)
     sample_rate = int(payload.get("sample_rate") or 44100)
     try:
-        wav = render_mod.render_notes_to_wav(notes, program=program, sample_rate=sample_rate)
+        wav = render_mod.render_notes_to_wav(notes, program=program, sample_rate=sample_rate, bank=bank)
     except Exception as e:
         logger.exception("render failed")
         raise HTTPException(500, f"render failed: {e}")
@@ -300,7 +328,8 @@ async def export_midi(payload: dict):
         except Exception as e:
             raise HTTPException(400, f"invalid note: {e}")
         program = int(payload.get("program") or 0)
-        data = notes_to_midi_bytes(notes, program=program, tempo_bpm=tempo)
+        bank = int(payload.get("bank") or 0)
+        data = notes_to_midi_bytes(notes, program=program, tempo_bpm=tempo, bank=bank)
     return Response(
         content=data,
         media_type="audio/midi",

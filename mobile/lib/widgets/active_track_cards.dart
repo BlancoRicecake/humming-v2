@@ -74,7 +74,7 @@ Widget _helpIcon(BuildContext context, {required String title, required String b
 }
 
 String _instrumentDisplayName(TrackData t) {
-  for (final i in instrumentPalette[t.role] ?? const <Instrument>[]) {
+  for (final i in instrumentsForRole(t.role)) {
     if (i.program == t.program) return i.label;
   }
   return t.role == TrackRole.drum ? '드럼 키트' : (t.role == TrackRole.vocal ? '원본 보컬' : '악기');

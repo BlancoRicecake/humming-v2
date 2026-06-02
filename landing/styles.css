@@ -392,18 +392,6 @@ img { display: block; max-width: 100%; }
   @keyframes navDrop { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
   .navbar { animation: navDrop 0.6s ease both; }
 
-  /* phone gentle float */
-  @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
-  .phone { animation: float 6s ease-in-out infinite; }
-
-  /* badge dot pulse */
-  @keyframes dotPulse {
-    0% { box-shadow: 0 0 0 0 rgba(163, 230, 53, 0.55); }
-    70% { box-shadow: 0 0 0 8px rgba(163, 230, 53, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(163, 230, 53, 0); }
-  }
-  .badge-dot { animation: dotPulse 2.2s ease-out infinite; }
-
   /* chip icon hover lift */
   .card:hover .chip { transform: translateY(-2px) scale(1.04); }
   .chip { transition: transform 0.25s ease; }
