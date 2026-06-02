@@ -1,0 +1,73 @@
+# fly.toml — Humming V2 API (Tier 0 / MVP)
+# Region: iad (us-east-1, lowest latency to Supabase us-east-1)
+# Machine: shared-cpu-1x @ 1GB → $5.70/mo (within $7 budget)
+# Spec ref: docs/infra-mvp.html §1, §5
+
+app = "humming-api"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# ----------------------------------------------------------------------------
+# Runtime env (non-secret). Secrets set via `flyctl secrets set` — see SETUP.md
+# ----------------------------------------------------------------------------
+[env]
+  PORT = "8080"
+  ENV = "production"
+  LOG_LEVEL = "info"
+  # Placeholders (set via flyctl secrets set):
+  #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET
+  #   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
+  #   SENTRY_DSN, POSTHOG_API_KEY
+  #   APPLE_SHARED_SECRET, GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+
+# ----------------------------------------------------------------------------
+# HTTP service
+# ----------------------------------------------------------------------------
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"   # idle savings; first req after stop ~1.5s cold
+  auto_start_machines = true
+  min_machines_running = 1      # MVP: keep 1 warm for /analyze p95
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 10
+    hard_limit = 20
+
+  # Liveness/readiness — /health is a 200 JSON liveness endpoint
+  [[http_service.checks]]
+    name = "health"
+    method = "GET"
+    path = "/health"
+    interval = "10s"
+    timeout = "3s"
+    grace_period = "20s"
+    protocol = "http"
+    [http_service.checks.headers]
+      X-Forwarded-Proto = "https"
+
+# ----------------------------------------------------------------------------
+# VM spec — Tier 0
+# ----------------------------------------------------------------------------
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# ----------------------------------------------------------------------------
+# Deploy strategy — rolling, 1 machine at a time (we only run 1 at MVP)
+# ----------------------------------------------------------------------------
+[deploy]
+  strategy = "rolling"
+  release_command = ""  # leave empty; migrations applied via Supabase CLI
+
+# Processes (single process model at MVP)
+[processes]
+  app = ""

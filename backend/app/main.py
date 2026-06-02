@@ -17,31 +17,102 @@ import re
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from .analyze import analyze_audio, process_vocal
 from .assistant import run_key_and_assistant
 from .midi_build import notes_to_midi_bytes, tracks_to_midi_bytes
 from . import render as render_mod
 from .schemas import AnalyzeOptions, AnalyzeResponse, DetectedKey, Note
+from .settings import get_settings
+from .routes import projects as projects_routes
+from .routes import storage as storage_routes
+from .routes import iap as iap_routes
+from .routes import health as health_routes
 
 logger = logging.getLogger("soundlab")
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="SoundLab", version="0.2.0")
+_settings = get_settings()
+
+# --- Sentry (optional) ------------------------------------------------------
+if _settings.sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        sentry_sdk.init(
+            dsn=_settings.sentry_dsn,
+            environment=_settings.environment,
+            traces_sample_rate=_settings.sentry_traces_sample_rate,
+            integrations=[FastApiIntegration(), StarletteIntegration()],
+            send_default_pii=False,
+        )
+        logger.info("Sentry initialised env=%s", _settings.environment)
+    except ImportError:
+        logger.warning("SENTRY_DSN set but sentry-sdk not installed")
+
+app = FastAPI(title="Humming V2 backend", version="0.3.0")
+
+# --- Rate limit (slowapi) ---------------------------------------------------
+try:
+    from slowapi import Limiter
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.middleware import SlowAPIMiddleware
+    from slowapi.util import get_remote_address
+
+    limiter = Limiter(key_func=get_remote_address, default_limits=[])
+    app.state.limiter = limiter
+    app.add_middleware(SlowAPIMiddleware)
+
+    @app.exception_handler(RateLimitExceeded)
+    async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+        return JSONResponse(status_code=429, content={"detail": "rate limit exceeded"})
+except ImportError:
+    logger.warning("slowapi not installed — no per-IP limit on /analyze")
+    limiter = None  # type: ignore
+
+
+# --- Body-size cap middleware -----------------------------------------------
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    """Reject requests whose Content-Length exceeds the configured cap.
+
+    Streaming uploads without Content-Length are NOT capped here (rare on
+    mobile); /analyze additionally counts bytes when reading the upload.
+    """
+
+    def __init__(self, app, max_bytes: int):
+        super().__init__(app)
+        self.max_bytes = max_bytes
+
+    async def dispatch(self, request: Request, call_next):
+        cl = request.headers.get("content-length")
+        if cl is not None:
+            try:
+                if int(cl) > self.max_bytes:
+                    return JSONResponse(status_code=413,
+                                        content={"detail": f"body too large (>{self.max_bytes} bytes)"})
+            except ValueError:
+                pass
+        return await call_next(request)
+
+
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=_settings.max_body_bytes)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # local dev only
+    allow_origins=["*"],  # local dev only — tighten in production via env
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-@app.get("/health")
-def health():
-    return {"ok": True}
+# --- New P0 routers ---------------------------------------------------------
+app.include_router(health_routes.router)
+app.include_router(projects_routes.router)
+app.include_router(storage_routes.router)
+app.include_router(iap_routes.router)
 
 
 # --- sample library --------------------------------------------------------
@@ -109,8 +180,23 @@ def get_sample(slug: str):
 
 
 # --- analysis + export ------------------------------------------------------
+_analyze_decorators = []
+if limiter is not None:
+    _analyze_decorators.append(limiter.limit("10/minute"))
+
+
+def _apply(decorators):
+    def wrap(fn):
+        for d in reversed(decorators):
+            fn = d(fn)
+        return fn
+    return wrap
+
+
 @app.post("/analyze", response_model=AnalyzeResponse)
+@_apply(_analyze_decorators)
 async def analyze(
+    request: Request,
     audio: UploadFile = File(...),
     options: str | None = Form(None),
 ):

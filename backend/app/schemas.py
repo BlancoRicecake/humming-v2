@@ -133,3 +133,10 @@ class AnalyzeResponse(BaseModel):
     detected_key: Optional[DetectedKey] = None
     assist_applied_count: int = 0
     key_candidates: List[KeyCandidate] = Field(default_factory=list)
+    # --- Decoder debug surface (Opus integration) ---
+    # All optional for backwards compatibility with existing clients.
+    input_codec: Optional[str] = None        # 'wav' | 'opus' | 'm4a' | 'caf' | 'aac' | 'unknown'
+    input_sr: Optional[int] = None           # original sample rate, before TARGET_SR resample
+    input_channels: Optional[int] = None
+    input_bitrate_kbps: Optional[int] = None # populated for lossy (Opus/AAC)
+    decoded_via: Optional[Literal["soundfile", "ffmpeg"]] = None

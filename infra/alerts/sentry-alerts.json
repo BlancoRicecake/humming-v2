@@ -1,0 +1,72 @@
+{
+  "_comment": "Sentry alert rules for humming-server + humming-mobile projects. Free plan disallows API-based rule creation; use this file as a manual checklist when configuring via the Sentry UI (Alerts -> Create Alert). All notifications email heobusy@gmail.com.",
+  "_spec_ref": "docs/infra-mvp.html §9; .claude/agents/infra-ops.md 'alarm rules to configure'",
+  "alerts": [
+    {
+      "name": "Server error rate > 1% over 5min",
+      "project": "humming-server",
+      "type": "metric_alert",
+      "dataset": "events",
+      "query": "event.type:error",
+      "aggregate": "percent(event.type:error) / count()",
+      "trigger": {
+        "comparison": "above",
+        "threshold": 1.0,
+        "window_minutes": 5
+      },
+      "actions": [
+        { "type": "email", "target": "heobusy@gmail.com" }
+      ],
+      "notes": "If percent_change of error count vs prior period is easier in UI, use that. Goal: catch broken deploys fast."
+    },
+    {
+      "name": "/analyze p95 latency > 5s over 10min",
+      "project": "humming-server",
+      "type": "metric_alert",
+      "dataset": "transactions",
+      "query": "transaction:POST /analyze",
+      "aggregate": "p95(transaction.duration)",
+      "trigger": {
+        "comparison": "above",
+        "threshold_ms": 5000,
+        "window_minutes": 10
+      },
+      "actions": [
+        { "type": "email", "target": "heobusy@gmail.com" }
+      ],
+      "notes": "Indicates Opus decode or librosa slowdown. p95 budget at MVP = 2s; alarm at 5s = 2.5x degradation."
+    },
+    {
+      "name": "Deploy failure / first-event crash spike",
+      "project": "humming-server",
+      "type": "issue_alert",
+      "conditions": [
+        { "id": "FirstSeenEventCondition" },
+        { "id": "EventFrequencyCondition", "value": 10, "interval": "5m" }
+      ],
+      "filters": [
+        { "id": "AgeComparisonFilter", "comparison_type": "newer", "value": 1, "time": "hour" }
+      ],
+      "actions": [
+        { "type": "email", "target": "heobusy@gmail.com" }
+      ],
+      "notes": "Catches new errors >=10 occurrences within first hour. Strong signal a deploy broke something."
+    },
+    {
+      "name": "Mobile crash-free sessions < 99% over 1h",
+      "project": "humming-mobile",
+      "type": "metric_alert",
+      "dataset": "sessions",
+      "aggregate": "crash_free_rate(session)",
+      "trigger": {
+        "comparison": "below",
+        "threshold": 0.99,
+        "window_minutes": 60
+      },
+      "actions": [
+        { "type": "email", "target": "heobusy@gmail.com" }
+      ],
+      "notes": "Optional but recommended. Skip if free-plan session tracking unavailable."
+    }
+  ]
+}

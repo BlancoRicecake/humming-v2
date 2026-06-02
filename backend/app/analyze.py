@@ -8,15 +8,18 @@ visible.
 from __future__ import annotations
 
 import io
+import json
 import math
+import subprocess
 import tempfile
 import os
 import uuid
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import librosa
 import soundfile as sf
+from fastapi import HTTPException
 from scipy.signal import medfilt
 
 from .schemas import (
@@ -46,24 +49,195 @@ from .assistant import run_key_and_assistant
 TARGET_SR = 22050
 HOP = 256
 
+# ============================================================================
+# Decoder probe / debug surface (Opus integration)
+# ============================================================================
+# Last decode metadata — populated by _load_audio, consumed by analyze_audio()
+# at response-pack time. Module-level is fine because analyze_audio runs
+# under the per-request slot (Semaphore(2) in main.py) so there is no
+# interleaving between concurrent /analyze calls within a single Python
+# function frame.
+_LAST_DECODE_INFO: Dict[str, Optional[object]] = {}
+
+
+def _magic_is_wav(blob: bytes) -> bool:
+    return len(blob) >= 12 and blob[:4] == b"RIFF" and blob[8:12] == b"WAVE"
+
+
+def _magic_is_caf(blob: bytes) -> bool:
+    return len(blob) >= 4 and blob[:4] == b"caff"
+
+
+def _magic_is_ogg(blob: bytes) -> bool:
+    return len(blob) >= 4 and blob[:4] == b"OggS"
+
+
+def _magic_is_mp4(blob: bytes) -> bool:
+    # ISO BMFF: ?? ?? ?? ?? 'ftyp' at offset 4
+    return len(blob) >= 12 and blob[4:8] == b"ftyp"
+
+
+def _ffprobe_info(blob: bytes) -> Dict[str, Optional[object]]:
+    """Return {codec, sr, channels, bitrate_kbps}. Tolerates probe failure."""
+    info: Dict[str, Optional[object]] = {
+        "codec": None, "sr": None, "channels": None, "bitrate_kbps": None,
+    }
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_streams", "-show_format", "-of", "json",
+                "pipe:0",
+            ],
+            input=blob, capture_output=True, timeout=10,
+        )
+        if proc.returncode != 0:
+            return info
+        meta = json.loads(proc.stdout.decode("utf-8", errors="ignore"))
+        streams = meta.get("streams") or []
+        # Pick first audio stream
+        astream = next((s for s in streams if s.get("codec_type") == "audio"), None)
+        if astream:
+            info["codec"] = astream.get("codec_name")
+            sr_raw = astream.get("sample_rate")
+            info["sr"] = int(sr_raw) if sr_raw else None
+            info["channels"] = astream.get("channels")
+            br = astream.get("bit_rate") or (meta.get("format") or {}).get("bit_rate")
+            if br:
+                try:
+                    info["bitrate_kbps"] = max(1, int(round(int(br) / 1000)))
+                except Exception:
+                    pass
+            # ffprobe over a stdin pipe cannot seek → bit_rate is often unset
+            # for Ogg/Opus and MP4 containers. Estimate from blob size + duration.
+            if not info["bitrate_kbps"]:
+                dur_raw = astream.get("duration") or (meta.get("format") or {}).get("duration")
+                try:
+                    dur = float(dur_raw) if dur_raw else 0.0
+                    if dur > 0.05 and len(blob) > 0:
+                        info["bitrate_kbps"] = max(1, int(round(len(blob) * 8.0 / dur / 1000)))
+                except (TypeError, ValueError):
+                    pass
+    except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError, ValueError):
+        pass
+    return info
+
+
+def _ffmpeg_decode_to_pcm(
+    blob: bytes, target_sr: int = TARGET_SR, mono: bool = True,
+) -> Tuple[np.ndarray, int]:
+    """Decode arbitrary container (Opus/m4a/CAF/AAC/...) → mono float32 PCM at target_sr.
+
+    Uses ffmpeg subprocess with stdin/stdout pipes. ffmpeg performs container
+    demux, codec decode, channel downmix and resample (SIMD swresample) in one
+    pass — no temp file.
+    """
+    ac = 1 if mono else 2
+    cmd = [
+        "ffmpeg", "-loglevel", "error",
+        "-i", "pipe:0",
+        "-f", "s16le", "-ac", str(ac), "-ar", str(target_sr),
+        "pipe:1",
+    ]
+    try:
+        proc = subprocess.run(
+            cmd, input=blob, capture_output=True, timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=400, detail="audio decode timeout (ffmpeg > 30s)") from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail="ffmpeg binary not available on server") from exc
+
+    if proc.returncode != 0 or not proc.stdout:
+        err = proc.stderr.decode("utf-8", errors="ignore")[:200] if proc.stderr else "unknown"
+        raise HTTPException(status_code=400, detail=f"audio decode failed (ffmpeg): {err}")
+
+    pcm = np.frombuffer(proc.stdout, dtype=np.int16).astype(np.float32) / 32768.0
+    return pcm, target_sr
+
 
 # ============================================================================
 # Stage 2 — Preprocessing
 # ============================================================================
 def _load_audio(file_bytes: bytes) -> Tuple[np.ndarray, int]:
-    """Decode any audio blob into mono float32 PCM at TARGET_SR."""
-    bio = io.BytesIO(file_bytes)
-    try:
-        y, sr = sf.read(bio, dtype="float32", always_2d=False)
-    except Exception:
-        # m4a/mp3 etc. — librosa.load with audioread fallback needs a file path
-        tmp = tempfile.NamedTemporaryFile(suffix=".audio", delete=False)
+    """Decode any audio blob into mono float32 PCM at TARGET_SR.
+
+    Routing:
+      - WAV (RIFF magic): keep the legacy soundfile path verbatim (no
+        regression risk on PCM inputs).
+      - Anything else (Opus/m4a/CAF/AAC/...): ffmpeg subprocess pipe.
+      - Both paths populate ``_LAST_DECODE_INFO`` for the response debug
+        surface.
+    """
+    probe = _ffprobe_info(file_bytes)
+    # Container hint independent of ffprobe (for the input_codec label).
+    if _magic_is_wav(file_bytes):
+        container = "wav"
+    elif _magic_is_caf(file_bytes):
+        container = "caf"
+    elif _magic_is_ogg(file_bytes):
+        container = "opus" if (probe.get("codec") in {"opus", None}) else str(probe.get("codec"))
+    elif _magic_is_mp4(file_bytes):
+        # iOS may wrap Opus in MP4 (.m4a). Distinguish via codec probe.
+        codec_name = probe.get("codec")
+        if codec_name == "opus":
+            container = "opus"
+        elif codec_name in {"aac", "mp4a"}:
+            container = "m4a"
+        else:
+            container = "m4a"
+    else:
+        container = str(probe.get("codec") or "unknown")
+
+    decoded_via: str
+    if _magic_is_wav(file_bytes):
+        # ---- Legacy WAV path (unchanged for regression safety) -----------------
+        bio = io.BytesIO(file_bytes)
         try:
-            tmp.write(file_bytes); tmp.flush(); tmp.close()
-            y, sr = librosa.load(tmp.name, sr=None, mono=True)
-        finally:
-            try: os.unlink(tmp.name)
-            except OSError: pass
+            y, sr = sf.read(bio, dtype="float32", always_2d=False)
+            decoded_via = "soundfile"
+        except Exception:
+            # Extremely rare: RIFF magic but libsndfile can't parse (e.g.
+            # exotic subtype). Fall through to ffmpeg.
+            y, sr = _ffmpeg_decode_to_pcm(file_bytes, target_sr=TARGET_SR, mono=True)
+            decoded_via = "ffmpeg"
+    else:
+        # ---- Opus / m4a / CAF / AAC / ... -------------------------------------
+        try:
+            y, sr = _ffmpeg_decode_to_pcm(file_bytes, target_sr=TARGET_SR, mono=True)
+            decoded_via = "ffmpeg"
+        except HTTPException:
+            # Final fallback: try soundfile (libsndfile may handle some Ogg/Opus).
+            try:
+                bio = io.BytesIO(file_bytes)
+                y, sr = sf.read(bio, dtype="float32", always_2d=False)
+                decoded_via = "soundfile"
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="unsupported audio format (ffmpeg + soundfile both failed)",
+                ) from exc
+
+    # Cache decode metadata for the response packer.
+    probe_sr = probe.get("sr")
+    bitrate_kbps = probe.get("bitrate_kbps")
+    # ffprobe over stdin pipe can't seek → duration/bitrate often missing for
+    # Ogg/Opus + MP4. Back-fill from blob size + decoded duration when the
+    # decode used the lossy ffmpeg path.
+    if bitrate_kbps is None and decoded_via == "ffmpeg":
+        ch = 1
+        dur_decoded = (len(y) / float(sr) / ch) if sr else 0.0
+        if dur_decoded > 0.05:
+            bitrate_kbps = max(1, int(round(len(file_bytes) * 8.0 / dur_decoded / 1000)))
+    _LAST_DECODE_INFO.clear()
+    _LAST_DECODE_INFO.update({
+        "input_codec": container,
+        "input_sr": int(probe_sr) if probe_sr else int(sr),
+        "input_channels": probe.get("channels"),
+        "input_bitrate_kbps": bitrate_kbps,
+        "decoded_via": decoded_via,
+    })
+
     if y.ndim > 1:
         y = np.mean(y, axis=1)
     if sr != TARGET_SR:
@@ -350,9 +524,15 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
     def _safe(arr: np.ndarray) -> List[float]:
         return [float(x) if math.isfinite(x) else float("nan") for x in arr.tolist()]
 
+    decode_info = dict(_LAST_DECODE_INFO)
     return AnalyzeResponse(
         notes=notes,
         chunks=[Chunk(**c) for c in chunks_final],
+        input_codec=decode_info.get("input_codec"),
+        input_sr=decode_info.get("input_sr"),
+        input_channels=decode_info.get("input_channels"),
+        input_bitrate_kbps=decode_info.get("input_bitrate_kbps"),
+        decoded_via=decode_info.get("decoded_via"),
         envelope=EnvelopeInfo(
             times=[float(t) for t in env_times.tolist()],
             rms=[float(x) for x in rms.tolist()],
