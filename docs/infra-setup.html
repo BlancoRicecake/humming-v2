@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Humming V2 — 인프라 셋업 가이드</title>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #14141c;
+      --surface-2: #1c1c26;
+      --border: #2a2a38;
+      --text: #e8e8ee;
+      --text-2: #a0a0b0;
+      --text-3: #6a6a78;
+      --lime: #c8ff00;
+      --lime-dim: #889a00;
+      --amber: #ffb700;
+      --red: #ff5566;
+      --blue: #4dd0e1;
+      --green: #6ce28d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { overflow-x: hidden; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif;
+      font-size: 14px;
+      line-height: 1.65;
+      padding: 32px 24px 80px;
+      max-width: 980px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 28px; margin-bottom: 8px; letter-spacing: -0.5px; }
+    h2 {
+      font-size: 18px;
+      margin-top: 36px;
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      color: var(--lime);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h2 .step {
+      background: var(--lime);
+      color: var(--bg);
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    h2 .time {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-2);
+    }
+    h3 {
+      font-size: 14px;
+      margin-top: 18px;
+      margin-bottom: 8px;
+      color: var(--text);
+      letter-spacing: 0.2px;
+    }
+    .subtitle { color: var(--text-2); margin-bottom: 24px; font-size: 13px; line-height: 1.7; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 14px;
+    }
+    p { margin-bottom: 12px; }
+    ol, ul { padding-left: 20px; margin-bottom: 12px; line-height: 1.75; }
+    li { margin-bottom: 6px; }
+    li::marker { color: var(--lime); font-weight: 700; }
+    ul li::marker { color: var(--text-3); }
+    code {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: 12px;
+      color: var(--lime);
+    }
+    pre {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 10px 0 14px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text);
+    }
+    pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: var(--text);
+    }
+    .goal-box {
+      background: rgba(200,255,0,0.06);
+      border: 1px solid rgba(200,255,0,0.25);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      color: var(--text);
+    }
+    .goal-box b { color: var(--lime); }
+    .secret-box {
+      background: rgba(255,183,0,0.06);
+      border: 1px solid rgba(255,183,0,0.25);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 14px 0;
+      font-size: 13px;
+    }
+    .secret-box .label {
+      color: var(--amber);
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .secret-box ul { margin-bottom: 0; padding-left: 18px; }
+    .secret-box li::marker { color: var(--amber); }
+    .secret-box code { color: var(--amber); border-color: rgba(255,183,0,0.3); }
+    .note-box {
+      background: rgba(77,208,225,0.05);
+      border: 1px solid rgba(77,208,225,0.2);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 12px 0;
+      font-size: 12px;
+      color: var(--text-2);
+    }
+    .note-box b { color: var(--blue); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--text-2);
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .total-row {
+      background: rgba(200,255,0,0.05);
+      font-weight: 700;
+    }
+    .total-row td { color: var(--lime); }
+    .checklist {
+      list-style: none;
+      padding-left: 0;
+    }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 6px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .checklist li::before {
+      content: "☐";
+      color: var(--text-3);
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: -2px;
+    }
+    .checklist li code {
+      font-size: 11px;
+    }
+    .total-banner {
+      background: linear-gradient(135deg, rgba(200,255,0,0.10), rgba(200,255,0,0.02));
+      border: 1px solid rgba(200,255,0,0.3);
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .total-banner .num {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--lime);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.5px;
+    }
+    .total-banner .lbl { color: var(--text-2); font-size: 13px; line-height: 1.5; }
+    .footnote {
+      color: var(--text-3);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    a { color: var(--blue); text-decoration: none; border-bottom: 1px solid rgba(77,208,225,0.3); }
+    a:hover { border-bottom-color: var(--blue); }
+  </style>
+</head>
+<body>
+  <h1>Humming V2 — 인프라 셋업 가이드</h1>
+  <div class="subtitle">
+    Tier 0 / MVP 수동 1회성 셋업. 순차로 진행 — 뒷 단계는 앞 단계에서 받아낸 시크릿을 사용합니다.<br />
+    스펙 출처: <code>docs/infra-mvp.html</code> §1 스택, §5 셋업, §9 Observability
+  </div>
+
+  <div class="total-banner">
+    <div>
+      <div class="num">≈ 3시간 20분</div>
+    </div>
+    <div class="lbl">
+      실작업 시간 (대부분 대기 시간)<br />
+      DNS 전파 ~10분, IAP 스토어 심사 1~2일
+    </div>
+  </div>
+
+  <h2><span class="step">0</span> 사전 준비 <span class="time">5분</span></h2>
+  <div class="card">
+    <ul>
+      <li>Apple Developer 계정 ($99/년) — 이미 결제됨</li>
+      <li>Google Play Console ($25 일회성) — 이미 결제됨</li>
+      <li>결제수단 (Cloudflare / Fly.io / Supabase / Vercel 등록용 신용카드)</li>
+      <li>CLI 도구 설치:
+        <pre><code>brew install flyctl supabase/tap/supabase vercel-cli gh
+npm i -g @cloudflare/wrangler</code></pre>
+      </li>
+    </ul>
+  </div>
+
+  <h2><span class="step">1</span> Cloudflare — 도메인 + DNS + R2 <span class="time">30분</span></h2>
+  <div class="goal-box">
+    <b>목표:</b> 도메인 등록 + R2 버킷 생성 + DNS 레코드 준비 (api → Fly, apex/www → Vercel)
+  </div>
+  <div class="card">
+    <ol>
+      <li><b>도메인 등록</b> — Cloudflare Registrar 에서 등록 (예: <code>hum-track.com</code>). 약 10분 전파. 비용 ~$10/년.</li>
+      <li><b>DNS 레코드</b> — <code>infra/cloudflare/dns.md</code> 참고. Fly 와 Vercel 의 호스트네임이 나온 뒤 추가 (3, 4번 단계 후).</li>
+      <li><b>R2 버킷 생성</b>:
+        <ul>
+          <li>대시보드 → R2 → <em>Create bucket</em> → 이름 <code>humming-vocals</code> → location <em>Automatic</em></li>
+          <li>Lifecycle 규칙: <code>infra/cloudflare/r2-lifecycle.md</code> 참고 (자동 삭제 없음, multipart abort cleanup 만)</li>
+        </ul>
+      </li>
+      <li><b>R2 API 토큰</b>:
+        <ul>
+          <li>R2 → <em>Manage R2 API Tokens</em> → <em>Create API token</em></li>
+          <li>권한: <em>Object Read &amp; Write</em>, <code>humming-vocals</code> 만 scope</li>
+          <li><b>Access Key ID</b> + <b>Secret Access Key</b> 저장 (한 번만 표시됨)</li>
+          <li><b>Account ID</b> 저장 (R2 대시보드 우측 상단)</li>
+        </ul>
+      </li>
+      <li><b>Cloudflare DNS Proxy</b> — <code>api.</code> 만 orange-cloud 활성화. <b>Fly 인증서 발급 완료 후</b> (3.6 단계).</li>
+    </ol>
+  </div>
+  <div class="secret-box">
+    <div class="label">받아낼 시크릿</div>
+    <ul>
+      <li><code>R2_ACCOUNT_ID</code></li>
+      <li><code>R2_ACCESS_KEY_ID</code></li>
+      <li><code>R2_SECRET_ACCESS_KEY</code></li>
+      <li><code>R2_BUCKET=humming-vocals</code></li>
+    </ul>
+  </div>
+
+  <h2><span class="step">2</span> Vercel — 랜딩 페이지 <span class="time">10분</span></h2>
+  <div class="card">
+    <ol>
+      <li><code>vercel login</code> (GitHub OAuth 로 로그인)</li>
+      <li>저장소 루트에서: <code>cd landing &amp;&amp; vercel link</code> (프로젝트명 <code>humming-landing</code>)</li>
+      <li><em>Settings → Domains</em> → <code>hum-track.com</code> 와 <code>www.hum-track.com</code> 추가.<br />
+        Vercel 이 CNAME 대상 (예: <code>cname.vercel-dns.com</code>) 을 반환 → Cloudflare DNS 에 추가.</li>
+      <li>배포: <code>vercel deploy --prod</code> (랜딩 코드가 준비된 뒤 최초 1회)</li>
+    </ol>
+  </div>
+  <div class="note-box">
+    <b>받아낼 시크릿: 없음</b> — Vercel 이 TLS 자동 처리
+  </div>
+
+  <h2><span class="step">3</span> Fly.io — API 서버 <span class="time">25분</span></h2>
+  <div class="card">
+    <ol>
+      <li><code>flyctl auth login</code> (브라우저 로그인)</li>
+      <li><code>backend/</code> 디렉터리에서:
+        <pre><code>flyctl launch --no-deploy --copy-config --name humming-api --region iad</code></pre>
+        기존 <code>fly.toml</code> 그대로 사용. 아직 <b>배포는 하지 않음</b>.
+      </li>
+      <li><b>시크릿 설정</b> (절대 git commit 금지). 1, 4, 5, 6번 단계에서 받아낸 값 채워넣기:
+        <pre><code>flyctl secrets set \
+  SUPABASE_URL=... \
+  SUPABASE_SERVICE_ROLE_KEY=... \
+  SUPABASE_JWT_SECRET=... \
+  R2_ACCOUNT_ID=... \
+  R2_ACCESS_KEY_ID=... \
+  R2_SECRET_ACCESS_KEY=... \
+  R2_BUCKET=humming-vocals \
+  SENTRY_DSN=... \
+  POSTHOG_API_KEY=... \
+  APPLE_SHARED_SECRET=... \
+  GOOGLE_PLAY_SERVICE_ACCOUNT_JSON='{...}'</code></pre>
+      </li>
+      <li>배포: <code>flyctl deploy --remote-only</code></li>
+      <li><b>커스텀 호스트네임</b>: <code>flyctl certs add api.hum-track.com</code><br />
+        CNAME 대상 반환 → Cloudflare DNS 에 추가. <code>flyctl certs show</code> 가 <em>Issued</em> 상태가 될 때까지 대기 (보통 5분 미만).
+      </li>
+      <li><b>Cloudflare proxy 활성화</b> — <code>api.</code> 레코드의 orange cloud 켜기. 재테스트: <code>curl -fsS https://api.hum-track.com/health</code></li>
+      <li><b>지출 알람</b>: Fly 대시보드 → <em>Billing</em> → <em>Spending alerts</em> → 임계치 $5/일 → <code>heobusy@gmail.com</code></li>
+    </ol>
+  </div>
+
+  <h2><span class="step">4</span> Supabase — DB + Auth <span class="time">40분</span></h2>
+  <div class="card">
+    <ol>
+      <li>대시보드 → <em>New project</em>:
+        <ul>
+          <li>리전: <b>us-east-1</b> (Fly iad 와 가장 가까움)</li>
+          <li>DB 비밀번호: 생성 후 1Password 에 저장</li>
+        </ul>
+      </li>
+      <li><b>마이그레이션 실행</b>:
+        <pre><code>cd backend
+supabase link --project-ref &lt;ref&gt;
+supabase db push   # migrations/001_initial_schema.sql 적용됨</code></pre>
+      </li>
+      <li><b>인증 provider</b> — <em>Authentication → Providers</em>:
+        <ul>
+          <li><b>Apple</b>: 활성화. Apple Developer 에서 Services ID, Team ID, Key ID, p8 private key 필요. Supabase 가 표시하는 redirect URL 을 Apple → Services ID 의 <em>Return URLs</em> 에 붙여넣기.</li>
+          <li><b>Google</b>: 활성화. Google Cloud Console <em>OAuth 2.0 Client IDs</em> 에서 Web client ID + secret. Supabase redirect URL 을 <em>Authorized redirect URIs</em> 에 추가.</li>
+          <li><b>Kakao</b>: 활성화. Kakao Developers → <em>내 애플리케이션</em> 에서 REST API 키 + client secret. Supabase redirect URL 을 <em>플랫폼 → Web</em> 의 <em>Redirect URI</em> 에 추가.</li>
+          <li><b>Redirect URL 형식</b> (Supabase 자동 생성): <code>https://&lt;ref&gt;.supabase.co/auth/v1/callback</code></li>
+          <li><b>모바일 deep link</b> (<em>URL Configuration → Site URL</em>): <code>humming://auth/callback</code></li>
+        </ul>
+      </li>
+      <li><b>이메일 템플릿</b>: 기본값 그대로 (MVP 에서 magic link 안 씀)</li>
+      <li><b>DB 용량 알람</b>: <em>Project Settings → Billing → Usage</em> → 무료 한도 80% (400MB) 도달 시 이메일 활성화</li>
+    </ol>
+  </div>
+  <div class="secret-box">
+    <div class="label">받아낼 시크릿</div>
+    <ul>
+      <li><code>SUPABASE_URL=https://&lt;ref&gt;.supabase.co</code></li>
+      <li><code>SUPABASE_SERVICE_ROLE_KEY</code> (<em>Project Settings → API</em>)</li>
+      <li><code>SUPABASE_JWT_SECRET</code> (<em>Project Settings → API → JWT Settings</em>)</li>
+    </ul>
+  </div>
+
+  <h2><span class="step">5</span> Sentry — 에러 + APM <span class="time">15분</span></h2>
+  <div class="card">
+    <ol>
+      <li>Sentry.io → <em>Create project</em> 두 번:
+        <ul>
+          <li><code>humming-mobile</code> (플랫폼: Flutter)</li>
+          <li><code>humming-server</code> (플랫폼: Python / FastAPI)</li>
+        </ul>
+      </li>
+      <li>각 프로젝트의 <b>DSN</b> 저장</li>
+      <li><b>알람 규칙</b>: <code>infra/alerts/sentry-alerts.json</code> 참고 → Sentry Alerts UI 에서 수동 입력 (무료 plan 은 API 로 규칙 생성 불가)</li>
+      <li><b>샘플링</b>: 모바일 + 서버 SDK 양쪽에 <code>traces_sample_rate=0.1</code> (10%) → MAU 1k 까지 월 5k 이벤트 한도 안에서 운영</li>
+    </ol>
+  </div>
+  <div class="secret-box">
+    <div class="label">받아낼 시크릿</div>
+    <ul>
+      <li><code>SENTRY_DSN</code> (server) → Fly secrets</li>
+      <li>모바일 DSN → Flutter <code>--dart-define</code> 에 주입</li>
+    </ul>
+  </div>
+
+  <h2><span class="step">6</span> PostHog — 분석 <span class="time">10분</span></h2>
+  <div class="card">
+    <ol>
+      <li>PostHog Cloud 가입 (US 리전, 무료 plan)</li>
+      <li><em>Project Settings → Project API Key</em> → 복사</li>
+      <li>funnel 설정: 가입 → 첫 곡 → 내보내기 → 구독 (대시보드 수동)</li>
+    </ol>
+  </div>
+  <div class="secret-box">
+    <div class="label">받아낼 시크릿</div>
+    <ul>
+      <li><code>POSTHOG_API_KEY</code> → Fly secrets + Flutter <code>--dart-define</code></li>
+      <li>호스트: <code>https://us.posthog.com</code></li>
+    </ul>
+  </div>
+
+  <h2><span class="step">7</span> UptimeRobot — 가용성 모니터링 <span class="time">5분</span></h2>
+  <div class="card">
+    <ol>
+      <li>무료 계정 생성</li>
+      <li><em>Add Monitor</em> → HTTP(s) → <code>https://api.hum-track.com/health</code> → 5분 간격</li>
+      <li><em>Alert contacts</em>: <code>heobusy@gmail.com</code> + iOS 푸시 (UptimeRobot 앱 설치)</li>
+      <li>모니터 목록 및 에스컬레이션 정책은 <code>infra/alerts/uptimerobot.md</code> 참고</li>
+    </ol>
+  </div>
+
+  <h2><span class="step">8</span> App Store Connect — IAP <span class="time">30분 + 24~48h 심사</span></h2>
+  <div class="card">
+    <ol>
+      <li><em>My Apps → Humming → In-App Purchases → Manage</em>:
+        <ul>
+          <li>자동 갱신 구독 그룹: <code>humming_pro</code></li>
+          <li>상품 ID:
+            <ul>
+              <li><code>humming_pro_monthly</code> — $4.99/월, 7일 무료 체험 (Introductory Offer)</li>
+              <li><code>humming_pro_yearly</code> — $39.99/년, 7일 무료 체험</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+      <li><em>App Information → App-Specific Shared Secret</em> → 생성 → <code>APPLE_SHARED_SECRET</code> 으로 복사</li>
+      <li><em>Users and Access → Keys → In-App Purchase</em> → 키 생성, <code>.p8</code> 다운로드. Key ID + Issuer ID 메모 (App Store Server API 용)</li>
+      <li>첫 빌드와 함께 상품 심사 제출</li>
+    </ol>
+  </div>
+  <div class="secret-box">
+    <div class="label">받아낼 시크릿</div>
+    <ul>
+      <li><code>APPLE_SHARED_SECRET</code></li>
+      <li>App Store Server API 키 (p8) — 서버-서버 검증 도입 시 (post-MVP) Fly multi-line secret</li>
+    </ul>
+  </div>
+
+  <h2><span class="step">9</span> Play Console — IAP <span class="time">30분 + 24h 심사</span></h2>
+  <div class="card">
+    <ol>
+      <li><em>Monetize → Products → Subscriptions</em>:
+        <ul>
+          <li><code>humming_pro_monthly</code> — $4.99/월, 7일 무료 체험</li>
+          <li><code>humming_pro_yearly</code> — $39.99/년, 7일 무료 체험</li>
+        </ul>
+      </li>
+      <li><em>Monetization setup → Real-time developer notifications</em>:
+        <ul>
+          <li>Google Cloud Pub/Sub 토픽 <code>humming-rtdn</code> 생성</li>
+          <li>토픽명을 Play Console 에 붙여넣기</li>
+        </ul>
+      </li>
+      <li><em>Setup → API access</em>:
+        <ul>
+          <li>Google Cloud 프로젝트 연결</li>
+          <li>서비스 계정 <code>humming-play-api</code> 생성, 역할 <em>Pub/Sub Subscriber</em> + <em>Android Publisher</em> (Play Console linkage 경유)</li>
+          <li>JSON 키 다운로드 → <code>GOOGLE_PLAY_SERVICE_ACCOUNT_JSON</code> Fly secret 으로 저장</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+  <div class="secret-box">
+    <div class="label">받아낼 시크릿</div>
+    <ul>
+      <li><code>GOOGLE_PLAY_SERVICE_ACCOUNT_JSON</code> (전체 JSON inline)</li>
+    </ul>
+  </div>
+
+  <h2>시간 요약</h2>
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>단계</th><th>실작업 시간</th><th>심사 대기</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0 사전준비</td><td>5분</td><td>—</td></tr>
+        <tr><td>1 Cloudflare</td><td>30분</td><td>DNS 10분</td></tr>
+        <tr><td>2 Vercel</td><td>10분</td><td>—</td></tr>
+        <tr><td>3 Fly.io</td><td>25분</td><td>cert 5분</td></tr>
+        <tr><td>4 Supabase</td><td>40분</td><td>—</td></tr>
+        <tr><td>5 Sentry</td><td>15분</td><td>—</td></tr>
+        <tr><td>6 PostHog</td><td>10분</td><td>—</td></tr>
+        <tr><td>7 UptimeRobot</td><td>5분</td><td>—</td></tr>
+        <tr><td>8 App Store IAP</td><td>30분</td><td>24~48시간</td></tr>
+        <tr><td>9 Play IAP</td><td>30분</td><td>24시간</td></tr>
+        <tr class="total-row"><td>총합</td><td>≈ 3시간 20분</td><td>최대 2일</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>검증 체크리스트</h2>
+  <ul class="checklist">
+    <li><code>curl https://api.hum-track.com/health</code> → <code>{"status":"ok"}</code></li>
+    <li>Cloudflare proxy <code>api.</code> 활성화 (orange cloud)</li>
+    <li><code>flyctl secrets list</code> 에 11개 시크릿 표시</li>
+    <li><code>supabase db push</code> 성공, <code>projects</code> <code>tracks</code> <code>chunks</code> <code>notes</code> <code>subscriptions</code> 테이블 존재</li>
+    <li>Sentry 테스트 이벤트 (서버 <code>/health</code> 에 <code>raise</code> 추가) 30초 안에 표시</li>
+    <li>PostHog Live Events 에 Vercel 랜딩의 <code>$pageview</code> 표시</li>
+    <li>UptimeRobot 모니터 그린 상태</li>
+    <li>IAP 상품 "Ready to Submit" 또는 "Approved" 상태</li>
+    <li>Fly 지출 알람 $5/일 설정 완료</li>
+    <li>Supabase 사용량 알람 80% 설정 완료</li>
+  </ul>
+
+  <div class="footnote" style="margin-top:40px;text-align:center;">
+    Humming V2 — Infra Setup Guide &nbsp;·&nbsp; 2026-06-02 갱신
+  </div>
+</body>
+</html>

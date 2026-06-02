@@ -1,0 +1,1498 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Humming V2 — Launch UI P0 시안</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ─── Design Tokens (app_theme.dart 일치) ─── */
+:root {
+  --bg: #0A0A0F;
+  --surface: #16161E;
+  --surface-alt: #1F1F27;
+  --lime: #A3E635;
+  --active-lane: #1F2A0F;
+  --border: #27272A;
+  --border-strong: #3F3F46;
+  --danger: #EF4444;
+  --danger-bg: #3F1D1D;
+  --amber: #F59E0B;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #71717A;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: Inter, sans-serif; }
+html { overflow-x: hidden; }
+body {
+  background: #1a1a22;
+  color: var(--text-primary);
+  padding: 60px 16px 40px;
+  display: grid;
+  grid-template-columns: repeat(3, 390px);
+  gap: 100px 36px;
+  justify-content: center;
+  align-items: start;
+  min-height: 100vh;
+}
+@media (max-width: 1280px) {
+  body { grid-template-columns: repeat(2, 390px); }
+}
+@media (max-width: 860px) {
+  body {
+    grid-template-columns: 390px;
+    padding: 60px 0 40px;
+    gap: 80px 0;
+  }
+}
+@media (max-width: 430px) {
+  body {
+    grid-template-columns: 100%;
+    padding: 50px 8px 40px;
+  }
+  .frame {
+    width: 100% !important;
+    max-width: 390px;
+    margin: 0 auto;
+  }
+  .frame-title { padding: 0 8px; }
+}
+.frame-title {
+  position: absolute;
+  top: -42px;
+  left: 0; right: 0;
+  color: #ccc;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.frame-title b { color: var(--lime); }
+.frame-title em { color: var(--text-tertiary); font-style: normal; font-weight: 400; display: block; margin-top: 4px; font-size: 11px; }
+
+.frame {
+  width: 390px;
+  height: 844px;
+  background: var(--bg);
+  border-radius: 44px;
+  border: 4px solid #2a2a35;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.notch {
+  position: absolute;
+  top: 10px; left: 50%;
+  transform: translateX(-50%);
+  width: 120px; height: 30px;
+  background: #000; border-radius: 20px;
+  z-index: 10;
+}
+.statusbar {
+  height: 50px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 28px 6px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 5;
+}
+.statusbar-icons { display: flex; gap: 5px; align-items: center; font-size: 12px; }
+.safe { padding-top: 50px; }
+
+/* ─── App header (My Songs 일치) ─── */
+.app-header {
+  padding: 16px 20px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.app-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.profile-chip {
+  width: 36px; height: 36px;
+  background: var(--surface);
+  border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+/* ─── Brand mark ─── */
+.brand-mark {
+  width: 140px; height: 140px;
+  background: var(--surface);
+  border-radius: 34px;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.brand-mark img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ─── LimeButton ─── */
+.lime-btn {
+  background: var(--lime);
+  color: var(--bg);
+  border: none;
+  border-radius: 999px;
+  padding: 14px 28px;
+  font-size: 15px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.lime-btn.full { width: 100%; }
+.lime-btn.large { padding: 16px 32px; font-size: 16px; }
+
+/* ─── Bottom Nav (3 tabs in pill) ─── */
+.bottom-nav-wrap {
+  padding: 12px 21px 16px;
+}
+.bottom-nav {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 36px;
+  padding: 4px;
+  display: flex;
+}
+.tab {
+  flex: 1;
+  margin: 4px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border-radius: 26px;
+  color: var(--text-secondary);
+}
+.tab.active {
+  background: var(--lime);
+  color: var(--bg);
+}
+.tab.disabled { color: var(--text-tertiary); opacity: 0.5; }
+.tab .ic { font-size: 16px; }
+.tab .label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.content { flex: 1; display: flex; flex-direction: column; }
+.content-fill { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 32px; }
+
+/* ─── Headings (T.h1/h2/sub) ─── */
+.h1 { font-size: 28px; font-weight: 700; color: var(--text-primary); }
+.h2 { font-size: 22px; font-weight: 700; color: var(--text-primary); text-align: center; }
+.sub { font-size: 12px; color: var(--text-secondary); text-align: center; line-height: 1.5; }
+
+/* ─── Cards / Lists ─── */
+.proj-list { padding: 8px 16px; flex: 1; overflow-y: auto; }
+.proj-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 10px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.proj-thumb {
+  width: 52px; height: 52px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  color: var(--bg);
+}
+.proj-thumb.t1 { background: var(--lime); }
+.proj-thumb.t2 { background: #3B82F6; color: white; }
+.proj-thumb.t3 { background: #F59E0B; }
+.proj-thumb.t4 { background: var(--surface-alt); color: var(--text-primary); }
+.proj-info { flex: 1; min-width: 0; }
+.proj-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-meta { color: var(--text-tertiary); font-size: 11px; }
+.proj-meta .dot { margin: 0 6px; }
+.proj-more {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 18px;
+}
+
+.fab {
+  position: absolute;
+  bottom: 116px; right: 24px;
+  width: 60px; height: 60px;
+  background: var(--lime);
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgba(163,230,53,0.35);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px;
+  font-weight: 300;
+  color: var(--bg);
+}
+
+/* ─── Sheet ─── */
+.sheet-frame {
+  background: var(--surface);
+  flex: 1;
+  border-radius: 28px 28px 0 0;
+  position: relative;
+}
+.sheet-grab {
+  width: 40px; height: 4px;
+  background: var(--border-strong);
+  border-radius: 2px;
+  margin: 10px auto;
+}
+.sheet-x {
+  position: absolute;
+  top: 14px; right: 16px;
+  width: 32px; height: 32px;
+  background: var(--surface-alt);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.modal-bg { background: rgba(0,0,0,0.55); }
+.modal-bg .frame-inner { display: flex; flex-direction: column; height: 100%; }
+
+/* ─── Paywall ─── */
+.paywall { padding: 26px 24px 20px; }
+.paywall-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(163,230,53,0.12);
+  color: var(--lime);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+.paywall h2 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+.paywall p.sub-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+  text-align: left;
+}
+.feature-list { margin-bottom: 20px; }
+.feature-list .item {
+  display: flex; gap: 10px; align-items: flex-start;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.feature-list .check { color: var(--lime); font-size: 14px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+.plan-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.plan {
+  background: var(--surface-alt);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 12px;
+  text-align: center;
+  position: relative;
+}
+.plan.active {
+  border-color: var(--lime);
+  background: rgba(163,230,53,0.04);
+}
+.plan-tag {
+  position: absolute;
+  top: -8px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--lime);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.4px;
+}
+.plan .period { color: var(--text-tertiary); font-size: 11px; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.5px; }
+.plan .price { font-size: 18px; font-weight: 700; }
+.plan .price small { font-size: 11px; color: var(--text-tertiary); font-weight: 400; }
+.plan .save { color: var(--lime); font-size: 10px; margin-top: 4px; font-weight: 600; }
+.paywall-fine {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-align: center;
+  line-height: 1.5;
+  margin-top: 12px;
+}
+.paywall-fine a { color: var(--text-secondary); text-decoration: underline; }
+.paywall-restore {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 12px;
+  text-decoration: underline;
+}
+
+/* ─── Export sheet ─── */
+.export-sheet { padding: 26px 24px; }
+.export-sheet h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.export-sheet .sub-text { color: var(--text-secondary); font-size: 13px; margin-bottom: 22px; }
+.format-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.fmt {
+  background: var(--surface-alt);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fmt.active { border-color: var(--lime); background: rgba(163,230,53,0.04); }
+.fmt .name { font-size: 14px; font-weight: 700; }
+.fmt .desc { font-size: 10px; color: var(--text-tertiary); line-height: 1.4; }
+.fmt .ic { font-size: 18px; color: var(--lime); }
+.export-options {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+.export-options .row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; padding: 4px 0;
+}
+.export-options .row .label { color: var(--text-secondary); }
+.export-options .row .val { font-weight: 600; }
+
+/* ─── Login sheet ─── */
+.login-sheet { padding: 32px 28px 24px; }
+.login-icon {
+  width: 60px; height: 60px;
+  background: var(--surface-alt);
+  border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  margin: 0 auto 18px;
+}
+.login-icon img { width: 100%; height: 100%; object-fit: cover; }
+.login-sheet h2 { font-size: 22px; font-weight: 700; text-align: center; margin-bottom: 6px; line-height: 1.3; }
+.login-sheet .sub-text { color: var(--text-secondary); font-size: 13px; text-align: center; margin-bottom: 28px; line-height: 1.4; }
+.login-btn {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+.login-btn.apple { background: white; color: black; border-color: white; }
+.login-btn .pic { font-size: 18px; width: 22px; text-align: center; font-weight: 700; }
+
+/* ─── Account screen ─── */
+.acc-section { padding: 16px; }
+.profile-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex; gap: 14px; align-items: center;
+  margin-bottom: 14px;
+}
+.avatar-lg {
+  width: 52px; height: 52px;
+  background: var(--lime);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 700;
+  color: var(--bg);
+}
+.avatar-lg.muted { background: var(--surface-alt); color: var(--text-primary); border: 1px solid var(--border); }
+.profile-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.profile-email { font-size: 12px; color: var(--text-tertiary); }
+.sub-card {
+  background: linear-gradient(135deg, rgba(163,230,53,0.12), rgba(163,230,53,0.03));
+  border: 1px solid rgba(163,230,53,0.3);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.sub-card .head {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+}
+.sub-card .label-pro {
+  font-size: 10px; color: var(--lime); font-weight: 700; letter-spacing: 1px;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.sub-card .renew {
+  font-size: 11px; color: var(--text-secondary);
+  background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 12px;
+}
+.sub-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.sub-card .desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.menu-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.menu-row {
+  display: flex; align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.menu-row:last-child { border-bottom: none; }
+.menu-row .ic { width: 22px; color: var(--text-tertiary); font-size: 16px; }
+.menu-row .name { flex: 1; margin-left: 4px; }
+.menu-row .arrow { color: var(--text-tertiary); font-size: 14px; }
+.menu-row.danger .name { color: var(--danger); }
+.menu-row.danger .ic { color: var(--danger); }
+
+/* ─── Expired banner ─── */
+.banner-expired {
+  background: rgba(245,158,11,0.10);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: 16px;
+  padding: 14px;
+  margin: 16px 16px 0;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.banner-expired .ic { color: var(--amber); font-size: 16px; }
+.banner-expired .body { flex: 1; font-size: 12px; line-height: 1.5; }
+.banner-expired b { color: var(--amber); }
+.resub-btn {
+  display: inline-block;
+  background: var(--amber);
+  color: var(--bg);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 10px;
+}
+
+/* ─── Edit screen ─── */
+.edit-screen { display: flex; flex-direction: column; height: 100%; padding-bottom: 0; }
+.edit-appbar {
+  height: 50px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.edit-appbar .left, .edit-appbar .right { display: flex; gap: 4px; align-items: center; }
+.edit-appbar h2 { font-size: 15px; font-weight: 600; }
+.icon-btn-edit {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary);
+  font-size: 18px;
+}
+.edit-banner {
+  background: rgba(245,158,11,0.10);
+  border-bottom: 1px solid rgba(245,158,11,0.3);
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 11px;
+}
+.edit-banner .ic { color: var(--amber); }
+.edit-banner .body { flex: 1; color: var(--text-secondary); }
+.edit-banner b { color: var(--text-primary); }
+.edit-banner .cta {
+  background: var(--amber); color: var(--bg);
+  padding: 5px 12px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+}
+.cards-area { padding: 12px; }
+.card-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 8px;
+}
+.card-label { font-size: 9px; color: var(--text-tertiary); font-weight: 700; letter-spacing: 0.6px; margin-bottom: 6px; }
+.card-value { font-size: 16px; font-weight: 700; }
+.timeline-mock {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin: 8px 12px;
+  height: 200px;
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.lane {
+  background: var(--surface-alt);
+  border-radius: 8px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  position: relative;
+}
+.lane .chunk {
+  position: absolute;
+  height: 24px;
+  border-radius: 4px;
+  top: 6px;
+}
+.lane .c1 { left: 14%; width: 28%; background: var(--lime); }
+.lane .c2 { left: 50%; width: 22%; background: #3B82F6; }
+.lane .c3 { left: 8%; width: 44%; background: #F59E0B; }
+
+.export-pill {
+  background: var(--surface-alt);
+  color: var(--text-tertiary);
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  height: 32px;
+  display: flex; align-items: center; gap: 4px;
+}
+.export-pill.active { color: var(--lime); }
+
+/* ─── Delete modal ─── */
+.modal-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 20;
+}
+.delete-modal {
+  background: var(--surface);
+  border-radius: 24px;
+  margin: 20px;
+  padding: 24px;
+  width: calc(100% - 40px);
+}
+.delete-icon {
+  width: 56px; height: 56px;
+  background: var(--danger-bg);
+  border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+  color: var(--danger);
+  margin: 0 auto 16px;
+}
+.delete-modal h2 { font-size: 18px; font-weight: 700; text-align: center; margin-bottom: 10px; }
+.delete-modal .sub-text { color: var(--text-secondary); font-size: 13px; text-align: center; line-height: 1.5; margin-bottom: 18px; }
+.delete-list {
+  background: rgba(239,68,68,0.05);
+  border: 1px solid var(--danger-bg);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 18px;
+}
+.delete-list .item {
+  display: flex; gap: 8px; align-items: center;
+  font-size: 12px; padding: 4px 0;
+  color: var(--text-secondary);
+}
+.delete-list .item:before { content: "•"; color: var(--danger); }
+.btn-danger {
+  width: 100%;
+  background: var(--danger); color: white;
+  border: none; border-radius: 999px;
+  padding: 14px; font-size: 14px; font-weight: 700;
+  margin-bottom: 8px;
+}
+.btn-cancel {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 14px; font-size: 14px; font-weight: 600;
+}
+</style>
+</head>
+<body>
+
+<!-- ─── Screen 1: SONGS — 빈 상태 (현재 구현 일치, 참조용) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>① SONGS — 빈 상태</b> <em>현재 구현 화면 (참조 기준)</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <span class="app-title">My Songs</span>
+        <div class="profile-chip">👤</div>
+      </div>
+      <div class="content-fill">
+        <div class="brand-mark"><img src="hummingbird.png" alt="Humming"></div>
+        <div style="height:28px;"></div>
+        <div class="h2">새 곡 작업을 시작하세요</div>
+        <div style="height:10px;"></div>
+        <div class="sub">흥얼거리면 악기로 변환되고,<br>녹음부터 편집까지 한 번에</div>
+        <div style="height:28px;"></div>
+        <button class="lime-btn large">→&nbsp;&nbsp;작업 시작</button>
+      </div>
+      <div class="bottom-nav-wrap">
+        <div class="bottom-nav">
+          <div class="tab"><span class="ic">✦</span><span class="label">STUDIO</span></div>
+          <div class="tab active"><span class="ic">♬</span><span class="label">SONGS</span></div>
+          <div class="tab disabled"><span class="ic">≡</span><span class="label">MIXER</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 2: SONGS — 작품 있음 (신규) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>② SONGS — 작품 있음</b> <em>리스트 + FAB · 길게눌러 메뉴</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <span class="app-title">My Songs</span>
+        <div class="profile-chip">👤</div>
+      </div>
+      <div class="proj-list">
+        <div class="proj-card">
+          <div class="proj-thumb t1">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">여름밤의 멜로디</div>
+            <div class="proj-meta">방금 전<span class="dot">·</span>4 트랙<span class="dot">·</span>1:28</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t2">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">새로운 시작 v2</div>
+            <div class="proj-meta">어제<span class="dot">·</span>3 트랙<span class="dot">·</span>0:54</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t3">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">잠 못 드는 밤</div>
+            <div class="proj-meta">3일 전<span class="dot">·</span>4 트랙<span class="dot">·</span>2:12</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t4">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">데모 #03</div>
+            <div class="proj-meta">5월 28일<span class="dot">·</span>2 트랙<span class="dot">·</span>0:42</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+      </div>
+      <div class="fab">＋</div>
+      <div class="bottom-nav-wrap">
+        <div class="bottom-nav">
+          <div class="tab"><span class="ic">✦</span><span class="label">STUDIO</span></div>
+          <div class="tab active"><span class="ic">♬</span><span class="label">SONGS</span></div>
+          <div class="tab disabled"><span class="ic">≡</span><span class="label">MIXER</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 3: Paywall (export 트리거) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>③ Paywall</b> <em>Export / Sync 시도 시 / 7일 무료 체험</em></div>
+  <div class="frame modal-bg">
+    <div class="notch"></div>
+    <div class="frame-inner">
+      <div style="height:88px;"></div>
+      <div class="sheet-frame">
+        <div class="sheet-grab"></div>
+        <div class="sheet-x">✕</div>
+        <div class="paywall">
+          <div class="paywall-badge">✦ HUMMING PRO</div>
+          <h2>완성한 곡을<br>세상에 내보내세요</h2>
+          <p class="sub-text">7일 동안 모든 기능을 무료로 사용해보세요.<br>언제든 취소 가능합니다.</p>
+          <div class="feature-list">
+            <div class="item"><span class="check">✓</span> WAV / MIDI / Stems 내보내기</div>
+            <div class="item"><span class="check">✓</span> 어느 기기에서든 작품 이어가기</div>
+            <div class="item"><span class="check">✓</span> iPhone ↔ Android 크로스 플랫폼</div>
+            <div class="item"><span class="check">✓</span> 보컬 원본 영구 클라우드 보관</div>
+            <div class="item"><span class="check">✓</span> 다중 기기 실시간 동기화</div>
+          </div>
+          <div class="plan-cards">
+            <div class="plan">
+              <div class="period">월간</div>
+              <div class="price">$4.99<small>/월</small></div>
+            </div>
+            <div class="plan active">
+              <div class="plan-tag">38% 할인</div>
+              <div class="period">연간</div>
+              <div class="price">$2.49<small>/월</small></div>
+              <div class="save">$29.99/년</div>
+            </div>
+          </div>
+          <button class="lime-btn full large">7일 무료로 시작하기</button>
+          <div class="paywall-fine">
+            계속 진행하면 <a>이용약관</a>과 <a>개인정보처리방침</a>에 동의하는 것으로 간주됩니다.<br>
+            체험 종료 24시간 전까지 취소하지 않으면 자동 결제됩니다.
+          </div>
+          <div class="paywall-restore">구매 복원</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 4: Export 형식 선택 (Pro) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>④ Export 형식 선택</b> <em>Pro 유저 / 형식 + 옵션</em></div>
+  <div class="frame modal-bg">
+    <div class="notch"></div>
+    <div class="frame-inner">
+      <div style="height:160px;"></div>
+      <div class="sheet-frame">
+        <div class="sheet-grab"></div>
+        <div class="sheet-x">✕</div>
+        <div class="export-sheet">
+          <h2>내보내기</h2>
+          <div class="sub-text">파일 형식과 품질을 선택하세요</div>
+          <div class="format-grid">
+            <div class="fmt active">
+              <div class="ic">♪</div>
+              <div class="name">WAV</div>
+              <div class="desc">무손실 고음질<br>믹스 다운</div>
+            </div>
+            <div class="fmt">
+              <div class="ic">⌨</div>
+              <div class="name">MIDI</div>
+              <div class="desc">DAW 호환<br>편집 가능</div>
+            </div>
+            <div class="fmt">
+              <div class="ic">⛁</div>
+              <div class="name">Stems</div>
+              <div class="desc">트랙별 분리<br>믹싱용</div>
+            </div>
+            <div class="fmt">
+              <div class="ic">▶</div>
+              <div class="name">MP3</div>
+              <div class="desc">공유용<br>320 kbps</div>
+            </div>
+          </div>
+          <div class="export-options">
+            <div class="row"><span class="label">샘플레이트</span><span class="val">48 kHz</span></div>
+            <div class="row"><span class="label">비트 깊이</span><span class="val">24-bit</span></div>
+            <div class="row"><span class="label">노멀라이즈</span><span class="val" style="color:var(--lime);">ON</span></div>
+          </div>
+          <button class="lime-btn full large">내보내기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 5: 로그인 모달 (paywall 내부) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑤ 로그인 모달</b> <em>Paywall "구독하기" 탭 시 / 별도 단독 진입 없음</em></div>
+  <div class="frame modal-bg">
+    <div class="notch"></div>
+    <div class="frame-inner">
+      <div style="height:200px;"></div>
+      <div class="sheet-frame">
+        <div class="sheet-grab"></div>
+        <div class="sheet-x">✕</div>
+        <div class="login-sheet">
+          <div class="login-icon"><img src="hummingbird.png" alt=""></div>
+          <h2>구독하려면<br>로그인이 필요해요</h2>
+          <div class="sub-text">기존 계정이 없다면 자동으로 가입됩니다.</div>
+          <button class="login-btn apple">
+            <span class="pic"></span>
+            <span>Apple로 계속하기</span>
+          </button>
+          <button class="login-btn">
+            <span class="pic" style="color:#4285F4;">G</span>
+            <span>Google로 계속하기</span>
+          </button>
+          <button class="login-btn">
+            <span class="pic" style="color:#FAE100;">K</span>
+            <span>Kakao로 계속하기</span>
+          </button>
+          <div class="paywall-fine">
+            계속 진행하면 <a>이용약관</a>과<br><a>개인정보처리방침</a>에 동의하는 것으로 간주됩니다.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 6: ME — Pro Active ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑥ ME (프로필) — Pro 활성</b> <em>상단 person 아이콘 탭 시 진입</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <span class="app-title">계정</span>
+        <div class="profile-chip" style="background:transparent;color:var(--text-secondary);">‹</div>
+      </div>
+      <div class="acc-section">
+        <div class="profile-card">
+          <div class="avatar-lg">J</div>
+          <div>
+            <div class="profile-name">정민</div>
+            <div class="profile-email">heobusy@gmail.com</div>
+          </div>
+        </div>
+        <div class="sub-card">
+          <div class="head">
+            <span class="label-pro">✦ HUMMING PRO</span>
+            <span class="renew">매월 갱신</span>
+          </div>
+          <h3>구독 중</h3>
+          <div class="desc">다음 결제일: 2026년 7월 2일 · $4.99</div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row"><span class="ic">⚙</span><span class="name">구독 관리</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">↻</span><span class="name">구매 복원</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">?</span><span class="name">도움말 / FAQ</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">✉</span><span class="name">문의하기</span><span class="arrow">›</span></div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row"><span class="ic">▤</span><span class="name">이용약관</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">🛡</span><span class="name">개인정보처리방침</span><span class="arrow">›</span></div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row danger"><span class="ic">⎋</span><span class="name">로그아웃</span><span class="arrow">›</span></div>
+          <div class="menu-row danger"><span class="ic">🗑</span><span class="name">계정 삭제</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 7: ME — Pro Expired ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑦ ME — Pro 만료</b> <em>만료 배너 + 재구독 CTA / 클라우드 데이터 안전 안내</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <span class="app-title">계정</span>
+        <div class="profile-chip" style="background:transparent;color:var(--text-secondary);">‹</div>
+      </div>
+      <div class="banner-expired">
+        <span class="ic">⚠</span>
+        <div class="body">
+          <b>Pro 구독이 만료되었어요.</b><br>
+          <span style="color:var(--text-tertiary);">내보내기와 동기화는 재구독 시 다시 사용 가능합니다.<br>저장하신 클라우드 데이터는 안전하게 보존됩니다.</span>
+          <div class="resub-btn">재구독하기 →</div>
+        </div>
+      </div>
+      <div class="acc-section">
+        <div class="profile-card">
+          <div class="avatar-lg muted">J</div>
+          <div>
+            <div class="profile-name">정민</div>
+            <div class="profile-email">heobusy@gmail.com</div>
+          </div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row"><span class="ic">⚙</span><span class="name">구독 관리</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">☁</span><span class="name">클라우드 데이터 다운로드</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">↻</span><span class="name">구매 복원</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">?</span><span class="name">도움말 / FAQ</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">✉</span><span class="name">문의하기</span><span class="arrow">›</span></div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row danger"><span class="ic">⎋</span><span class="name">로그아웃</span><span class="arrow">›</span></div>
+          <div class="menu-row danger"><span class="ic">🗑</span><span class="name">계정 삭제</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 10: 구독 관리 — Active ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑧ 구독 관리 — Active</b> <em>현재 결제 상태 / 스토어 deep link</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">구독 관리</span>
+        </div>
+      </div>
+      <div class="acc-section">
+        <div class="sub-card" style="margin-bottom:14px;">
+          <div class="head">
+            <span class="label-pro">✦ HUMMING PRO 활성</span>
+          </div>
+          <h3 style="margin-bottom:4px;">연간 플랜</h3>
+          <div class="desc" style="font-size:13px;color:var(--text-primary);">$29.99 / 년 · 다음 갱신: <b>2026년 7월 2일</b></div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row"><span class="ic">📱</span><span class="name">결제 수단</span><span style="color:var(--text-secondary);font-size:12px;">Apple App Store</span></div>
+          <div class="menu-row"><span class="ic">📅</span><span class="name">구독 시작</span><span style="color:var(--text-secondary);font-size:12px;">2026-06-02</span></div>
+          <div class="menu-row"><span class="ic">☁</span><span class="name">사용 중인 클라우드</span><span style="color:var(--text-secondary);font-size:12px;">12개 보컬 · 4개 곡</span></div>
+        </div>
+        <div style="padding:8px 0 14px;">
+          <button class="lime-btn full" style="margin-bottom:10px;">스토어에서 관리하기 →</button>
+          <div style="text-align:center;color:var(--text-tertiary);font-size:11px;line-height:1.5;">
+            플랜 변경 / 취소는 Apple ID 의<br>구독 설정에서 처리할 수 있어요.
+          </div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row"><span class="ic">↻</span><span class="name">구매 복원</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">📨</span><span class="name">영수증 이메일로 받기</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 11: 구독 관리 — Cancelled (grace) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑨ 구독 관리 — 취소됨 (grace)</b> <em>아직 결제 기간 남음 · 재활성화 가능</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">구독 관리</span>
+        </div>
+      </div>
+      <div class="acc-section">
+        <div class="sub-card" style="background:linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.03));border-color:rgba(245,158,11,0.3);margin-bottom:14px;">
+          <div class="head">
+            <span class="label-pro" style="color:var(--amber);">⚠ 취소됨</span>
+            <span class="renew" style="background:rgba(245,158,11,0.15);color:var(--amber);">5일 남음</span>
+          </div>
+          <h3 style="margin-bottom:4px;">2026년 7월 2일까지 사용 가능</h3>
+          <div class="desc">이후 자동으로 만료되며, 클라우드 데이터는 안전하게 보존됩니다.</div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row"><span class="ic">📱</span><span class="name">결제 수단</span><span style="color:var(--text-secondary);font-size:12px;">Apple App Store</span></div>
+          <div class="menu-row"><span class="ic">📅</span><span class="name">최근 결제</span><span style="color:var(--text-secondary);font-size:12px;">2026-06-02</span></div>
+          <div class="menu-row"><span class="ic">📅</span><span class="name">만료 예정일</span><span style="color:var(--text-secondary);font-size:12px;">2026-07-02</span></div>
+        </div>
+        <div style="padding:8px 0 14px;">
+          <button class="lime-btn full" style="margin-bottom:10px;">스토어에서 재활성화 →</button>
+          <div style="text-align:center;color:var(--text-tertiary);font-size:11px;line-height:1.5;">
+            만료 전 재활성화하면<br>다음 결제일이 연장됩니다.
+          </div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row"><span class="ic">↻</span><span class="name">구매 복원</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 12: 구독 관리 — Expired ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑩ 구독 관리 — 만료됨</b> <em>재구독 진입 · 보존된 데이터 양 표시</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">구독 관리</span>
+        </div>
+      </div>
+      <div class="acc-section">
+        <div class="sub-card" style="background:var(--surface);border-color:var(--border);margin-bottom:14px;">
+          <div class="head">
+            <span class="label-pro" style="color:var(--text-tertiary);">⊘ 만료됨</span>
+          </div>
+          <h3 style="margin-bottom:4px;color:var(--text-secondary);">Pro 구독이 종료되었어요</h3>
+          <div class="desc">마지막 구독 기간: 2026-05-02 ~ 2026-06-02 (월간 플랜)</div>
+        </div>
+        <div class="menu-section" style="background:rgba(163,230,53,0.04);border-color:rgba(163,230,53,0.2);">
+          <div class="menu-row" style="padding-top:18px;padding-bottom:6px;">
+            <span class="ic" style="color:var(--lime);">☁</span>
+            <span class="name" style="color:var(--lime);font-weight:700;">안전하게 보존 중인 데이터</span>
+          </div>
+          <div class="menu-row" style="border-top:none;padding-top:4px;padding-bottom:18px;font-size:13px;color:var(--text-secondary);">
+            <span class="ic"></span>
+            <span class="name" style="margin-left:4px;">• 곡 4개<br>• 보컬 원본 12개 (총 8.4 MB)<br>• 재구독 시 즉시 복원됩니다</span>
+          </div>
+        </div>
+        <div style="padding:8px 0 14px;">
+          <button class="lime-btn full large" style="margin-bottom:10px;">✦ &nbsp;재구독하기</button>
+          <div style="text-align:center;color:var(--text-tertiary);font-size:11px;line-height:1.5;">
+            7일 무료 체험으로 다시 시작할 수 있어요.
+          </div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row"><span class="ic">↻</span><span class="name">구매 복원 (다른 기기에서 결제했나요?)</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 8: 편집 화면 — Expired 배너 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>㉓ 편집 화면 — Pro 만료 배너</b> <em>편집 자체는 자유 / 내보내기만 차단</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="edit-screen">
+      <div class="edit-appbar">
+        <div class="left">
+          <div class="icon-btn-edit">‹</div>
+          <h2>여름밤의 멜로디</h2>
+        </div>
+        <div class="right">
+          <div class="icon-btn-edit">♪</div>
+          <div class="export-pill">↑&nbsp;내보내기 ✦</div>
+        </div>
+      </div>
+      <div class="edit-banner">
+        <span class="ic">⚠</span>
+        <div class="body">
+          <b>Pro 만료</b> · 내보내기와 동기화는 재구독 시 가능해요
+        </div>
+        <span class="cta">재구독</span>
+      </div>
+      <div class="cards-area">
+        <div class="card-row">
+          <div class="card-label">INSTRUMENT</div>
+          <div class="card-value">♪&nbsp;Grand Piano</div>
+        </div>
+      </div>
+      <div class="timeline-mock">
+        <div class="lane">키<div class="chunk c1"></div></div>
+        <div class="lane">베이스<div class="chunk c2"></div></div>
+        <div class="lane">드럼<div class="chunk c3"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 13: 도움말 / FAQ ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑬ 도움말 / FAQ</b> <em>아코디언 리스트 + 검색</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">도움말</span>
+        </div>
+      </div>
+      <div style="padding:8px 16px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <span style="color:var(--text-tertiary);">🔍</span>
+          <span style="color:var(--text-tertiary);font-size:13px;">궁금한 점을 검색하세요</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-tertiary);font-weight:700;letter-spacing:0.6px;margin:6px 0 8px;">자주 묻는 질문</div>
+        <div class="menu-section">
+          <div class="menu-row" style="padding:14px 16px;flex-direction:column;align-items:flex-start;gap:8px;">
+            <div style="display:flex;width:100%;justify-content:space-between;align-items:center;">
+              <span style="font-size:13px;font-weight:600;">녹음한 곡은 어디 저장되나요?</span>
+              <span class="arrow" style="transform:rotate(90deg);">›</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">로컬 디바이스에 자동 저장됩니다. Pro 구독 시 클라우드에도 백업되어 다른 기기에서도 작업을 이어갈 수 있어요.</div>
+          </div>
+          <div class="menu-row"><span class="name" style="font-size:13px;">Pro 구독 취소는 어떻게 하나요?</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="name" style="font-size:13px;">분석이 자꾸 실패해요</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="name" style="font-size:13px;">새 기기로 곡을 옮기려면?</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="name" style="font-size:13px;">박자 보정은 어떻게 작동하나요?</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="name" style="font-size:13px;">계정을 삭제하면 어떻게 되나요?</span><span class="arrow">›</span></div>
+        </div>
+        <div style="font-size:10px;color:var(--text-tertiary);font-weight:700;letter-spacing:0.6px;margin:14px 0 8px;">카테고리</div>
+        <div class="menu-section">
+          <div class="menu-row"><span class="ic">🎙</span><span class="name">녹음 / 분석</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">🎵</span><span class="name">편집 / 합성</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">✦</span><span class="name">Pro 구독</span><span class="arrow">›</span></div>
+          <div class="menu-row"><span class="ic">⚙</span><span class="name">계정 / 설정</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 14: 문의하기 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑭ 문의하기</b> <em>분류 + 메시지 + 첨부 + 전송</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">문의하기</span>
+        </div>
+      </div>
+      <div style="padding:8px 16px;">
+        <div style="font-size:11px;color:var(--text-tertiary);font-weight:700;letter-spacing:0.5px;margin-bottom:8px;">문의 유형</div>
+        <div class="menu-section" style="margin-bottom:18px;">
+          <div class="menu-row" style="background:rgba(163,230,53,0.05);">
+            <span class="ic" style="color:var(--lime);">●</span>
+            <span class="name">버그 신고</span>
+            <span class="arrow" style="color:var(--lime);">✓</span>
+          </div>
+          <div class="menu-row"><span class="ic">●</span><span class="name">기능 제안</span></div>
+          <div class="menu-row"><span class="ic">●</span><span class="name">결제 문제</span></div>
+          <div class="menu-row"><span class="ic">●</span><span class="name">계정 / 데이터</span></div>
+          <div class="menu-row"><span class="ic">●</span><span class="name">기타</span></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-tertiary);font-weight:700;letter-spacing:0.5px;margin-bottom:8px;">내용</div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;min-height:140px;font-size:13px;color:var(--text-tertiary);line-height:1.5;margin-bottom:14px;">
+          최대한 자세히 설명해주세요.<br>
+          (어떤 동작에서, 어떤 결과가 나타났는지)
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;">
+          <div style="flex:1;background:var(--surface);border:1px dashed var(--border-strong);border-radius:12px;padding:12px;font-size:12px;color:var(--text-tertiary);text-align:center;">📎 파일 첨부</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;font-size:12px;color:var(--text-secondary);">📋 로그</div>
+        </div>
+        <button class="lime-btn full" style="opacity:0.5;">전송하기</button>
+        <div style="text-align:center;color:var(--text-tertiary);font-size:11px;margin-top:10px;line-height:1.5;">
+          답변은 등록된 이메일로 영업일 기준 2-3일 내<br>도착합니다.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 15: 이용약관 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑮ 이용약관</b> <em>WebView 또는 정적 페이지 / 한·영 토글</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">이용약관</span>
+        </div>
+        <div style="display:flex;gap:0;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:2px;">
+          <span style="padding:4px 10px;border-radius:999px;background:var(--lime);color:var(--bg);font-size:11px;font-weight:700;">KO</span>
+          <span style="padding:4px 10px;font-size:11px;color:var(--text-secondary);">EN</span>
+        </div>
+      </div>
+      <div style="padding:16px;font-size:13px;line-height:1.7;color:var(--text-secondary);">
+        <div style="color:var(--text-primary);font-size:11px;font-weight:700;margin-bottom:12px;">최종 갱신: 2026년 6월 1일</div>
+        <div style="color:var(--text-primary);font-size:15px;font-weight:700;margin-bottom:8px;">제1조 (목적)</div>
+        <p style="margin-bottom:14px;">본 약관은 Humming(이하 "회사")이 제공하는 모바일 음원 제작 서비스(이하 "서비스")의 이용 조건 및 절차, 회원과 회사의 권리·의무 등을 규정함을 목적으로 합니다.</p>
+        <div style="color:var(--text-primary);font-size:15px;font-weight:700;margin-bottom:8px;">제2조 (정의)</div>
+        <p style="margin-bottom:14px;">"회원"이란 본 약관에 동의하고 서비스 이용 자격을 부여받은 자를 말하며, "Pro 회원"은 유료 구독 결제를 완료한 회원을 의미합니다…</p>
+        <div style="color:var(--text-primary);font-size:15px;font-weight:700;margin-bottom:8px;">제3조 (회원가입)</div>
+        <p>회원가입은 Apple ID / Google 계정 / Kakao 계정 인증을 통해 이루어집니다. 약관 동의는 로그인 시점에 부여…</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 16: 개인정보처리방침 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑯ 개인정보처리방침</b> <em>GDPR/CCPA 호환 / Right to Forget 명시</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">개인정보처리방침</span>
+        </div>
+      </div>
+      <div style="padding:16px;font-size:13px;line-height:1.7;color:var(--text-secondary);">
+        <div style="color:var(--text-primary);font-size:11px;font-weight:700;margin-bottom:12px;">최종 갱신: 2026년 6월 1일</div>
+        <div style="background:rgba(163,230,53,0.06);border:1px solid rgba(163,230,53,0.2);border-radius:12px;padding:14px;margin-bottom:18px;">
+          <div style="color:var(--lime);font-size:11px;font-weight:700;letter-spacing:0.5px;margin-bottom:6px;">✦ 요약 (TL;DR)</div>
+          <div style="color:var(--text-primary);font-size:12px;line-height:1.5;">• 광고/마케팅을 위한 데이터 수집 안 함<br>• 음성 분석은 메모리에서만 처리, 저장 안 함<br>• 보컬 원본은 Pro 만 서버에 저장 (R2)<br>• 언제든 계정 + 데이터 전부 삭제 가능</div>
+        </div>
+        <div style="color:var(--text-primary);font-size:15px;font-weight:700;margin-bottom:8px;">수집하는 정보</div>
+        <p style="margin-bottom:14px;">이메일(OAuth), 디바이스 ID(분석용 익명 ID), 보컬 음성 파일(Pro 구독자에 한해)…</p>
+        <div style="color:var(--text-primary);font-size:15px;font-weight:700;margin-bottom:8px;">데이터 삭제 요청</div>
+        <p>설정 → 계정 → 계정 삭제 메뉴에서 즉시 처리됩니다. GDPR/CCPA 권리에 따라 회사 보관 데이터를 완전 제거합니다…</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 17: 클라우드 다운로드 (Expired 유저) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑰ 클라우드 다운로드</b> <em>Expired 유저용 / 보존된 데이터 로컬로 가져오기</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">클라우드 데이터</span>
+        </div>
+      </div>
+      <div style="padding:0 16px;">
+        <div style="background:rgba(163,230,53,0.04);border:1px solid rgba(163,230,53,0.2);border-radius:14px;padding:14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">
+          <span style="color:var(--lime);">☁</span>
+          <div style="flex:1;font-size:12px;line-height:1.5;color:var(--text-secondary);">
+            <b style="color:var(--text-primary);">총 8.4 MB · 4개 곡 · 보컬 12개</b><br>
+            언제든지 로컬로 다운로드할 수 있어요. 재구독하면 자동으로 다시 동기화됩니다.
+          </div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-row" style="padding:12px 16px;align-items:center;">
+            <div class="proj-thumb t1" style="width:40px;height:40px;border-radius:10px;font-size:18px;margin-right:10px;">♪</div>
+            <div style="flex:1;">
+              <div style="font-size:14px;font-weight:600;">여름밤의 멜로디</div>
+              <div style="color:var(--text-tertiary);font-size:11px;margin-top:2px;">4 트랙 · 2.1 MB</div>
+            </div>
+            <span style="color:var(--lime);font-size:18px;">↓</span>
+          </div>
+          <div class="menu-row" style="padding:12px 16px;align-items:center;">
+            <div class="proj-thumb t2" style="width:40px;height:40px;border-radius:10px;font-size:18px;margin-right:10px;">♪</div>
+            <div style="flex:1;">
+              <div style="font-size:14px;font-weight:600;">새로운 시작 v2</div>
+              <div style="color:var(--text-tertiary);font-size:11px;margin-top:2px;">3 트랙 · 1.4 MB</div>
+            </div>
+            <span style="color:var(--text-tertiary);font-size:18px;">✓</span>
+          </div>
+          <div class="menu-row" style="padding:12px 16px;align-items:center;">
+            <div class="proj-thumb t3" style="width:40px;height:40px;border-radius:10px;font-size:18px;margin-right:10px;">♪</div>
+            <div style="flex:1;">
+              <div style="font-size:14px;font-weight:600;">잠 못 드는 밤</div>
+              <div style="color:var(--text-tertiary);font-size:11px;margin-top:2px;">4 트랙 · 3.2 MB</div>
+            </div>
+            <span style="color:var(--lime);font-size:18px;">↓</span>
+          </div>
+          <div class="menu-row" style="padding:12px 16px;align-items:center;">
+            <div class="proj-thumb t4" style="width:40px;height:40px;border-radius:10px;font-size:18px;margin-right:10px;">♪</div>
+            <div style="flex:1;">
+              <div style="font-size:14px;font-weight:600;">데모 #03</div>
+              <div style="color:var(--text-tertiary);font-size:11px;margin-top:2px;">2 트랙 · 1.7 MB</div>
+            </div>
+            <span style="color:var(--lime);font-size:18px;">↓</span>
+          </div>
+        </div>
+        <div style="padding:14px 0;">
+          <button class="lime-btn full">전체 다운로드 (3개)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 18: 로그아웃 확인 모달 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑱ 로그아웃 확인 모달</b> <em>가벼운 확인 / 로컬 데이터 보존 안내</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content" style="opacity:0.4;">
+      <div class="app-header">
+        <span class="app-title">계정</span>
+        <div class="profile-chip" style="background:transparent;color:var(--text-secondary);">‹</div>
+      </div>
+    </div>
+    <div class="modal-backdrop">
+      <div class="delete-modal">
+        <div class="delete-icon" style="background:rgba(161,161,170,0.15);color:var(--text-secondary);">⎋</div>
+        <h2>로그아웃 할까요?</h2>
+        <div class="sub-text">
+          로그아웃해도 이 디바이스의<br>곡들은 그대로 남아있어요.<br><br>
+          <span style="color:var(--text-tertiary);font-size:12px;">클라우드 동기화 / 내보내기는<br>다시 로그인해야 사용할 수 있어요.</span>
+        </div>
+        <button class="btn-danger" style="background:var(--surface-alt);color:var(--text-primary);">로그아웃</button>
+        <button class="btn-cancel">취소</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 19: 구매 복원 결과 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑲ 구매 복원 결과</b> <em>성공 / 복원 항목 없음 두 가지 케이스</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content" style="opacity:0.4;">
+      <div class="app-header">
+        <span class="app-title">계정</span>
+        <div class="profile-chip" style="background:transparent;color:var(--text-secondary);">‹</div>
+      </div>
+    </div>
+    <div class="modal-backdrop">
+      <div class="delete-modal">
+        <div class="delete-icon" style="background:rgba(163,230,53,0.15);color:var(--lime);">✓</div>
+        <h2>구독이 복원되었어요</h2>
+        <div class="sub-text">
+          <b style="color:var(--lime);">연간 플랜</b><br>
+          다음 갱신: 2026년 7월 2일<br><br>
+          <span style="color:var(--text-tertiary);font-size:12px;">모든 Pro 기능을 다시 사용할 수<br>있어요.</span>
+        </div>
+        <button class="lime-btn full" style="margin-bottom:0;">확인</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 20: 프로젝트 옵션 시트 (long-press) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑳ 프로젝트 옵션 시트</b> <em>곡 카드 길게 누름 / ⋯ 탭 시</em></div>
+  <div class="frame modal-bg">
+    <div class="notch"></div>
+    <div class="frame-inner">
+      <div style="height:380px;"></div>
+      <div class="sheet-frame">
+        <div class="sheet-grab"></div>
+        <div style="padding:18px 20px 28px;">
+          <div style="display:flex;align-items:center;gap:14px;padding-bottom:18px;border-bottom:1px solid var(--border);margin-bottom:8px;">
+            <div class="proj-thumb t1" style="width:48px;height:48px;">♪</div>
+            <div>
+              <div style="font-size:16px;font-weight:700;">여름밤의 멜로디</div>
+              <div style="color:var(--text-tertiary);font-size:11px;margin-top:2px;">방금 전 · 4 트랙 · 1:28</div>
+            </div>
+          </div>
+          <div class="menu-row" style="border-bottom:none;padding:14px 0;"><span class="ic">▶</span><span class="name">열기</span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:14px 0;"><span class="ic">✎</span><span class="name">이름 변경</span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:14px 0;"><span class="ic">⎘</span><span class="name">복제</span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:14px 0;"><span class="ic" style="color:var(--lime);">↑</span><span class="name" style="color:var(--lime);">내보내기 <span style="background:rgba(163,230,53,0.2);color:var(--lime);padding:1px 6px;border-radius:6px;font-size:9px;margin-left:4px;font-weight:700;">PRO</span></span><span class="arrow">›</span></div>
+          <div class="menu-row danger" style="border-bottom:none;padding:14px 0;"><span class="ic">🗑</span><span class="name">삭제</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 21: 프로젝트 이름 변경 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>㉑ 프로젝트 이름 변경</b> <em>인라인 텍스트 다이얼로그</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content" style="opacity:0.4;">
+      <div class="app-header">
+        <span class="app-title">My Songs</span>
+        <div class="profile-chip">👤</div>
+      </div>
+    </div>
+    <div class="modal-backdrop">
+      <div class="delete-modal">
+        <div style="font-size:18px;font-weight:700;text-align:center;margin-bottom:18px;">이름 변경</div>
+        <div style="background:var(--bg);border:2px solid var(--lime);border-radius:14px;padding:14px;margin-bottom:6px;display:flex;align-items:center;">
+          <span style="flex:1;font-size:15px;font-weight:600;">여름밤의 멜로디</span>
+          <span style="color:var(--text-tertiary);font-size:14px;">⊗</span>
+        </div>
+        <div style="text-align:right;color:var(--text-tertiary);font-size:10px;margin-bottom:18px;">8 / 40</div>
+        <button class="lime-btn full" style="margin-bottom:8px;">저장</button>
+        <button class="btn-cancel">취소</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 22: 프로젝트 삭제 확인 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>㉒ 프로젝트 삭제 확인</b> <em>로컬 + 클라우드 동기화된 곡인 경우 모두 삭제</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content" style="opacity:0.4;">
+      <div class="app-header">
+        <span class="app-title">My Songs</span>
+        <div class="profile-chip">👤</div>
+      </div>
+    </div>
+    <div class="modal-backdrop">
+      <div class="delete-modal">
+        <div class="delete-icon">🗑</div>
+        <h2>이 곡을 삭제할까요?</h2>
+        <div class="sub-text">
+          <b style="color:var(--text-primary);">여름밤의 멜로디</b><br>
+          이 작업은 되돌릴 수 없어요.
+        </div>
+        <div class="delete-list">
+          <div class="item">로컬 디바이스에서 즉시 삭제</div>
+          <div class="item">클라우드에서도 함께 삭제 (Pro)</div>
+        </div>
+        <button class="btn-danger">삭제</button>
+        <button class="btn-cancel">취소</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Screen 9: 계정 삭제 확인 모달 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>㉔ 계정 삭제 확인 모달</b> <em>GDPR — R2 + Supabase + 로컬 일괄 삭제</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content" style="opacity:0.4;">
+      <div class="app-header">
+        <span class="app-title">계정</span>
+        <div class="profile-chip" style="background:transparent;color:var(--text-secondary);">‹</div>
+      </div>
+    </div>
+    <div class="modal-backdrop">
+      <div class="delete-modal">
+        <div class="delete-icon">🗑</div>
+        <h2>정말 계정을 삭제할까요?</h2>
+        <div class="sub-text">이 작업은 되돌릴 수 없어요.<br>아래 데이터가 즉시 삭제됩니다.</div>
+        <div class="delete-list">
+          <div class="item">클라우드에 저장된 모든 곡 (4개)</div>
+          <div class="item">보컬 원본 음성 파일 (12개)</div>
+          <div class="item">계정 정보 및 구독 기록</div>
+          <div class="item">로컬 디바이스의 모든 작품</div>
+        </div>
+        <button class="btn-danger">영구 삭제</button>
+        <button class="btn-cancel">취소</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>이용약관 — Humming</title>
+<meta name="description" content="Humming 이용약관 — 회원이 창작한 음악의 저작권은 100% 회원에게 귀속됩니다.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="이용약관 — Humming">
+<meta property="og:description" content="Humming 이용약관 — 회원이 창작한 음악의 저작권은 100% 회원에게 귀속됩니다.">
+<meta property="og:image" content="https://hum-track.com/hummingbird.png">
+<meta property="og:url" content="https://hum-track.com/terms">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="이용약관 — Humming">
+<meta name="twitter:description" content="Humming 이용약관 — 회원이 창작한 음악의 저작권은 100% 회원에게 귀속됩니다.">
+<meta name="twitter:image" content="https://hum-track.com/hummingbird.png">
+<link rel="icon" type="image/png" href="/hummingbird.png">
+<link rel="apple-touch-icon" href="/hummingbird.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0A0A0F;
+  --surface: #16161E;
+  --surface-alt: #1F1F27;
+  --lime: #A3E635;
+  --lime-dim: #84B82A;
+  --border: #27272A;
+  --border-strong: #3F3F46;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #71717A;
+  --amber: #F59E0B;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(10,10,15,0.85);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px;
+}
+.nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.2px; text-decoration: none; color: var(--text-primary); }
+.nav-brand .dot { width: 22px; height: 22px; border-radius: 7px; background: var(--lime); display: grid; place-items: center; color: var(--bg); font-weight: 900; font-size: 14px; }
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; }
+.nav-links a:hover { color: var(--text-primary); }
+.nav-links a.active { color: var(--lime); }
+.nav-cta { display: flex; align-items: center; gap: 12px; }
+.lang-toggle { display: inline-flex; background: var(--surface); border-radius: 999px; padding: 3px; border: 1px solid var(--border); }
+.lang-toggle button {
+  background: none; border: 0; color: var(--text-secondary);
+  padding: 6px 12px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.lang-toggle button.active { background: var(--lime); color: var(--bg); }
+.back-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; font-weight: 600; }
+.back-link:hover { color: var(--lime); }
+
+/* ─── Doc layout ─── */
+.doc {
+  max-width: 760px; margin: 0 auto;
+  padding: 60px 24px 100px;
+}
+.doc-hero {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 28px;
+  margin-bottom: 40px;
+}
+.doc-eyebrow {
+  color: var(--lime); font-weight: 700; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 14px;
+}
+.doc-hero h1 {
+  font-size: 40px; font-weight: 900; letter-spacing: -1.2px; line-height: 1.1; margin-bottom: 12px;
+}
+.doc-hero .meta { color: var(--text-tertiary); font-size: 13px; }
+.draft-banner {
+  margin-top: 18px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: var(--amber);
+  padding: 10px 14px; border-radius: 10px;
+  font-size: 12px; font-weight: 600;
+}
+
+/* ─── Prose ─── */
+.prose { color: var(--text-primary); font-size: 16px; line-height: 1.75; }
+.prose h1 { font-size: 32px; margin: 56px 0 16px; letter-spacing: -0.8px; font-weight: 800; }
+.prose h2 { font-size: 24px; margin: 48px 0 14px; letter-spacing: -0.4px; font-weight: 800; border-top: 1px solid var(--border); padding-top: 32px; }
+.prose h2:first-of-type { border-top: 0; padding-top: 0; }
+.prose h3 { font-size: 18px; margin: 32px 0 10px; font-weight: 700; color: var(--text-primary); }
+.prose h4 { font-size: 15px; margin: 22px 0 8px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.6px; }
+.prose p { margin: 0 0 16px; color: var(--text-secondary); }
+.prose strong { color: var(--text-primary); font-weight: 700; }
+.prose em { color: var(--text-primary); font-style: italic; }
+.prose a { color: var(--lime); text-decoration: none; border-bottom: 1px solid rgba(163,230,53,0.4); }
+.prose a:hover { border-bottom-color: var(--lime); }
+.prose ul, .prose ol { margin: 0 0 18px 22px; color: var(--text-secondary); }
+.prose li { margin-bottom: 6px; }
+.prose li::marker { color: var(--lime-dim); }
+.prose hr { border: 0; border-top: 1px solid var(--border); margin: 40px 0; }
+.prose blockquote {
+  margin: 18px 0; padding: 14px 18px;
+  border-left: 3px solid var(--lime);
+  background: var(--surface);
+  color: var(--text-secondary);
+  border-radius: 0 8px 8px 0;
+  font-size: 14px;
+}
+.prose code {
+  background: var(--surface-alt); border: 1px solid var(--border);
+  padding: 1px 6px; border-radius: 5px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--lime);
+}
+.prose pre { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 18px 0; }
+.prose pre code { border: 0; background: transparent; padding: 0; color: var(--text-primary); }
+.prose table {
+  width: 100%; border-collapse: collapse;
+  margin: 22px 0; font-size: 14px;
+  background: var(--surface); border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--border);
+}
+.prose th, .prose td {
+  text-align: left; padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.prose th { background: var(--surface-alt); color: var(--text-primary); font-weight: 700; font-size: 13px; letter-spacing: 0.2px; }
+.prose tr:last-child td { border-bottom: 0; }
+
+/* lang switch */
+.lang-body[hidden] { display: none; }
+
+/* footer */
+footer.foot {
+  border-top: 1px solid var(--border);
+  padding: 40px 24px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+.foot-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap;
+}
+.foot-inner a { color: var(--text-secondary); text-decoration: none; margin-right: 18px; font-weight: 500; }
+.foot-inner a:hover { color: var(--lime); }
+
+@media (max-width: 720px) {
+  .doc-hero h1 { font-size: 30px; }
+  .prose { font-size: 15px; }
+  .prose h2 { font-size: 21px; }
+  .nav-links { display: none; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="nav-brand" href="/"><span class="dot">H</span><span>Humming</span></a>
+    <div class="nav-links">
+      <a href="/privacy" class="">개인정보처리방침</a>
+      <a href="/terms" class="active">이용약관</a>
+      <a href="/refund" class="">환불 정책</a>
+    </div>
+    <div class="nav-cta">
+      <div class="lang-toggle" role="tablist" aria-label="Language">
+        <button type="button" data-lang="ko" class="active">KO</button>
+        <button type="button" data-lang="en">EN</button>
+      </div>
+      <a class="back-link" href="/">← 홈으로</a>
+    </div>
+  </div>
+</nav>
+
+<main class="doc">
+  <header class="doc-hero">
+    <div class="doc-eyebrow" data-ko="Legal · Humming" data-en="Legal · Humming">Legal · Humming</div>
+    <h1 data-ko="이용약관" data-en="Terms of Service">이용약관</h1>
+    <div class="meta" data-ko="최종 갱신: 2026-06-02" data-en="Last updated: 2026-06-02">최종 갱신: 2026-06-02</div>
+    <div class="draft-banner" data-ko="⚠ 본 문서는 변호사 검토 전 1차 초안(DRAFT)입니다. 최종 발효 전에 PIPA · GDPR · CCPA 변호사 검토를 거칩니다." data-en="⚠ DRAFT for legal counsel review. Final review by PIPA · GDPR · CCPA counsel required before publication.">⚠ 본 문서는 변호사 검토 전 1차 초안(DRAFT)입니다. 최종 발효 전에 PIPA · GDPR · CCPA 변호사 검토를 거칩니다.</div>
+  </header>
+
+  <article class="prose lang-body" data-body="ko">
+<p>본 약관은 한국어 본문과 영문 본문(English Version below)을 함께 제공합니다. 양 언어 간 해석에 차이가 발생할 경우 한국어본을 우선합니다. 다만, 대한민국 외 거주 이용자와의 사이에서는 영문본이 우선합니다.</p>
+<hr />
+<h3>제1조 (목적)</h3>
+<p>본 약관은 [PLACEHOLDER 회사명] (이하 "회사")가 제공하는 모바일 음원 제작 애플리케이션 "Humming" (이하 "서비스")의 이용과 관련하여, 회사와 이용자(이하 "회원") 간의 권리, 의무 및 책임사항, 기타 필요한 사항을 규정함을 목적으로 합니다.</p>
+<h3>제2조 (정의)</h3>
+<ol>
+<li>"서비스"란 회사가 운영하는 Humming 모바일 애플리케이션 및 부수 기능 일체를 의미합니다.</li>
+<li>"회원"이란 본 약관에 동의하고 서비스 이용 자격을 부여받은 자를 의미합니다.</li>
+<li>"무료 회원(Free)"이란 유료 구독을 결제하지 않은 회원을 의미하며, 일부 기능(클라우드 동기화, 내보내기 등)은 제한됩니다.</li>
+<li>"Pro 회원"이란 인앱결제(IAP)를 통해 유료 구독을 활성화한 회원을 의미합니다.</li>
+<li>"콘텐츠"란 회원이 서비스를 통해 입력, 녹음, 생성한 음원, 노트(MIDI), 프로젝트 메타데이터 및 그 결과물 일체를 의미합니다.</li>
+</ol>
+<h3>제3조 (회원가입 및 계정)</h3>
+<ol>
+<li>회원가입은 Apple/Google OAuth 또는 이메일을 통해 이루어지며, 본 약관 및 개인정보처리방침에 동의함으로써 성립합니다.</li>
+<li>회원은 본인의 계정 정보 보안에 대한 책임을 부담하며, 계정 무단 사용으로 발생한 손해에 대해 회사는 회원의 고의·과실 없는 한도에서 책임지지 않습니다.</li>
+<li>만 14세 미만은 가입할 수 없습니다. (한국법 및 COPPA 준수)</li>
+</ol>
+<h3>제4조 (서비스의 제공)</h3>
+<ol>
+<li><strong>무료(Free) 기능</strong>: 로컬 디바이스에서의 녹음·악기 분석·재생·로컬 저장·메트로놈·박자 보정 등 기본 기능을 제공합니다. 분석 과정에서 업로드된 보컬 데이터는 메모리에서만 처리되며 영구 저장되지 않습니다.</li>
+<li><strong>Pro 기능</strong>: 무료 기능에 더하여 클라우드 백업·다기기 동기화·내보내기(Export)·보컬 WAV 클라우드 저장(Cloudflare R2)·프로젝트 메타 클라우드 저장(Supabase) 등을 제공합니다.</li>
+<li>회사는 안정적 서비스 제공을 위해 정기·비정기 점검을 시행할 수 있으며, 사전 또는 사후 공지합니다.</li>
+</ol>
+<h3>제5조 (결제 및 환불)</h3>
+<ol>
+<li>Pro 구독은 Apple App Store 또는 Google Play의 인앱결제(IAP)를 통해서만 제공됩니다. 회사는 그 외 결제 수단을 직접 제공하지 않습니다.</li>
+<li>구독 요금은 월 USD 4.99 또는 연 USD 29.99이며(현지 통화로 환산되어 청구), 7일 무료 체험 후 자동으로 결제됩니다.</li>
+<li>결제는 각 스토어 약관에 따라 자동 갱신되며, 갱신을 원치 않는 회원은 만료 24시간 전까지 해당 스토어에서 직접 취소해야 합니다.</li>
+<li>환불은 별도의 회사 <a href="./refund-policy.md">환불정책</a> 및 각 스토어 환불 정책을 따릅니다. 스토어 IAP의 특성상 환불 권한은 1차적으로 해당 스토어가 보유합니다.</li>
+<li>대한민국 「전자상거래법」 및 EU 소비자권리지침에 따른 청약철회권은 환불정책 문서에 별도 명시합니다.</li>
+</ol>
+<h3>제6조 (콘텐츠 및 권리)</h3>
+<ol>
+<li><strong>회원이 서비스를 통해 창작한 음악 결과물의 저작권 및 모든 권리는 100% 회원 본인에게 귀속됩니다.</strong> 회사는 이를 광고, AI 학습, 재판매 등 어떠한 상업적·비상업적 2차 활용에도 사용하지 않습니다.</li>
+<li>회원의 보컬 음성 녹음 데이터는 광고 타겟팅 또는 머신러닝/AI 모델 학습에 일절 사용되지 않습니다.</li>
+<li>회사는 서비스 제공(저장·전송·재생·동기화 등) 목적에 한하여, 회원이 업로드한 콘텐츠를 처리할 수 있는 비독점적, 한정적 라이선스만을 가집니다. 본 라이선스는 계정 또는 데이터 삭제 시 즉시 종료됩니다.</li>
+<li>회원은 자신이 업로드한 콘텐츠가 제3자의 권리(저작권·초상권·상표권 등)를 침해하지 않음을 보증합니다.</li>
+</ol>
+<h3>제7조 (책임 제한)</h3>
+<ol>
+<li>회사는 천재지변, 불가항력, 제3자 서비스(Apple, Google, Supabase, Cloudflare 등)의 장애로 인한 손해에 대해 책임지지 않습니다.</li>
+<li>회사는 회원이 로컬 디바이스에만 저장한 데이터의 손실(예: 디바이스 분실, OS 백업 미설정)에 대해 책임지지 않습니다.</li>
+<li>회사의 손해배상 책임은, 관련 법령이 허용하는 최대 한도에서, 직전 12개월간 회원이 회사에 지급한 구독료 총액을 초과하지 않습니다.</li>
+</ol>
+<h3>제8조 (약관의 변경)</h3>
+<ol>
+<li>회사는 관련 법령을 위반하지 않는 범위에서 본 약관을 개정할 수 있습니다.</li>
+<li>약관 변경 시 시행일 7일 전(회원에게 불리한 변경의 경우 30일 전)부터 앱 내 공지 및/또는 가입 이메일을 통해 고지합니다.</li>
+<li>회원이 시행일 전까지 거부 의사를 표명하지 않은 경우 변경 약관에 동의한 것으로 간주합니다.</li>
+</ol>
+<h3>제9조 (분쟁 해결 및 준거법)</h3>
+<ol>
+<li><strong>대한민국 거주 회원</strong>: 본 약관은 대한민국 법령에 따라 해석되며, 분쟁 발생 시 서울중앙지방법원을 제1심 전속 관할 법원으로 합니다.</li>
+<li><strong>EU/EEA 거주 회원</strong>: 거주국의 강행 소비자보호 법령이 우선 적용되며, 회원은 거주국 법원에 제소할 권리를 가집니다.</li>
+<li><strong>미국 거주 회원</strong>: 캘리포니아 주법을 준거법으로 하고, 캘리포니아 산타클라라 카운티 법원을 합의 관할로 하되, 소비자가 부담하는 비용은 미연방·주 소비자보호법이 보장하는 권리를 침해하지 않는 범위로 제한합니다. (변호사 검토 필요: arbitration / class action waiver 도입 여부)</li>
+<li>그 외 지역 회원: 대한민국 법령을 준거법으로 합니다.</li>
+</ol>
+<h3>제10조 (시행일)</h3>
+<p>본 약관은 2026년 [PLACEHOLDER] 일부터 시행합니다.</p>
+  </article>
+  <article class="prose lang-body" data-body="en" hidden>
+<h3>Article 1. Purpose</h3>
+<p>These Terms of Service ("Terms") govern your access to and use of the Humming mobile application and related services (collectively, the "Service") provided by [PLACEHOLDER Company Name] ("we," "us," or "Company").</p>
+<h3>Article 2. Definitions</h3>
+<ul>
+<li>"User" means any person who has agreed to these Terms and uses the Service.</li>
+<li>"Free User" means a User without an active paid subscription. Cloud sync, export, and certain other features are unavailable.</li>
+<li>"Pro User" means a User with an active in-app subscription.</li>
+<li>"Content" means audio, MIDI notes, project metadata, and any output created by a User through the Service.</li>
+</ul>
+<h3>Article 3. Account Registration</h3>
+<p>You may register via Apple/Google OAuth or email. You must be at least 14 years of age (or the minimum age required by your jurisdiction, including 13 under U.S. COPPA where applicable). You are responsible for safeguarding your account credentials.</p>
+<h3>Article 4. The Service</h3>
+<ul>
+<li><strong>Free</strong>: On-device recording, instrument analysis, playback, local storage, metronome, and beat quantization. Vocal audio uploaded for analysis is processed in memory only and is not persisted.</li>
+<li><strong>Pro</strong>: Adds cloud backup, multi-device sync, export, vocal WAV cloud storage (Cloudflare R2), and project metadata cloud storage (Supabase).</li>
+</ul>
+<h3>Article 5. Payment and Refunds</h3>
+<ul>
+<li>Pro subscriptions are sold exclusively via Apple App Store or Google Play in-app purchase. We do not offer any other payment method.</li>
+<li>Pricing: USD 4.99/month or USD 29.99/year (charged in local currency), following a 7-day free trial.</li>
+<li>Subscriptions auto-renew per the applicable store's terms. To avoid renewal, cancel through the store at least 24 hours before the renewal date.</li>
+<li>Refunds are governed by our <a href="./refund-policy.md">Refund Policy</a> and the applicable store's refund policy. Korean Electronic Commerce Act and EU Consumer Rights Directive withdrawal rights are addressed in the Refund Policy.</li>
+</ul>
+<h3>Article 6. Content and Rights</h3>
+<ul>
+<li><strong>You own 100% of the copyright and all rights in the music you create using the Service.</strong> We will never use your music or vocal recordings for advertising, AI/ML training, resale, or any other commercial or non-commercial secondary use.</li>
+<li>We hold only a non-exclusive, limited license to process Content solely to operate the Service (storage, transmission, playback, sync). This license terminates immediately upon deletion of the Content or your account.</li>
+<li>You represent that your Content does not infringe any third party's rights.</li>
+</ul>
+<h3>Article 7. Limitation of Liability</h3>
+<p>To the maximum extent permitted by law, our aggregate liability shall not exceed the total subscription fees you paid us in the 12 months preceding the claim. We are not responsible for losses arising from force majeure, third-party service outages (Apple, Google, Supabase, Cloudflare, etc.), or local-device-only data loss.</p>
+<h3>Article 8. Changes to Terms</h3>
+<p>We may revise these Terms. We will provide notice in-app and/or via your registered email at least 7 days (or 30 days for changes materially adverse to you) before the effective date. Continued use after the effective date constitutes acceptance.</p>
+<h3>Article 9. Governing Law and Dispute Resolution</h3>
+<ul>
+<li><strong>Users resident in the Republic of Korea</strong>: Korean law; Seoul Central District Court as the court of first instance.</li>
+<li><strong>Users resident in the EU/EEA</strong>: Mandatory consumer protection laws of your country of residence apply; you may sue in your local courts.</li>
+<li><strong>Users resident in the United States</strong>: California law; venue in Santa Clara County, California (counsel to review arbitration clause and class action waiver enforceability).</li>
+<li><strong>Other jurisdictions</strong>: Korean law.</li>
+</ul>
+<h3>Article 10. Effective Date</h3>
+<p>These Terms take effect on [PLACEHOLDER], 2026.</p>
+<hr />
+<p><strong>Contact</strong>: support@hum-track.com
+<strong>Operator</strong>: [PLACEHOLDER Company Name], [PLACEHOLDER Address], Business Registration No. [PLACEHOLDER]</p>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="foot-inner">
+    <div>© 2026 Humming Labs · hum-track.com</div>
+    <div>
+      <a href="/privacy">개인정보처리방침</a>
+      <a href="/terms">이용약관</a>
+      <a href="/refund">환불 정책</a>
+      <a href="mailto:support@hum-track.com">support@hum-track.com</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function() {
+  const buttons = document.querySelectorAll('.lang-toggle button');
+  const bodies = document.querySelectorAll('.lang-body');
+  function setLang(lang) {
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+    bodies.forEach(b => {
+      b.hidden = b.dataset.body !== lang;
+    });
+    document.querySelectorAll('[data-ko]').forEach(el => {
+      const v = el.getAttribute('data-' + lang);
+      if (v) el.textContent = v;
+    });
+    document.documentElement.lang = lang;
+    try { localStorage.setItem('humming-lang', lang); } catch (e) {}
+  }
+  buttons.forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)));
+  let initial = 'ko';
+  try {
+    const saved = localStorage.getItem('humming-lang');
+    if (saved === 'en' || saved === 'ko') initial = saved;
+    else if (navigator.language && navigator.language.toLowerCase().startsWith('en')) initial = 'en';
+  } catch (e) {}
+  setLang(initial);
+})();
+</script>
+</body>
+</html>

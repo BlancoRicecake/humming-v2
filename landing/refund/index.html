@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>환불 정책 — Humming</title>
+<meta name="description" content="Humming 환불 정책 — 스토어 IAP 정책 및 법정 청약철회권.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="환불 정책 — Humming">
+<meta property="og:description" content="Humming 환불 정책 — 스토어 IAP 정책 및 법정 청약철회권.">
+<meta property="og:image" content="https://hum-track.com/hummingbird.png">
+<meta property="og:url" content="https://hum-track.com/refund">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="환불 정책 — Humming">
+<meta name="twitter:description" content="Humming 환불 정책 — 스토어 IAP 정책 및 법정 청약철회권.">
+<meta name="twitter:image" content="https://hum-track.com/hummingbird.png">
+<link rel="icon" type="image/png" href="/hummingbird.png">
+<link rel="apple-touch-icon" href="/hummingbird.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0A0A0F;
+  --surface: #16161E;
+  --surface-alt: #1F1F27;
+  --lime: #A3E635;
+  --lime-dim: #84B82A;
+  --border: #27272A;
+  --border-strong: #3F3F46;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #71717A;
+  --amber: #F59E0B;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(10,10,15,0.85);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px;
+}
+.nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.2px; text-decoration: none; color: var(--text-primary); }
+.nav-brand .dot { width: 22px; height: 22px; border-radius: 7px; background: var(--lime); display: grid; place-items: center; color: var(--bg); font-weight: 900; font-size: 14px; }
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; }
+.nav-links a:hover { color: var(--text-primary); }
+.nav-links a.active { color: var(--lime); }
+.nav-cta { display: flex; align-items: center; gap: 12px; }
+.lang-toggle { display: inline-flex; background: var(--surface); border-radius: 999px; padding: 3px; border: 1px solid var(--border); }
+.lang-toggle button {
+  background: none; border: 0; color: var(--text-secondary);
+  padding: 6px 12px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.lang-toggle button.active { background: var(--lime); color: var(--bg); }
+.back-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; font-weight: 600; }
+.back-link:hover { color: var(--lime); }
+
+/* ─── Doc layout ─── */
+.doc {
+  max-width: 760px; margin: 0 auto;
+  padding: 60px 24px 100px;
+}
+.doc-hero {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 28px;
+  margin-bottom: 40px;
+}
+.doc-eyebrow {
+  color: var(--lime); font-weight: 700; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 14px;
+}
+.doc-hero h1 {
+  font-size: 40px; font-weight: 900; letter-spacing: -1.2px; line-height: 1.1; margin-bottom: 12px;
+}
+.doc-hero .meta { color: var(--text-tertiary); font-size: 13px; }
+.draft-banner {
+  margin-top: 18px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: var(--amber);
+  padding: 10px 14px; border-radius: 10px;
+  font-size: 12px; font-weight: 600;
+}
+
+/* ─── Prose ─── */
+.prose { color: var(--text-primary); font-size: 16px; line-height: 1.75; }
+.prose h1 { font-size: 32px; margin: 56px 0 16px; letter-spacing: -0.8px; font-weight: 800; }
+.prose h2 { font-size: 24px; margin: 48px 0 14px; letter-spacing: -0.4px; font-weight: 800; border-top: 1px solid var(--border); padding-top: 32px; }
+.prose h2:first-of-type { border-top: 0; padding-top: 0; }
+.prose h3 { font-size: 18px; margin: 32px 0 10px; font-weight: 700; color: var(--text-primary); }
+.prose h4 { font-size: 15px; margin: 22px 0 8px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.6px; }
+.prose p { margin: 0 0 16px; color: var(--text-secondary); }
+.prose strong { color: var(--text-primary); font-weight: 700; }
+.prose em { color: var(--text-primary); font-style: italic; }
+.prose a { color: var(--lime); text-decoration: none; border-bottom: 1px solid rgba(163,230,53,0.4); }
+.prose a:hover { border-bottom-color: var(--lime); }
+.prose ul, .prose ol { margin: 0 0 18px 22px; color: var(--text-secondary); }
+.prose li { margin-bottom: 6px; }
+.prose li::marker { color: var(--lime-dim); }
+.prose hr { border: 0; border-top: 1px solid var(--border); margin: 40px 0; }
+.prose blockquote {
+  margin: 18px 0; padding: 14px 18px;
+  border-left: 3px solid var(--lime);
+  background: var(--surface);
+  color: var(--text-secondary);
+  border-radius: 0 8px 8px 0;
+  font-size: 14px;
+}
+.prose code {
+  background: var(--surface-alt); border: 1px solid var(--border);
+  padding: 1px 6px; border-radius: 5px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--lime);
+}
+.prose pre { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 18px 0; }
+.prose pre code { border: 0; background: transparent; padding: 0; color: var(--text-primary); }
+.prose table {
+  width: 100%; border-collapse: collapse;
+  margin: 22px 0; font-size: 14px;
+  background: var(--surface); border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--border);
+}
+.prose th, .prose td {
+  text-align: left; padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.prose th { background: var(--surface-alt); color: var(--text-primary); font-weight: 700; font-size: 13px; letter-spacing: 0.2px; }
+.prose tr:last-child td { border-bottom: 0; }
+
+/* lang switch */
+.lang-body[hidden] { display: none; }
+
+/* footer */
+footer.foot {
+  border-top: 1px solid var(--border);
+  padding: 40px 24px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+.foot-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap;
+}
+.foot-inner a { color: var(--text-secondary); text-decoration: none; margin-right: 18px; font-weight: 500; }
+.foot-inner a:hover { color: var(--lime); }
+
+@media (max-width: 720px) {
+  .doc-hero h1 { font-size: 30px; }
+  .prose { font-size: 15px; }
+  .prose h2 { font-size: 21px; }
+  .nav-links { display: none; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="nav-brand" href="/"><span class="dot">H</span><span>Humming</span></a>
+    <div class="nav-links">
+      <a href="/privacy" class="">개인정보처리방침</a>
+      <a href="/terms" class="">이용약관</a>
+      <a href="/refund" class="active">환불 정책</a>
+    </div>
+    <div class="nav-cta">
+      <div class="lang-toggle" role="tablist" aria-label="Language">
+        <button type="button" data-lang="ko" class="active">KO</button>
+        <button type="button" data-lang="en">EN</button>
+      </div>
+      <a class="back-link" href="/">← 홈으로</a>
+    </div>
+  </div>
+</nav>
+
+<main class="doc">
+  <header class="doc-hero">
+    <div class="doc-eyebrow" data-ko="Legal · Humming" data-en="Legal · Humming">Legal · Humming</div>
+    <h1 data-ko="환불 정책" data-en="Refund Policy">환불 정책</h1>
+    <div class="meta" data-ko="최종 갱신: 2026-06-02" data-en="Last updated: 2026-06-02">최종 갱신: 2026-06-02</div>
+    <div class="draft-banner" data-ko="⚠ 본 문서는 변호사 검토 전 1차 초안(DRAFT)입니다. 최종 발효 전에 PIPA · GDPR · CCPA 변호사 검토를 거칩니다." data-en="⚠ DRAFT for legal counsel review. Final review by PIPA · GDPR · CCPA counsel required before publication.">⚠ 본 문서는 변호사 검토 전 1차 초안(DRAFT)입니다. 최종 발효 전에 PIPA · GDPR · CCPA 변호사 검토를 거칩니다.</div>
+  </header>
+
+  <article class="prose lang-body" data-body="ko">
+<p>본 문서는 한국어 본문과 영문 본문(English below)을 함께 제공합니다.</p>
+<hr />
+<h2>1. 기본 원칙: 스토어 IAP 정책 우선</h2>
+<p>Humming Pro 구독은 Apple App Store 또는 Google Play의 인앱결제(IAP)를 통해서만 판매됩니다. 환불 처리 권한은 <strong>1차적으로 해당 스토어가 보유</strong>하며, 회사는 스토어 정책에 종속됩니다.</p>
+<ul>
+<li><strong>Apple (iOS)</strong>: https://support.apple.com/ko-kr/HT204084 — "App Store 환불 요청"</li>
+<li><strong>Google (Android)</strong>: https://support.google.com/googleplay/answer/2479637 — "Google Play 환불 요청"</li>
+</ul>
+<p>회사 측에 환불을 요청해 주셔도 결제 정보는 스토어가 보유하므로, 위 링크를 통한 직접 요청이 가장 빠릅니다.</p>
+<h2>2. 구독 취소와 사용 기간</h2>
+<ul>
+<li><strong>자발적 취소</strong>: 회원이 스토어에서 구독을 취소하면, <strong>이미 결제한 기간 말까지 Pro 기능을 계속 사용</strong>할 수 있으며, 만료 시점 이후에는 자동으로 무료(읽기 전용) 모드로 전환됩니다.</li>
+<li><strong>취소 = 즉시 환불 아님</strong>: 스토어 IAP 특성상 취소는 다음 자동 갱신을 막는 행위이며, 잔여 기간에 대한 비례 환불은 기본 제공되지 않습니다.</li>
+</ul>
+<h2>3. 법정 청약철회권 (한국·EU)</h2>
+<h3>한국 「전자상거래법」 (재화의 디지털콘텐츠 특칙)</h3>
+<ul>
+<li>디지털콘텐츠의 경우, <strong>이용 개시 전 7일 이내</strong>에 청약철회가 가능합니다.</li>
+<li>7일 무료 체험 기간 중에는 결제가 발생하지 않으므로 환불 대상이 아닙니다. 체험 종료 후 자동 결제된 직후 사용을 개시하지 않은 상태에서는 결제일로부터 7일 이내 회사로 직접 요청 시 환불 검토합니다.</li>
+<li>이미 다운로드·동기화·내보내기 기능을 사용한 경우 디지털콘텐츠 특성상 청약철회권이 제한될 수 있습니다.</li>
+</ul>
+<h3>EU 소비자권리지침 (2011/83/EU)</h3>
+<ul>
+<li>디지털콘텐츠 구매 후 <strong>14일 청약철회권</strong>이 원칙입니다.</li>
+<li>단, 사용자가 구매 시 "즉시 콘텐츠 다운로드/사용에 동의하며 철회권 상실에 동의한다"는 명시적 동의를 제공한 경우 철회권이 소멸할 수 있습니다 (지침 제16조 m항).</li>
+<li>회사는 결제 흐름에서 해당 동의 여부를 명확히 표시합니다.</li>
+</ul>
+<h2>4. 회사가 직접 환불을 검토하는 케이스</h2>
+<p>스토어를 통한 환불이 거부된 경우에도, 다음에 해당하면 회사가 직접 환불을 검토합니다 (스토어 환불 처리가 기술적으로 불가능한 영역에 한함):</p>
+<ol>
+<li><strong>결제 오류</strong>: 동일 기간 중복 결제, 명백한 시스템 오류로 인한 부당 청구</li>
+<li><strong>서비스 장애</strong>: 회사 측 원인으로 <strong>연속 7일 이상</strong> 핵심 기능(클라우드 동기화·내보내기 등) 사용 불가</li>
+<li><strong>회사가 약관을 중대하게 위반</strong>한 경우</li>
+</ol>
+<p>요청 채널: <code>support@hum-track.com</code> — 결제 영수증 ID(스토어), 발생 일시, 증빙(스크린샷 등) 첨부 필수.
+처리 SLA: 영업일 기준 <strong>5일 이내 1차 회신</strong>, 필요 시 추가 조사 후 <strong>14일 이내 최종 결정</strong>.</p>
+<h2>5. 환불되지 않는 경우</h2>
+<ul>
+<li>회원의 단순 변심으로 위 청약철회 기간을 도과한 경우</li>
+<li>회원의 약관 위반으로 인한 계정 정지</li>
+<li>제3자(Apple/Google/Supabase/Cloudflare)의 일시적 장애 (회사 책임 범위 밖)</li>
+<li>디바이스 분실·로컬 데이터 손실 등 회사가 통제할 수 없는 사유</li>
+</ul>
+<h2>6. 데이터 보존</h2>
+<p>환불 여부와 무관하게, <strong>클라우드 데이터는 자동 삭제되지 않습니다.</strong> 회원이 명시적으로 계정 삭제를 요청하지 않는 한 R2 / Supabase 데이터는 보존되며, 향후 재구독 시 즉시 복원됩니다.</p>
+  </article>
+  <article class="prose lang-body" data-body="en" hidden>
+<h3>1. Stores Govern IAP Refunds</h3>
+<p>Humming Pro is sold exclusively via Apple App Store or Google Play in-app purchase. The store of purchase holds primary refund authority. Submit refund requests directly:
+- <strong>Apple</strong>: https://support.apple.com/HT204084
+- <strong>Google</strong>: https://support.google.com/googleplay/answer/2479637</p>
+<h3>2. Cancellation vs. Refund</h3>
+<p>Canceling your subscription stops the next renewal but does not trigger a prorated refund. You retain Pro access until the end of the paid period; the app then switches to free, read-only mode.</p>
+<h3>3. Statutory Withdrawal Rights</h3>
+<ul>
+<li><strong>Korea (Electronic Commerce Act)</strong>: 7-day withdrawal for digital content not yet consumed. The 7-day free trial is not a paid charge. If you have not used Pro features after the first charge, contact us within 7 days.</li>
+<li><strong>EU (Directive 2011/83/EU)</strong>: 14-day withdrawal for digital content unless you expressly consented to immediate performance and acknowledged loss of withdrawal at checkout (Art. 16(m)). We surface this consent in the purchase flow.</li>
+<li><strong>United States</strong>: Subject to applicable state consumer law; California subscribers have rights under the Automatic Renewal Law (cal. BPC §17600 et seq.) — see counsel.</li>
+</ul>
+<h3>4. Company-Initiated Refund Review</h3>
+<p>Where store-level refunds fail, we will independently review:
+1. <strong>Duplicate or erroneous charges</strong>
+2. <strong>Service outage caused by us lasting 7+ consecutive days</strong> affecting core Pro features (cloud sync, export)
+3. <strong>Material breach of these Terms by us</strong></p>
+<p>Submit to <code>support@hum-track.com</code> with the store receipt ID, timestamp, and evidence. <strong>SLA: first response within 5 business days; final decision within 14 days.</strong></p>
+<h3>5. Non-Refundable Situations</h3>
+<ul>
+<li>Change of mind beyond statutory withdrawal windows</li>
+<li>Account suspension for Terms violations</li>
+<li>Transient third-party outages (Apple, Google, Supabase, Cloudflare)</li>
+<li>Lost device or local data outside our control</li>
+</ul>
+<h3>6. Data is Not Auto-Deleted</h3>
+<p>Refund status does not affect data retention. Cloud data (R2 + Supabase) is preserved until you explicitly delete your account, and resubscribing restores immediate access.</p>
+<hr />
+<p><strong>Contact</strong>: support@hum-track.com</p>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="foot-inner">
+    <div>© 2026 Humming Labs · hum-track.com</div>
+    <div>
+      <a href="/privacy">개인정보처리방침</a>
+      <a href="/terms">이용약관</a>
+      <a href="/refund">환불 정책</a>
+      <a href="mailto:support@hum-track.com">support@hum-track.com</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function() {
+  const buttons = document.querySelectorAll('.lang-toggle button');
+  const bodies = document.querySelectorAll('.lang-body');
+  function setLang(lang) {
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+    bodies.forEach(b => {
+      b.hidden = b.dataset.body !== lang;
+    });
+    document.querySelectorAll('[data-ko]').forEach(el => {
+      const v = el.getAttribute('data-' + lang);
+      if (v) el.textContent = v;
+    });
+    document.documentElement.lang = lang;
+    try { localStorage.setItem('humming-lang', lang); } catch (e) {}
+  }
+  buttons.forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)));
+  let initial = 'ko';
+  try {
+    const saved = localStorage.getItem('humming-lang');
+    if (saved === 'en' || saved === 'ko') initial = saved;
+    else if (navigator.language && navigator.language.toLowerCase().startsWith('en')) initial = 'en';
+  } catch (e) {}
+  setLang(initial);
+})();
+</script>
+</body>
+</html>

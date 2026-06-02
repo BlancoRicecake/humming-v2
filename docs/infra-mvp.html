@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Humming V2 — Infra MVP Setup</title>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #14141c;
+      --surface-2: #1c1c26;
+      --border: #2a2a38;
+      --text: #e8e8ee;
+      --text-2: #a0a0b0;
+      --text-3: #6a6a78;
+      --lime: #c8ff00;
+      --lime-dim: #889a00;
+      --amber: #ffb700;
+      --red: #ff5566;
+      --blue: #4dd0e1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 32px 24px 80px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 28px; margin-bottom: 8px; }
+    h2 {
+      font-size: 18px;
+      margin-top: 40px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      color: var(--lime);
+    }
+    h3 {
+      font-size: 14px;
+      margin-top: 24px;
+      margin-bottom: 10px;
+      color: var(--text);
+      letter-spacing: 0.3px;
+    }
+    .subtitle { color: var(--text-2); margin-bottom: 32px; font-size: 13px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 14px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--text-2);
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .pill-lime { background: rgba(200,255,0,0.12); color: var(--lime); }
+    .pill-amber { background: rgba(255,183,0,0.12); color: var(--amber); }
+    .pill-red { background: rgba(255,85,102,0.12); color: var(--red); }
+    .pill-blue { background: rgba(77,208,225,0.12); color: var(--blue); }
+    .pill-gray { background: rgba(160,160,176,0.12); color: var(--text-2); }
+    .arch {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--text);
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .cost-banner {
+      background: linear-gradient(135deg, rgba(200,255,0,0.08), rgba(200,255,0,0.02));
+      border: 1px solid rgba(200,255,0,0.3);
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+    .cost-banner .price {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--lime);
+      font-variant-numeric: tabular-nums;
+    }
+    .cost-banner .label {
+      color: var(--text-2);
+      font-size: 13px;
+    }
+    .checklist {
+      list-style: none;
+    }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 6px 0;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .checklist li::before {
+      content: "☐";
+      color: var(--text-3);
+      font-size: 14px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .checklist li.done::before { content: "☑"; color: var(--lime); }
+    .checklist li .meta {
+      color: var(--text-3);
+      font-size: 11px;
+      margin-left: auto;
+    }
+    .day-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 14px;
+    }
+    .day-card .day-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .day-card .day-num {
+      background: var(--lime);
+      color: var(--bg);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .day-card .day-title { font-size: 15px; font-weight: 600; }
+    .day-card .day-est { color: var(--text-3); font-size: 12px; }
+    code {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: 12px;
+      color: var(--lime);
+    }
+    .footnote {
+      color: var(--text-3);
+      font-size: 12px;
+      font-style: italic;
+      margin-top: 8px;
+    }
+    .stack-row {
+      display: grid;
+      grid-template-columns: 140px 160px 100px 1fr;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      font-size: 13px;
+    }
+    .stack-row:last-child { border-bottom: none; }
+    .stack-role { color: var(--text-2); font-size: 12px; letter-spacing: 0.3px; }
+    .stack-service { font-weight: 600; }
+    .stack-price { color: var(--lime); font-variant-numeric: tabular-nums; }
+    .stack-note { color: var(--text-3); font-size: 12px; }
+    .tier-row {
+      display: grid;
+      grid-template-columns: 60px 100px 1fr 1fr 1fr;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      font-size: 13px;
+    }
+    .tier-num {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      text-align: center;
+      font-weight: 700;
+      color: var(--lime);
+    }
+    .priority-list {
+      counter-reset: priority;
+      list-style: none;
+    }
+    .priority-list li {
+      counter-increment: priority;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      position: relative;
+      padding-left: 48px;
+    }
+    .priority-list li::before {
+      content: counter(priority);
+      position: absolute;
+      left: 14px;
+      top: 12px;
+      width: 24px;
+      height: 24px;
+      background: var(--lime);
+      color: var(--bg);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .priority-list li .title { font-weight: 600; margin-bottom: 4px; }
+    .priority-list li .desc { color: var(--text-2); font-size: 12px; line-height: 1.5; }
+    .priority-list li .badge { float: right; margin-top: -22px; }
+    section { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Humming V2 — Infra MVP Setup</h1>
+  <div class="subtitle">글로벌 타겟 / 스토어 IAP 결제 / 보컬 WAV 만 클라우드 보관 / 노트는 모두 클라우드 동기화</div>
+
+  <div class="cost-banner">
+    <div>
+      <div class="price">$7<span style="font-size:16px;color:var(--text-2);">/월</span></div>
+    </div>
+    <div class="label">
+      MVP 고정비 (도메인 $10/년 포함). DAU 1,000 까지 같은 비용 유지.<br/>
+      셋업 2일 / 1차년 누적 ~$82 (약 12만원)
+    </div>
+  </div>
+
+  <h2>1. 스택 아키텍처</h2>
+  <div class="arch">[유저 (글로벌)]
+      │ HTTPS
+      ▼
+[Cloudflare]  ── proxy + DNS + DDoS + 무료 SSL
+      │
+      ├──→ [Vercel Hobby]             — 랜딩 (apex 도메인)
+      │
+      └──→ [Fly.io shared-cpu-1x@1GB] — FastAPI (api.도메인)
+                  │
+                  ├──→ [Supabase Free]   — 소셜로그인 + Postgres (노트/메타)
+                  │
+                  └──→ [Cloudflare R2]   — 보컬 WAV (Opus 48kbps)
+
+[Sentry Free] ←── SDK ──→ 모바일 + 서버 에러/성능 모니터링
+[App Store / Google Play] ── 영수증 → /iap/verify
+</div>
+
+  <h2>2. 컴포넌트 별 비용</h2>
+  <div class="card">
+    <div class="stack-row">
+      <div class="stack-role">도메인</div>
+      <div class="stack-service">Cloudflare Registrar</div>
+      <div class="stack-price">$0.83/월</div>
+      <div class="stack-note">$10/년, DNS+proxy 통합</div>
+    </div>
+    <div class="stack-row">
+      <div class="stack-role">DNS / CDN / SSL</div>
+      <div class="stack-service">Cloudflare Free</div>
+      <div class="stack-price">$0</div>
+      <div class="stack-note">글로벌 PoP, DDoS 1차 방어</div>
+    </div>
+    <div class="stack-row">
+      <div class="stack-role">랜딩</div>
+      <div class="stack-service">Vercel Hobby</div>
+      <div class="stack-price">$0</div>
+      <div class="stack-note">글로벌 edge 자동</div>
+    </div>
+    <div class="stack-row">
+      <div class="stack-role">API 서버</div>
+      <div class="stack-service">Fly.io shared-cpu-1x@1GB</div>
+      <div class="stack-price">$6/월</div>
+      <div class="stack-note">FastAPI + librosa, region 확장 쉬움</div>
+    </div>
+    <div class="stack-row">
+      <div class="stack-role">Auth + DB</div>
+      <div class="stack-service">Supabase Free</div>
+      <div class="stack-price">$0</div>
+      <div class="stack-note">소셜로그인 + Postgres 500MB</div>
+    </div>
+    <div class="stack-row">
+      <div class="stack-role">파일 저장</div>
+      <div class="stack-service">Cloudflare R2 Free (10GB)</div>
+      <div class="stack-price">$0</div>
+      <div class="stack-note">보컬 WAV 만, egress 무료</div>
+    </div>
+    <div class="stack-row">
+      <div class="stack-role">모니터링</div>
+      <div class="stack-service">Sentry Free</div>
+      <div class="stack-price">$0</div>
+      <div class="stack-note">5k events/월</div>
+    </div>
+    <div class="stack-row">
+      <div class="stack-role">결제</div>
+      <div class="stack-service">iOS / Google IAP</div>
+      <div class="stack-price">수수료 15%</div>
+      <div class="stack-note">스토어 계정 준비 완료</div>
+    </div>
+  </div>
+
+  <h2>3. 데이터 저장 정책</h2>
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>데이터</th><th>위치</th><th>정책</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>유저 계정 / 세션</td><td>Supabase Auth</td><td><span class="pill pill-lime">영구</span></td></tr>
+        <tr><td>프로젝트 메타 / 노트 (MIDI) — <strong>Pro 만</strong></td><td>Supabase Postgres</td><td><span class="pill pill-lime">영구 (사용자 명시 삭제 시까지)</span></td></tr>
+        <tr><td>보컬 WAV (Opus 48kbps) — <strong>Pro 만</strong></td><td>Cloudflare R2</td><td><span class="pill pill-lime">영구 (사용자 명시 삭제 시까지)</span></td></tr>
+        <tr><td><strong>로컬 프로젝트 / 보컬</strong> (무료 + Pro 모두)</td><td>앱 documents 디렉터리</td><td><span class="pill pill-gray">OS 기본 동작 — 사용자 백업 설정 따름</span></td></tr>
+        <tr><td>악기 분석용 WAV</td><td>저장 안 함</td><td><span class="pill pill-red">메모리 처리 후 폐기</span></td></tr>
+        <tr><td>IAP 영수증 / 구독 상태</td><td>Supabase Postgres</td><td><span class="pill pill-lime">영구</span></td></tr>
+      </tbody>
+    </table>
+    <div class="footnote">
+      <strong>무료</strong> = 로컬 디바이스에 저장. OS 백업(iCloud / Google One)은 유저가 켜뒀다면 자연스럽게 포함됨 — 우리가 막지 않음. 같은 OS 새 기기로의 복원은 OS 백업에 의존. 크로스 OS / 실시간 동기화 / Export 는 불가.<br/>
+      <strong>Pro</strong> = R2/Supabase 영구 보관, 어느 기기 어느 OS 에서도 로그인하면 즉시 복원. 구독 만료 후에도 데이터 삭제 안 함 (읽기/다운로드 모드). 사용자가 계정 삭제 요청 시에만 R2 + DB 전부 제거 (GDPR).<br/>
+      보컬 트랙은 분석을 거치지 않음 — <code>/analyze</code> 호출은 악기 트랙(keys/bass/drum)에서만 발생.
+    </div>
+  </div>
+
+  <h2>4. 백엔드 엔드포인트</h2>
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>엔드포인트</th><th>메소드</th><th>역할</th><th>호출 빈도</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>/analyze</code></td><td>POST multipart</td><td>음성 → 노트 (악기 트랙만)</td><td>곡당 ~12회</td></tr>
+        <tr><td><code>/storage/presign</code></td><td>POST</td><td>R2 직접 업로드 URL 발급 (보컬 전용)</td><td>보컬 take 당 1회</td></tr>
+        <tr><td><code>/projects</code></td><td>GET/POST/PUT/DELETE</td><td>프로젝트 동기화</td><td>세션당 수회</td></tr>
+        <tr><td><code>/iap/verify</code></td><td>POST</td><td>App Store / Play 영수증 검증</td><td>구독/갱신 시</td></tr>
+        <tr><td><code>/health</code></td><td>GET</td><td>uptime 체크</td><td>외부 모니터링</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>5. 셋업 작업 (2일)</h2>
+
+  <div class="day-card">
+    <div class="day-header">
+      <div class="day-num">1</div>
+      <div>
+        <div class="day-title">계정 · 도메인 · 외부 서비스 셋업</div>
+        <div class="day-est">예상 4–5시간</div>
+      </div>
+    </div>
+    <ul class="checklist">
+      <li>Cloudflare 계정 생성 + 도메인 구매/이전 <span class="meta">~30분</span></li>
+      <li>Cloudflare DNS 설정 + proxy 활성화 <span class="meta">~15분</span></li>
+      <li>Vercel 계정 + GitHub 연동 <span class="meta">~10분</span></li>
+      <li>Fly.io 계정 + flyctl 설치 + 결제수단 등록 <span class="meta">~20분</span></li>
+      <li>Supabase 프로젝트 생성 (region: us-east-1) <span class="meta">~10분</span></li>
+      <li>Supabase OAuth provider 등록 (Google + Apple + Kakao) <span class="meta">~1시간</span></li>
+      <li>Cloudflare R2 버킷 생성 + API 토큰 발급 <span class="meta">~15분</span></li>
+      <li>R2 60일 무접속 lifecycle 정책 설정 <span class="meta">~10분</span></li>
+      <li>Sentry 프로젝트 2개 생성 (mobile + server) <span class="meta">~15분</span></li>
+      <li>App Store Connect / Play Console 에 IAP 상품 등록 <span class="meta">~1시간</span></li>
+    </ul>
+  </div>
+
+  <div class="day-card">
+    <div class="day-header">
+      <div class="day-num">2</div>
+      <div>
+        <div class="day-title">백엔드 배포 + 모바일 연동</div>
+        <div class="day-est">예상 6–8시간</div>
+      </div>
+    </div>
+    <h3>백엔드</h3>
+    <ul class="checklist">
+      <li>FastAPI <code>Dockerfile</code> + <code>fly.toml</code> 작성</li>
+      <li>Supabase 마이그레이션: projects / tracks / chunks / notes / subscriptions 테이블 + RLS</li>
+      <li>기존 <code>/analyze</code> 엔드포인트 유지 + slowapi 분당 10회 IP 제한 + max_bytes=2MB</li>
+      <li>신규 <code>/storage/presign</code> 엔드포인트 (보컬 R2 업로드 URL 발급)</li>
+      <li>신규 <code>/projects</code> CRUD (Supabase 클라이언트 통합)</li>
+      <li>신규 <code>/iap/verify</code> 엔드포인트 (App Store + Play 영수증 검증)</li>
+      <li>Sentry SDK 통합</li>
+      <li><code>fly deploy</code> → <code>api.도메인</code> Cloudflare proxy 연결</li>
+    </ul>
+    <h3>모바일</h3>
+    <ul class="checklist">
+      <li><code>supabase_flutter</code> 패키지 추가 + 소셜로그인 UI</li>
+      <li><code>in_app_purchase</code> 패키지 추가 + 구독 UI</li>
+      <li><code>engine_api.dart</code> baseUrl → <code>https://api.도메인</code></li>
+      <li>프로젝트 노트 동기화: <code>project_store.dart</code> ↔ Supabase</li>
+      <li>보컬 트랙 녹음 후 R2 presigned URL 로 직접 업로드</li>
+      <li>Sentry SDK 통합 + user country 태그</li>
+      <li>로그인 → 프로젝트 목록 → 편집 화면 동선 검증</li>
+    </ul>
+    <h3>랜딩</h3>
+    <ul class="checklist">
+      <li>Vercel 에 랜딩 repo 연결 + apex 도메인 연결</li>
+      <li>회원가입 / 다운로드 CTA</li>
+    </ul>
+  </div>
+
+  <h2>6. 우선순위 — 시작 전 반드시 박아둘 것</h2>
+  <ol class="priority-list">
+    <li>
+      <span class="pill pill-lime badge">무료, 즉시 적용</span>
+      <div class="title">클라이언트 16kHz mono Opus 64kbps 인코딩</div>
+      <div class="desc">업로드 1/10 + 서버 리샘플링 제거 → 서버 CPU 25%↓. 글로벌 latency 흡수 최대 효과. <code>record</code> 패키지 옵션 한 줄 추가. <code>audio-regression</code> 으로 회귀 검증 필수 (Task #42).</div>
+    </li>
+    <li>
+      <span class="pill pill-amber badge">방어용</span>
+      <div class="title">업로드 캡 + 레이트리밋 + R2 lifecycle</div>
+      <div class="desc">FastAPI middleware <code>max_bytes=2MB</code>, slowapi 분당 10회 IP, R2 60일 무접속 자동삭제. 비용 폭주 + 어뷰즈 동시 방어 (Task #43).</div>
+    </li>
+    <li>
+      <span class="pill pill-blue badge">선택, 추후</span>
+      <div class="title">WAV 해시 → 노트 캐시</div>
+      <div class="desc">정상 사용 hit rate 5–10% (재시도/봇 한정). 처리량 증가는 적지만 어뷰즈 방어막. DAU 증가 후 도입 검토.</div>
+    </li>
+    <li>
+      <span class="pill pill-red badge">신중 검토</span>
+      <div class="title">pYIN 알고리즘 튜닝</div>
+      <div class="desc">frame_length / hop_length / 다운샘플링. 처리량 30–50% 증가 가능하지만 정확도 회귀 위험. <code>audio-regression</code> 베이스라인 확보 + 사용자 영향 평가 필요. MVP 외 별도 의사결정.</div>
+    </li>
+  </ol>
+
+  <h2>7. Tier 별 수용력 / 확장 트리거</h2>
+  <div class="card">
+    <div class="tier-row" style="font-weight:600;color:var(--text-2);font-size:11px;letter-spacing:0.6px;text-transform:uppercase;">
+      <div>Tier</div><div>월 비용</div><div>DAU 권장</div><div>다음 트리거</div><div>변경</div>
+    </div>
+    <div class="tier-row">
+      <div class="tier-num">0</div>
+      <div>$7</div>
+      <div>200–500</div>
+      <div>R2 > 8GB / CPU > 40% / DB > 400MB</div>
+      <div class="stack-note">현재 MVP 시작</div>
+    </div>
+    <div class="tier-row">
+      <div class="tier-num">1</div>
+      <div>$20</div>
+      <div>1,500</div>
+      <div>CPU > 50% sustained</div>
+      <div class="stack-note">Fly $10 + R2 유료 ($1.5)</div>
+    </div>
+    <div class="tier-row">
+      <div class="tier-num">2</div>
+      <div>$100</div>
+      <div>8,000</div>
+      <div>analyze p95 > 2s</div>
+      <div class="stack-note">2-region + Supabase Pro + Redis</div>
+    </div>
+    <div class="tier-row">
+      <div class="tier-num">3</div>
+      <div>$500</div>
+      <div>40,000</div>
+      <div>worker autoscale max</div>
+      <div class="stack-note">Fargate + SQS + CloudFront</div>
+    </div>
+    <div class="tier-row">
+      <div class="tier-num">4</div>
+      <div>$2k+</div>
+      <div>200,000+</div>
+      <div>글로벌 진출 본격화</div>
+      <div class="stack-note">multi-region + 자체 DB</div>
+    </div>
+  </div>
+
+  <h2>8. Supabase 스키마</h2>
+  <div class="arch">-- 인증은 Supabase Auth 자동 (별도 테이블 없음)
+
+projects (
+  id uuid primary key,
+  user_id uuid references auth.users,
+  name text,
+  bpm int default 90,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+
+tracks (
+  id uuid primary key,
+  project_id uuid references projects,
+  role text,        -- 'keys' | 'bass' | 'drum' | 'vocal'
+  program int,
+  options jsonb,
+  position int
+)
+
+chunks (
+  id uuid primary key,
+  track_id uuid references tracks,
+  timeline_start float,
+  in_point float,
+  out_point float,
+  original_length float,
+  audio_url text    -- 보컬 chunk 만 NOT NULL
+)
+
+notes (
+  id uuid primary key,
+  chunk_id uuid references chunks,
+  pitch int,
+  start float,
+  duration float,
+  velocity int
+)
+
+subscriptions (
+  user_id uuid primary key references auth.users,
+  store text,       -- 'app_store' | 'play_store'
+  product_id text,
+  expires_at timestamptz,
+  status text       -- 'active' | 'expired' | 'cancelled'
+)
+
+-- 모든 테이블 RLS 활성: user_id = auth.uid()
+</div>
+
+  <h2>9. Observability — 트래킹 셋업</h2>
+  <div class="subtitle" style="margin-bottom:14px;">무료 도구 4종 조합. 추가 비용 $0. MAU 5,000 까지 충분.</div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">도구 매핑</h3>
+    <div class="arch" style="margin-top:10px;">[모바일 앱]
+  ├─ Sentry SDK ──→ 에러 / 성능 / 크래시 (5k events/월 무료)
+  └─ PostHog SDK ─→ 유저 행동 / funnel / cohort (1M events/월 무료)
+
+[Fly.io API]
+  ├─ Fly Metrics ──→ CPU / RAM / 응답시간 (내장)
+  ├─ Sentry SDK ──→ 백엔드 에러 / APM (traces_sample_rate=0.1)
+  ├─ stdout 로그 ─→ /analyze duration_ms · file_size · audio_sec
+  └─ /health   ←── UptimeRobot 5분 핑 (무료 50 모니터)
+
+[Cloudflare] ─ Analytics: 트래픽 / 봇 차단 / DDoS (내장)
+[Supabase]   ─ Dashboard: DB / Auth users / API 호출 (내장)
+[R2]         ─ Dashboard: 저장 용량 / 요청 수 (내장)
+</div>
+  </div>
+
+  <h3>핵심 PostHog 이벤트 (모바일에 박을 6개)</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>이벤트</th><th>발생 시점</th><th>속성</th></tr></thead>
+      <tbody>
+        <tr><td><code>user_signed_up</code></td><td>회원가입 완료</td><td>method (apple/google/kakao)</td></tr>
+        <tr><td><code>recording_started</code></td><td>녹음 시작</td><td>track_role</td></tr>
+        <tr><td><code>analyze_completed</code></td><td>/analyze 응답</td><td>duration_ms, take_kept</td></tr>
+        <tr><td><code>song_exported</code></td><td>WAV/MIDI export</td><td>track_count, duration_sec</td></tr>
+        <tr><td><code>paywall_viewed</code></td><td>구독 화면 진입</td><td>trigger (limit/cta/onboarding)</td></tr>
+        <tr><td><code>subscription_started</code></td><td>구독 결제 성공</td><td>product, region</td></tr>
+      </tbody>
+    </table>
+    <div class="footnote">→ 자동 funnel: 가입 → 첫 녹음 → 첫 분석 → 첫 export → paywall → 구독</div>
+  </div>
+
+  <h3>알람 7종 (24h 무인 운영)</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>트리거</th><th>도구</th><th>채널</th></tr></thead>
+      <tbody>
+        <tr><td>API 다운 (3분 무응답)</td><td>UptimeRobot</td><td>이메일 + 푸시</td></tr>
+        <tr><td>에러율 > 1% (5분)</td><td>Sentry</td><td>이메일 / 슬랙</td></tr>
+        <tr><td><code>/analyze</code> p95 > 5초</td><td>Sentry Performance</td><td>이메일</td></tr>
+        <tr><td>R2 용량 > 8GB</td><td>Cloudflare 알림</td><td>이메일</td></tr>
+        <tr><td>Supabase DB > 400MB</td><td>Supabase 알림</td><td>이메일</td></tr>
+        <tr><td>Fly 머신 재시작</td><td>Fly notify</td><td>이메일</td></tr>
+        <tr><td>일 비용 > $1</td><td>Fly billing alert</td><td>이메일</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>체크 루틴</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 style="margin-top:0;">매일 (3분)</h3>
+      <ul class="checklist">
+        <li>UptimeRobot: 다운타임 0</li>
+        <li>Sentry: 새 에러 수 정상</li>
+        <li>Fly: CPU 평균 50% 이하</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">매주 (15분)</h3>
+      <ul class="checklist">
+        <li>PostHog funnel 추이</li>
+        <li>자원 사용량 트렌드</li>
+        <li>p95 latency 주간 평균</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">매월 (30분)</h3>
+      <ul class="checklist">
+        <li>비용 청구서 확인</li>
+        <li>cohort 7일/30일 잔존율</li>
+        <li>Tier 진입 여부 판단</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>10. 서비스 개시 UX 모델 (CapCut 참고)</h2>
+  <div class="subtitle" style="margin-bottom:14px;">편집/로컬 저장 = 무료, 내보내기/클라우드 동기화 = 유료. 워터마크/광고 없음. 음악 결과물 품질 무차별.</div>
+
+  <h3>핵심 동선</h3>
+  <div class="arch">설치 → 홈 = 프로젝트 리스트 (비로그인)
+        ↓
+        FAB "새 곡" → 편집 → 녹음 → /analyze (익명, IP 분당 10회 제한만)
+        ↓
+        편집 자유 (모든 음색, 박자 보정, 피치 어시스트, 트랙 수 무제한)
+        ↓
+        자동 로컬 저장 (디바이스 파일)
+        ↓
+        ┌─────────────────┬─────────────────────┬──────────────────┐
+        ▼ 내보내기 탭      ▼ "다른 기기에서 보기"  ▼ 백업 / 영구 보관
+        [Paywall 시트]    [Paywall 시트]         [Paywall 시트]
+              ↓                  ↓                     ↓
+        로그인 → IAP 구독 → Pro 해제 → Export / Sync / R2 업로드
+</div>
+
+  <h3>무료 / Pro 차별화 (확정)</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>항목</th><th>무료</th><th>Pro</th></tr></thead>
+      <tbody>
+        <tr><td>곡 만들기 / 편집</td><td>✅ 모든 기능</td><td>✅</td></tr>
+        <tr><td>Pro 음색 (128종)</td><td>✅ 자유 사용</td><td>✅</td></tr>
+        <tr><td>박자 보정 / 피치 어시스트</td><td>✅ 무제한</td><td>✅</td></tr>
+        <tr><td>로컬 프로젝트 / 보컬 녹음</td><td>✅ 무제한</td><td>✅</td></tr>
+        <tr><td>트랙 수 / 청크 수</td><td>✅ 무제한</td><td>✅</td></tr>
+        <tr><td><code>/analyze</code> 호출</td><td>✅ 무제한 (IP 분당 10회 제한만)</td><td>✅</td></tr>
+        <tr><td><strong>WAV / MIDI / Stems Export</strong></td><td>❌</td><td>✅</td></tr>
+        <tr><td><strong>클라우드 동기화 (멀티 기기)</strong></td><td>❌</td><td>✅</td></tr>
+        <tr><td><strong>보컬 영구 보관 (R2)</strong></td><td>❌ (로컬 디바이스만)</td><td>✅</td></tr>
+        <tr><td><strong>같은 OS 새 기기로 이전</strong></td><td>유저의 OS 백업(iCloud / Google One) 설정에 따름</td><td>✅ 로그인하면 즉시</td></tr>
+        <tr><td><strong>iPhone ↔ Android 크로스 OS</strong></td><td>❌</td><td>✅</td></tr>
+        <tr><td><strong>다중 기기 동시 / 실시간 동기화</strong></td><td>❌</td><td>✅</td></tr>
+        <tr><td>광고</td><td>없음</td><td>없음</td></tr>
+        <tr><td>7일 무료 체험</td><td>—</td><td>✅</td></tr>
+      </tbody>
+    </table>
+    <div class="footnote">
+      → 무료 = 로컬 디바이스에 저장. OS 백업은 유저가 켜둔 경우 자연스럽게 포함됨 (우리가 막지 않음). 다만 크로스 OS / 실시간 동기화 / Export 는 Pro 만 가능.<br/>
+      → Pro = 어디서든 즉시 복원, 다중 기기 실시간 sync, 구독 만료해도 클라우드 데이터 영구 보존 (다운로드 가능).
+    </div>
+  </div>
+
+  <h3>로그인이 트리거되는 4가지 순간</h3>
+  <div class="card">
+    <ol style="padding-left:20px;line-height:1.8;">
+      <li><strong>내보내기 버튼 탭</strong> → paywall → 로그인 → IAP → export</li>
+      <li><strong>"다른 기기에서 불러오기"</strong> → paywall → 로그인 → 클라우드 동기화</li>
+      <li><strong>"이 디바이스 외 다른 곳에서도 사용"</strong> 또는 백업 의도 → paywall → 로그인 → R2 업로드</li>
+      <li><strong>회원 탈퇴</strong> (= 결제한 유저만 해당. 비로그인은 그냥 앱 삭제)</li>
+    </ol>
+    <div class="footnote">→ <strong>별도의 "로그인" 단독 진입점 없음</strong>. 모든 로그인은 paywall flow 의 일부. 약관 동의도 paywall 시트 내 inline 문구로 갈음.</div>
+  </div>
+
+  <h3>구독 라이프사이클 (단순화)</h3>
+  <div class="card">
+    <div class="arch">[Anonymous]   비로그인 · 로컬 only
+   ↓ paywall (export/sync 트리거) + IAP 결제 시작
+[Trial]       7일 무료 체험 · Pro 전체 기능
+   ↓ trial 종료 + 결제 성공
+[Active]      정상 구독
+   ↓ 사용자가 스토어에서 취소
+[Cancelled]   결제 기간 종료까지 Pro 유지 (grace) · "D-N 후 만료" 배너
+   ↓ expires_at 도달
+[Expired]     읽기 전용 모드 — 클라우드 데이터 영구 보존
+                 ↓ 가능 동작:
+                 - 다운로드 (R2 → 로컬 pull)
+                 - 새 곡 만들기 (로컬 only)
+                 - 재구독 → Active
+              ↓ 사용자 명시 "계정 삭제"
+[Deleted]     R2 + Supabase 전부 제거 (GDPR)
+</div>
+    <table style="margin-top:14px;">
+      <thead><tr><th>상태</th><th>Export</th><th>새 sync 업로드</th><th>클라우드 다운로드</th><th>표시</th></tr></thead>
+      <tbody>
+        <tr><td>Anonymous</td><td>❌ paywall</td><td>❌ paywall</td><td>해당 없음</td><td>정상</td></tr>
+        <tr><td>Trial</td><td>✅</td><td>✅</td><td>✅</td><td>"체험 D-N" 배지</td></tr>
+        <tr><td>Active</td><td>✅</td><td>✅</td><td>✅</td><td>정상</td></tr>
+        <tr><td>Cancelled (grace)</td><td>✅</td><td>✅</td><td>✅</td><td>"D-N 후 Pro 종료" 배너</td></tr>
+        <tr><td>Expired</td><td>❌ paywall</td><td>❌ paywall</td><td>✅ <strong>영구 가능</strong></td><td>"Pro 재구독" 배너</td></tr>
+        <tr><td>Deleted</td><td>해당 없음</td><td>해당 없음</td><td>해당 없음</td><td>anonymous 로 복귀</td></tr>
+      </tbody>
+    </table>
+    <div class="footnote">
+      <strong>핵심 원칙</strong>: 사용자 작품은 자동 삭제하지 않음. 구독 만료의 페널티는 "새 업로드 / Export 차단" 뿐, "기존 데이터 박탈" 아님. CapCut 정책과 일관.<br/>
+      만료 후에도 다른 기기에서 로그인하면 클라우드 데이터 다운로드 가능. 재구독 시 즉시 모든 기능 복귀.
+    </div>
+  </div>
+
+  <h2>11. P0 작업 — 출시 전 필수</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>화면 / 기능</th><th>설명</th><th>예상</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>홈 / 프로젝트 리스트</strong></td>
+          <td>비로그인 진입 화면. 카드형 곡 목록 (제목 / 수정일 / 트랙 수). FAB "새 곡". 길게 눌러 삭제/이름 변경. 빈 상태 안내</td>
+          <td>2일</td>
+        </tr>
+        <tr>
+          <td><strong>로컬 프로젝트 저장</strong></td>
+          <td>JSON 직렬화 + 디바이스 documents 디렉터리. 보컬 Opus 파일 동봉. 자동 저장 (편집 종료 / 30초 간격). OS 백업 참여 여부는 유저 OS 설정에 위임 — 별도 제외 플래그 설정 안 함</td>
+          <td>1.5일</td>
+        </tr>
+        <tr>
+          <td><strong>Expired 상태 read-only 모드</strong></td>
+          <td>구독 만료 후에도 클라우드 데이터 다운로드 가능. 새 업로드 / Export 차단 + paywall. "Pro 재구독" 배너. 만료 데이터 자동 삭제 없음</td>
+          <td>1일</td>
+        </tr>
+        <tr>
+          <td><strong>익명 device ID + <code>/analyze</code></strong></td>
+          <td>로그인 없이 /analyze 호출. device ID 헤더로 PostHog 추적. 백엔드는 인증 없이 처리, slowapi IP 분당 10회 제한만 적용</td>
+          <td>0.5일</td>
+        </tr>
+        <tr>
+          <td><strong>Paywall 시트</strong></td>
+          <td>Export/Sync/Backup 트리거 시 모달. Pro 기능 비교, 월/연 plan, 7일 무료 체험 CTA, 복원 버튼 (Apple 필수), 약관 inline 링크</td>
+          <td>1.5일</td>
+        </tr>
+        <tr>
+          <td><strong>로그인 흐름 (paywall 내부)</strong></td>
+          <td>Apple / Google / Kakao. Paywall 의 "구독하기" 탭 시 모달로 표시. 약관 동의 inline 문구. 별도 단독 화면 없음</td>
+          <td>1일</td>
+        </tr>
+        <tr>
+          <td><strong>IAP 결제 + 영수증 검증</strong></td>
+          <td>in_app_purchase + /iap/verify. 구독 상태 Supabase 동기화. 7일 무료 체험 처리. 복원 흐름</td>
+          <td>1.5일</td>
+        </tr>
+        <tr>
+          <td><strong>Export 흐름</strong></td>
+          <td>형식 선택 시트 (MP3 / WAV / MIDI / Stems). Pro 상태 체크 → 미구독 시 paywall. 구독 시 즉시 export</td>
+          <td>1일</td>
+        </tr>
+        <tr>
+          <td><strong>회원 탈퇴 (Pro 유저)</strong></td>
+          <td>설정 → 계정 → 탈퇴. App Store 정책 필수. R2 보컬 / Supabase 데이터 일괄 삭제. 구독 자동 취소 안내</td>
+          <td>0.5일</td>
+        </tr>
+        <tr>
+          <td><strong>이용약관 / 개인정보처리방침</strong></td>
+          <td>Vercel 정적 페이지(en/ko). GDPR/CCPA 호환. 앱에서 paywall/설정에서 외부 링크</td>
+          <td>1일 (법무 확인 별도)</td>
+        </tr>
+        <tr>
+          <td><strong>랜딩 페이지</strong></td>
+          <td>Vercel — Hero, 기능 3-4 섹션, 가격, 다운로드 CTA, 푸터. 영문+한글</td>
+          <td>2일</td>
+        </tr>
+        <tr>
+          <td><strong>에러 / 빈 상태</strong></td>
+          <td>네트워크 끊김 토스트, 분석 실패 재시도, 빈 프로젝트 리스트, 결제 실패 메시지</td>
+          <td>1일</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="footnote">합계 약 <strong>13.5일</strong> (단독 작업 기준). 백엔드 셋업 2일 + UI 작업 13.5일 = <strong>최소 15.5일 (약 3주)</strong></div>
+  </div>
+
+  <h3 style="color:var(--amber);">🟡 P1 — 출시 직후 1–2주 내 추가</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>기능</th><th>설명</th></tr></thead>
+      <tbody>
+        <tr><td>온보딩 swipe</td><td>첫 실행 시 3–4 페이지 (녹음 → 분석 → 합성 흐름 소개)</td></tr>
+        <tr><td>구독 관리 화면</td><td>현재 plan / 갱신일 / 취소 (스토어 구독 페이지로 deep link)</td></tr>
+        <tr><td>무료 제한 paywall 모달</td><td>곡 N개 초과 / 보컬 만료 등 트리거 시 paywall 상단 시트로 표시</td></tr>
+        <tr><td>다국어 (한/영)</td><td>flutter_intl. 글로벌 출시라 기본 영문 + 한국어</td></tr>
+        <tr><td>보컬 만료 D-N</td><td>보컬 청크에 만료일 표시 (60일 카운트다운). 만료 1주 전 푸시</td></tr>
+        <tr><td>프로젝트 cover / 색상</td><td>리스트 시각 구분. 자동 컬러 또는 사용자 선택</td></tr>
+        <tr><td>도움말 / FAQ</td><td>설정 → 도움말. 정적 페이지 또는 inline 시트</td></tr>
+        <tr><td>문의 / 피드백</td><td>이메일 mailto: 또는 Tally/Typeform 폼</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="color:var(--lime);">🟢 P2 — 안정화 후 (Tier 1 이후)</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>기능</th><th>설명</th></tr></thead>
+      <tbody>
+        <tr><td>푸시 알림</td><td>보컬 만료 임박, 구독 갱신, 신기능 출시. FCM/APNs 통합</td></tr>
+        <tr><td>평점 유도</td><td>3번째 곡 export 후 in-app review (RequestReview API)</td></tr>
+        <tr><td>친구 초대 / 공유</td><td>곡 export → 카카오톡 / WhatsApp / SNS 공유. 초대 코드 인센티브</td></tr>
+        <tr><td>곡 공개 / 마켓플레이스</td><td>유저간 곡 공유 (Tier 2 이후 검토)</td></tr>
+        <tr><td>다크/라이트 모드 토글</td><td>현재 다크 only. 시스템 따라가기 옵션</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>12. 추적 중인 Task</h2>
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>#</th><th>제목</th><th>분류</th><th>상태</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>41</td>
+          <td>[Infra MVP] Cloudflare + Vercel + Fly.io + Supabase + R2 셋업</td>
+          <td><span class="pill pill-blue">인프라</span></td>
+          <td><span class="pill pill-amber">대기</span></td>
+        </tr>
+        <tr>
+          <td>42</td>
+          <td>[Opus] 클라이언트 16kHz mono Opus 64kbps + 회귀 검증</td>
+          <td><span class="pill pill-blue">최적화</span></td>
+          <td><span class="pill pill-amber">대기</span></td>
+        </tr>
+        <tr>
+          <td>43</td>
+          <td>[비용 안전망] 업로드 캡 + 레이트리밋 + R2 lifecycle</td>
+          <td><span class="pill pill-blue">안전망</span></td>
+          <td><span class="pill pill-amber">대기</span></td>
+        </tr>
+        <tr>
+          <td>44</td>
+          <td>[Observability] Sentry + PostHog + UptimeRobot + 알람</td>
+          <td><span class="pill pill-blue">관측</span></td>
+          <td><span class="pill pill-amber">대기</span></td>
+        </tr>
+        <tr>
+          <td>45</td>
+          <td>[Launch UI P0] 로그인 + 약관 + 회원탈퇴 + 프로젝트 리스트 + paywall + 에러상태</td>
+          <td><span class="pill pill-red">P0 UI</span></td>
+          <td><span class="pill pill-amber">대기</span></td>
+        </tr>
+        <tr>
+          <td>46</td>
+          <td>[Launch UI P1] 온보딩 + 구독관리 + 다국어 + 보컬만료 + 도움말</td>
+          <td><span class="pill pill-amber">P1 UI</span></td>
+          <td><span class="pill pill-amber">대기</span></td>
+        </tr>
+        <tr>
+          <td>47</td>
+          <td>[법무] 이용약관 + 개인정보처리방침 + 환불정책 (글로벌 GDPR/CCPA)</td>
+          <td><span class="pill pill-red">법무</span></td>
+          <td><span class="pill pill-amber">대기</span></td>
+        </tr>
+        <tr>
+          <td>48</td>
+          <td>[랜딩] Vercel 마케팅 페이지 (Hero + 기능 + 가격 + 다운로드)</td>
+          <td><span class="pill pill-red">랜딩</span></td>
+          <td><span class="pill pill-amber">대기</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>13. 출시까지 전체 로드맵</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>주차</th><th>작업</th><th>완료 시 상태</th></tr></thead>
+      <tbody>
+        <tr><td>W1</td><td>인프라 셋업 (#41) + Observability (#44) + 비용 안전망 (#43)</td><td>API + DB + 파일 저장 + 모니터링 가동</td></tr>
+        <tr><td>W2</td><td>Opus 도입 (#42) + 법무 문서 초안 (#47)</td><td>분석 처리량 ↑ + 법적 문서 준비</td></tr>
+        <tr><td>W3–4</td><td>Launch UI P0 (#45) — 로그인/리스트/paywall</td><td>회원가입 → 구독까지 동선 가능</td></tr>
+        <tr><td>W5</td><td>랜딩 페이지 (#48) + 에러 상태 + QA</td><td>출시 가능 상태</td></tr>
+        <tr><td>W6</td><td>심사 제출 + 출시</td><td>🚀 1.0 출시</td></tr>
+        <tr><td>W7–8</td><td>Launch UI P1 (#46) — 온보딩 / 다국어 / 만료 / FAQ</td><td>안정화 + 글로벌 확장 준비</td></tr>
+      </tbody>
+    </table>
+    <div class="footnote">→ 단독 작업 기준 약 <strong>6주 (1.5개월)</strong>. 백엔드/모바일/디자인 병렬 가능 시 4주 가능.</div>
+  </div>
+
+  <div class="footnote" style="margin-top:40px;text-align:center;">
+    Humming V2 — Infra MVP + Service Launch Doc &nbsp;·&nbsp; 2026-06-02 갱신
+  </div>
+</body>
+</html>
