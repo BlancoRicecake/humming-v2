@@ -1,0 +1,13 @@
+# Flutter intl 코드 생성 설정 (Flutter SDK 의 `flutter gen-l10n` 이 사용).
+# pubspec.yaml 의 `flutter: generate: true` 와 짝.
+# arb 파일은 lib/l10n/ 에 둔다. 생성물은 .dart_tool/flutter_gen/ 에 위치하며,
+# 빌드 시 자동 생성되니 커밋 안 해도 됨.
+
+arb-dir: lib/l10n
+template-arb-file: app_ko.arb
+output-localization-file: app_localizations.dart
+output-class: L10n
+nullable-getter: false
+# 신규 Flutter: synthetic-package 옵션은 deprecated.
+# 생성물은 lib/l10n/generated/ 에 두고 직접 import.
+output-dir: lib/l10n/generated

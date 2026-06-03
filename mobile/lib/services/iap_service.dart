@@ -1,7 +1,7 @@
 // in_app_purchase 통합 — Pro 월/연 구독. 영수증은 백엔드 /iap/verify 로 위임.
 //
 // 상품 ID (App Store + Play 동일):
-//   - humtrack_pro_monthly
+//   - humtrack_pro_monthly_v2  (구 humtrack_pro_monthly 는 Apple reservation 잔존 → v2 로 재발급, 2026-06-03)
 //   - humtrack_pro_yearly
 //
 // 호출 흐름:
@@ -18,7 +18,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
-const String kProductMonthly = 'humtrack_pro_monthly';
+const String kProductMonthly = 'humtrack_pro_monthly_v2';
 const String kProductYearly  = 'humtrack_pro_yearly';
 const Set<String> kProductIds = {kProductMonthly, kProductYearly};
 

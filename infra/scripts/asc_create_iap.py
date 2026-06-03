@@ -268,15 +268,23 @@ def add_subscription_localization(
     asc.post("/v1/subscriptionLocalizations", payload)
 
 
-def pick_price_point(asc: ASC, sub_id: str, target_usd: float) -> str | None:
-    """Find a USA price point closest to target USD (USA territory id = 'USA').
+def pick_price_point(
+    asc: ASC,
+    sub_id: str,
+    target_price: float,
+    territory: str = "USA",
+) -> str | None:
+    """Find a price point closest to target_price in the given territory.
 
+    Defaults to USA (USD). Apple's 2023+ flexible price system maps each
+    tier to per-territory prices (e.g. $3.49 USD → ₩5,500 KRW in Korea).
+    Apple auto-converts to other territories via tier mapping.
     Paginates through every price point — there are ~800 per territory.
     """
     url = f"/v1/subscriptions/{sub_id}/pricePoints"
-    params: dict[str, Any] = {"filter[territory]": "USA", "limit": 200}
+    params: dict[str, Any] = {"filter[territory]": territory, "limit": 200}
     best_id: str | None = None
-    best_diff = 1e9
+    best_diff = 1e18
     while True:
         r = asc.s.get(API_BASE + url, params=params)
         if r.status_code != 200:
@@ -287,7 +295,7 @@ def pick_price_point(asc: ASC, sub_id: str, target_usd: float) -> str | None:
                 cust = float(pp["attributes"].get("customerPrice", "0"))
             except (TypeError, ValueError):
                 continue
-            diff = abs(cust - target_usd)
+            diff = abs(cust - target_price)
             if diff < best_diff:
                 best_diff = diff
                 best_id = pp["id"]
@@ -343,15 +351,23 @@ def set_base_price(asc: ASC, sub_id: str, price_point_id: str) -> None:
 
 PRODUCTS = [
     {
-        "product_id": "humtrack_pro_monthly",
+        "product_id": "humtrack_pro_monthly_v2",
         "name": "HumTrack Pro Monthly",
         "duration": "ONE_MONTH",
-        "usd": 4.99,
+        "usd": 3.49,  # Apple tier: $3.49 USD → ₩5,500 KRW (verified in ASC GUI 2026-06-03)
         "loc": {
-            "ko": ("HumTrack Pro 월간", "HumTrack의 모든 Pro 기능을 매달 이용하세요."),
+            "ko": (
+                "HumTrack Pro 월간",
+                "허밍을 코드·박자·악기 트랙으로 바꿔주는 HumTrack의 모든 Pro 기능을 매달 이용하세요. "
+                "무제한 내보내기 (MIDI · WAV), 5GB 클라우드 동기화, 보컬 영구 보관, 우선 분석 처리. "
+                "7일 무료 체험 후 자동 결제됩니다.",
+            ),
             "en-US": (
                 "HumTrack Pro Monthly",
-                "Unlock every HumTrack Pro feature, billed monthly.",
+                "Unlock every HumTrack Pro feature monthly — turning your humming into chords, "
+                "beats, and instrument tracks. Includes unlimited export (MIDI · WAV), 5GB Cloud "
+                "sync, permanent vocal backup, and priority analysis. 7-day free trial, then "
+                "auto-renews.",
             ),
         },
     },
@@ -359,12 +375,20 @@ PRODUCTS = [
         "product_id": "humtrack_pro_yearly",
         "name": "HumTrack Pro Yearly",
         "duration": "ONE_YEAR",
-        "usd": 29.99,
+        # USD 기준 20% 할인: $3.49 × 12 = $41.88 × 0.8 ≈ $33.49 USD = ₩55,000 KRW.
+        "usd": 33.49,
         "loc": {
-            "ko": ("HumTrack Pro 연간", "HumTrack의 모든 Pro 기능을 1년간 이용하세요."),
+            "ko": (
+                "HumTrack Pro 연간",
+                "HumTrack의 모든 Pro 기능을 1년간 약 20% 할인된 가격으로 이용하세요. "
+                "무제한 내보내기 (MIDI · WAV), 5GB 클라우드 동기화, 보컬 영구 보관, 우선 분석 처리. "
+                "7일 무료 체험 후 자동 결제됩니다.",
+            ),
             "en-US": (
                 "HumTrack Pro Yearly",
-                "Unlock every HumTrack Pro feature, billed yearly.",
+                "Unlock every HumTrack Pro feature for a full year at about 20% off the monthly "
+                "rate. Includes unlimited export (MIDI · WAV), 5GB Cloud sync, permanent vocal "
+                "backup, and priority analysis. 7-day free trial, then auto-renews yearly.",
             ),
         },
     },

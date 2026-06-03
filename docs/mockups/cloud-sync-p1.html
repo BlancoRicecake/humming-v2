@@ -1,0 +1,1596 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>HumTrack — Cloud Sync P1 시안</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ─── Design Tokens (app_theme.dart 일치) ─── */
+:root {
+  --bg: #0A0A0F;
+  --surface: #16161E;
+  --surface-alt: #1F1F27;
+  --lime: #A3E635;
+  --active-lane: #1F2A0F;
+  --border: #27272A;
+  --border-strong: #3F3F46;
+  --danger: #EF4444;
+  --danger-bg: #3F1D1D;
+  --amber: #F59E0B;
+  --blue: #3B82F6;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #71717A;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: Inter, sans-serif; }
+html { overflow-x: hidden; }
+body {
+  background: #1a1a22;
+  color: var(--text-primary);
+  padding: 60px 16px 40px;
+  display: grid;
+  grid-template-columns: repeat(3, 390px);
+  gap: 100px 36px;
+  justify-content: center;
+  align-items: start;
+  min-height: 100vh;
+}
+@media (max-width: 1280px) {
+  body { grid-template-columns: repeat(2, 390px); }
+}
+@media (max-width: 860px) {
+  body {
+    grid-template-columns: 390px;
+    padding: 60px 0 40px;
+    gap: 80px 0;
+  }
+}
+@media (max-width: 430px) {
+  body {
+    grid-template-columns: 100%;
+    padding: 50px 8px 40px;
+  }
+  .frame {
+    width: 100% !important;
+    max-width: 390px;
+    margin: 0 auto;
+  }
+  .frame-title { padding: 0 8px; }
+}
+.frame-title {
+  position: absolute;
+  top: -42px;
+  left: 0; right: 0;
+  color: #ccc;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.frame-title b { color: var(--lime); }
+.frame-title em { color: var(--text-tertiary); font-style: normal; font-weight: 400; display: block; margin-top: 4px; font-size: 11px; }
+
+.frame {
+  width: 390px;
+  height: 844px;
+  background: var(--bg);
+  border-radius: 44px;
+  border: 4px solid #2a2a35;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.notch {
+  position: absolute;
+  top: 10px; left: 50%;
+  transform: translateX(-50%);
+  width: 120px; height: 30px;
+  background: #000; border-radius: 20px;
+  z-index: 10;
+}
+.statusbar {
+  height: 50px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 28px 6px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 5;
+}
+.statusbar-icons { display: flex; gap: 5px; align-items: center; font-size: 12px; }
+
+.app-header {
+  padding: 16px 20px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.app-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.header-right { display: flex; gap: 8px; align-items: center; }
+.icon-chip {
+  width: 36px; height: 36px;
+  background: var(--surface);
+  border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-primary);
+  font-size: 16px;
+  position: relative;
+}
+.icon-chip .dot-badge {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 8px; height: 8px;
+  background: var(--lime);
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+}
+
+.content { flex: 1; display: flex; flex-direction: column; }
+
+.lime-btn {
+  background: var(--lime);
+  color: var(--bg);
+  border: none;
+  border-radius: 999px;
+  padding: 14px 28px;
+  font-size: 15px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.lime-btn.full { width: 100%; }
+.lime-btn.large { padding: 16px 32px; font-size: 16px; }
+.lime-btn.muted { background: var(--surface-alt); color: var(--text-primary); }
+
+/* ─── Sync indicator (global) ─── */
+.sync-bar {
+  margin: 0 16px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px;
+}
+.sync-bar.ok { border-color: rgba(163,230,53,0.25); background: rgba(163,230,53,0.05); }
+.sync-bar.syncing { border-color: rgba(59,130,246,0.3); background: rgba(59,130,246,0.05); }
+.sync-bar.offline { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.06); }
+.sync-bar .ic { font-size: 14px; }
+.sync-bar.ok .ic { color: var(--lime); }
+.sync-bar.syncing .ic { color: var(--blue); animation: spin 1.5s linear infinite; }
+.sync-bar.offline .ic { color: var(--amber); }
+.sync-bar .body { flex: 1; color: var(--text-primary); font-weight: 500; }
+.sync-bar .meta { color: var(--text-tertiary); font-size: 11px; }
+@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+/* Free 사용자 배너 */
+.upsell-banner {
+  margin: 0 16px 10px;
+  background: linear-gradient(135deg, rgba(163,230,53,0.10), rgba(163,230,53,0.02));
+  border: 1px solid rgba(163,230,53,0.25);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.upsell-banner .ic { font-size: 22px; color: var(--lime); }
+.upsell-banner .body { flex: 1; font-size: 12px; line-height: 1.4; }
+.upsell-banner .body b { display: block; font-size: 13px; margin-bottom: 2px; }
+.upsell-banner .body span { color: var(--text-tertiary); }
+.upsell-banner .cta {
+  background: var(--lime); color: var(--bg);
+  padding: 6px 12px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ─── Project cards with sync badges ─── */
+.proj-list { padding: 4px 16px; flex: 1; overflow-y: auto; }
+.proj-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 10px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  position: relative;
+}
+.proj-thumb {
+  width: 52px; height: 52px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  color: var(--bg);
+  position: relative;
+}
+.proj-thumb.t1 { background: var(--lime); }
+.proj-thumb.t2 { background: #3B82F6; color: white; }
+.proj-thumb.t3 { background: #F59E0B; }
+.proj-thumb.t4 { background: var(--surface-alt); color: var(--text-primary); }
+.proj-info { flex: 1; min-width: 0; }
+.proj-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+.proj-meta { color: var(--text-tertiary); font-size: 11px; }
+.proj-meta .dot { margin: 0 6px; }
+.proj-more {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 18px;
+}
+
+/* Sync badge — top-right corner of card */
+.sync-badge {
+  width: 22px; height: 22px;
+  border-radius: 11px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.sync-badge.synced { background: rgba(163,230,53,0.18); color: var(--lime); }
+.sync-badge.syncing { background: rgba(161,161,170,0.18); color: var(--text-secondary); animation: spin 1.5s linear infinite; }
+.sync-badge.dirty { background: rgba(245,158,11,0.18); color: var(--amber); }
+.sync-badge.cloudonly { background: rgba(163,230,53,0.18); color: var(--lime); }
+.sync-badge.local { background: rgba(113,113,122,0.18); color: var(--text-tertiary); }
+.sync-badge.failed { background: rgba(239,68,68,0.18); color: var(--danger); }
+
+/* ─── Bottom Nav ─── */
+.bottom-nav-wrap {
+  padding: 12px 21px 16px;
+}
+.bottom-nav {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 36px;
+  padding: 4px;
+  display: flex;
+}
+.tab {
+  flex: 1;
+  margin: 4px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border-radius: 26px;
+  color: var(--text-secondary);
+}
+.tab.active {
+  background: var(--lime);
+  color: var(--bg);
+}
+.tab.disabled { color: var(--text-tertiary); opacity: 0.5; }
+.tab .ic { font-size: 16px; }
+.tab .label { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+
+.fab {
+  position: absolute;
+  bottom: 116px; right: 24px;
+  width: 60px; height: 60px;
+  background: var(--lime);
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgba(163,230,53,0.35);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px;
+  font-weight: 300;
+  color: var(--bg);
+}
+
+/* ─── Sheets ─── */
+.sheet-frame {
+  background: var(--surface);
+  flex: 1;
+  border-radius: 28px 28px 0 0;
+  position: relative;
+}
+.sheet-grab {
+  width: 40px; height: 4px;
+  background: var(--border-strong);
+  border-radius: 2px;
+  margin: 10px auto;
+}
+.sheet-x {
+  position: absolute;
+  top: 14px; right: 16px;
+  width: 32px; height: 32px;
+  background: var(--surface-alt);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.modal-bg { background: rgba(0,0,0,0.55); }
+.modal-bg .frame-inner { display: flex; flex-direction: column; height: 100%; }
+
+/* ─── Menu rows ─── */
+.menu-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.menu-row {
+  display: flex; align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.menu-row:last-child { border-bottom: none; }
+.menu-row .ic { width: 22px; color: var(--text-tertiary); font-size: 16px; }
+.menu-row .name { flex: 1; margin-left: 4px; }
+.menu-row .arrow { color: var(--text-tertiary); font-size: 14px; }
+.menu-row .pro-tag {
+  background: rgba(163,230,53,0.18);
+  color: var(--lime);
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  margin-left: 6px;
+  letter-spacing: 0.3px;
+}
+.menu-row .lock-tag {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  margin-left: 6px;
+}
+.menu-row.danger .name { color: var(--danger); }
+.menu-row.danger .ic { color: var(--danger); }
+.menu-row .switch {
+  width: 38px; height: 22px;
+  background: var(--lime);
+  border-radius: 11px;
+  position: relative;
+}
+.menu-row .switch::after {
+  content: '';
+  position: absolute;
+  top: 3px; right: 3px;
+  width: 16px; height: 16px;
+  background: var(--bg);
+  border-radius: 50%;
+}
+.menu-row .switch.off { background: var(--surface-alt); border: 1px solid var(--border-strong); }
+.menu-row .switch.off::after { right: auto; left: 3px; background: var(--text-tertiary); }
+
+/* ─── Cloud Library ─── */
+.cloud-row {
+  display: flex; align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.cloud-row:last-child { border-bottom: none; }
+.cloud-thumb {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  margin-right: 12px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  color: var(--bg);
+}
+.cloud-thumb.t1 { background: var(--lime); }
+.cloud-thumb.t2 { background: var(--blue); color: white; }
+.cloud-thumb.t3 { background: var(--amber); }
+.cloud-thumb.t4 { background: var(--surface-alt); color: var(--text-primary); }
+.cloud-info { flex: 1; min-width: 0; }
+.cloud-name { font-size: 14px; font-weight: 600; }
+.cloud-meta { font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
+.cloud-action {
+  background: var(--lime); color: var(--bg);
+  font-size: 11px; font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+.cloud-action.muted { background: var(--surface-alt); color: var(--text-tertiary); border: 1px solid var(--border); }
+.cloud-action.downloading {
+  background: rgba(59,130,246,0.15); color: var(--blue);
+  border: 1px solid rgba(59,130,246,0.3);
+}
+
+/* ─── Section labels ─── */
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  letter-spacing: 0.6px;
+  margin: 6px 4px 8px;
+  padding: 0 12px;
+}
+
+/* ─── Conflict dialog ─── */
+.modal-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 20;
+}
+.conflict-modal {
+  background: var(--surface);
+  border-radius: 24px;
+  margin: 20px;
+  padding: 22px 20px;
+  width: calc(100% - 40px);
+}
+.conflict-icon {
+  width: 52px; height: 52px;
+  background: rgba(245,158,11,0.15);
+  border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+  color: var(--amber);
+  margin: 0 auto 12px;
+}
+.conflict-modal h2 {
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 6px;
+}
+.conflict-modal .sub-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+.version-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.ver {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.ver .label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.ver.local .label { color: var(--blue); }
+.ver.cloud .label { color: var(--lime); }
+.ver .time { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.ver .stat { font-size: 10px; color: var(--text-tertiary); line-height: 1.4; }
+
+.choice-list { margin-bottom: 8px; }
+.choice {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 12px;
+}
+.choice.recommended {
+  border-color: var(--lime);
+  background: rgba(163,230,53,0.05);
+}
+.choice .ic-wrap {
+  width: 32px; height: 32px;
+  background: var(--bg);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.choice.recommended .ic-wrap { background: var(--lime); color: var(--bg); }
+.choice .text { flex: 1; }
+.choice .title { font-size: 13px; font-weight: 600; }
+.choice .recommend-tag {
+  background: var(--lime); color: var(--bg);
+  font-size: 9px; font-weight: 700;
+  padding: 2px 6px; border-radius: 6px;
+  margin-left: 6px;
+  letter-spacing: 0.4px;
+}
+.choice .desc { font-size: 10px; color: var(--text-tertiary); margin-top: 2px; line-height: 1.4; }
+
+/* ─── Paywall (cloud-centric) ─── */
+.paywall { padding: 26px 24px 20px; }
+.paywall-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(163,230,53,0.12);
+  color: var(--lime);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+.paywall h2 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  line-height: 1.25;
+  margin-bottom: 8px;
+}
+.paywall p.sub-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 18px;
+  text-align: left;
+}
+.value-stack { margin-bottom: 18px; }
+.value-card {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 8px;
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.value-card.hero {
+  background: linear-gradient(135deg, rgba(163,230,53,0.10), rgba(163,230,53,0.02));
+  border-color: rgba(163,230,53,0.3);
+  padding: 16px;
+}
+.value-card .ic {
+  font-size: 22px;
+  color: var(--lime);
+  flex-shrink: 0;
+  width: 32px;
+}
+.value-card.hero .ic { font-size: 26px; }
+.value-card .body { flex: 1; }
+.value-card .title { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+.value-card.hero .title { font-size: 15px; }
+.value-card .desc { font-size: 11px; color: var(--text-secondary); line-height: 1.45; }
+
+.plan-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.plan {
+  background: var(--surface-alt);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 12px;
+  text-align: center;
+  position: relative;
+}
+.plan.active {
+  border-color: var(--lime);
+  background: rgba(163,230,53,0.04);
+}
+.plan-tag {
+  position: absolute;
+  top: -8px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--lime);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.4px;
+}
+.plan .period { color: var(--text-tertiary); font-size: 11px; margin-bottom: 4px; font-weight: 600; letter-spacing: 0.5px; }
+.plan .price { font-size: 18px; font-weight: 700; }
+.plan .price small { font-size: 11px; color: var(--text-tertiary); font-weight: 400; }
+.plan .save { color: var(--lime); font-size: 10px; margin-top: 4px; font-weight: 600; }
+.paywall-fine {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-align: center;
+  line-height: 1.5;
+  margin-top: 12px;
+}
+.paywall-fine a { color: var(--text-secondary); text-decoration: underline; }
+.paywall-restore {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 12px;
+  text-decoration: underline;
+}
+
+/* ─── Onboarding ─── */
+.onb-illust {
+  margin: 24px auto 18px;
+  width: 180px; height: 180px;
+  background: linear-gradient(135deg, rgba(163,230,53,0.18), rgba(163,230,53,0.02));
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 76px;
+  color: var(--lime);
+}
+.step-list { padding: 0 24px; }
+.step-item {
+  display: flex; gap: 12px; align-items: flex-start;
+  margin-bottom: 14px;
+}
+.step-num {
+  width: 28px; height: 28px;
+  background: rgba(163,230,53,0.15);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--lime);
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.step-text { flex: 1; padding-top: 4px; }
+.step-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.step-desc { font-size: 11px; color: var(--text-secondary); line-height: 1.45; }
+
+/* ─── Toast ─── */
+.toast-stack {
+  position: absolute;
+  top: 60px; left: 16px; right: 16px;
+  z-index: 30;
+}
+.toast {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 8px;
+  backdrop-filter: blur(20px);
+}
+.toast.syncing { border-color: rgba(59,130,246,0.3); background: rgba(20,20,30,0.95); }
+.toast.ok { border-color: rgba(163,230,53,0.3); background: rgba(20,20,30,0.95); }
+.toast.fail { border-color: rgba(239,68,68,0.3); background: rgba(20,20,30,0.95); }
+.toast .ic { font-size: 16px; flex-shrink: 0; }
+.toast.syncing .ic { color: var(--blue); }
+.toast.ok .ic { color: var(--lime); }
+.toast.fail .ic { color: var(--danger); }
+.toast .body { flex: 1; font-size: 12px; line-height: 1.4; }
+.toast .body b { display: block; font-weight: 600; }
+.toast .body span { color: var(--text-tertiary); font-size: 11px; }
+.toast .retry {
+  background: var(--danger); color: white;
+  padding: 5px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+}
+
+.progress-track {
+  width: 100%;
+  height: 4px;
+  background: var(--surface-alt);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--blue);
+  border-radius: 2px;
+}
+
+/* ─── Banner (downgrade) ─── */
+.banner-down {
+  background: rgba(245,158,11,0.10);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: 16px;
+  padding: 14px;
+  margin: 8px 16px 12px;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.banner-down .ic { color: var(--amber); font-size: 16px; }
+.banner-down .body { flex: 1; font-size: 12px; line-height: 1.5; }
+.banner-down b { color: var(--amber); }
+.banner-down-actions { display: flex; gap: 8px; margin-top: 10px; }
+.banner-down-actions .btn-amber {
+  background: var(--amber); color: var(--bg);
+  padding: 7px 13px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+}
+.banner-down-actions .btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  padding: 7px 13px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+}
+
+/* ─── Settings progress ─── */
+.usage-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.usage-card .head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; margin-bottom: 8px;
+}
+.usage-card .head b { font-size: 13px; }
+.usage-card .head .pro-pill {
+  background: rgba(163,230,53,0.15); color: var(--lime);
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 10px; font-weight: 700;
+}
+.usage-bar {
+  height: 6px;
+  background: var(--surface-alt);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 8px 0 6px;
+}
+.usage-bar .fill {
+  height: 100%;
+  background: var(--lime);
+  border-radius: 3px;
+}
+.usage-card .foot {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ─── Mosaic preview (paywall lock) ─── */
+.mosaic {
+  position: relative;
+  padding: 0 16px;
+}
+.mosaic .blur-wrap {
+  filter: blur(4px);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.lock-overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px;
+  text-align: center;
+  z-index: 5;
+}
+.lock-overlay .lock-icon {
+  width: 64px; height: 64px;
+  background: rgba(163,230,53,0.12);
+  border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  color: var(--lime);
+  margin-bottom: 14px;
+}
+.lock-overlay h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.lock-overlay p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px; max-width: 280px; }
+
+/* ─── Section divider in cloud screen ─── */
+.cloud-stat-bar {
+  margin: 0 16px 12px;
+  background: rgba(163,230,53,0.04);
+  border: 1px solid rgba(163,230,53,0.18);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex; gap: 12px; align-items: center;
+}
+.cloud-stat-bar .ic { color: var(--lime); font-size: 18px; }
+.cloud-stat-bar .body { flex: 1; font-size: 12px; line-height: 1.4; }
+.cloud-stat-bar .body b { display: block; color: var(--text-primary); font-size: 13px; margin-bottom: 2px; }
+.cloud-stat-bar .body span { color: var(--text-tertiary); }
+
+</style>
+</head>
+<body>
+
+<!-- ─── ① SONGS — Pro (모두 동기화됨) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>① SONGS — Pro 사용자</b> <em>전역 sync indicator + 카드별 상태 뱃지</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <span class="app-title">My Songs</span>
+        <div class="header-right">
+          <div class="icon-chip">☁<span class="dot-badge"></span></div>
+          <div class="icon-chip">👤</div>
+        </div>
+      </div>
+      <div class="sync-bar ok">
+        <span class="ic">●</span>
+        <span class="body">동기화됨</span>
+        <span class="meta">방금 전</span>
+      </div>
+      <div class="proj-list">
+        <div class="proj-card">
+          <div class="proj-thumb t1">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">여름밤의 멜로디 <span class="sync-badge synced">✓</span></div>
+            <div class="proj-meta">방금 전<span class="dot">·</span>4 트랙<span class="dot">·</span>1:28</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t2">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">새로운 시작 v2 <span class="sync-badge syncing">◐</span></div>
+            <div class="proj-meta">동기화 중 · 62%</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t3">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">잠 못 드는 밤 <span class="sync-badge dirty">!</span></div>
+            <div class="proj-meta">미저장 변경<span class="dot">·</span>4 트랙</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t4">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">아이패드에서 만든 곡 <span class="sync-badge cloudonly">↓</span></div>
+            <div class="proj-meta">클라우드 · 5월 28일 · 0:42</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t1">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">데모 #03 <span class="sync-badge failed">⊘</span></div>
+            <div class="proj-meta">동기화 실패<span class="dot">·</span>탭하여 재시도</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+      </div>
+      <div class="fab">＋</div>
+      <div class="bottom-nav-wrap">
+        <div class="bottom-nav">
+          <div class="tab"><span class="ic">✦</span><span class="label">STUDIO</span></div>
+          <div class="tab active"><span class="ic">♬</span><span class="label">SONGS</span></div>
+          <div class="tab disabled"><span class="ic">≡</span><span class="label">MIXER</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ② SONGS — Free (업셀 배너 + local-only 뱃지) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>② SONGS — Free 사용자</b> <em>업셀 배너 + 로컬-only 뱃지</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <span class="app-title">My Songs</span>
+        <div class="header-right">
+          <div class="icon-chip">☁</div>
+          <div class="icon-chip">👤</div>
+        </div>
+      </div>
+      <div class="upsell-banner">
+        <span class="ic">✦</span>
+        <div class="body">
+          <b>어디서나 작업 이어가기</b>
+          <span>클라우드 동기화 · 7일 무료 체험</span>
+        </div>
+        <span class="cta">체험 시작</span>
+      </div>
+      <div class="proj-list">
+        <div class="proj-card">
+          <div class="proj-thumb t1">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">여름밤의 멜로디 <span class="sync-badge local">▣</span></div>
+            <div class="proj-meta">방금 전<span class="dot">·</span>4 트랙<span class="dot">·</span>1:28</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t2">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">새로운 시작 v2 <span class="sync-badge local">▣</span></div>
+            <div class="proj-meta">어제<span class="dot">·</span>3 트랙<span class="dot">·</span>0:54</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t3">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">잠 못 드는 밤 <span class="sync-badge local">▣</span></div>
+            <div class="proj-meta">3일 전<span class="dot">·</span>4 트랙<span class="dot">·</span>2:12</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t4">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">데모 #03 <span class="sync-badge local">▣</span></div>
+            <div class="proj-meta">5월 28일<span class="dot">·</span>2 트랙<span class="dot">·</span>0:42</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+      </div>
+      <div class="fab">＋</div>
+      <div class="bottom-nav-wrap">
+        <div class="bottom-nav">
+          <div class="tab"><span class="ic">✦</span><span class="label">STUDIO</span></div>
+          <div class="tab active"><span class="ic">♬</span><span class="label">SONGS</span></div>
+          <div class="tab disabled"><span class="ic">≡</span><span class="label">MIXER</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ③ SONGS — 오프라인 상태 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>③ SONGS — 오프라인</b> <em>네트워크 없음 / 연결 시 자동 재개</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">⛒ ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <span class="app-title">My Songs</span>
+        <div class="header-right">
+          <div class="icon-chip">☁</div>
+          <div class="icon-chip">👤</div>
+        </div>
+      </div>
+      <div class="sync-bar offline">
+        <span class="ic">⚠</span>
+        <span class="body">오프라인</span>
+        <span class="meta">연결 시 자동 동기화</span>
+      </div>
+      <div class="proj-list">
+        <div class="proj-card">
+          <div class="proj-thumb t1">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">여름밤의 멜로디 <span class="sync-badge synced">✓</span></div>
+            <div class="proj-meta">방금 전<span class="dot">·</span>4 트랙<span class="dot">·</span>1:28</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t2">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">새로운 시작 v2 <span class="sync-badge dirty">!</span></div>
+            <div class="proj-meta">대기열<span class="dot">·</span>3 트랙</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t3">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">잠 못 드는 밤 <span class="sync-badge dirty">!</span></div>
+            <div class="proj-meta">대기열<span class="dot">·</span>4 트랙</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+      </div>
+      <div class="fab">＋</div>
+      <div class="bottom-nav-wrap">
+        <div class="bottom-nav">
+          <div class="tab"><span class="ic">✦</span><span class="label">STUDIO</span></div>
+          <div class="tab active"><span class="ic">♬</span><span class="label">SONGS</span></div>
+          <div class="tab disabled"><span class="ic">≡</span><span class="label">MIXER</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ④ 프로젝트 옵션 시트 (Pro) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>④ 프로젝트 옵션 시트 (Pro)</b> <em>백업/복원 메뉴 추가</em></div>
+  <div class="frame modal-bg">
+    <div class="notch"></div>
+    <div class="frame-inner">
+      <div style="height:240px;"></div>
+      <div class="sheet-frame">
+        <div class="sheet-grab"></div>
+        <div style="padding:18px 20px 28px;">
+          <div style="display:flex;align-items:center;gap:14px;padding-bottom:18px;border-bottom:1px solid var(--border);margin-bottom:8px;">
+            <div class="proj-thumb t1" style="width:48px;height:48px;">♪</div>
+            <div>
+              <div style="font-size:16px;font-weight:700;display:flex;align-items:center;gap:6px;">여름밤의 멜로디 <span class="sync-badge synced">✓</span></div>
+              <div style="color:var(--text-tertiary);font-size:11px;margin-top:2px;">동기화됨 · 4 트랙 · 1:28</div>
+            </div>
+          </div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;"><span class="ic">▶</span><span class="name">열기</span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;"><span class="ic">✎</span><span class="name">이름 변경</span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;"><span class="ic">⎘</span><span class="name">복제</span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;"><span class="ic" style="color:var(--lime);">☁</span><span class="name">클라우드에 백업 <span class="pro-tag">PRO</span></span><span class="arrow" style="color:var(--text-tertiary);">지금 백업</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;"><span class="ic">↓</span><span class="name">클라우드에서 복원</span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;"><span class="ic" style="color:var(--lime);">↑</span><span class="name" style="color:var(--lime);">내보내기 <span class="pro-tag">PRO</span></span><span class="arrow">›</span></div>
+          <div class="menu-row danger" style="border-bottom:none;padding:13px 0;"><span class="ic">🗑</span><span class="name">삭제 (로컬+클라우드)</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑤ 프로젝트 옵션 시트 (Free, 잠금) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑤ 프로젝트 옵션 시트 (Free)</b> <em>Pro 항목은 잠금 + 탭 시 paywall</em></div>
+  <div class="frame modal-bg">
+    <div class="notch"></div>
+    <div class="frame-inner">
+      <div style="height:240px;"></div>
+      <div class="sheet-frame">
+        <div class="sheet-grab"></div>
+        <div style="padding:18px 20px 28px;">
+          <div style="display:flex;align-items:center;gap:14px;padding-bottom:18px;border-bottom:1px solid var(--border);margin-bottom:8px;">
+            <div class="proj-thumb t1" style="width:48px;height:48px;">♪</div>
+            <div>
+              <div style="font-size:16px;font-weight:700;display:flex;align-items:center;gap:6px;">여름밤의 멜로디 <span class="sync-badge local">▣</span></div>
+              <div style="color:var(--text-tertiary);font-size:11px;margin-top:2px;">로컬 저장 · 4 트랙 · 1:28</div>
+            </div>
+          </div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;"><span class="ic">▶</span><span class="name">열기</span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;"><span class="ic">✎</span><span class="name">이름 변경</span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;"><span class="ic">⎘</span><span class="name">복제</span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;opacity:0.7;"><span class="ic">☁</span><span class="name" style="color:var(--text-secondary);">클라우드에 백업 <span class="lock-tag">🔒</span></span><span class="arrow">›</span></div>
+          <div class="menu-row" style="border-bottom:none;padding:13px 0;opacity:0.7;"><span class="ic">↑</span><span class="name" style="color:var(--text-secondary);">내보내기 <span class="lock-tag">🔒</span></span><span class="arrow">›</span></div>
+          <div class="menu-row danger" style="border-bottom:none;padding:13px 0;"><span class="ic">🗑</span><span class="name">삭제</span><span class="arrow">›</span></div>
+          <div style="background:rgba(163,230,53,0.06);border:1px solid rgba(163,230,53,0.2);border-radius:12px;padding:12px;margin-top:10px;display:flex;gap:10px;align-items:center;">
+            <span style="font-size:16px;color:var(--lime);">✦</span>
+            <span style="flex:1;font-size:12px;color:var(--text-secondary);">잠긴 기능을 사용하려면<br>Pro 구독이 필요해요</span>
+            <span style="background:var(--lime);color:var(--bg);padding:6px 12px;border-radius:999px;font-size:11px;font-weight:700;">7일 체험</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑥ Cloud Library (Pro) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑥ 클라우드 라이브러리</b> <em>다른 기기 프로젝트 포함 / 다운로드 액션</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">클라우드</span>
+        </div>
+        <div class="icon-chip">⟳</div>
+      </div>
+      <div class="cloud-stat-bar">
+        <span class="ic">☁</span>
+        <div class="body">
+          <b>총 8.4 MB · 곡 4개 · 보컬 12개</b>
+          <span>마지막 동기화: 방금 전 · 무제한 보관</span>
+        </div>
+      </div>
+      <div class="section-label">이 기기에 없는 곡</div>
+      <div style="padding:0 16px;">
+        <div class="menu-section">
+          <div class="cloud-row">
+            <div class="cloud-thumb t4">♪</div>
+            <div class="cloud-info">
+              <div class="cloud-name">아이패드에서 만든 곡</div>
+              <div class="cloud-meta">5월 28일 · 3 트랙 · 1.7 MB · iPad</div>
+            </div>
+            <span class="cloud-action">↓ 받기</span>
+          </div>
+          <div class="cloud-row">
+            <div class="cloud-thumb t2">♪</div>
+            <div class="cloud-info">
+              <div class="cloud-name">출퇴근 스케치</div>
+              <div class="cloud-meta">5월 25일 · 2 트랙 · 0.9 MB · Android</div>
+            </div>
+            <span class="cloud-action downloading">38%</span>
+          </div>
+        </div>
+      </div>
+      <div class="section-label">이 기기에 있음</div>
+      <div style="padding:0 16px;">
+        <div class="menu-section">
+          <div class="cloud-row">
+            <div class="cloud-thumb t1">♪</div>
+            <div class="cloud-info">
+              <div class="cloud-name">여름밤의 멜로디</div>
+              <div class="cloud-meta">방금 전 · 4 트랙 · 2.1 MB</div>
+            </div>
+            <span class="cloud-action muted">✓ 동기화됨</span>
+          </div>
+          <div class="cloud-row">
+            <div class="cloud-thumb t3">♪</div>
+            <div class="cloud-info">
+              <div class="cloud-name">잠 못 드는 밤</div>
+              <div class="cloud-meta">3일 전 · 4 트랙 · 3.2 MB</div>
+            </div>
+            <span class="cloud-action muted">✓ 동기화됨</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑦ Cloud Library (Free, paywall) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑦ 클라우드 라이브러리 — Free</b> <em>모자이크 미리보기 + paywall CTA</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content" style="position:relative;">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">클라우드</span>
+        </div>
+      </div>
+      <div class="mosaic" style="flex:1;">
+        <div class="blur-wrap">
+          <div class="cloud-stat-bar">
+            <span class="ic">☁</span>
+            <div class="body"><b>곡 4개 · 보컬 12개</b></div>
+          </div>
+          <div style="padding:0 0;">
+            <div class="menu-section">
+              <div class="cloud-row"><div class="cloud-thumb t1">♪</div><div class="cloud-info"><div class="cloud-name">여름밤의 멜로디</div><div class="cloud-meta">방금 전 · 4 트랙</div></div></div>
+              <div class="cloud-row"><div class="cloud-thumb t2">♪</div><div class="cloud-info"><div class="cloud-name">새로운 시작 v2</div><div class="cloud-meta">어제 · 3 트랙</div></div></div>
+              <div class="cloud-row"><div class="cloud-thumb t3">♪</div><div class="cloud-info"><div class="cloud-name">잠 못 드는 밤</div><div class="cloud-meta">3일 전 · 4 트랙</div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="lock-overlay">
+          <div class="lock-icon">☁</div>
+          <h3>클라우드는 Pro 전용이에요</h3>
+          <p>모든 기기에서 작품을 자동으로 이어가고<br>보컬 원본을 영구 보관합니다.</p>
+          <button class="lime-btn large" style="margin-bottom:10px;">7일 무료 체험 시작</button>
+          <div style="color:var(--text-tertiary);font-size:11px;">이후 ₩5,500/월 · 언제든 취소 가능</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑧ 빈 클라우드 (Pro, 첫 진입) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑧ 클라우드 라이브러리 — 빈 상태</b> <em>아직 백업 없음 / 첫 곡 만들기 유도</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">클라우드</span>
+        </div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 36px;text-align:center;">
+        <div style="width:120px;height:120px;background:var(--surface);border-radius:34px;display:flex;align-items:center;justify-content:center;font-size:54px;color:var(--lime);margin-bottom:24px;">☁</div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:8px;">아직 백업한 곡이 없어요</div>
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin-bottom:24px;">새 곡을 만들거나 기존 곡을 편집하면<br>자동으로 클라우드에 저장됩니다.</div>
+        <button class="lime-btn large">＋ 첫 곡 만들기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑨ 충돌 해결 다이얼로그 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑨ 충돌 해결</b> <em>로컬/클라우드 동시 수정 / "둘 다 보관" 추천</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content" style="opacity:0.35;">
+      <div class="app-header">
+        <span class="app-title">My Songs</span>
+        <div class="icon-chip">👤</div>
+      </div>
+    </div>
+    <div class="modal-backdrop">
+      <div class="conflict-modal">
+        <div class="conflict-icon">⇋</div>
+        <h2>충돌이 발견됐어요</h2>
+        <div class="sub-text">
+          <b style="color:var(--text-primary);">잠 못 드는 밤</b>이 두 곳에서<br>다르게 수정되었습니다.
+        </div>
+        <div class="version-cards">
+          <div class="ver local">
+            <div class="label">이 기기 (로컬)</div>
+            <div class="time">10분 전</div>
+            <div class="stat">4 트랙<br>2:12 · 3.2 MB</div>
+          </div>
+          <div class="ver cloud">
+            <div class="label">클라우드</div>
+            <div class="time">25분 전</div>
+            <div class="stat">5 트랙<br>2:30 · 4.1 MB</div>
+          </div>
+        </div>
+        <div class="choice-list">
+          <div class="choice recommended">
+            <div class="ic-wrap">⎘</div>
+            <div class="text">
+              <div class="title">둘 다 보관 <span class="recommend-tag">추천</span></div>
+              <div class="desc">새 사본을 만들어 모두 안전하게 보관</div>
+            </div>
+          </div>
+          <div class="choice">
+            <div class="ic-wrap">↑</div>
+            <div class="text">
+              <div class="title">로컬 유지</div>
+              <div class="desc">클라우드 버전을 덮어씁니다</div>
+            </div>
+          </div>
+          <div class="choice">
+            <div class="ic-wrap">↓</div>
+            <div class="text">
+              <div class="title">클라우드 가져오기</div>
+              <div class="desc">로컬 변경은 폐기됩니다</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑩ Paywall — Cloud Sync 중심 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑩ Paywall (Cloud-centric)</b> <em>클라우드 가치 카드 최상단 강조</em></div>
+  <div class="frame modal-bg">
+    <div class="notch"></div>
+    <div class="frame-inner">
+      <div style="height:64px;"></div>
+      <div class="sheet-frame">
+        <div class="sheet-grab"></div>
+        <div class="sheet-x">✕</div>
+        <div class="paywall">
+          <div class="paywall-badge">✦ HUMTRACK PRO</div>
+          <h2>모든 기기에서<br>작품 이어가기</h2>
+          <p class="sub-text">7일 무료 체험 후 ₩5,500/월. 언제든 취소 가능합니다.</p>
+          <div class="value-stack">
+            <div class="value-card hero">
+              <span class="ic">☁</span>
+              <div class="body">
+                <div class="title">클라우드 동기화</div>
+                <div class="desc">모든 기기에서 작업물 자동 보관·복원. iPhone에서 시작하고 iPad에서 마무리하세요.</div>
+              </div>
+            </div>
+            <div class="value-card">
+              <span class="ic">🛡</span>
+              <div class="body">
+                <div class="title">보컬 영구 보관</div>
+                <div class="desc">앱을 다시 설치해도 원본 그대로</div>
+              </div>
+            </div>
+            <div class="value-card">
+              <span class="ic">↑</span>
+              <div class="body">
+                <div class="title">무제한 내보내기</div>
+                <div class="desc">WAV · MIDI · Stems 무제한 공유</div>
+              </div>
+            </div>
+            <div class="value-card">
+              <span class="ic">⚡</span>
+              <div class="body">
+                <div class="title">우선 분석 처리</div>
+                <div class="desc">더 빠른 응답 시간</div>
+              </div>
+            </div>
+          </div>
+          <div class="plan-cards">
+            <div class="plan">
+              <div class="period">월간</div>
+              <div class="price">₩5,500<small>/월</small></div>
+            </div>
+            <div class="plan active">
+              <div class="plan-tag">20% 할인</div>
+              <div class="period">연간</div>
+              <div class="price">₩4,400<small>/월</small></div>
+              <div class="save">₩52,800/년</div>
+            </div>
+          </div>
+          <button class="lime-btn full large">7일 무료 체험 시작</button>
+          <div class="paywall-fine">
+            체험 종료 24시간 전까지 취소하지 않으면<br>자동 결제됩니다. <a>이용약관</a> · <a>개인정보</a>
+          </div>
+          <div class="paywall-restore">구매 복원</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑪ Sync 진행 toast ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑪ 동기화 토스트</b> <em>업로드 중 / 완료 / 실패 — 3가지 상태</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <span class="app-title">My Songs</span>
+        <div class="header-right">
+          <div class="icon-chip">☁<span class="dot-badge"></span></div>
+          <div class="icon-chip">👤</div>
+        </div>
+      </div>
+      <div class="toast-stack" style="top:108px;">
+        <div class="toast syncing">
+          <span class="ic">◐</span>
+          <div class="body" style="flex:1;">
+            <b>동기화 중</b>
+            <span>여름밤의 멜로디 · 38%</span>
+            <div class="progress-track"><div class="progress-fill" style="width:38%;"></div></div>
+          </div>
+        </div>
+        <div class="toast ok">
+          <span class="ic">✓</span>
+          <div class="body">
+            <b>동기화 완료</b>
+            <span>3개 곡 클라우드에 저장됨</span>
+          </div>
+        </div>
+        <div class="toast fail">
+          <span class="ic">⊘</span>
+          <div class="body">
+            <b>동기화 실패</b>
+            <span>네트워크 확인 후 다시 시도해 주세요</span>
+          </div>
+          <span class="retry">재시도</span>
+        </div>
+      </div>
+      <div style="flex:1;opacity:0.3;padding:200px 16px 0;">
+        <div class="proj-card">
+          <div class="proj-thumb t1">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">여름밤의 멜로디</div>
+            <div class="proj-meta">방금 전 · 4 트랙</div>
+          </div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t2">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">새로운 시작 v2</div>
+            <div class="proj-meta">어제 · 3 트랙</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑫ Downgrade Banner (만료) ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑫ SONGS — 구독 만료</b> <em>30일 grace · 클라우드 데이터 보존</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <span class="app-title">My Songs</span>
+        <div class="header-right">
+          <div class="icon-chip">☁</div>
+          <div class="icon-chip">👤</div>
+        </div>
+      </div>
+      <div class="banner-down">
+        <span class="ic">⏰</span>
+        <div class="body">
+          <b>Pro 구독이 만료되었어요</b>
+          <div style="color:var(--text-secondary);margin-top:4px;">클라우드 작품은 <b style="color:var(--text-primary);">30일 (2026-07-03)</b>까지 보관됩니다. 그 전에 재구독하거나 로컬로 받아두세요.</div>
+          <div class="banner-down-actions">
+            <span class="btn-amber">다시 구독</span>
+            <span class="btn-ghost">지금 다운로드</span>
+          </div>
+        </div>
+      </div>
+      <div class="proj-list">
+        <div class="proj-card">
+          <div class="proj-thumb t1">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">여름밤의 멜로디 <span class="sync-badge local">▣</span></div>
+            <div class="proj-meta">로컬 · 방금 전 · 4 트랙</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t2">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">새로운 시작 v2 <span class="sync-badge cloudonly">↓</span></div>
+            <div class="proj-meta">클라우드 · 받기</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+        <div class="proj-card">
+          <div class="proj-thumb t3">♪</div>
+          <div class="proj-info">
+            <div class="proj-name">잠 못 드는 밤 <span class="sync-badge cloudonly">↓</span></div>
+            <div class="proj-meta">클라우드 · 받기</div>
+          </div>
+          <div class="proj-more">⋯</div>
+        </div>
+      </div>
+      <div class="bottom-nav-wrap">
+        <div class="bottom-nav">
+          <div class="tab"><span class="ic">✦</span><span class="label">STUDIO</span></div>
+          <div class="tab active"><span class="ic">♬</span><span class="label">SONGS</span></div>
+          <div class="tab disabled"><span class="ic">≡</span><span class="label">MIXER</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑬ 첫 가입 후 onboarding ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑬ Pro 가입 후 환영</b> <em>1회성 · cloud sync 동작 설명</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div style="padding:16px 20px;display:flex;justify-content:flex-end;">
+        <span style="color:var(--text-tertiary);font-size:13px;">건너뛰기</span>
+      </div>
+      <div class="onb-illust">☁</div>
+      <div style="text-align:center;padding:0 24px;">
+        <div style="font-size:22px;font-weight:700;margin-bottom:6px;">환영합니다, 정민님!</div>
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.5;margin-bottom:22px;">이제 어디서나 작업을 이어갈 수 있어요.</div>
+      </div>
+      <div class="step-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-text">
+            <div class="step-title">자동으로 백업돼요</div>
+            <div class="step-desc">곡을 만들거나 편집할 때마다 클라우드에 안전하게 저장됩니다.</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-text">
+            <div class="step-title">다른 기기에서 이어 작업</div>
+            <div class="step-desc">같은 계정으로 로그인하면 모든 프로젝트가 자동으로 나타나요.</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-text">
+            <div class="step-title">보컬 원본은 영구 보관</div>
+            <div class="step-desc">앱을 다시 설치해도 원본 그대로 복구됩니다.</div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:18px 24px 0;">
+        <button class="lime-btn full large">시작하기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑭ Settings — Sync 옵션 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑭ 설정 — 동기화</b> <em>토글 + 수동 동기화 + 사용량</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div class="app-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:22px;color:var(--text-secondary);">‹</span>
+          <span class="app-title" style="font-size:22px;">동기화</span>
+        </div>
+      </div>
+      <div style="padding:0 16px;">
+        <div class="usage-card">
+          <div class="head">
+            <b>클라우드 사용량</b>
+            <span class="pro-pill">✦ PRO · 무제한</span>
+          </div>
+          <div style="font-size:22px;font-weight:700;color:var(--text-primary);">1.2 <span style="font-size:12px;color:var(--text-tertiary);font-weight:500;">GB 사용 중</span></div>
+          <div class="usage-bar"><div class="fill" style="width:12%;"></div></div>
+          <div class="foot">곡 4개 · 보컬 12개 · 마지막 동기화 방금 전</div>
+        </div>
+
+        <div class="section-label">동기화 설정</div>
+        <div class="menu-section">
+          <div class="menu-row">
+            <span class="ic">⟳</span>
+            <span class="name">자동 동기화</span>
+            <span class="switch"></span>
+          </div>
+          <div class="menu-row">
+            <span class="ic">📶</span>
+            <span class="name">Wi-Fi 에서만 동기화</span>
+            <span class="switch off"></span>
+          </div>
+          <div class="menu-row">
+            <span class="ic">🛡</span>
+            <span class="name">보컬 원본 백업</span>
+            <span class="switch"></span>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <div class="menu-row">
+            <span class="ic" style="color:var(--lime);">↑</span>
+            <span class="name">지금 동기화</span>
+            <span style="color:var(--text-tertiary);font-size:11px;">방금 전</span>
+          </div>
+          <div class="menu-row">
+            <span class="ic">☁</span>
+            <span class="name">클라우드 라이브러리 열기</span>
+            <span class="arrow">›</span>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <div class="menu-row danger">
+            <span class="ic">🗑</span>
+            <span class="name">클라우드 데이터 모두 삭제</span>
+            <span class="arrow">›</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ⑮ Edit 화면 — 자동 sync 상태 표시 ─── -->
+<div style="position:relative;">
+  <div class="frame-title"><b>⑮ 편집 화면 — Sync 상태</b> <em>상단바에 미니 sync 아이콘 · 저장 → 백업 자동 흐름</em></div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span class="statusbar-icons">●●● ▢ 100%</span></div>
+    <div class="content">
+      <div style="height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid var(--border);">
+        <div style="display:flex;gap:4px;align-items:center;">
+          <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:18px;">‹</div>
+          <h2 style="font-size:15px;font-weight:600;">여름밤의 멜로디</h2>
+          <span class="sync-badge syncing" style="margin-left:6px;">◐</span>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:18px;">♪</div>
+          <div style="background:var(--surface-alt);color:var(--lime);padding:0 12px;border-radius:999px;font-size:12px;font-weight:600;height:32px;display:flex;align-items:center;gap:4px;">↑ 내보내기</div>
+        </div>
+      </div>
+      <div style="background:rgba(59,130,246,0.05);border-bottom:1px solid rgba(59,130,246,0.2);padding:10px 16px;display:flex;align-items:center;gap:10px;font-size:11px;">
+        <span style="color:var(--blue);">◐</span>
+        <div style="flex:1;color:var(--text-secondary);">변경사항을 클라우드에 저장하는 중 · 62%</div>
+      </div>
+      <div style="padding:12px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:8px;">
+          <div style="font-size:9px;color:var(--text-tertiary);font-weight:700;letter-spacing:0.6px;margin-bottom:6px;">INSTRUMENT</div>
+          <div style="font-size:16px;font-weight:700;">♪ Grand Piano</div>
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;margin:8px 12px;height:200px;padding:12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="background:var(--surface-alt);border-radius:8px;height:36px;display:flex;align-items:center;padding:0 8px;font-size:10px;color:var(--text-tertiary);position:relative;">
+          키
+          <div style="position:absolute;left:14%;width:28%;height:24px;border-radius:4px;top:6px;background:var(--lime);"></div>
+        </div>
+        <div style="background:var(--surface-alt);border-radius:8px;height:36px;display:flex;align-items:center;padding:0 8px;font-size:10px;color:var(--text-tertiary);position:relative;">
+          베이스
+          <div style="position:absolute;left:50%;width:22%;height:24px;border-radius:4px;top:6px;background:var(--blue);"></div>
+        </div>
+        <div style="background:var(--surface-alt);border-radius:8px;height:36px;display:flex;align-items:center;padding:0 8px;font-size:10px;color:var(--text-tertiary);position:relative;">
+          드럼
+          <div style="position:absolute;left:8%;width:44%;height:24px;border-radius:4px;top:6px;background:var(--amber);"></div>
+        </div>
+      </div>
+      <div style="padding:12px 16px;font-size:11px;color:var(--text-tertiary);text-align:center;">
+        저장 시 자동으로 클라우드에 백업됩니다
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

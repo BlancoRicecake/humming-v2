@@ -6,21 +6,60 @@
 // 실제 in_app_purchase / supabase 패키지는 다음 배치에서 도입.
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../l10n/generated/app_localizations.dart';
+import '../screens/legal_doc_screen.dart';
+
 import '../services/analytics_service.dart';
 import '../services/auth_service.dart';
+import '../services/iap_pricing.dart';
 import '../services/iap_service.dart';
 import '../state/local_storage.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
+import 'social_sign_in_buttons.dart';
+import 'sync_progress_sheet.dart';
 
 BoxDecoration _sheetDeco() => const BoxDecoration(
       color: AppColors.surface,
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
     );
+
+String _authProviderLabel(L10n l, String provider) {
+  switch (provider.toLowerCase()) {
+    case 'apple':    return 'Apple';
+    case 'google':   return 'Google';
+    case 'kakao':    return l.authProviderKakao;
+    case 'naver':    return l.authProviderNaver;
+    case 'github':   return 'GitHub';
+    case 'facebook': return 'Facebook';
+    default:         return provider;
+  }
+}
+
+/// AuthError → 사용자 표시용 로컬라이즈 문자열.
+String _localizedAuthError(L10n l, AuthError e) {
+  switch (e.code) {
+    case 'disabled':
+      return l.authErrDisabled;
+    case 'googleNoIdToken':
+      return l.authErrGoogleNoIdToken;
+    case 'identityBlockedGeneric':
+      return l.authErrIdentityBlockedGeneric;
+    case 'identityBlockedSpecific':
+      final labels = e.providers.map((p) => _authProviderLabel(l, p)).join(', ');
+      return l.authErrIdentityBlockedSpecific(labels);
+    case 'appleCode':
+      return l.authErrAppleCode(e.appleCode ?? '', e.appleMessage ?? '');
+    case 'generic':
+    default:
+      return l.authErrGeneric(e.provider ?? '', e.raw ?? '');
+  }
+}
 
 Widget _grabber() => Center(
       child: Container(
@@ -35,10 +74,7 @@ Widget _grabber() => Center(
 /// trigger: 'export' | 'sync' | 'backup' — 진입 컨텍스트에 따라 헤더 카피 분기.
 Future<bool> showPaywallSheet(BuildContext context, ProjectStore store, {required String trigger}) async {
   AnalyticsService.instance.paywallViewed(trigger: trigger);
-  // 실제 IAP 가능하면 상품 정보 미리 로드 (실패해도 시트는 떠야 함).
-  if (IapService.instance.enabled && IapService.instance.products.isEmpty) {
-    unawaited(IapService.instance.loadProducts());
-  }
+  // 상품 로드는 _PaywallBodyState.initState 에서 처리 — 완료 시 setState 로 가격 표시 갱신.
   final ok = await showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -61,21 +97,33 @@ class _PaywallBodyState extends State<_PaywallBody> {
   String _plan = 'yearly'; // yearly | monthly
   bool _purchasing = false;
 
-  String get _headline {
-    switch (widget.trigger) {
-      case 'export': return '내보내려면 Pro 가 필요해요';
-      case 'sync': return '다른 기기에서 보려면 Pro';
-      case 'backup': return '보컬 영구 보관';
-      default: return 'Humming Pro';
+  @override
+  void initState() {
+    super.initState();
+    // 스토어가 가격 정보를 비동기로 가져오는 동안 UI 는 폴백(KRW 상수)로 먼저 그림.
+    // 로드 완료 시 setState 로 다시 그리면 ProductDetails.price (로컬라이즈된 통화) 가 반영됨.
+    if (IapService.instance.enabled && IapService.instance.products.isEmpty) {
+      IapService.instance.loadProducts().then((_) {
+        if (mounted) setState(() {});
+      });
     }
   }
 
-  String get _sub {
+  String _headlineFor(L10n t) {
     switch (widget.trigger) {
-      case 'export': return 'WAV · MIDI 파일로 저장하고 공유하세요';
-      case 'sync': return '클라우드 동기화로 어디서든 이어서 작업';
-      case 'backup': return '내 목소리를 잃지 않고 평생 보관';
-      default: return '전체 기능 잠금 해제';
+      case 'export': return t.paywallHeadlineExport;
+      case 'sync': return t.paywallHeadlineSync;
+      case 'backup': return t.paywallHeadlineBackup;
+      default: return t.paywallHeadlineDefault;
+    }
+  }
+
+  String _subFor(L10n t) {
+    switch (widget.trigger) {
+      case 'export': return t.paywallSubExport;
+      case 'sync': return t.paywallSubSync;
+      case 'backup': return t.paywallSubBackup;
+      default: return t.paywallSubDefault;
     }
   }
 
@@ -115,7 +163,11 @@ class _PaywallBodyState extends State<_PaywallBody> {
     }
     if (!mounted) return;
     setState(() => _purchasing = false);
-    if (ok && mounted) Navigator.pop(context, true);
+    if (ok && mounted) {
+      // 시안 ⑫ — Pro 결제 통과 직후 환영 화면 1회 표시 (SongsScreen 진입 시).
+      store.pendingProWelcome = true;
+      Navigator.pop(context, true);
+    }
   }
 
   Widget _planTile(String key, String title, String price, String hint) {
@@ -181,6 +233,7 @@ class _PaywallBodyState extends State<_PaywallBody> {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
+    final t = L10n.of(context);
     return Container(
       decoration: _sheetDeco(),
       constraints: BoxConstraints(maxHeight: mq.size.height * 0.92),
@@ -192,7 +245,7 @@ class _PaywallBodyState extends State<_PaywallBody> {
           children: [
             _grabber(),
             Row(children: [
-              Expanded(child: Text(_headline, style: T.h2.copyWith(fontSize: 20))),
+              Expanded(child: Text(_headlineFor(t), style: T.h2.copyWith(fontSize: 20))),
               GestureDetector(
                 onTap: () => Navigator.pop(context, false),
                 child: const Padding(
@@ -202,22 +255,35 @@ class _PaywallBodyState extends State<_PaywallBody> {
               ),
             ]),
             const SizedBox(height: 6),
-            Text(_sub, style: T.sub),
+            Text(_subFor(t), style: T.sub),
             const SizedBox(height: 18),
-            _feature(Symbols.cloud_done, '클라우드 동기화', '다른 기기에서 그대로 이어서 작업'),
-            _feature(Symbols.download, '무제한 내보내기', 'WAV · MIDI 파일 저장 · 공유'),
-            _feature(Symbols.shield, '보컬 영구 보관', '원본 목소리 클라우드 백업'),
-            _feature(Symbols.bolt, '우선 처리', '빠른 분석/렌더 서버'),
+            // 시안 ⑪ — 5GB 클라우드 가장 위로, 4개 가치 카드 순서 정리.
+            _feature(Symbols.cloud, t.paywallFeatureCloudTitle, t.paywallFeatureCloudSub),
+            _feature(Symbols.shield, t.paywallFeatureBackupTitle, t.paywallFeatureBackupSub),
+            _feature(Symbols.download, t.paywallFeatureExportTitle, t.paywallFeatureExportSub),
+            _feature(Symbols.bolt, t.paywallFeaturePriorityTitle, t.paywallFeaturePrioritySub),
             const SizedBox(height: 8),
-            _planTile('yearly', '연 구독', '₩69,000 / 년', '월 ₩5,750 · 33% 할인'),
-            _planTile('monthly', '월 구독', '₩8,900 / 월', '언제든 해지'),
+            _planTile(
+              'yearly',
+              t.paywallPlanYearly,
+              t.paywallPlanYearlyPrice(IapPricing.yearlyLabel()),
+              t.paywallPlanYearlyHint(IapPricing.yearlyAsMonthlyLabel(), IapPricing.yearlyDiscountPercent()),
+            ),
+            _planTile(
+              'monthly',
+              t.paywallPlanMonthly,
+              t.paywallPlanMonthlyPrice(IapPricing.monthlyLabel()),
+              t.paywallPlanMonthlyHint,
+            ),
             const SizedBox(height: 4),
             LimeButton(
-              label: _purchasing ? '결제 처리 중…' : '7일 무료로 시작하기',
+              label: _purchasing
+                  ? t.paywallCtaProcessing
+                  : t.paywallCtaStartTrial(IapPricing.trialDays),
               onTap: _purchasing ? null : _purchase,
             ),
             const SizedBox(height: 10),
-            Center(child: Text('첫 결제 7일 전 알림 · 언제든 해지 가능',
+            Center(child: Text(t.paywallFooterTrial,
                 style: T.sub.copyWith(fontSize: 11, color: AppColors.textTertiary))),
             const SizedBox(height: 8),
             Center(
@@ -230,12 +296,12 @@ class _PaywallBodyState extends State<_PaywallBody> {
                           ok: widget.store.subscription.hasProAccess);
                     }
                   } else {
-                    comingSoon(context, '구매 복원');
+                    comingSoon(context, t.paywallRestoreLink);
                   }
                 },
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: Text('구매 복원', style: T.sub.copyWith(fontSize: 12, color: AppColors.textSecondary)),
+                  child: Text(t.paywallRestoreLink, style: T.sub.copyWith(fontSize: 12, color: AppColors.textSecondary)),
                 ),
               ),
             ),
@@ -262,38 +328,38 @@ class _LoginBody extends StatelessWidget {
   const _LoginBody({required this.store});
   final ProjectStore store;
 
-  Widget _btn(BuildContext context, {required IconData ic, required String label, required Color bg, required Color fg, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(12),
-          border: bg == Colors.transparent ? Border.all(color: AppColors.border) : null,
-        ),
-        alignment: Alignment.center,
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(ic, color: fg, size: 20),
-          const SizedBox(width: 10),
-          Text(label, style: T.body.copyWith(color: fg, fontWeight: FontWeight.w700)),
-        ]),
-      ),
-    );
-  }
-
   Future<void> _login(BuildContext context, String provider, String email) async {
-    // 실제 Supabase OAuth 가능 → 브라우저 redirect 시작.
-    // 세션은 AuthService.onSession 으로 비동기 도착 → ProjectStore 가 자동 갱신.
     if (AuthService.instance.enabled) {
       final launched = await AuthService.instance.signInWith(provider);
+      if (!context.mounted) return;
       if (launched) {
-        if (context.mounted) Navigator.pop(context, true);
+        Navigator.pop(context, true);
         return;
       }
+      // 실패 — lastError 있으면 표시. 사용자 취소면 null 이라 silent.
+      final err = AuthService.instance.lastError;
+      if (err != null) {
+        // SnackBar 는 모달 시트 아래에 깔려 안 보이므로 dialog 로 — 모달 위 보장.
+        await showDialog<void>(
+          context: context,
+          builder: (dctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: Text(L10n.of(dctx).loginFailedTitle, style: const TextStyle(color: AppColors.danger)),
+            content: SelectableText(
+              _localizedAuthError(L10n.of(dctx), err),
+              style: T.body.copyWith(fontSize: 12),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dctx),
+                child: Text(L10n.of(dctx).ok),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
     }
-    // 비활성 환경 → mock 로그인 (시뮬레이터 / 개발 모드 / 키 미설정).
     store.mockLogin(provider: provider, email: email);
     if (context.mounted) Navigator.pop(context, true);
   }
@@ -301,6 +367,7 @@ class _LoginBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
+    final t = L10n.of(context);
     return Container(
       decoration: _sheetDeco(),
       padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
@@ -309,34 +376,77 @@ class _LoginBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _grabber(),
-          Text('로그인', style: T.h2.copyWith(fontSize: 20), textAlign: TextAlign.center),
+          Text(t.loginTitle, style: T.h2.copyWith(fontSize: 20), textAlign: TextAlign.center),
           const SizedBox(height: 6),
-          Text('구독 결제와 클라우드 동기화에 사용돼요',
+          Text(t.loginSub,
               style: T.sub, textAlign: TextAlign.center),
           const SizedBox(height: 20),
-          _btn(context,
-              ic: Symbols.devices, label: 'Apple 로 계속',
-              bg: Colors.white, fg: AppColors.bg,
-              onTap: () => _login(context, 'apple', 'me@privaterelay.appleid.com')),
-          _btn(context,
-              ic: Symbols.g_mobiledata, label: 'Google 로 계속',
-              bg: Colors.transparent, fg: AppColors.textPrimary,
-              onTap: () => _login(context, 'google', 'me@gmail.com')),
+          // App Store Review Guideline 5.1.5: Sign in with Apple 는 다른 소셜
+          // 로그인보다 prominence 동등 이상 — 시안 ⑤ 와 동일하게 최상단 배치.
+          AppleSignInButton(
+            label: t.appleSignInCta,
+            onPressed: () => _login(context, 'apple', 'me@privaterelay.appleid.com'),
+          ),
+          GoogleSignInButton(
+            label: t.googleSignInCta,
+            onPressed: () => _login(context, 'google', 'me@gmail.com'),
+          ),
           const SizedBox(height: 8),
           Center(
             child: GestureDetector(
               onTap: () => Navigator.pop(context, false),
               child: Padding(
                 padding: const EdgeInsets.all(8),
-                child: Text('나중에', style: T.sub.copyWith(fontSize: 13, color: AppColors.textSecondary)),
+                child: Text(t.later, style: T.sub.copyWith(fontSize: 13, color: AppColors.textSecondary)),
               ),
             ),
           ),
           const SizedBox(height: 4),
-          Text('계속 진행하면 서비스 약관과 개인정보처리방침에 동의하는 것으로 간주됩니다.',
-              style: T.sub.copyWith(fontSize: 10, color: AppColors.textTertiary, height: 1.5),
-              textAlign: TextAlign.center),
+          const _TermsAgreement(),
         ],
+      ),
+    );
+  }
+}
+
+/// 로그인 시트 하단 약관 동의 안내.
+/// "서비스 약관", "개인정보 처리방침" 은 풀모달로 해당 문서를 연다.
+class _TermsAgreement extends StatelessWidget {
+  const _TermsAgreement();
+
+  @override
+  Widget build(BuildContext context) {
+    final base = T.sub.copyWith(fontSize: 11, color: AppColors.textTertiary, height: 1.5);
+    final link = base.copyWith(
+      color: AppColors.textSecondary,
+      decoration: TextDecoration.underline,
+      decorationColor: AppColors.textSecondary.withValues(alpha: 0.6),
+    );
+    final t = L10n.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Text.rich(
+        TextSpan(
+          style: base,
+          children: [
+            TextSpan(text: t.loginTermsPrefix),
+            TextSpan(
+              text: t.loginTermsLinkTerms,
+              style: link,
+              recognizer: TapGestureRecognizer()
+                ..onTap = () => LegalDocScreen.open(context, LegalDoc.terms),
+            ),
+            TextSpan(text: t.loginTermsBetween),
+            TextSpan(
+              text: t.loginTermsLinkPrivacy,
+              style: link,
+              recognizer: TapGestureRecognizer()
+                ..onTap = () => LegalDocScreen.open(context, LegalDoc.privacy),
+            ),
+            TextSpan(text: t.loginTermsSuffix),
+          ],
+        ),
+        textAlign: TextAlign.center,
       ),
     );
   }
@@ -346,9 +456,12 @@ class _LoginBody extends StatelessWidget {
 Future<void> showLogoutConfirm(BuildContext context, ProjectStore store) async {
   await showModalBottomSheet(
     context: context,
+    isScrollControlled: true,
     backgroundColor: Colors.transparent,
     useSafeArea: true,
-    builder: (sheetCtx) => Container(
+    builder: (sheetCtx) {
+      final t = L10n.of(sheetCtx);
+      return Container(
       decoration: _sheetDeco(),
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       child: Column(
@@ -356,9 +469,9 @@ Future<void> showLogoutConfirm(BuildContext context, ProjectStore store) async {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _grabber(),
-          Text('로그아웃 하시겠어요?', style: T.h2.copyWith(fontSize: 18), textAlign: TextAlign.center),
+          Text(t.logoutConfirmTitle, style: T.h2.copyWith(fontSize: 18), textAlign: TextAlign.center),
           const SizedBox(height: 6),
-          Text('이 기기의 로컬 프로젝트는 그대로 남아있어요. 다시 로그인하면 클라우드 작업물도 복원됩니다.',
+          Text(t.logoutConfirmBody,
               style: T.sub, textAlign: TextAlign.center),
           const SizedBox(height: 18),
           GestureDetector(
@@ -378,7 +491,7 @@ Future<void> showLogoutConfirm(BuildContext context, ProjectStore store) async {
                 border: Border.all(color: AppColors.dangerBorder),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text('로그아웃',
+              child: Text(t.logoutCta,
                   style: T.body.copyWith(fontWeight: FontWeight.w700, color: AppColors.danger)),
             ),
           ),
@@ -393,12 +506,13 @@ Future<void> showLogoutConfirm(BuildContext context, ProjectStore store) async {
                 border: Border.all(color: AppColors.border),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text('취소', style: T.body.copyWith(fontWeight: FontWeight.w600)),
+              child: Text(t.cancel, style: T.body.copyWith(fontWeight: FontWeight.w600)),
             ),
           ),
         ],
       ),
-    ),
+    );
+    },
   );
 }
 
@@ -406,9 +520,12 @@ Future<void> showLogoutConfirm(BuildContext context, ProjectStore store) async {
 Future<void> showRestoreResult(BuildContext context, {required bool ok, String? message}) async {
   await showModalBottomSheet(
     context: context,
+    isScrollControlled: true,
     backgroundColor: Colors.transparent,
     useSafeArea: true,
-    builder: (sheetCtx) => Container(
+    builder: (sheetCtx) {
+      final t = L10n.of(sheetCtx);
+      return Container(
       decoration: _sheetDeco(),
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       child: Column(
@@ -418,24 +535,34 @@ Future<void> showRestoreResult(BuildContext context, {required bool ok, String? 
           Icon(ok ? Symbols.check_circle : Symbols.error,
               color: ok ? AppColors.lime : AppColors.danger, size: 48),
           const SizedBox(height: 12),
-          Text(ok ? '복원 완료' : '복원할 구매가 없어요',
+          Text(ok ? t.restoreOkTitle : t.restoreEmptyTitle,
               style: T.h2.copyWith(fontSize: 18)),
           const SizedBox(height: 6),
-          Text(message ?? (ok ? 'Pro 기능이 다시 활성화됐어요.' : '다른 계정으로 로그인했는지 확인해 주세요.'),
+          Text(message ?? (ok ? t.restoreOkBody : t.restoreEmptyBody),
               style: T.sub, textAlign: TextAlign.center),
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
-            child: LimeButton(label: '확인', onTap: () => Navigator.pop(sheetCtx)),
+            child: LimeButton(label: t.ok, onTap: () => Navigator.pop(sheetCtx)),
           ),
         ],
       ),
-    ),
+    );
+    },
   );
 }
 
 // ─── ⑳ ㉑ ㉒ 프로젝트 옵션 ───────────────────────────────────────────
-enum _ProjectAction { open, rename, duplicate, export, delete }
+// cloud-sync-p3 ⑥ — 내 작업물 탭 옵션 시트에 "클라우드에 올리기 / 클라우드 최신화" 추가.
+enum _ProjectAction {
+  open,
+  rename,
+  duplicate,
+  export,
+  delete,
+  uploadToCloud,
+  refreshCloud,
+}
 
 /// `onChanged` 는 옵션 시트 결과로 리스트를 갱신해야 할 때 호출 — songs screen 에서 setState.
 Future<void> showProjectOptionsSheet(
@@ -449,6 +576,7 @@ Future<void> showProjectOptionsSheet(
     context: context,
     backgroundColor: Colors.transparent,
     useSafeArea: true,
+    isScrollControlled: true,
     builder: (sheetCtx) => _ProjectOptionsBody(meta: meta, store: store),
   );
   if (action == null) return;
@@ -472,16 +600,56 @@ Future<void> showProjectOptionsSheet(
       if (!store.subscription.hasProAccess) {
         // ignore: use_build_context_synchronously
         await showPaywallSheet(context, store, trigger: 'export');
-      } else {
-        // ignore: use_build_context_synchronously
-        comingSoon(context, '내보내기');
+        break;
       }
+      // Pro — 해당 프로젝트를 열어 EditScreen 진입. 사용자는 거기서 우상단 공유 아이콘
+      // 으로 MIDI/WAV 내보내기 가능. (별도 export 시트를 여기서 직접 띄우려면 onOpen
+      // 의 navigation 종료를 기다린 뒤 EditScreen context 를 받아야 해 흐름이 복잡.)
+      await onOpen();
       break;
     case _ProjectAction.delete:
       // ignore: use_build_context_synchronously
       final ok = await _promptDelete(context, meta.title);
       if (ok == true) {
         await LocalStorage.instance.deleteProject(meta.id);
+        onChanged();
+      }
+      break;
+    case _ProjectAction.uploadToCloud:
+    case _ProjectAction.refreshCloud:
+      // Pro 가 아니면 paywall (lock 아이콘 탭).
+      if (!store.subscription.hasProAccess) {
+        // ignore: use_build_context_synchronously
+        await showPaywallSheet(context, store, trigger: 'sync');
+        break;
+      }
+      // 시안 ⑧ — 업로드 진행 모달 → mock 업로드.
+      final sizeBytes = (meta.durationSec * 200 * 1024).toInt().clamp(1024 * 1024, 50 * 1024 * 1024);
+      if (!context.mounted) break;
+      final done = await showSyncProgressSheet(
+        context,
+        direction: SyncDirection.upload,
+        projectTitle: meta.title,
+        totalBytes: sizeBytes,
+        onRun: () => store.mockUploadToCloud(meta.id, meta.title, sizeBytes: sizeBytes),
+      );
+      if (done && context.mounted) {
+        // 시안 ② — "{title} — 클라우드에 올렸어요" 토스트.
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Row(children: [
+              const Icon(Symbols.check_circle, color: AppColors.lime, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(L10n.of(context).projectUploadedToast(meta.title),
+                    style: T.body.copyWith(fontSize: 13)),
+              ),
+            ]),
+            backgroundColor: AppColors.surface3,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ));
         onChanged();
       }
       break;
@@ -493,8 +661,10 @@ class _ProjectOptionsBody extends StatelessWidget {
   final ProjectMeta meta;
   final ProjectStore store;
 
-  Widget _row(BuildContext context, IconData ic, String title, String? sub, _ProjectAction action, {bool danger = false, bool pro = false}) {
-    final color = danger ? AppColors.danger : AppColors.textPrimary;
+  Widget _row(BuildContext context, IconData ic, String title, String? sub, _ProjectAction action, {bool danger = false, bool pro = false, bool lime = false, bool muted = false}) {
+    final color = danger
+        ? AppColors.danger
+        : (lime ? AppColors.lime : (muted ? AppColors.textSecondary : AppColors.textPrimary));
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => Navigator.pop(context, action),
@@ -544,6 +714,19 @@ class _ProjectOptionsBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
+    // 같은 id 가 클라우드에 있으면 "최신화" 톤. 없으면 "올리기" lime 강조.
+    final cloudExisting = store.cloudProjects.firstWhere(
+      (c) => c.id == meta.id,
+      orElse: () => CloudProjectMeta(
+        id: '',
+        title: '',
+        uploadedAt: DateTime.now(),
+        lastModifiedAt: DateTime.now(),
+        sizeBytes: 0,
+        onThisDevice: true,
+      ),
+    );
+    final hasCloud = cloudExisting.id.isNotEmpty;
     return Container(
       decoration: _sheetDeco(),
       padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + mq.viewPadding.bottom),
@@ -552,20 +735,40 @@ class _ProjectOptionsBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _grabber(),
-          _projectHeader(meta),
+          _projectHeader(context, meta),
           const SizedBox(height: 16),
-          _row(context, Symbols.folder_open, '열기', null, _ProjectAction.open),
-          _row(context, Symbols.edit, '이름 바꾸기', null, _ProjectAction.rename),
-          _row(context, Symbols.content_copy, '복제', null, _ProjectAction.duplicate),
-          _row(context, Symbols.ios_share, '내보내기', 'WAV · MIDI', _ProjectAction.export, pro: !store.subscription.hasProAccess),
-          _row(context, Symbols.delete, '삭제', '되돌릴 수 없어요', _ProjectAction.delete, danger: true),
+          // 클라우드 액션 — 시안 ⑥. Pro 면 lime, 비-Pro 면 lock + paywall.
+          if (!hasCloud)
+            _row(
+              context,
+              Symbols.cloud_upload,
+              L10n.of(context).projectActionUploadToCloud,
+              store.subscription.hasProAccess ? null : L10n.of(context).projectOptionUploadProBadge,
+              _ProjectAction.uploadToCloud,
+              lime: store.subscription.hasProAccess,
+              pro: !store.subscription.hasProAccess,
+            )
+          else
+            _row(
+              context,
+              Symbols.cloud_sync,
+              L10n.of(context).projectActionRefreshCloud,
+              L10n.of(context).projectOptionRefreshSyncedAt(_fmtAgo(context, cloudExisting.lastModifiedAt)),
+              _ProjectAction.refreshCloud,
+              muted: true,
+            ),
+          _row(context, Symbols.folder_open, L10n.of(context).projectOptionOpen, null, _ProjectAction.open),
+          _row(context, Symbols.edit, L10n.of(context).projectOptionRename, null, _ProjectAction.rename),
+          _row(context, Symbols.content_copy, L10n.of(context).projectOptionDuplicate, null, _ProjectAction.duplicate),
+          _row(context, Symbols.ios_share, L10n.of(context).projectOptionExport, L10n.of(context).projectOptionExportSub, _ProjectAction.export, pro: !store.subscription.hasProAccess),
+          _row(context, Symbols.delete, L10n.of(context).projectOptionDelete, L10n.of(context).projectOptionDeleteSub, _ProjectAction.delete, danger: true),
         ],
       ),
     );
   }
 }
 
-Widget _projectHeader(ProjectMeta meta) {
+Widget _projectHeader(BuildContext context, ProjectMeta meta) {
   return Row(children: [
     _ProjectThumb(index: meta.thumbIndex, size: 56),
     const SizedBox(width: 12),
@@ -577,8 +780,14 @@ Widget _projectHeader(ProjectMeta meta) {
           Text(meta.title, style: T.h2.copyWith(fontSize: 17),
               maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 4),
-          Text('${meta.trackCount}개 트랙 · ${_fmtDur(meta.durationSec)} · ${_fmtAgo(meta.updatedAt)}',
-              style: T.sub),
+          Text(
+            L10n.of(context).projectHeaderMeta(
+              meta.trackCount,
+              _fmtDur(context, meta.durationSec),
+              _fmtAgo(context, meta.updatedAt),
+            ),
+            style: T.sub,
+          ),
         ],
       ),
     ),
@@ -631,7 +840,7 @@ Future<String?> _promptRename(BuildContext context, String initial) {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('이름 바꾸기', style: T.h2.copyWith(fontSize: 17)),
+            Text(L10n.of(dctx).rename, style: T.h2.copyWith(fontSize: 17)),
             const SizedBox(height: 14),
             TextField(
               controller: ctrl,
@@ -667,7 +876,7 @@ Future<String?> _promptRename(BuildContext context, String initial) {
                       color: AppColors.bg, borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: AppColors.border),
                     ),
-                    child: Text('취소', style: T.body.copyWith(fontWeight: FontWeight.w600)),
+                    child: Text(L10n.of(dctx).cancel, style: T.body.copyWith(fontWeight: FontWeight.w600)),
                   ),
                 ),
               ),
@@ -680,7 +889,7 @@ Future<String?> _promptRename(BuildContext context, String initial) {
                     decoration: BoxDecoration(
                       color: AppColors.lime, borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text('저장', style: T.body.copyWith(fontWeight: FontWeight.w700, color: AppColors.bg)),
+                    child: Text(L10n.of(dctx).save, style: T.body.copyWith(fontWeight: FontWeight.w700, color: AppColors.bg)),
                   ),
                 ),
               ),
@@ -717,9 +926,9 @@ Future<bool?> _promptDelete(BuildContext context, String title) {
               ),
             ),
             const SizedBox(height: 12),
-            Text('"$title" 삭제', style: T.h2.copyWith(fontSize: 17), textAlign: TextAlign.center),
+            Text(L10n.of(dctx).projectDeleteTitle(title), style: T.h2.copyWith(fontSize: 17), textAlign: TextAlign.center),
             const SizedBox(height: 8),
-            Text('로컬 파일이 영구 삭제돼요. 이 작업은 되돌릴 수 없어요.',
+            Text(L10n.of(dctx).projectDeleteBody,
                 style: T.sub, textAlign: TextAlign.center),
             const SizedBox(height: 18),
             Row(children: [
@@ -732,7 +941,7 @@ Future<bool?> _promptDelete(BuildContext context, String title) {
                       color: AppColors.bg, borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: AppColors.border),
                     ),
-                    child: Text('취소', style: T.body.copyWith(fontWeight: FontWeight.w600)),
+                    child: Text(L10n.of(dctx).cancel, style: T.body.copyWith(fontWeight: FontWeight.w600)),
                   ),
                 ),
               ),
@@ -745,7 +954,7 @@ Future<bool?> _promptDelete(BuildContext context, String title) {
                     decoration: BoxDecoration(
                       color: AppColors.danger, borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text('삭제', style: T.body.copyWith(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    child: Text(L10n.of(dctx).delete, style: T.body.copyWith(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                   ),
                 ),
               ),
@@ -758,17 +967,18 @@ Future<bool?> _promptDelete(BuildContext context, String title) {
 }
 
 // ─── 포맷 헬퍼 ────────────────────────────────────────────────────────
-String _fmtDur(double s) {
+String _fmtDur(BuildContext context, double s) {
   final m = (s ~/ 60), ss = (s % 60).round();
-  return '$m분 ${ss.toString().padLeft(2, '0')}초';
+  return L10n.of(context).projectDurationLabel(m, ss.toString().padLeft(2, '0'));
 }
 
-String _fmtAgo(DateTime dt) {
+String _fmtAgo(BuildContext context, DateTime dt) {
+  final t = L10n.of(context);
   final d = DateTime.now().difference(dt);
-  if (d.inMinutes < 1) return '방금 전';
-  if (d.inHours < 1) return '${d.inMinutes}분 전';
-  if (d.inDays < 1) return '${d.inHours}시간 전';
-  if (d.inDays < 7) return '${d.inDays}일 전';
+  if (d.inMinutes < 1) return t.agoJustNow;
+  if (d.inHours < 1) return t.agoMinutes(d.inMinutes);
+  if (d.inDays < 1) return t.agoHours(d.inHours);
+  if (d.inDays < 7) return t.agoDays(d.inDays);
   return '${dt.year}.${dt.month.toString().padLeft(2, '0')}.${dt.day.toString().padLeft(2, '0')}';
 }
 
@@ -782,5 +992,5 @@ class ProjectThumb extends StatelessWidget {
 }
 
 /// fmt helpers 외부 공개.
-String fmtProjectDuration(double s) => _fmtDur(s);
-String fmtProjectAgo(DateTime dt) => _fmtAgo(dt);
+String fmtProjectDuration(BuildContext context, double s) => _fmtDur(context, s);
+String fmtProjectAgo(BuildContext context, DateTime dt) => _fmtAgo(context, dt);

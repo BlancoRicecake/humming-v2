@@ -26,6 +26,7 @@ class ProjectMeta {
     required this.updatedAt,
     required this.trackCount,
     required this.durationSec,
+    this.sizeBytes = 0,
   });
 
   final String id;
@@ -33,6 +34,13 @@ class ProjectMeta {
   DateTime updatedAt;
   int trackCount;
   double durationSec;
+
+  /// 디스크 사용량 — meta.json + vocals/* 합. listProjects() 가 채워넣음 (영속화는 안 함).
+  /// 클라우드 업로드 전 사용량 예상 + 정렬 기준에 사용.
+  int sizeBytes;
+
+  /// 사람 친화 포맷: 512 B / 2.1 KB / 14.6 MB / 1.2 GB.
+  String get sizeLabel => _formatBytes(sizeBytes);
 
   /// 카드 썸네일 색상 인덱스(0..3) — id 해시 기반 자동 분배.
   int get thumbIndex {
@@ -58,6 +66,21 @@ class ProjectMeta {
         trackCount: (j['track_count'] as num?)?.toInt() ?? 0,
         durationSec: (j['duration_sec'] as num?)?.toDouble() ?? 0,
       );
+}
+
+String _formatBytes(int bytes) {
+  if (bytes <= 0) return '0 B';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  var i = 0;
+  double v = bytes.toDouble();
+  while (v >= k && i < units.length - 1) {
+    v /= k;
+    i++;
+  }
+  // 1 단위 미만(B, KB)은 정수, 그 이상은 소수 1자리.
+  final s = i < 2 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+  return '$s ${units[i]}';
 }
 
 class LocalStorage {
@@ -124,13 +147,30 @@ class LocalStorage {
       try {
         final j = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
         final meta = (j['meta'] ?? {}) as Map<String, dynamic>;
-        out.add(ProjectMeta.fromJson(meta));
+        final m = ProjectMeta.fromJson(meta);
+        m.sizeBytes = _dirSize(entry);
+        out.add(m);
       } catch (e) {
         debugPrint('[storage] skip malformed meta at ${entry.path}: $e');
       }
     }
     out.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return out;
+  }
+
+  /// 디렉터리 안 모든 파일 크기 합 (재귀). meta.json + vocals/*.caf|.ogg 등 포함.
+  int _dirSize(Directory d) {
+    int total = 0;
+    try {
+      for (final ent in d.listSync(recursive: true, followLinks: false)) {
+        if (ent is File) {
+          try {
+            total += ent.lengthSync();
+          } catch (_) {/* skip unreadable */}
+        }
+      }
+    } catch (_) {/* skip */}
+    return total;
   }
 
   /// 프로젝트 전체 로드 — store 에 반영(replace).
@@ -178,6 +218,91 @@ class LocalStorage {
     if (dir.existsSync()) {
       dir.deleteSync(recursive: true);
       debugPrint('[storage] deleted project=$id');
+    }
+  }
+
+  /// 모든 프로젝트 + 보컬 파일 통째 삭제 — 회원 탈퇴 시 호출.
+  /// 호출 후 listProjects() 는 빈 배열.
+  // ─── Cloud prefs (cloud_prefs.json) ────────────────────────────────────
+  // 가벼운 key/value 영속화. shared_preferences 패키지 추가 회피 — Documents 디렉터리에
+  // 단일 JSON 파일로 저장. autoSync 토글 등 cloud UI 가 사용.
+  Future<File> _cloudPrefsFile() async {
+    final docs = await getApplicationDocumentsDirectory();
+    return File('${docs.path}/cloud_prefs.json');
+  }
+
+  Future<Map<String, dynamic>> readCloudPrefs() async {
+    final f = await _cloudPrefsFile();
+    if (!f.existsSync()) return const {};
+    try {
+      final j = jsonDecode(await f.readAsString());
+      if (j is Map<String, dynamic>) return j;
+    } catch (_) {}
+    return const {};
+  }
+
+  Future<void> writeCloudPrefs(Map<String, dynamic> patch) async {
+    final cur = Map<String, dynamic>.from(await readCloudPrefs());
+    cur.addAll(patch);
+    final f = await _cloudPrefsFile();
+    await f.writeAsString(jsonEncode(cur), flush: true);
+  }
+
+  // ─── Cloud download — 다운로드 받은 보컬/메타 영속화 ────────────────────
+  /// 클라우드에서 받은 보컬 파일 바이트를 `vocals/<file_name>` 으로 저장.
+  /// 디렉터리가 없으면 자동 생성. 반환값은 저장된 절대 경로.
+  Future<String> saveDownloadedVocal({
+    required String projectId,
+    required String fileName,
+    required List<int> bytes,
+  }) async {
+    final dir = await _projectDir(projectId);
+    final f = File('${dir.path}/vocals/$fileName');
+    await f.writeAsBytes(bytes, flush: true);
+    return f.path;
+  }
+
+  /// 클라우드 다운로드 직후 로컬 meta.json 생성/덮어쓰기.
+  /// 백엔드에서 받은 serverMeta 의 트랙 구조(이미 toJson 포맷)를 그대로 사용.
+  Future<void> writeDownloadedMeta({
+    required String projectId,
+    required String title,
+    required Map<String, dynamic> serverMeta,
+  }) async {
+    final dir = await _projectDir(projectId);
+    // 서버 meta 가 기존 saveProject 포맷({meta, bpm, tracks}) 을 그대로 담고 있으면
+    // 그대로 사용. 아니라면 최소 골격으로 wrap.
+    Map<String, dynamic> body;
+    if (serverMeta['tracks'] is List && serverMeta['meta'] is Map) {
+      body = Map<String, dynamic>.from(serverMeta);
+      // 다운로드 시각으로 updated_at 갱신.
+      final m = Map<String, dynamic>.from(body['meta'] as Map);
+      m['updated_at'] = DateTime.now().toIso8601String();
+      m['id'] = projectId;
+      m['title'] = title;
+      body['meta'] = m;
+    } else {
+      body = {
+        'meta': ProjectMeta(
+          id: projectId,
+          title: title,
+          updatedAt: DateTime.now(),
+          trackCount: 0,
+          durationSec: 0,
+        ).toJson(),
+        'bpm': (serverMeta['bpm'] as num?)?.toInt() ?? 90,
+        'tracks': serverMeta['tracks'] ?? [],
+      };
+    }
+    final f = File('${dir.path}/meta.json');
+    await f.writeAsString(jsonEncode(body), flush: true);
+  }
+
+  Future<void> wipeAll() async {
+    final root = await _root();
+    if (root.existsSync()) {
+      root.deleteSync(recursive: true);
+      debugPrint('[storage] wiped all projects');
     }
   }
 

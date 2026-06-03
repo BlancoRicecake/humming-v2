@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
+import '../l10n/generated/app_localizations.dart';
 import '../models/models.dart';
 import '../music/instrument_icons.dart';
 import '../state/project_store.dart';
@@ -702,7 +703,7 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.repeat, size: 9, color: AppColors.lime),
                   const SizedBox(width: 3),
-                  Text('루프',
+                  Text(L10n.of(context).timelineLoop,
                       style: T.label.copyWith(
                         fontSize: 9,
                         fontWeight: FontWeight.w700,
@@ -748,7 +749,7 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      '재녹음',
+                      L10n.of(context).timelineRerecord,
                       style: T.label.copyWith(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
@@ -936,7 +937,7 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
             decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
-          Text('녹음 시작',
+          Text(L10n.of(context).timelineRecordStart,
               style: T.body.copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
         ]),
       ),
@@ -1042,13 +1043,14 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
   // 아래 함수들은 더 이상 호출되지 않으며 추후 정리 예정.
   // ignore: unused_element
   Widget _pendingDialog(PendingRecording p) {
+    final l = L10n.of(context);
     final isVocal = p.role == TrackRole.vocal;
     final notesCount = p.notes.length;
     final msg = isVocal
-        ? '녹음 완료 — 보컬을 사용할까요?'
+        ? l.timelineRecCompleteVocal
         : (notesCount > 0
-            ? '녹음 완료 — 노트 $notesCount개를 사용할까요?'
-            : '녹음 완료 — 사용할까요?');
+            ? l.timelineRecCompleteNotes(notesCount)
+            : l.timelineRecCompleteGeneric);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
@@ -1075,10 +1077,10 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
           ),
         ),
         const SizedBox(width: 6),
-        _pendingBtn('삭제',
+        _pendingBtn(l.delete,
             outlined: true, onTap: () => widget.onPendingDiscard?.call()),
         const SizedBox(width: 6),
-        _pendingBtn('사용',
+        _pendingBtn(l.use,
             outlined: false, onTap: () => widget.onPendingUse?.call()),
       ]),
     );
@@ -1108,7 +1110,7 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
           ),
         ),
         const SizedBox(width: 5),
-        Text('피치 어시스트',
+        Text(L10n.of(context).timelinePitchAssist,
             style: T.label.copyWith(
                 fontSize: 9,
                 color: on ? AppColors.lime : AppColors.textSecondary,

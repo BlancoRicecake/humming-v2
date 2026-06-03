@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../audio/container.dart';
 import '../audio/recorder.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../models/models.dart';
 import '../services/analytics_service.dart';
 import '../theme/app_theme.dart';
@@ -134,23 +135,24 @@ class _RecordingScreenState extends State<RecordingScreen> with WidgetsBindingOb
 
   /// 권한 거부 상태별 에러 블록.
   Widget _buildPermissionBlock() {
+    final t = L10n.of(context);
     String msg;
     Widget? action;
     switch (_permState) {
       case _MicPermState.denied:
-        msg = '마이크 권한이 필요합니다. 다시 허용해주세요.';
-        action = _permActionButton(label: '권한 요청', onTap: _requestPermission);
+        msg = t.recPermDenied;
+        action = _permActionButton(label: t.recPermRequest, onTap: _requestPermission);
         break;
       case _MicPermState.permanentlyDenied:
-        msg = '설정 > 개인정보 > 마이크에서 권한을 켜주세요.';
-        action = _permActionButton(label: '설정 열기', onTap: _openSettings);
+        msg = t.recPermPermanentlyDenied;
+        action = _permActionButton(label: t.recPermOpenSettings, onTap: _openSettings);
         break;
       case _MicPermState.restricted:
-        msg = '이 기기에서는 마이크 사용이 제한되어 있어 녹음할 수 없습니다.';
+        msg = t.recPermRestricted;
         action = null;
         break;
       default:
-        msg = '마이크 권한을 확인 중입니다…';
+        msg = t.recPermChecking;
         action = null;
     }
     return Column(
@@ -188,6 +190,7 @@ class _RecordingScreenState extends State<RecordingScreen> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     final showPermBlock = !_ready && _permState != _MicPermState.granted;
+    final t = L10n.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -204,7 +207,9 @@ class _RecordingScreenState extends State<RecordingScreen> with WidgetsBindingOb
                       Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle)),
                     if (_recording) const SizedBox(width: 8),
                     Text(
-                      _recording ? 'Recording · ${widget.role.label.toUpperCase()}' : '${widget.role.label.toUpperCase()} 녹음',
+                      _recording
+                          ? t.recRecordingTitle(widget.role.label.toUpperCase())
+                          : t.recScreenTitle(widget.role.label.toUpperCase()),
                       style: T.title,
                     ),
                   ],
@@ -230,14 +235,14 @@ class _RecordingScreenState extends State<RecordingScreen> with WidgetsBindingOb
                               const SizedBox(height: 20),
                               Text(_recording ? _time : '0:00', style: T.h1.copyWith(fontSize: 56, fontWeight: FontWeight.w300)),
                               const SizedBox(height: 8),
-                              Text(_recording ? '흥얼거리거나 노래해주세요' : '준비되면 아래 버튼을 누르세요', style: T.sub),
+                              Text(_recording ? t.recHumOrSing : t.recReadyHint, style: T.sub),
                             ],
                           ),
                   ),
                 ),
               ),
               if (!showPermBlock) ...[
-                Text(_recording ? '탭하면 녹음 종료' : (_ready ? '탭하면 녹음 시작' : ''), style: T.sub),
+                Text(_recording ? t.recTapToStop : (_ready ? t.recTapToStart : ''), style: T.sub),
                 const SizedBox(height: 12),
                 GestureDetector(
                   onTap: _recording ? _stop : (_ready ? _start : null),

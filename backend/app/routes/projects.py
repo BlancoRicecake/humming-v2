@@ -1,188 +1,270 @@
-"""/projects CRUD — nested tracks / chunks / notes.
+"""/projects — Cloud Sync (2026-06-04).
 
-Storage strategy: a project write fully replaces the tracks-tree atomically
-(simple, predictable for a 4-week MVP). For PUT, we delete existing tracks
-(cascades down) then re-insert from payload. R2 audio_url cleanup happens
-on DELETE.
+HumTrack 모바일 클라이언트가 보컬 + 메타데이터를 클라우드에 백업/복원하는
+경로. 보컬 오디오 파일 자체는 R2 에 직접 PUT (presigned URL 로) 하고,
+프로젝트 트랙/청크/노트 트리는 본 엔드포인트에서 JSONB(meta) 로 통째 저장.
+
+스키마: `backend/sql/2026-06-04_cloud_sync_schema.sql` 참고.
 """
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
-from urllib.parse import urlparse
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query, Response
+from pydantic import BaseModel, Field
 
-from ..deps import CurrentUser, get_current_user, require_supabase, get_r2_client
-from ..models import (
-    ChunkIn, ChunkOut, NoteIn, NoteOut, ProjectCreate, ProjectOut,
-    ProjectSummary, ProjectUpdate, TrackIn, TrackOut,
-)
-from ..settings import get_settings
+from ..auth import extract_user_id
+from ..deps import require_supabase
+from ..storage_r2 import delete_prefix
 
-logger = logging.getLogger("humming.projects")
-router = APIRouter(prefix="/projects", tags=["projects"])
+logger = logging.getLogger("humming.cloud_projects")
+router = APIRouter(prefix="/projects", tags=["cloud-projects"])
 
 
-def _project_to_out(row: dict, tracks: List[TrackOut]) -> ProjectOut:
-    return ProjectOut(
-        id=row["id"], name=row["name"], bpm=row["bpm"],
-        created_at=row["created_at"], updated_at=row["updated_at"],
-        tracks=tracks,
+# ── Models ──────────────────────────────────────────────────────────────────
+class CloudProjectSummary(BaseModel):
+    project_id: str
+    title: str
+    size_bytes: int
+    uploaded_at: datetime
+    updated_at: datetime
+
+
+class CloudProjectDetail(CloudProjectSummary):
+    meta: Dict[str, Any]
+
+
+class CloudProjectUpsertIn(BaseModel):
+    project_id: str = Field(..., min_length=1, max_length=128)
+    title: str = Field(..., min_length=1, max_length=200)
+    meta: Dict[str, Any]
+    size_bytes: int = Field(..., ge=0)
+    expected_updated_at: Optional[datetime] = None
+
+
+class CloudProjectUpsertOut(BaseModel):
+    project_id: str
+    used_bytes: int
+    quota_bytes: int
+
+
+class ConflictOut(BaseModel):
+    detail: str = "conflict"
+    cloud_version: Dict[str, Any]
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
+def _quota_bytes() -> int:
+    import os
+
+    raw = os.environ.get("CLOUD_QUOTA_PRO_BYTES")
+    if raw:
+        try:
+            return int(raw)
+        except ValueError:
+            logger.warning("CLOUD_QUOTA_PRO_BYTES invalid: %r", raw)
+    return 5 * 1024 * 1024 * 1024  # 5 GB default (Pro)
+
+
+def _used_bytes(sb, user_id: str) -> int:
+    try:
+        res = (
+            sb.table("cloud_quota")
+            .select("used_bytes")
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        logger.exception("quota lookup failed")
+        raise HTTPException(500, f"quota lookup failed: {e}")
+    row = getattr(res, "data", None) or {}
+    return int(row.get("used_bytes") or 0)
+
+
+def _to_dt(v: Any) -> Optional[datetime]:
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+# ── GET /projects ───────────────────────────────────────────────────────────
+@router.get("", response_model=List[CloudProjectSummary])
+def list_cloud_projects(
+    include: Optional[str] = Query(default=None, description="`meta` 포함 여부"),
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = extract_user_id(authorization, tag="/projects")
+    sb = require_supabase()
+    cols = "project_id,title,size_bytes,uploaded_at,updated_at"
+    if include == "meta":
+        cols += ",meta"
+    try:
+        rows = (
+            sb.table("cloud_projects")
+            .select(cols)
+            .eq("user_id", user_id)
+            .order("updated_at", desc=True)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        logger.exception("list failed")
+        raise HTTPException(500, f"list failed: {e}")
+    # When `meta` requested, callers expect richer payload — return Detail model shape via dict.
+    return rows  # FastAPI will coerce; extra keys (meta) tolerated by Pydantic v2 if allowed.
+
+
+# ── GET /projects/{project_id} ──────────────────────────────────────────────
+@router.get("/{project_id}", response_model=CloudProjectDetail)
+def get_cloud_project(
+    project_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = extract_user_id(authorization, tag="/projects")
+    sb = require_supabase()
+    try:
+        res = (
+            sb.table("cloud_projects")
+            .select("project_id,title,size_bytes,uploaded_at,updated_at,meta")
+            .eq("user_id", user_id)
+            .eq("project_id", project_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        logger.exception("get failed")
+        raise HTTPException(500, f"get failed: {e}")
+    row = getattr(res, "data", None)
+    if not row:
+        raise HTTPException(404, "project not found")
+    return row
+
+
+# ── POST /projects (upsert) ─────────────────────────────────────────────────
+@router.post("", response_model=CloudProjectUpsertOut)
+def upsert_cloud_project(
+    payload: CloudProjectUpsertIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = extract_user_id(authorization, tag="/projects")
+    sb = require_supabase()
+    quota = _quota_bytes()
+
+    # 충돌 감지: expected_updated_at 이 주어졌고 DB row 의 updated_at 과 다르면 409.
+    try:
+        existing_res = (
+            sb.table("cloud_projects")
+            .select("title,size_bytes,updated_at")
+            .eq("user_id", user_id)
+            .eq("project_id", payload.project_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        logger.exception("conflict pre-read failed")
+        raise HTTPException(500, f"conflict pre-read failed: {e}")
+    existing = getattr(existing_res, "data", None)
+
+    if (
+        existing
+        and payload.expected_updated_at is not None
+        and _to_dt(existing.get("updated_at"))
+        and _to_dt(existing["updated_at"]) != payload.expected_updated_at
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "conflict",
+                "project_id": payload.project_id,
+                "cloud_version": {
+                    "title": existing.get("title"),
+                    "size_bytes": existing.get("size_bytes"),
+                    "updated_at": (
+                        existing["updated_at"].isoformat()
+                        if isinstance(existing.get("updated_at"), datetime)
+                        else existing.get("updated_at")
+                    ),
+                },
+            },
+        )
+
+    # Quota 사전 검증 (delta 가 양수일 때만 의미 있음 — 음수면 항상 통과).
+    old_size = int((existing or {}).get("size_bytes") or 0)
+    delta = payload.size_bytes - old_size
+    if delta > 0:
+        current_used = _used_bytes(sb, user_id)
+        if current_used + delta > quota:
+            raise HTTPException(
+                status_code=412,
+                detail={
+                    "error": "quota_exceeded",
+                    "used": current_used,
+                    "quota": quota,
+                    "deficit": (current_used + delta) - quota,
+                },
+            )
+
+    # RPC 원자 호출 — upsert + quota 갱신을 한 트랜잭션으로.
+    try:
+        rpc_res = sb.rpc(
+            "upsert_cloud_project",
+            {
+                "p_user_id": user_id,
+                "p_project_id": payload.project_id,
+                "p_title": payload.title,
+                "p_meta": payload.meta,
+                "p_size_bytes": payload.size_bytes,
+            },
+        ).execute()
+    except Exception as e:
+        logger.exception("upsert RPC failed")
+        raise HTTPException(500, f"upsert failed: {e}")
+
+    used = int(getattr(rpc_res, "data", 0) or 0)
+    return CloudProjectUpsertOut(
+        project_id=payload.project_id, used_bytes=used, quota_bytes=quota
     )
 
 
-def _load_tracks(sb, project_id: str) -> List[TrackOut]:
-    tr_rows = sb.table("tracks").select("*").eq("project_id", project_id).order("position").execute().data or []
-    if not tr_rows:
-        return []
-    track_ids = [t["id"] for t in tr_rows]
-    ch_rows = sb.table("chunks").select("*").in_("track_id", track_ids).execute().data or []
-    chunk_ids = [c["id"] for c in ch_rows]
-    nt_rows = (
-        sb.table("notes").select("*").in_("chunk_id", chunk_ids).execute().data
-        if chunk_ids else []
-    ) or []
-
-    notes_by_chunk: dict = {}
-    for n in nt_rows:
-        notes_by_chunk.setdefault(n["chunk_id"], []).append(
-            NoteOut(id=n["id"], pitch=n["pitch"], start=n["start"],
-                    duration=n["duration"], velocity=n["velocity"])
-        )
-    chunks_by_track: dict = {}
-    for c in ch_rows:
-        chunks_by_track.setdefault(c["track_id"], []).append(
-            ChunkOut(
-                id=c["id"], timeline_start=c["timeline_start"],
-                in_point=c["in_point"], out_point=c["out_point"],
-                original_length=c["original_length"], audio_url=c.get("audio_url"),
-                notes=notes_by_chunk.get(c["id"], []),
-            )
-        )
-    return [
-        TrackOut(
-            id=t["id"], role=t["role"], program=t["program"],
-            options=t.get("options") or {}, position=t["position"],
-            chunks=chunks_by_track.get(t["id"], []),
-        )
-        for t in tr_rows
-    ]
-
-
-def _insert_tracks_tree(sb, project_id: str, tracks: List[TrackIn]) -> None:
-    for idx, tr in enumerate(tracks):
-        tr_row = sb.table("tracks").insert({
-            "project_id": project_id, "role": tr.role, "program": tr.program,
-            "options": tr.options, "position": tr.position or idx,
-        }).execute().data[0]
-        for ch in tr.chunks:
-            ch_row = sb.table("chunks").insert({
-                "track_id": tr_row["id"],
-                "timeline_start": ch.timeline_start,
-                "in_point": ch.in_point, "out_point": ch.out_point,
-                "original_length": ch.original_length,
-                "audio_url": ch.audio_url,
-            }).execute().data[0]
-            if ch.notes:
-                sb.table("notes").insert([
-                    {"chunk_id": ch_row["id"], "pitch": n.pitch, "start": n.start,
-                     "duration": n.duration, "velocity": n.velocity}
-                    for n in ch.notes
-                ]).execute()
-
-
-@router.get("", response_model=List[ProjectSummary])
-def list_projects(user: CurrentUser = Depends(get_current_user)):
-    sb = require_supabase()
-    rows = sb.table("projects").select("*").eq("user_id", user.id).order("updated_at", desc=True).execute().data or []
-    return [ProjectSummary(**r) for r in rows]
-
-
-@router.post("", response_model=ProjectOut, status_code=201)
-def create_project(payload: ProjectCreate, user: CurrentUser = Depends(get_current_user)):
-    sb = require_supabase()
-    row = sb.table("projects").insert({
-        "user_id": user.id, "name": payload.name, "bpm": payload.bpm,
-    }).execute().data[0]
-    if payload.tracks:
-        _insert_tracks_tree(sb, row["id"], payload.tracks)
-    return _project_to_out(row, _load_tracks(sb, row["id"]))
-
-
-@router.get("/{project_id}", response_model=ProjectOut)
-def get_project(project_id: str, user: CurrentUser = Depends(get_current_user)):
-    sb = require_supabase()
-    res = sb.table("projects").select("*").eq("id", project_id).eq("user_id", user.id).maybe_single().execute()
-    row = getattr(res, "data", None)
-    if not row:
-        raise HTTPException(404, "project not found")
-    return _project_to_out(row, _load_tracks(sb, project_id))
-
-
-@router.put("/{project_id}", response_model=ProjectOut)
-def update_project(project_id: str, payload: ProjectUpdate,
-                   user: CurrentUser = Depends(get_current_user)):
-    sb = require_supabase()
-    res = sb.table("projects").select("*").eq("id", project_id).eq("user_id", user.id).maybe_single().execute()
-    row = getattr(res, "data", None)
-    if not row:
-        raise HTTPException(404, "project not found")
-    updates: dict = {}
-    if payload.name is not None: updates["name"] = payload.name
-    if payload.bpm is not None: updates["bpm"] = payload.bpm
-    if updates:
-        row = sb.table("projects").update(updates).eq("id", project_id).execute().data[0]
-    if payload.tracks is not None:
-        # full replace
-        sb.table("tracks").delete().eq("project_id", project_id).execute()
-        _insert_tracks_tree(sb, project_id, payload.tracks)
-    return _project_to_out(row, _load_tracks(sb, project_id))
-
-
-def _r2_keys_for_project(sb, project_id: str) -> List[str]:
-    """Collect chunk audio_url values that point into our R2 bucket."""
-    s = get_settings()
-    tracks = sb.table("tracks").select("id").eq("project_id", project_id).execute().data or []
-    if not tracks:
-        return []
-    track_ids = [t["id"] for t in tracks]
-    chunks = sb.table("chunks").select("audio_url").in_("track_id", track_ids).execute().data or []
-    keys: List[str] = []
-    base = (s.r2_public_base_url or "").rstrip("/")
-    for c in chunks:
-        url = c.get("audio_url")
-        if not url:
-            continue
-        if base and url.startswith(base + "/"):
-            keys.append(url[len(base) + 1:])
-        else:
-            parsed = urlparse(url)
-            if parsed.path:
-                keys.append(parsed.path.lstrip("/"))
-    return keys
-
-
+# ── DELETE /projects/{project_id} ───────────────────────────────────────────
 @router.delete("/{project_id}", status_code=204)
-def delete_project(project_id: str, user: CurrentUser = Depends(get_current_user)):
+def delete_cloud_project(
+    project_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    user_id = extract_user_id(authorization, tag="/projects")
     sb = require_supabase()
-    res = sb.table("projects").select("id").eq("id", project_id).eq("user_id", user.id).maybe_single().execute()
-    if not getattr(res, "data", None):
-        raise HTTPException(404, "project not found")
 
-    # collect R2 objects before cascade
-    keys = _r2_keys_for_project(sb, project_id)
-    sb.table("projects").delete().eq("id", project_id).execute()
+    try:
+        rpc_res = sb.rpc(
+            "delete_cloud_project",
+            {"p_user_id": user_id, "p_project_id": project_id},
+        ).execute()
+    except Exception as e:
+        logger.exception("delete RPC failed")
+        raise HTTPException(500, f"delete failed: {e}")
 
-    # best-effort cleanup — never fail the API on storage hiccups
-    r2 = get_r2_client()
-    if r2 and keys:
-        s = get_settings()
-        try:
-            r2.delete_objects(
-                Bucket=s.r2_bucket,
-                Delete={"Objects": [{"Key": k} for k in keys][:1000]},
-            )
-        except Exception:
-            logger.exception("R2 cleanup failed for project %s", project_id)
-    return None
+    result = getattr(rpc_res, "data", None)
+    if result is None:
+        # 존재하지 않음 — idempotent: 그래도 204 로 응답.
+        logger.info("delete: project not found user=%s pid=%s", user_id, project_id)
+
+    # R2 객체 삭제 (best-effort)
+    prefix = f"vocals/{user_id}/{project_id}/"
+    try:
+        deleted = delete_prefix(prefix)
+        if deleted:
+            logger.info("R2 cleaned: prefix=%s deleted=%d", prefix, deleted)
+    except Exception:
+        logger.exception("R2 prefix cleanup failed: %s", prefix)
+
+    return Response(status_code=204)

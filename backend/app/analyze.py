@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import math
 import subprocess
 import tempfile
@@ -21,6 +22,8 @@ import librosa
 import soundfile as sf
 from fastapi import HTTPException
 from scipy.signal import medfilt
+
+log = logging.getLogger("soundlab")
 
 from .schemas import (
     AnalyzeOptions,
@@ -130,28 +133,57 @@ def _ffmpeg_decode_to_pcm(
 ) -> Tuple[np.ndarray, int]:
     """Decode arbitrary container (Opus/m4a/CAF/AAC/...) → mono float32 PCM at target_sr.
 
-    Uses ffmpeg subprocess with stdin/stdout pipes. ffmpeg performs container
-    demux, codec decode, channel downmix and resample (SIMD swresample) in one
-    pass — no temp file.
+    Uses ffmpeg subprocess. CAF (iOS `record` package output) cannot be demuxed
+    from a non-seekable stdin pipe — its 64-bit chunk size + `-1` sentinel
+    requires random seek. For CAF we spill to a temp file and pass a path;
+    everything else stays on stdin for zero-copy.
     """
     ac = 1 if mono else 2
-    cmd = [
-        "ffmpeg", "-loglevel", "error",
-        "-i", "pipe:0",
-        "-f", "s16le", "-ac", str(ac), "-ar", str(target_sr),
-        "pipe:1",
-    ]
+    use_tempfile = _magic_is_caf(blob)
+    tmp_path: Optional[str] = None
     try:
-        proc = subprocess.run(
-            cmd, input=blob, capture_output=True, timeout=30,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise HTTPException(status_code=400, detail="audio decode timeout (ffmpeg > 30s)") from exc
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=500, detail="ffmpeg binary not available on server") from exc
+        if use_tempfile:
+            with tempfile.NamedTemporaryFile(suffix=".caf", delete=False) as tmp:
+                tmp.write(blob)
+                tmp_path = tmp.name
+            cmd = [
+                "ffmpeg", "-loglevel", "error",
+                "-i", tmp_path,
+                "-f", "s16le", "-ac", str(ac), "-ar", str(target_sr),
+                "pipe:1",
+            ]
+            stdin_data: Optional[bytes] = None
+        else:
+            cmd = [
+                "ffmpeg", "-loglevel", "error",
+                "-i", "pipe:0",
+                "-f", "s16le", "-ac", str(ac), "-ar", str(target_sr),
+                "pipe:1",
+            ]
+            stdin_data = blob
+        try:
+            proc = subprocess.run(
+                cmd, input=stdin_data, capture_output=True, timeout=30,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise HTTPException(status_code=400, detail="audio decode timeout (ffmpeg > 30s)") from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=500, detail="ffmpeg binary not available on server") from exc
+    finally:
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
     if proc.returncode != 0 or not proc.stdout:
         err = proc.stderr.decode("utf-8", errors="ignore")[:200] if proc.stderr else "unknown"
+        head_hex = blob[:16].hex() if blob else "(empty)"
+        head_ascii = "".join(chr(b) if 32 <= b < 127 else "." for b in blob[:16])
+        log.warning(
+            "ffmpeg decode failed: size=%d head_hex=%s head_ascii=%r err=%s",
+            len(blob), head_hex, head_ascii, err[:120],
+        )
         raise HTTPException(status_code=400, detail=f"audio decode failed (ffmpeg): {err}")
 
     pcm = np.frombuffer(proc.stdout, dtype=np.int16).astype(np.float32) / 32768.0

@@ -1,16 +1,23 @@
-// My Songs — 저장된 프로젝트 카드 리스트(시안 ②) + 빈 상태 + 우상단 person chip.
-// FAB ＋ → 새 프로젝트, 카드 탭 → load 후 Edit push, ⋯ / 길게누름 → 옵션 시트.
+// My Songs — 저장된 프로젝트 카드 리스트 + 클라우드 세그먼트 탭.
+// 시안 ① ② ③ ④ ⑤ ⑬ — docs/mockups/cloud-sync-p3.html.
+//
+// 상단: 제목 + person chip. 검색 바 자리(아직 미구현). 그 아래 세그먼트 컨트롤.
+// [내 작업물] [클라우드] — IndexedStack 으로 전환(빈 상태와 리스트 상태가 함께 살아있도록).
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/generated/app_localizations.dart';
 import '../state/local_storage.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_sheets.dart';
+import '../widgets/cloud_tab_view.dart';
 import '../widgets/common.dart';
+import '../widgets/segmented_control.dart';
 import 'account_screen.dart';
 import 'edit_screen.dart';
+import 'pro_welcome_screen.dart';
 
 class SongsScreen extends StatefulWidget {
   const SongsScreen({super.key});
@@ -21,11 +28,29 @@ class SongsScreen extends StatefulWidget {
 class _SongsScreenState extends State<SongsScreen> {
   List<ProjectMeta> _projects = const [];
   bool _loading = true;
+  int _tabIndex = 0; // 0 = 내 작업물, 1 = 클라우드
 
   @override
   void initState() {
     super.initState();
     _refresh();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Pro 결제 직후 환영 화면 — store.pendingProWelcome 가 true 면 1회 push.
+    final store = context.read<ProjectStore>();
+    if (store.pendingProWelcome) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        store.markProWelcomeSeen();
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ProWelcomeScreen()),
+        );
+        if (mounted) setState(() => _tabIndex = 1);
+      });
+    }
   }
 
   Future<void> _refresh() async {
@@ -54,44 +79,70 @@ class _SongsScreenState extends State<SongsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final store = context.watch<ProjectStore>();
+    final t = L10n.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
         child: Column(
           children: [
-            _topBar(context),
+            _topBar(context, store),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+              child: SegmentedControl(
+                tabs: [
+                  (icon: Symbols.smartphone, label: t.tabSongs),
+                  (icon: Symbols.cloud, label: t.tabCloud),
+                ],
+                selectedIndex: _tabIndex,
+                onChanged: (i) => setState(() => _tabIndex = i),
+              ),
+            ),
             Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.lime, strokeWidth: 2.4))
-                  : (_projects.isEmpty ? _emptyState() : _projectList()),
+              child: IndexedStack(
+                index: _tabIndex,
+                children: [
+                  _loading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                              color: AppColors.lime, strokeWidth: 2.4))
+                      : (_projects.isEmpty ? _emptyState() : _projectList()),
+                  CloudTabView(onGoToLocalTab: () => setState(() => _tabIndex = 0)),
+                ],
+              ),
             ),
             _bottomNav(context),
           ],
         ),
       ),
-      floatingActionButton: _projects.isEmpty ? null : _fab(),
+      floatingActionButton: (_tabIndex == 0 && _projects.isNotEmpty) ? _fab() : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
-  Widget _topBar(BuildContext context) {
+  Widget _topBar(BuildContext context, ProjectStore store) {
+    final pro = store.subscription.hasProAccess;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('My Songs', style: T.h1),
+          Text(L10n.of(context).songsTitle, style: T.h1),
           GestureDetector(
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccountScreen())),
             child: Container(
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: pro ? AppColors.lime : AppColors.surface,
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: pro ? AppColors.lime : AppColors.border),
               ),
-              child: const Icon(Symbols.person, size: 20, color: AppColors.textPrimary),
+              child: Icon(
+                Symbols.person,
+                size: 20,
+                color: pro ? AppColors.bg : AppColors.textPrimary,
+              ),
             ),
           ),
         ],
@@ -100,6 +151,7 @@ class _SongsScreenState extends State<SongsScreen> {
   }
 
   Widget _emptyState() {
+    final t = L10n.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
@@ -107,10 +159,10 @@ class _SongsScreenState extends State<SongsScreen> {
         children: [
           _brandMark(),
           const SizedBox(height: 28),
-          Text('새 곡 작업을 시작하세요', style: T.h2),
+          Text(t.songsEmptyTitle, style: T.h2),
           const SizedBox(height: 10),
           Text(
-            '흥얼거리면 악기로 변환되고, 녹음부터 편집까지 한 번에',
+            t.songsEmptySub,
             style: T.sub,
             textAlign: TextAlign.center,
           ),
@@ -118,7 +170,7 @@ class _SongsScreenState extends State<SongsScreen> {
           SizedBox(
             width: 240,
             child: LimeButton(
-              label: '작업 시작',
+              label: t.songsEmptyCta,
               icon: Symbols.arrow_forward,
               onTap: _newProject,
             ),
@@ -130,7 +182,7 @@ class _SongsScreenState extends State<SongsScreen> {
 
   Widget _projectList() {
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
       itemCount: _projects.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) => _projectCard(_projects[i]),
@@ -139,6 +191,8 @@ class _SongsScreenState extends State<SongsScreen> {
 
   Widget _projectCard(ProjectMeta meta) {
     final store = context.read<ProjectStore>();
+    // 클라우드 보유 여부 — 같은 id 가 클라우드에 있으면 작은 단서 표시.
+    final inCloud = store.cloudProjects.any((c) => c.id == meta.id);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _openProject(meta),
@@ -168,12 +222,27 @@ class _SongsScreenState extends State<SongsScreen> {
                     style: T.body.copyWith(fontWeight: FontWeight.w700, fontSize: 15),
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
-                Text(fmtProjectAgo(meta.updatedAt), style: T.sub.copyWith(fontSize: 11)),
+                Row(children: [
+                  Text(fmtProjectAgo(context, meta.updatedAt), style: T.sub.copyWith(fontSize: 11)),
+                  if (inCloud) ...[
+                    const SizedBox(width: 6),
+                    const _Dot(),
+                    const SizedBox(width: 6),
+                    Icon(Symbols.cloud_done, size: 12, color: AppColors.lime),
+                    const SizedBox(width: 3),
+                    Text(L10n.of(context).songsCardInCloud,
+                        style: T.sub.copyWith(fontSize: 11, color: AppColors.lime)),
+                  ],
+                ]),
                 const SizedBox(height: 6),
                 Row(children: [
-                  _miniChip(Symbols.queue_music, '${meta.trackCount}트랙'),
+                  _miniChip(Symbols.queue_music, L10n.of(context).songsTrackCountChip(meta.trackCount)),
                   const SizedBox(width: 6),
-                  _miniChip(Symbols.schedule, fmtProjectDuration(meta.durationSec)),
+                  _miniChip(Symbols.schedule, fmtProjectDuration(context, meta.durationSec)),
+                  if (meta.sizeBytes > 0) ...[
+                    const SizedBox(width: 6),
+                    _miniChip(Symbols.sd_storage, meta.sizeLabel),
+                  ],
                 ]),
               ],
             ),
@@ -268,11 +337,24 @@ class _SongsScreenState extends State<SongsScreen> {
         ),
         padding: const EdgeInsets.all(4),
         child: Row(children: [
-          tab(Symbols.auto_awesome, 'STUDIO', false, disabled: true),
-          tab(Symbols.library_music, 'SONGS', true),
-          tab(Symbols.tune, 'MIXER', false, disabled: true),
+          tab(Symbols.auto_awesome, L10n.of(context).navStudio, false, disabled: true),
+          tab(Symbols.library_music, L10n.of(context).navSongs, true),
+          tab(Symbols.tune, L10n.of(context).navMixer, false, disabled: true),
         ]),
       ),
     );
   }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot();
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 3,
+        height: 3,
+        decoration: const BoxDecoration(
+          color: AppColors.textTertiary,
+          shape: BoxShape.circle,
+        ),
+      );
 }

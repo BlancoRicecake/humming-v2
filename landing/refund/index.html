@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>환불 정책 — Humming</title>
-<meta name="description" content="Humming 환불 정책 — 스토어 IAP 정책 및 법정 청약철회권.">
+<title>환불 정책 — HumTrack</title>
+<meta name="description" content="HumTrack 환불 정책 — App Store / Google Play IAP 환불 절차와 청약철회권 안내.">
 <meta property="og:type" content="article">
-<meta property="og:title" content="환불 정책 — Humming">
-<meta property="og:description" content="Humming 환불 정책 — 스토어 IAP 정책 및 법정 청약철회권.">
+<meta property="og:title" content="환불 정책 — HumTrack">
+<meta property="og:description" content="HumTrack 환불 정책 — App Store / Google Play IAP 환불 절차와 청약철회권 안내.">
 <meta property="og:image" content="https://hum-track.com/hummingbird.png">
 <meta property="og:url" content="https://hum-track.com/refund">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="환불 정책 — Humming">
-<meta name="twitter:description" content="Humming 환불 정책 — 스토어 IAP 정책 및 법정 청약철회권.">
+<meta name="twitter:title" content="환불 정책 — HumTrack">
+<meta name="twitter:description" content="HumTrack 환불 정책 — App Store / Google Play IAP 환불 절차와 청약철회권 안내.">
 <meta name="twitter:image" content="https://hum-track.com/hummingbird.png">
 <link rel="icon" type="image/png" href="/hummingbird.png">
 <link rel="apple-touch-icon" href="/hummingbird.png">
@@ -21,38 +21,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0A0A0F;
-  --surface: #16161E;
-  --surface-alt: #1F1F27;
-  --lime: #A3E635;
-  --lime-dim: #84B82A;
-  --border: #27272A;
-  --border-strong: #3F3F46;
-  --text-primary: #FAFAFA;
-  --text-secondary: #A1A1AA;
-  --text-tertiary: #71717A;
+  --bg: #0A0A0F; --surface: #16161E; --surface-alt: #1F1F27;
+  --lime: #A3E635; --lime-dim: #84B82A;
+  --border: #27272A; --border-strong: #3F3F46;
+  --text-primary: #FAFAFA; --text-secondary: #A1A1AA; --text-tertiary: #71717A;
   --amber: #F59E0B;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 html { scroll-behavior: smooth; }
-body {
-  background: var(--bg);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  line-height: 1.5;
-}
+body { background: var(--bg); color: var(--text-primary); -webkit-font-smoothing: antialiased; line-height: 1.5; }
 
-.nav {
-  position: sticky; top: 0; z-index: 50;
-  background: rgba(10,10,15,0.85);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border);
-}
-.nav-inner {
-  max-width: 1200px; margin: 0 auto;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 24px;
-}
+.nav { position: sticky; top: 0; z-index: 50; background: rgba(10,10,15,0.85); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+.nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; }
 .nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.2px; text-decoration: none; color: var(--text-primary); }
 .nav-brand .dot { width: 22px; height: 22px; border-radius: 7px; background: var(--lime); display: grid; place-items: center; color: var(--bg); font-weight: 900; font-size: 14px; }
 .nav-links { display: flex; align-items: center; gap: 28px; }
@@ -61,102 +41,54 @@ body {
 .nav-links a.active { color: var(--lime); }
 .nav-cta { display: flex; align-items: center; gap: 12px; }
 .lang-toggle { display: inline-flex; background: var(--surface); border-radius: 999px; padding: 3px; border: 1px solid var(--border); }
-.lang-toggle button {
-  background: none; border: 0; color: var(--text-secondary);
-  padding: 6px 12px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
-}
+.lang-toggle button { background: none; border: 0; color: var(--text-secondary); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .lang-toggle button.active { background: var(--lime); color: var(--bg); }
 .back-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; font-weight: 600; }
 .back-link:hover { color: var(--lime); }
 
-/* ─── Doc layout ─── */
-.doc {
-  max-width: 760px; margin: 0 auto;
-  padding: 60px 24px 100px;
-}
-.doc-hero {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 28px;
-  margin-bottom: 40px;
-}
-.doc-eyebrow {
-  color: var(--lime); font-weight: 700; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 14px;
-}
-.doc-hero h1 {
-  font-size: 40px; font-weight: 900; letter-spacing: -1.2px; line-height: 1.1; margin-bottom: 12px;
-}
+.doc { max-width: 760px; margin: 0 auto; padding: 60px 24px 80px; }
+.doc-hero { border-bottom: 1px solid var(--border); padding-bottom: 28px; margin-bottom: 40px; }
+.doc-eyebrow { color: var(--lime); font-weight: 700; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 14px; }
+.doc-hero h1 { font-size: 40px; font-weight: 900; letter-spacing: -1.2px; line-height: 1.1; margin-bottom: 12px; }
 .doc-hero .meta { color: var(--text-tertiary); font-size: 13px; }
-.draft-banner {
-  margin-top: 18px;
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  color: var(--amber);
-  padding: 10px 14px; border-radius: 10px;
-  font-size: 12px; font-weight: 600;
-}
+.doc-hero .meta strong { color: var(--text-secondary); font-weight: 600; }
 
-/* ─── Prose ─── */
 .prose { color: var(--text-primary); font-size: 16px; line-height: 1.75; }
 .prose h1 { font-size: 32px; margin: 56px 0 16px; letter-spacing: -0.8px; font-weight: 800; }
 .prose h2 { font-size: 24px; margin: 48px 0 14px; letter-spacing: -0.4px; font-weight: 800; border-top: 1px solid var(--border); padding-top: 32px; }
-.prose h2:first-of-type { border-top: 0; padding-top: 0; }
+.prose h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
 .prose h3 { font-size: 18px; margin: 32px 0 10px; font-weight: 700; color: var(--text-primary); }
 .prose h4 { font-size: 15px; margin: 22px 0 8px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.6px; }
 .prose p { margin: 0 0 16px; color: var(--text-secondary); }
 .prose strong { color: var(--text-primary); font-weight: 700; }
 .prose em { color: var(--text-primary); font-style: italic; }
-.prose a { color: var(--lime); text-decoration: none; border-bottom: 1px solid rgba(163,230,53,0.4); }
+.prose a { color: var(--lime); text-decoration: none; border-bottom: 1px solid rgba(163,230,53,0.4); word-break: break-word; }
 .prose a:hover { border-bottom-color: var(--lime); }
 .prose ul, .prose ol { margin: 0 0 18px 22px; color: var(--text-secondary); }
 .prose li { margin-bottom: 6px; }
 .prose li::marker { color: var(--lime-dim); }
 .prose hr { border: 0; border-top: 1px solid var(--border); margin: 40px 0; }
-.prose blockquote {
-  margin: 18px 0; padding: 14px 18px;
-  border-left: 3px solid var(--lime);
-  background: var(--surface);
-  color: var(--text-secondary);
-  border-radius: 0 8px 8px 0;
-  font-size: 14px;
-}
-.prose code {
-  background: var(--surface-alt); border: 1px solid var(--border);
-  padding: 1px 6px; border-radius: 5px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--lime);
-}
+.prose blockquote { margin: 18px 0; padding: 14px 18px; border-left: 3px solid var(--lime); background: var(--surface); color: var(--text-secondary); border-radius: 0 8px 8px 0; font-size: 14px; }
+.prose code { background: var(--surface-alt); border: 1px solid var(--border); padding: 1px 6px; border-radius: 5px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--lime); }
 .prose pre { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 18px 0; }
 .prose pre code { border: 0; background: transparent; padding: 0; color: var(--text-primary); }
-.prose table {
-  width: 100%; border-collapse: collapse;
-  margin: 22px 0; font-size: 14px;
-  background: var(--surface); border-radius: 10px; overflow: hidden;
-  border: 1px solid var(--border);
-}
-.prose th, .prose td {
-  text-align: left; padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
-}
+.prose table { width: 100%; border-collapse: collapse; margin: 22px 0; font-size: 14px; background: var(--surface); border-radius: 10px; overflow: hidden; border: 1px solid var(--border); display: block; overflow-x: auto; }
+.prose th, .prose td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .prose th { background: var(--surface-alt); color: var(--text-primary); font-weight: 700; font-size: 13px; letter-spacing: 0.2px; }
 .prose tr:last-child td { border-bottom: 0; }
 
-/* lang switch */
+.lang-divider { margin: 60px 0 40px; border-top: 1px dashed var(--border-strong); padding-top: 40px; }
+.lang-divider h2 { font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.4px; margin-bottom: 8px; }
+.lang-divider p { color: var(--text-tertiary); font-size: 13px; }
+
 .lang-body[hidden] { display: none; }
 
-/* footer */
-footer.foot {
-  border-top: 1px solid var(--border);
-  padding: 40px 24px;
-  color: var(--text-tertiary);
-  font-size: 13px;
-}
-.foot-inner {
-  max-width: 1200px; margin: 0 auto;
-  display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap;
-}
-.foot-inner a { color: var(--text-secondary); text-decoration: none; margin-right: 18px; font-weight: 500; }
+footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; color: var(--text-tertiary); font-size: 12px; }
+.foot-inner { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.foot-row { display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
+.foot-inner a { color: var(--text-secondary); text-decoration: none; margin-right: 14px; font-weight: 500; }
 .foot-inner a:hover { color: var(--lime); }
+.foot-biz { color: var(--text-tertiary); font-size: 11px; line-height: 1.7; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
 
 @media (max-width: 720px) {
   .doc-hero h1 { font-size: 30px; }
@@ -170,10 +102,10 @@ footer.foot {
 
 <nav class="nav">
   <div class="nav-inner">
-    <a class="nav-brand" href="/"><span class="dot">H</span><span>Humming</span></a>
+    <a class="nav-brand" href="/"><span class="dot">H</span><span>HumTrack</span></a>
     <div class="nav-links">
-      <a href="/privacy" class="">개인정보처리방침</a>
-      <a href="/terms" class="">이용약관</a>
+      <a href="/privacy">개인정보처리방침</a>
+      <a href="/terms">이용약관</a>
       <a href="/refund" class="active">환불 정책</a>
     </div>
     <div class="nav-cta">
@@ -188,101 +120,152 @@ footer.foot {
 
 <main class="doc">
   <header class="doc-hero">
-    <div class="doc-eyebrow" data-ko="Legal · Humming" data-en="Legal · Humming">Legal · Humming</div>
+    <div class="doc-eyebrow" data-ko="Legal · HumTrack" data-en="Legal · HumTrack">Legal · HumTrack</div>
     <h1 data-ko="환불 정책" data-en="Refund Policy">환불 정책</h1>
-    <div class="meta" data-ko="최종 갱신: 2026-06-02" data-en="Last updated: 2026-06-02">최종 갱신: 2026-06-02</div>
-    <div class="draft-banner" data-ko="⚠ 본 문서는 변호사 검토 전 1차 초안(DRAFT)입니다. 최종 발효 전에 PIPA · GDPR · CCPA 변호사 검토를 거칩니다." data-en="⚠ DRAFT for legal counsel review. Final review by PIPA · GDPR · CCPA counsel required before publication.">⚠ 본 문서는 변호사 검토 전 1차 초안(DRAFT)입니다. 최종 발효 전에 PIPA · GDPR · CCPA 변호사 검토를 거칩니다.</div>
+    <div class="meta">
+      <span data-ko="<strong>시행일</strong>: 2026-06-04" data-en="<strong>Effective</strong>: 2026-06-04"><strong>시행일</strong>: 2026-06-04</span>
+      &nbsp;·&nbsp;
+      <span data-ko="<strong>최종개정</strong>: 2026-06-03" data-en="<strong>Last updated</strong>: 2026-06-03"><strong>최종개정</strong>: 2026-06-03</span>
+      &nbsp;·&nbsp;
+      <span>1.2-draft</span>
+    </div>
   </header>
 
   <article class="prose lang-body" data-body="ko">
-<p>본 문서는 한국어 본문과 영문 본문(English below)을 함께 제공합니다.</p>
-<hr />
-<h2>1. 기본 원칙: 스토어 IAP 정책 우선</h2>
-<p>Humming Pro 구독은 Apple App Store 또는 Google Play의 인앱결제(IAP)를 통해서만 판매됩니다. 환불 처리 권한은 <strong>1차적으로 해당 스토어가 보유</strong>하며, 회사는 스토어 정책에 종속됩니다.</p>
+<h3>1. 기본 원칙: 스토어 IAP 환불</h3>
+<p>HumTrack Pro 구독은 <strong>Apple App Store 또는 Google Play 의 인앱결제(IAP)를 통해서만</strong> 판매됩니다. 회사는 자체 결제 시스템을 운영하지 않으며, 결제 카드 정보에 직접 접근하지 못합니다. 따라서 <strong>환불 처리 권한은 1차적으로 해당 스토어가 보유</strong>합니다.</p>
+<p>회원이 결제 환불을 원하는 경우 다음 경로를 통해 직접 요청하는 것이 가장 빠릅니다:</p>
 <ul>
-<li><strong>Apple (iOS)</strong>: https://support.apple.com/ko-kr/HT204084 — "App Store 환불 요청"</li>
-<li><strong>Google (Android)</strong>: https://support.google.com/googleplay/answer/2479637 — "Google Play 환불 요청"</li>
+<li><strong>Apple (iOS)</strong>: https://reportaproblem.apple.com — "App Store 환불 요청"</li>
+<li>안내: https://support.apple.com/ko-kr/HT204084</li>
+<li><strong>Google (Android)</strong>: https://play.google.com/store/account/orderhistory — 해당 거래 옆 "환불 요청"</li>
+<li>안내: https://support.google.com/googleplay/answer/2479637</li>
 </ul>
-<p>회사 측에 환불을 요청해 주셔도 결제 정보는 스토어가 보유하므로, 위 링크를 통한 직접 요청이 가장 빠릅니다.</p>
-<h2>2. 구독 취소와 사용 기간</h2>
+<p>스토어 환불 결정은 각 스토어의 정책에 따르며, 회사가 이를 번복할 권한은 없습니다.</p>
+<h3>2. 구독 취소와 사용 기간</h3>
 <ul>
-<li><strong>자발적 취소</strong>: 회원이 스토어에서 구독을 취소하면, <strong>이미 결제한 기간 말까지 Pro 기능을 계속 사용</strong>할 수 있으며, 만료 시점 이후에는 자동으로 무료(읽기 전용) 모드로 전환됩니다.</li>
-<li><strong>취소 = 즉시 환불 아님</strong>: 스토어 IAP 특성상 취소는 다음 자동 갱신을 막는 행위이며, 잔여 기간에 대한 비례 환불은 기본 제공되지 않습니다.</li>
+<li><strong>자발적 취소</strong>: 회원이 스토어에서 구독을 해지하면, 다음 자동 갱신이 중단되며 <strong>이미 결제한 기간 말까지는 Pro 기능을 계속 사용</strong>할 수 있습니다. 만료 시점 이후에는 자동으로 무료 플랜으로 전환됩니다.</li>
+<li><strong>취소 ≠ 즉시 환불</strong>: 스토어 IAP 의 특성상 구독 취소는 다음 갱신을 막는 행위이며, 잔여 기간에 대한 비례 환불은 기본 제공되지 않습니다.</li>
+<li><strong>해지 경로</strong>:</li>
+<li>iOS: 설정 → [사용자 이름] → 구독 → HumTrack</li>
+<li>Android: Play 스토어 → 프로필 → 결제 및 정기결제</li>
+<li><strong>갱신 24시간 전 해지 원칙</strong>: Apple / Google 정책상 자동 갱신을 막으려면 <strong>만료 시점 최소 24시간 전</strong>에 해지해야 합니다.</li>
 </ul>
-<h2>3. 법정 청약철회권 (한국·EU)</h2>
-<h3>한국 「전자상거래법」 (재화의 디지털콘텐츠 특칙)</h3>
-<ul>
-<li>디지털콘텐츠의 경우, <strong>이용 개시 전 7일 이내</strong>에 청약철회가 가능합니다.</li>
-<li>7일 무료 체험 기간 중에는 결제가 발생하지 않으므로 환불 대상이 아닙니다. 체험 종료 후 자동 결제된 직후 사용을 개시하지 않은 상태에서는 결제일로부터 7일 이내 회사로 직접 요청 시 환불 검토합니다.</li>
-<li>이미 다운로드·동기화·내보내기 기능을 사용한 경우 디지털콘텐츠 특성상 청약철회권이 제한될 수 있습니다.</li>
-</ul>
-<h3>EU 소비자권리지침 (2011/83/EU)</h3>
-<ul>
+<h3>3. 법정 청약철회권</h3>
+<h4>한국 「전자상거래 등에서의 소비자보호에 관한 법률」</h4>
+<ol>
+<li>디지털콘텐츠는 원칙적으로 결제일로부터 <strong>7일 이내 청약철회</strong>가 가능합니다.</li>
+<li>단, 「전자상거래법」 제17조 제2항 및 시행령 제21조에 따라 <strong>이용 개시 시 청약철회권이 제한</strong>될 수 있는 경우가 있습니다. HumTrack 의 경우:<br>
+   - <strong>분석 endpoint 를 1회라도 실행</strong>한 경우, 또는 <strong>MIDI/WAV export, 클라우드 동기화</strong> 등 Pro 전용 기능을 1회라도 사용한 경우 청약철회권이 제한될 수 있습니다.<br>
+   - 회사는 결제 직후 첫 Pro 기능 사용 직전에 위 사실을 사용자에게 명확히 표시(consent surface)합니다. 사용자가 "즉시 사용에 동의하며 철회권이 제한됨을 확인"하는 명시적 동의를 제공하기 전에는 Pro 기능을 활성화하지 않습니다.</li>
+<li><strong>7일 무료 체험 (Introductory Offer)</strong>:<br>
+   - 체험 기간 중에는 결제가 발생하지 않으므로 환불 대상이 아닙니다.<br>
+   - 체험 종료 후 자동으로 첫 결제가 발생한 직후, <strong>Pro 기능을 사용하지 않은 상태</strong>에서는 결제일로부터 7일 이내 회사 (<code>heobusy@gmail.com</code>) 또는 스토어에 요청 시 환불을 검토합니다.</li>
+</ol>
+<h4>EU 소비자권리지침 (2011/83/EU)</h4>
+<ol>
 <li>디지털콘텐츠 구매 후 <strong>14일 청약철회권</strong>이 원칙입니다.</li>
-<li>단, 사용자가 구매 시 "즉시 콘텐츠 다운로드/사용에 동의하며 철회권 상실에 동의한다"는 명시적 동의를 제공한 경우 철회권이 소멸할 수 있습니다 (지침 제16조 m항).</li>
-<li>회사는 결제 흐름에서 해당 동의 여부를 명확히 표시합니다.</li>
+<li>단, 사용자가 결제 시 "즉시 다운로드/사용에 동의하며 철회권 상실에 동의"한다는 <strong>명시적 동의(express consent)</strong>를 제공한 경우, 지침 제16조 (m) 항에 따라 철회권이 소멸합니다.</li>
+<li>회사는 첫 Pro 기능 활성화 흐름에서 본 동의를 명확히 표시하고 기록합니다.</li>
+</ol>
+<h4>미국</h4>
+<ul>
+<li><strong>California ARL (Business &amp; Professions Code §17600 et seq.)</strong>: 자동갱신 명확 공개 의무. 회사는 결제 페이지 및 본 약관에서 가격, 갱신 주기, 해지 방법을 명시적으로 공개합니다.</li>
+<li>기타 주별 소비자 보호법: 변호사 검토 후 추가 반영 예정.</li>
 </ul>
-<h2>4. 회사가 직접 환불을 검토하는 케이스</h2>
-<p>스토어를 통한 환불이 거부된 경우에도, 다음에 해당하면 회사가 직접 환불을 검토합니다 (스토어 환불 처리가 기술적으로 불가능한 영역에 한함):</p>
+<h3>4. 자동 갱신 7일 전 사전 고지 (전자상거래법 2022 개정)</h3>
+<p>「전자상거래법 시행령」 (2022 개정) 에 따라, 회사는 <strong>연간 자동 갱신 결제 발생 7일 전까지</strong> 회원이 가입 시 등록한 이메일 또는 앱 푸시로 다음을 고지합니다:</p>
+<ul>
+<li>갱신 예정 일자</li>
+<li>갱신 금액</li>
+<li>해지 방법 안내</li>
+</ul>
+<p>월간 자동 갱신은 위 법령 의무 대상은 아니나, 회사는 회원 보호를 위해 자율적으로 푸시 알림을 발송할 수 있습니다.</p>
+<h3>5. 미성년자 결제 취소</h3>
+<p>만 19세 미만 회원이 법정대리인의 동의 없이 결제한 경우, 「민법」 제5조에 따라 법정대리인은 결제를 취소할 수 있습니다. 다만 회사는 결제 카드 정보를 직접 보유하지 않으므로, 실제 환불 처리는 Apple / Google 의 환불 절차를 통해 진행됩니다. <code>heobusy@gmail.com</code> 으로 미성년자 결제임을 통보해 주시면 회사가 스토어 환불 요청을 적극 지원합니다.</p>
+<h3>6. 회사가 직접 환불을 검토하는 케이스</h3>
+<p>회사는 자체 결제를 운영하지 않으므로 환불 처리는 스토어가 1차적으로 담당합니다. 다만 다음의 경우 회사는 회원과 스토어 간 환불 절차를 적극 지원하며, 필요한 경우 스토어 처리가 불가능한 영역에 한해 회사가 별도 보상(예: 추가 무료 기간 부여)을 검토할 수 있습니다:</p>
 <ol>
 <li><strong>결제 오류</strong>: 동일 기간 중복 결제, 명백한 시스템 오류로 인한 부당 청구</li>
-<li><strong>서비스 장애</strong>: 회사 측 원인으로 <strong>연속 7일 이상</strong> 핵심 기능(클라우드 동기화·내보내기 등) 사용 불가</li>
+<li><strong>회사 측 서비스 장애</strong>: 회사 측 원인으로 <strong>연속 7일 이상</strong> Pro 핵심 기능(클라우드 동기화, MIDI/WAV export) 사용 불가</li>
 <li><strong>회사가 약관을 중대하게 위반</strong>한 경우</li>
 </ol>
-<p>요청 채널: <code>support@hum-track.com</code> — 결제 영수증 ID(스토어), 발생 일시, 증빙(스크린샷 등) 첨부 필수.
-처리 SLA: 영업일 기준 <strong>5일 이내 1차 회신</strong>, 필요 시 추가 조사 후 <strong>14일 이내 최종 결정</strong>.</p>
-<h2>5. 환불되지 않는 경우</h2>
+<p>요청 채널: <code>heobusy@gmail.com</code><br>
+- 첨부: 스토어 영수증 ID, 발생 일시, 증빙 자료 (스크린샷 등)<br>
+- <strong>SLA</strong>: 영업일 기준 5일 이내 1차 회신, 필요 시 추가 조사 후 14일 이내 최종 결정</p>
+<h3>7. 환불되지 않는 경우</h3>
 <ul>
 <li>회원의 단순 변심으로 위 청약철회 기간을 도과한 경우</li>
+<li>회원이 Pro 기능을 사용한 후 청약철회권 상실에 동의한 경우 (한국 「전상법」 / EU 지침 16(m) 적용 시)</li>
 <li>회원의 약관 위반으로 인한 계정 정지</li>
-<li>제3자(Apple/Google/Supabase/Cloudflare)의 일시적 장애 (회사 책임 범위 밖)</li>
-<li>디바이스 분실·로컬 데이터 손실 등 회사가 통제할 수 없는 사유</li>
+<li>제3자(Apple / Google / Supabase / Cloudflare / Fly.io) 의 일시적 장애 (회사 책임 범위 밖)</li>
+<li>디바이스 분실, 로컬 데이터 손실 등 회사가 통제할 수 없는 사유</li>
+<li>Apple / Google 가족 공유, Apple ID 잔액 충전 등 스토어 정책에 따른 결제</li>
 </ul>
-<h2>6. 데이터 보존</h2>
-<p>환불 여부와 무관하게, <strong>클라우드 데이터는 자동 삭제되지 않습니다.</strong> 회원이 명시적으로 계정 삭제를 요청하지 않는 한 R2 / Supabase 데이터는 보존되며, 향후 재구독 시 즉시 복원됩니다.</p>
+<h3>8. 환불 시 데이터 보존</h3>
+<p>환불 여부와 무관하게:<br>
+- 회원이 명시적으로 <strong>계정 삭제</strong> 또는 <strong>개별 작업물 삭제</strong>를 요청하지 않는 한 클라우드 데이터(R2 + Supabase)는 자동 삭제되지 않습니다.<br>
+- 구독이 환불·취소되어 만료된 경우에도 <strong>클라우드 작업물은 그대로 보존됩니다</strong>. 다만 만료 상태에서는 신규 업로드 및 동기화가 잠금되며, <strong>기존 작업물의 다운로드 및 삭제만 가능</strong>합니다. 재구독 시 동기화가 즉시 재활성화됩니다.<br>
+- 향후 휴면 계정 정책이 도입될 경우 시행일 30일 전 본 정책 개정을 통해 사전 고지합니다 (예정: 1년 미접속 시 휴면 전환, 휴면 후 1년 추가 미접속 시 30일 사전 고지 후 데이터 영구 삭제).</p>
   </article>
+
   <article class="prose lang-body" data-body="en" hidden>
+<div class="lang-divider"><h2>English Version</h2><p>The Korean text above is the primary version. The English translation below is provided for convenience.</p></div>
 <h3>1. Stores Govern IAP Refunds</h3>
-<p>Humming Pro is sold exclusively via Apple App Store or Google Play in-app purchase. The store of purchase holds primary refund authority. Submit refund requests directly:
-- <strong>Apple</strong>: https://support.apple.com/HT204084
-- <strong>Google</strong>: https://support.google.com/googleplay/answer/2479637</p>
+<p>HumTrack Pro is sold exclusively via Apple App Store or Google Play in-app purchase. <strong>The store of purchase holds primary refund authority</strong>; we do not process payments directly and cannot override store refund decisions.</p>
+<p>Direct refund requests to:<br>
+- <strong>Apple</strong>: https://reportaproblem.apple.com (see https://support.apple.com/HT204084)<br>
+- <strong>Google</strong>: https://play.google.com/store/account/orderhistory (see https://support.google.com/googleplay/answer/2479637)</p>
 <h3>2. Cancellation vs. Refund</h3>
-<p>Canceling your subscription stops the next renewal but does not trigger a prorated refund. You retain Pro access until the end of the paid period; the app then switches to free, read-only mode.</p>
+<p>Canceling your subscription stops the <strong>next</strong> renewal; it does <strong>not</strong> trigger a prorated refund. You retain Pro until the paid period ends, then switch to Free.</p>
+<p><strong>Cancel at least 24 hours before renewal</strong> (Apple/Google policy).<br>
+- iOS: Settings → [your name] → Subscriptions → HumTrack<br>
+- Android: Play Store → Profile → Payments &amp; subscriptions</p>
 <h3>3. Statutory Withdrawal Rights</h3>
+<p><strong>Korea (Electronic Commerce Act)</strong>:<br>
+- 7-day withdrawal for digital content <strong>not yet used</strong>.<br>
+- Withdrawal may be limited once you actively use Pro features (analysis, MIDI/WAV export, cloud sync). We require explicit consent at the first Pro use confirming you acknowledge this limitation.<br>
+- The 7-day free trial is not a paid charge. If you have not used Pro features after the first charge, request a refund within 7 days.</p>
+<p><strong>EU (Directive 2011/83/EU)</strong>:<br>
+- 14-day withdrawal for digital content <strong>unless</strong> you expressly consented to immediate performance and acknowledged loss of withdrawal at checkout (Art. 16(m)). We surface and record this consent in the first-use flow.</p>
+<p><strong>United States</strong>:<br>
+- California ARL (Bus. &amp; Prof. Code §17600 et seq.) requires clear auto-renewal disclosure; we disclose price, renewal cadence, and cancellation paths in the paywall and these Terms. Other state laws subject to counsel review.</p>
+<h3>4. 7-Day Pre-Renewal Notice (Korea, 2022 amendment)</h3>
+<p>For <strong>annual</strong> auto-renewals, we send a pre-renewal notice via your registered email or app push at least <strong>7 days</strong> before the renewal charge, per the 2022 amendment to the Korean Electronic Commerce Act Enforcement Decree. Monthly subscriptions are not mandated but we may send courtesy notifications.</p>
+<h3>5. Minors</h3>
+<p>Purchases by minors under 19 (Korea) without parental consent may be voidable under Korean Civil Code §5. We do not hold the payment instrument; the actual refund is processed by Apple/Google. Email <code>heobusy@gmail.com</code> and we will assist with the store refund request.</p>
+<h3>6. Company-Initiated Refund Review</h3>
+<p>We do not run our own billing. Where store-level refunds fall short, we may <strong>supplement</strong> with goodwill compensation (e.g., extra free time) for:<br>
+1. Duplicate or erroneous charges.<br>
+2. Service outage caused by us lasting <strong>7+ consecutive days</strong> affecting core Pro features (cloud sync, MIDI/WAV export).<br>
+3. Material breach of these Terms by us.</p>
+<p>Submit to <code>heobusy@gmail.com</code> with store receipt ID, timestamp, evidence. <strong>SLA: first response within 5 business days; final decision within 14 days.</strong></p>
+<h3>7. Non-Refundable</h3>
 <ul>
-<li><strong>Korea (Electronic Commerce Act)</strong>: 7-day withdrawal for digital content not yet consumed. The 7-day free trial is not a paid charge. If you have not used Pro features after the first charge, contact us within 7 days.</li>
-<li><strong>EU (Directive 2011/83/EU)</strong>: 14-day withdrawal for digital content unless you expressly consented to immediate performance and acknowledged loss of withdrawal at checkout (Art. 16(m)). We surface this consent in the purchase flow.</li>
-<li><strong>United States</strong>: Subject to applicable state consumer law; California subscribers have rights under the Automatic Renewal Law (cal. BPC §17600 et seq.) — see counsel.</li>
+<li>Change of mind beyond statutory withdrawal windows.</li>
+<li>Use of Pro features after consenting to loss of withdrawal.</li>
+<li>Account suspension for Terms violations.</li>
+<li>Transient third-party outages (Apple, Google, Supabase, Cloudflare, Fly.io).</li>
+<li>Lost device or local data outside our control.</li>
+<li>Apple Family Sharing, Apple ID balance top-ups, and similar store-policy-governed payments.</li>
 </ul>
-<h3>4. Company-Initiated Refund Review</h3>
-<p>Where store-level refunds fail, we will independently review:
-1. <strong>Duplicate or erroneous charges</strong>
-2. <strong>Service outage caused by us lasting 7+ consecutive days</strong> affecting core Pro features (cloud sync, export)
-3. <strong>Material breach of these Terms by us</strong></p>
-<p>Submit to <code>support@hum-track.com</code> with the store receipt ID, timestamp, and evidence. <strong>SLA: first response within 5 business days; final decision within 14 days.</strong></p>
-<h3>5. Non-Refundable Situations</h3>
-<ul>
-<li>Change of mind beyond statutory withdrawal windows</li>
-<li>Account suspension for Terms violations</li>
-<li>Transient third-party outages (Apple, Google, Supabase, Cloudflare)</li>
-<li>Lost device or local data outside our control</li>
-</ul>
-<h3>6. Data is Not Auto-Deleted</h3>
-<p>Refund status does not affect data retention. Cloud data (R2 + Supabase) is preserved until you explicitly delete your account, and resubscribing restores immediate access.</p>
-<hr />
-<p><strong>Contact</strong>: support@hum-track.com</p>
+<h3>8. Data is Not Auto-Deleted on Refund</h3>
+<p>Refund or cancellation does <strong>not</strong> delete your data. Cloud data (R2 + Supabase) is <strong>retained permanently</strong> regardless of subscription state; only you can delete it (per-project delete or account deletion). After expiration, new uploads/syncs are locked but existing content remains downloadable and deletable. A future dormant-account policy may be introduced with 30 days' prior notice (planned: 1 year of inactivity triggers dormant transition; an additional 1 year of inactivity, plus 30 days' final notice, leads to permanent data deletion). To erase immediately, use Settings → Delete Account.</p>
   </article>
 </main>
 
 <footer class="foot">
   <div class="foot-inner">
-    <div>© 2026 Humming Labs · hum-track.com</div>
-    <div>
-      <a href="/privacy">개인정보처리방침</a>
-      <a href="/terms">이용약관</a>
-      <a href="/refund">환불 정책</a>
-      <a href="mailto:support@hum-track.com">support@hum-track.com</a>
+    <div class="foot-row">
+      <div data-ko="© 2026 에르모세아르 · hum-track.com" data-en="© 2026 Hermosear · hum-track.com">© 2026 에르모세아르 · hum-track.com</div>
+      <div>
+        <a href="/privacy" data-ko="개인정보처리방침" data-en="Privacy Policy">개인정보처리방침</a>
+        <a href="/terms" data-ko="이용약관" data-en="Terms">이용약관</a>
+        <a href="/refund" data-ko="환불 정책" data-en="Refund">환불 정책</a>
+        <a href="mailto:heobusy@gmail.com">heobusy@gmail.com</a>
+      </div>
     </div>
+    <div class="foot-biz" data-ko="에르모세아르 | 대표자: 김동현 | 주소: 경기도 용인시 기흥구 공세로 150-29, B01-G160호 | 통신판매업 신고번호: 2024-용인기흥-2437 | 사업자등록번호: 106-16-34319 | 유선전화번호: 010-9611-1711 | heobusy@gmail.com" data-en="Hermosear | Representative: Kim Dong Hyun | Address: 150-29 Gongse-ro, Giheung-gu, Yongin-si, Gyeonggi-do (B01-G160) | E-Commerce Reg.: 2024-Yongin-Giheung-2437 | Business Reg.: 106-16-34319 | Phone: +82-10-9611-1711 | heobusy@gmail.com">에르모세아르 | 대표자: 김동현 | 주소: 경기도 용인시 기흥구 공세로 150-29, B01-G160호 | 통신판매업 신고번호: 2024-용인기흥-2437 | 사업자등록번호: 106-16-34319 | 유선전화번호: 010-9611-1711 | heobusy@gmail.com</div>
   </div>
 </footer>
 
@@ -292,20 +275,21 @@ footer.foot {
   const bodies = document.querySelectorAll('.lang-body');
   function setLang(lang) {
     buttons.forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
-    bodies.forEach(b => {
-      b.hidden = b.dataset.body !== lang;
-    });
+    bodies.forEach(b => { b.hidden = b.dataset.body !== lang; });
     document.querySelectorAll('[data-ko]').forEach(el => {
       const v = el.getAttribute('data-' + lang);
-      if (v) el.textContent = v;
+      if (v != null) {
+        if (v.includes('<')) el.innerHTML = v;
+        else el.textContent = v;
+      }
     });
     document.documentElement.lang = lang;
-    try { localStorage.setItem('humming-lang', lang); } catch (e) {}
+    try { localStorage.setItem('humtrack-lang', lang); } catch (e) {}
   }
   buttons.forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)));
   let initial = 'ko';
   try {
-    const saved = localStorage.getItem('humming-lang');
+    const saved = localStorage.getItem('humtrack-lang');
     if (saved === 'en' || saved === 'ko') initial = saved;
     else if (navigator.language && navigator.language.toLowerCase().startsWith('en')) initial = 'en';
   } catch (e) {}

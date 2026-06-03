@@ -15,6 +15,13 @@ class AppColors {
   static const border = Color(0xFF27272A);
   static const danger = Color(0xFFEF4444);
   static const dangerBorder = Color(0xFF3F1D1D);
+  // amber — 만료 grace 배너 (cloud-sync-p3 ⑬).
+  static const amber = Color(0xFFF59E0B);
+  static const amberBg = Color(0xFF3F2D0F);
+  static const amberBorder = Color(0xFF6B4A14);
+  // 시안 보조 surface (segment / chip 배경).
+  static const surface2 = Color(0xFF1F1F27);
+  static const surface3 = Color(0xFF26262F);
 }
 
 class AppRadius {

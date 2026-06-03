@@ -6,18 +6,22 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../audio/audio_route.dart';
 import '../audio/container.dart';
 import '../audio/metronome.dart';
 import '../audio/player.dart';
 import '../audio/recorder.dart';
+import '../audio/synth.dart';
 import '../audio/synth_player.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../models/models.dart';
 import '../services/analytics_service.dart';
 import '../state/local_storage.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
+import '../widgets/account_sheets.dart';
 import '../widgets/active_track_cards.dart';
 import '../widgets/common.dart';
 import '../widgets/meter_painter.dart';
@@ -134,6 +138,9 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
         _playheadSec = null;
       });
     });
+    // SF2 + audio framework cold start 를 백그라운드로 미리 데움 → 첫 재생 지연 감소.
+    // EditScreen 진입 시점에 한 번만 호출. 두 번째부턴 ensureLoaded 가 캐시 반환.
+    unawaited(SynthEngine().ensureLoaded());
     // 30초 자동 저장.
     _autoSaveTimer = Timer.periodic(const Duration(seconds: 30), (_) => _saveNow());
     // 인디케이터 시간 텍스트(초/분 단위)를 갱신하기 위해 1초마다 tick — 전체
@@ -247,11 +254,9 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
 
   Future<void> _startInlineRecord(ProjectStore store) async {
     if (_recState != _RecState.idle) return;
-    // 권한 먼저 확인 (카운트다운 후 거부되면 시간 낭비).
-    if (!await _rec.hasPermission()) {
-      if (mounted) comingSoon(context, '마이크 권한이 필요합니다');
-      return;
-    }
+    // 권한 prompt 는 사용자가 "녹음 시작" 누른 즉시 처리(카운트다운/마이크 init 전).
+    // recording_screen 과 동일한 status → request → openAppSettings 순서.
+    if (!await _ensureMicPermission()) return;
     // 기준(첫) 트랙을 마치고 *다른* 트랙 녹음으로 넘어가는 순간 → 앵커 잠금.
     // 그루브를 잠그고, 키는 검출값+상대조를 1탭 확인받아 프로젝트 키로 고정 →
     // 이후 이 녹음이 그 키를 상속해 적극 보정된다. (같은 트랙 재녹음은 잠그지 않음.)
@@ -277,8 +282,49 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       setState(() => _recState = _RecState.idle);
       return;
     }
-    setState(() => _recState = _RecState.recording);
+    // recording 상태 전환은 _startActualRecording 안에서 stopwatch 가 실제로 시작되는
+    // 시점에 한다. 그 전에 빨개지면 backing 로딩 + 마이크 엔진 init (1-3s) 동안
+    // 타이머가 0 으로 멈춰 보여 "카운트다운 두 번" 처럼 체감된다.
     await _startActualRecording(store);
+  }
+
+  /// 마이크 권한 확인 — 버튼 탭 즉시 호출.
+  ///
+  /// 권한 소스 우선순위:
+  ///   1) record 패키지의 hasPermission() — iOS 17+ AVAudioApplication.recordPermission /
+  ///      이전 AVAudioSession.recordPermission 을 직접 읽음. 시스템 prompt 도 띄움.
+  ///   2) permission_handler 의 status — record 가 false 일 때 isPermanentlyDenied 여부 구분 +
+  ///      "설정 열기" 동선용. iOS 에서는 status 가 종종 stale(설정 변경 직후 동기화 지연)
+  ///      이라 1차 신호로 쓰지 않음.
+  Future<bool> _ensureMicPermission() async {
+    // 1차: record 패키지가 시스템 prompt 까지 처리 + native 상태 직접 조회.
+    if (await _rec.hasPermission()) return true;
+    if (!mounted) return false;
+    // 2차: 거부 상태 → 영구 거부면 "설정 열기" 다이얼로그.
+    final status = await Permission.microphone.status;
+    if (!mounted) return false;
+    if (status.isPermanentlyDenied || status.isRestricted) {
+      final go = await showDialog<bool>(
+        // ignore: use_build_context_synchronously
+        context: context,
+        builder: (dctx) {
+          final l = L10n.of(dctx);
+          return AlertDialog(
+            title: Text(l.editMicPermNeededTitle),
+            content: Text(l.editMicPermNeededBody),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dctx, false), child: Text(l.cancel)),
+              TextButton(onPressed: () => Navigator.pop(dctx, true), child: Text(l.editOpenSettings)),
+            ],
+          );
+        },
+      );
+      if (go == true) await openAppSettings();
+    } else {
+      // ignore: use_build_context_synchronously
+      comingSoon(context, L10n.of(context).editMicPermLabel);
+    }
+    return false;
   }
 
   /// 카운트다운 실행 — bpm 기준 한 박 길이로 3→2→1. 사용자가 취소하면 false.
@@ -352,8 +398,9 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
     for (int i = 0; i < _recLevels.length; i++) {
       _recLevels[i] = 0.04;
     }
-    // _recState 는 호출자(_startInlineRecord) 가 카운트다운 종료 후 이미 recording 으로 전환.
-    if (mounted) setState(() {});
+    // 마이크 엔진/반주 준비가 모두 끝난 이 시점에 UI 를 recording 으로 전환 →
+    // 빨개지자마자 타이머가 즉시 흐른다.
+    if (mounted) setState(() => _recState = _RecState.recording);
     // 50ms 틱이되 시간은 Stopwatch 실측을 사용 → UI 지연이 있어도 선이 실제
     // 녹음 시간과 정확히 일치(틱 누적 드리프트 제거).
     _recTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
@@ -408,7 +455,11 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       final fut = store.analyzeForPending(path, tid);
       if (mounted) {
         setState(() => _recState = _RecState.idle);
-        showPendingRecordingSheet(context, store);
+        showPendingRecordingSheet(
+          context,
+          store,
+          onRetry: () => _startInlineRecord(store),
+        );
       }
       await fut;
       if (mounted && store.error != null) comingSoon(context, store.error!);
@@ -422,7 +473,8 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
 
   Future<void> _playMix(ProjectStore store) async {
     if (!store.hasPlayableMix) {
-      comingSoon(context, store.hasAnyRecording ? '활성 트랙이 없습니다(사이드바 탭)' : '먼저 녹음하세요');
+      final l = L10n.of(context);
+      comingSoon(context, store.hasAnyRecording ? l.editPlayNoActiveTrack : l.editPlayRecordFirst);
       return;
     }
     try {
@@ -454,7 +506,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       if (mounted) setState(() => _ps = _PlayState.playing);
     } catch (e, st) {
       debugPrint('[play] FAILED: $e\n$st');
-      if (mounted) comingSoon(context, '재생 실패: $e');
+      if (mounted) comingSoon(context, L10n.of(context).editPlayFailed('$e'));
     }
   }
 
@@ -469,7 +521,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       final resolved = (await findExistingByExt(base))?.path ?? wav;
       await _player.playFile(resolved); // 원본(녹음 그대로 — Opus/AAC)
     } catch (e) {
-      if (mounted) comingSoon(context, '원본 재생 실패');
+      if (mounted) comingSoon(context, L10n.of(context).editOriginalPlayFailed);
     }
   }
 
@@ -586,14 +638,25 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                 Text(store.title, style: T.title),
                 Row(children: [
                   GestureDetector(
-                    onTap: store.active.notes.isEmpty ? null : () => showExportShare(context, store),
+                    onTap: store.active.notes.isEmpty
+                        ? null
+                        : () async {
+                            // Pro gate — 비-Pro 는 paywall 띄움. Pro 면 export 시트 진입.
+                            if (!store.subscription.hasProAccess) {
+                              final ok = await showPaywallSheet(context, store, trigger: 'export');
+                              if (ok != true) return;
+                              if (!mounted) return;
+                            }
+                            if (!mounted) return;
+                            showExportShare(context, store);
+                          },
                     child: Icon(Symbols.ios_share, size: 22,
                         color: store.active.notes.isEmpty ? AppColors.textTertiary : AppColors.textPrimary),
                   ),
                   const SizedBox(width: 16),
                   GestureDetector(
                     onTap: () => Navigator.of(context).maybePop(),
-                    child: Text('완료', style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w600)),
+                    child: Text(L10n.of(context).editHeaderDone, style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w600)),
                   ),
                 ]),
               ],
@@ -616,7 +679,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
           child: Text(
-            '트랙 정보',
+            L10n.of(context).editTrackInfoLabel,
             style: T.label.copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -703,7 +766,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
             child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.lime),
           ),
           const SizedBox(width: 12),
-          const Text('변환 중…', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+          Text(L10n.of(context).editConverting, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
           const SizedBox(width: 12),
           Expanded(child: meter(active: false, alpha: 0.5)),
         ]),
@@ -734,7 +797,9 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       );
     }
     // 대기: 같은 64px 박스 + always-on 미터(dim). 탭하면 녹음 시작.
-    final label = t.hasRecording ? '${t.role.label.toUpperCase()} 다시 녹음' : '${t.role.label.toUpperCase()} 녹음';
+    final l = L10n.of(context);
+    final roleLabel = t.role.label.toUpperCase();
+    final label = t.hasRecording ? l.editRecLabelReRecord(roleLabel) : l.editRecLabelRecord(roleLabel);
     return GestureDetector(
       onTap: () => _startInlineRecord(store),
       child: Container(
@@ -762,6 +827,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   /// - 청크: 분할 · 복사 · 루프 · 코드 · 볼륨 · 삭제
   /// - 노트: 음정 · 코드 · 볼륨 · 삭제
   Widget _contextActionBar(ProjectStore store, TrackData t) {
+    final l = L10n.of(context);
     final hasNote = store.selectedNote != null && !t.chordActive;
     final hasChunk = store.selectedChunk != null && !t.chordActive;
     final hasTrack = !hasNote && !hasChunk && store.trackSelected && store.activeTrackId != null;
@@ -787,73 +853,73 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
 
     if (hasNote) {
       // 노트: 음정 · (코드 — 코드 가능 악기만) · 볼륨 · 삭제
-      items.add(item(Symbols.music_note, '음정',
+      items.add(item(Symbols.music_note, l.ctxActionPitch,
           enabled: true,
           onTap: () => showNoteCandidate(context, store, store.selectedNote!)));
       if (t.isChordInstrument) {
         final isChord = store.canUnchordSelected;
         items.add(item(isChord ? Symbols.heart_broken : Symbols.queue_music,
-            isChord ? '코드 해제' : '코드',
+            isChord ? l.ctxActionUnchord : l.ctxActionChord,
             enabled: store.canChordSelected || isChord,
             onTap: () => showChordPicker(context, store)));
       }
       items.addAll([
-        item(Symbols.volume_up, '볼륨', enabled: true, onTap: () => _showVolume(store)),
-        item(Symbols.delete, '삭제', enabled: true, onTap: store.deleteSelectedAny),
+        item(Symbols.volume_up, l.ctxActionVolume, enabled: true, onTap: () => _showVolume(store)),
+        item(Symbols.delete, l.ctxActionDelete, enabled: true, onTap: store.deleteSelectedAny),
       ]);
     } else if (hasChunk) {
       // 청크: 분할 · 복사 · (코드 — 코드 가능 악기만) · 볼륨 · 삭제 (루프는 트랙으로 이동)
       items.addAll([
-        item(Symbols.content_cut, '분할',
+        item(Symbols.content_cut, l.ctxActionSplit,
             enabled: true, onTap: () {
               if (!store.splitSelectedAny(_playheadSec)) {
-                comingSoon(context, '현재 위치에서는 분할할 수 없음');
+                comingSoon(context, l.editSplitNotPossible);
               }
             }),
-        item(Symbols.content_copy, '복사', enabled: true, onTap: store.copySelectedAny),
+        item(Symbols.content_copy, l.ctxActionCopy, enabled: true, onTap: store.copySelectedAny),
       ]);
       if (t.isChordInstrument) {
         final isChunkChord = store.canUnchordChunkSelected;
         items.add(item(isChunkChord ? Symbols.heart_broken : Symbols.queue_music,
-            isChunkChord ? '코드 해제' : '코드',
+            isChunkChord ? l.ctxActionUnchord : l.ctxActionChord,
             enabled: store.canChordChunkSelected || isChunkChord,
             onTap: () => showChordPicker(context, store)));
       }
       items.addAll([
-        item(Symbols.volume_up, '볼륨', enabled: true, onTap: () => _showVolume(store)),
-        item(Symbols.delete, '삭제', enabled: true, onTap: store.deleteSelectedAny),
+        item(Symbols.volume_up, l.ctxActionVolume, enabled: true, onTap: () => _showVolume(store)),
+        item(Symbols.delete, l.ctxActionDelete, enabled: true, onTap: store.deleteSelectedAny),
       ]);
     } else {
       // 트랙: 재녹음 · 루프 · 코드 · 뮤트 · 볼륨 · 삭제
       final canTrackChord = t.isChordInstrument && t.analysis?.detectedKey?.tonic != null;
       final trackHasNotes = t.notes.isNotEmpty;
-      items.add(item(Symbols.mic, '재녹음',
+      items.add(item(Symbols.mic, l.ctxActionRerecord,
           enabled: _recState == _RecState.idle,
           onTap: () => _startInlineRecord(store)));
-      items.add(item(Symbols.repeat, t.looping ? '루프 해제' : '루프',
+      items.add(item(Symbols.repeat, t.looping ? l.ctxActionUnloop : l.ctxActionLoop,
           enabled: trackHasNotes,
           onTap: () => store.toggleTrackLooping(t.id)));
       if (t.isChordInstrument) {
         items.add(item(t.chordActive ? Symbols.heart_broken : Symbols.queue_music,
-            t.chordActive ? '코드 해제' : '코드',
+            t.chordActive ? l.ctxActionUnchord : l.ctxActionChord,
             enabled: canTrackChord && trackHasNotes,
             onTap: () => store.setChordMode(!t.chordMode)));
       }
       if (t.role == TrackRole.bass) {
         items.add(item(Symbols.south,
-            t.bassPlacement ? '배치 해제' : '저음 배치',
+            t.bassPlacement ? l.ctxActionBassUnplace : l.ctxActionBassPlace,
             enabled: trackHasNotes,
             onTap: () => store.setBassPlacement(!t.bassPlacement)));
       }
       items.addAll([
         item(t.enabled ? Symbols.volume_up : Symbols.volume_off,
-            t.enabled ? '뮤트' : '뮤트 해제',
+            t.enabled ? l.ctxActionMute : l.ctxActionUnmute,
             enabled: true,
             onTap: () => store.toggleTrackEnabled(t.id)),
-        item(Symbols.volume_up, '볼륨',
+        item(Symbols.volume_up, l.ctxActionVolume,
             enabled: t.notes.isNotEmpty,
             onTap: () => _showVolume(store)),
-        item(Symbols.delete, '삭제',
+        item(Symbols.delete, l.ctxActionDelete,
             enabled: true,
             onTap: () => _confirmTrackDelete(store, t)),
       ]);
@@ -870,22 +936,25 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   void _confirmTrackDelete(ProjectStore store, TrackData t) {
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: Text('${t.role.label} 트랙 삭제', style: T.title),
-        content: const Text('녹음과 노트가 모두 삭제됩니다.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              store.removeTrack(t.id);
-              store.clearSelection();
-            },
-            child: const Text('삭제', style: TextStyle(color: AppColors.danger)),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        final l = L10n.of(ctx);
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text(l.editTrackDeleteTitle(t.role.label), style: T.title),
+          content: Text(l.editTrackDeleteBody),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel)),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                store.removeTrack(t.id);
+                store.clearSelection();
+              },
+              child: Text(l.delete, style: const TextStyle(color: AppColors.danger)),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -894,6 +963,8 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
     final isChunk = store.selectedChunk != null;
     showModalBottomSheet<void>(
       context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
       builder: (_) => StatefulBuilder(
@@ -901,7 +972,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(isChunk ? '청크 볼륨' : '노트 볼륨', style: T.title),
+              Text(isChunk ? L10n.of(c).editChunkVolumeTitle : L10n.of(c).editNoteVolumeTitle, style: T.title),
               Text('${(vel / 127 * 100).round()}%', style: T.h2.copyWith(color: AppColors.lime, fontSize: 20)),
             ]),
             const SizedBox(height: 8),
@@ -932,7 +1003,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // 원본(내가 부른 WAV) 재생
-          _miniBtn(Symbols.mic, '원본', enabled: canOrig, onTap: () => _playOriginal(store)),
+          _miniBtn(Symbols.mic, L10n.of(context).editTransportOriginal, enabled: canOrig, onTap: () => _playOriginal(store)),
           // 활성 트랙 믹스 — 재생/일시정지 토글(멈춘 지점부터 재개)
           GestureDetector(
             onTap: () => _onPlayTap(store),
@@ -1017,18 +1088,19 @@ class _SaveIndicator extends StatelessWidget {
   final ValueNotifier<int> tick;
   const _SaveIndicator({required this.tick});
 
-  String _fmtAgo(DateTime saved) {
+  String _fmtAgo(L10n l, DateTime saved) {
     final diff = DateTime.now().difference(saved);
-    if (diff.inSeconds < 5) return '방금 저장됨';
-    if (diff.inSeconds < 60) return '${diff.inSeconds}초 전';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
+    if (diff.inSeconds < 5) return l.editSaveJust;
+    if (diff.inSeconds < 60) return l.agoSecondsAgo(diff.inSeconds);
+    if (diff.inMinutes < 60) return l.agoMinutes(diff.inMinutes);
     final hh = saved.hour.toString().padLeft(2, '0');
     final mm = saved.minute.toString().padLeft(2, '0');
-    return '$hh:$mm 저장됨';
+    return l.editSaveAt('$hh:$mm');
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     // saving / lastSavedAt 만 구독 — 다른 store 변경은 rebuild 안 함.
     return Selector<ProjectStore, ({bool saving, DateTime? savedAt, bool dirty})>(
       selector: (_, s) => (saving: s.isSaving, savedAt: s.lastSavedAt, dirty: s.hasUnsavedChanges),
@@ -1041,7 +1113,7 @@ class _SaveIndicator extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.lime),
             ),
             const SizedBox(width: 6),
-            Text('저장 중...',
+            Text(l.editSaveSaving,
                 style: T.label.copyWith(
                     fontSize: 10, color: AppColors.lime, fontWeight: FontWeight.w600)),
           ]);
@@ -1062,7 +1134,7 @@ class _SaveIndicator extends StatelessWidget {
                       ? AppColors.textTertiary.withValues(alpha: 0.5)
                       : AppColors.textTertiary),
               const SizedBox(width: 4),
-              Text(_fmtAgo(v.savedAt!),
+              Text(_fmtAgo(l, v.savedAt!),
                   style: T.label.copyWith(
                       fontSize: 10, color: AppColors.textTertiary, fontWeight: FontWeight.w500)),
             ]),

@@ -1,9 +1,12 @@
 // 구독 관리 — 시안 ⑧ Active, ⑨ Cancelled, ⑩ Expired 세 상태를 SubscriptionStatus 로 분기.
-// Active: 자동갱신 안내 + 해지 버튼. Cancelled: 만료일 + 재구독. Expired: 재구독 CTA.
+// IAP 정책상 구독 변경/해지/결제수단은 스토어에서만 가능 — 앱 안에는 안내 문구만.
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/generated/app_localizations.dart';
+import '../services/iap_pricing.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_sheets.dart';
@@ -16,6 +19,7 @@ class SubscriptionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = context.watch<ProjectStore>();
     final s = store.subscription;
+    final t = L10n.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -25,7 +29,7 @@ class SubscriptionScreen extends StatelessWidget {
           icon: const Icon(Symbols.arrow_back_ios, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('구독 관리', style: T.h2.copyWith(fontSize: 17)),
+        title: Text(t.subScreenTitle, style: T.h2.copyWith(fontSize: 17)),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -45,44 +49,45 @@ class SubscriptionScreen extends StatelessWidget {
   }
 
   Widget _statusCard(BuildContext context, ProjectStore store, SubscriptionStatus s) {
+    final t = L10n.of(context);
     String headline;
     String body;
     Color color;
     IconData ic;
     switch (s) {
       case SubscriptionStatus.active:
-        headline = 'Humming Pro · 활성';
+        headline = t.subStatusActive;
         body = store.subscriptionRenewsAt != null
-            ? '${_fmtDate(store.subscriptionRenewsAt!)}에 자동 갱신돼요'
-            : '자동 갱신 활성';
+            ? t.subStatusActiveRenewsOn(_fmtDate(store.subscriptionRenewsAt!))
+            : t.subStatusActiveAutoOn;
         color = AppColors.lime;
         ic = Symbols.check_circle;
         break;
       case SubscriptionStatus.trial:
-        headline = '무료 체험 중';
+        headline = t.subTrial;
         body = store.subscriptionRenewsAt != null
-            ? '${_fmtDate(store.subscriptionRenewsAt!)}에 자동 결제'
-            : '7일 무료 체험';
+            ? t.subStatusTrialBillsOn(_fmtDate(store.subscriptionRenewsAt!))
+            : t.subStatusTrialNDays(IapPricing.trialDays);
         color = AppColors.lime;
         ic = Symbols.bolt;
         break;
       case SubscriptionStatus.cancelled:
-        headline = '해지 예약됨';
+        headline = t.subStatusCancelled;
         body = store.subscriptionRenewsAt != null
-            ? '${_fmtDate(store.subscriptionRenewsAt!)}까지 Pro 사용 가능'
-            : '만료 전까지 사용 가능';
+            ? t.subStatusCancelledUntil(_fmtDate(store.subscriptionRenewsAt!))
+            : t.subCancelledUntilExpiry;
         color = AppColors.textSecondary;
         ic = Symbols.schedule;
         break;
       case SubscriptionStatus.expired:
-        headline = '구독이 만료됐어요';
-        body = '다시 구독하면 클라우드 작업물이 즉시 복원돼요';
+        headline = t.subExpired;
+        body = t.subStatusExpiredBody;
         color = AppColors.danger;
         ic = Symbols.error;
         break;
       case SubscriptionStatus.anonymous:
-        headline = '구독 정보 없음';
-        body = '먼저 로그인하고 결제를 시작해 주세요';
+        headline = t.subStatusAnonymous;
+        body = t.subStatusAnonymousBody;
         color = AppColors.textTertiary;
         ic = Symbols.lock;
         break;
@@ -140,70 +145,67 @@ class SubscriptionScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('현재 권한', style: T.label.copyWith(fontSize: 11, color: AppColors.textSecondary)),
+      child: Builder(builder: (context) {
+        final t = L10n.of(context);
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(t.subCurrentEntitlements, style: T.label.copyWith(fontSize: 11, color: AppColors.textSecondary)),
         const SizedBox(height: 4),
-        row(Symbols.cloud_done, '클라우드 동기화', hasPro),
-        row(Symbols.download, '무제한 내보내기 (WAV / MIDI)', hasPro),
-        row(Symbols.shield, '보컬 영구 보관', hasPro),
-        row(Symbols.bolt, '우선 처리 (빠른 분석)', hasPro),
-      ]),
+        row(Symbols.cloud_done, t.subFeatureCloudSync, hasPro),
+        row(Symbols.download, t.subFeatureExport, hasPro),
+        row(Symbols.shield, t.subFeatureVocalBackup, hasPro),
+        row(Symbols.bolt, t.subFeaturePriority, hasPro),
+      ]);
+      }),
     );
   }
 
   Widget _actions(BuildContext context, ProjectStore store, SubscriptionStatus s) {
+    final t = L10n.of(context);
     if (s == SubscriptionStatus.active || s == SubscriptionStatus.trial) {
-      return Column(children: [
-        LimeButton(
-          label: '결제 정보 관리',
-          icon: Symbols.credit_card,
-          onTap: () => comingSoon(context, 'App Store / Google Play 결제 관리'),
-        ),
-        const SizedBox(height: 10),
-        GestureDetector(
-          onTap: () => _confirmCancel(context, store),
-          child: Container(
-            height: 52, alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.transparent, borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: AppColors.dangerBorder),
-            ),
-            child: Text('구독 해지', style: T.body.copyWith(color: AppColors.danger, fontWeight: FontWeight.w700)),
-          ),
-        ),
-      ]);
+      return _storeNotice(t.subStoreNoticeActive(_storeName()));
     }
     if (s == SubscriptionStatus.cancelled) {
-      return Column(children: [
-        LimeButton(
-          label: '해지 취소하고 계속 사용',
-          onTap: () async {
-            await store.mockPurchase();
-          },
-        ),
-        const SizedBox(height: 10),
-        Center(child: Text('만료일까지 모든 기능을 그대로 쓸 수 있어요',
-            style: T.sub.copyWith(fontSize: 11))),
-      ]);
+      return _storeNotice(t.subStoreNoticeCancelled(_storeName()));
     }
     if (s == SubscriptionStatus.expired) {
       return Column(children: [
         LimeButton(
-          label: 'Pro 다시 구독하기',
+          label: t.subResubCta,
           icon: Symbols.workspace_premium,
           onTap: () => showPaywallSheet(context, store, trigger: 'export'),
         ),
         const SizedBox(height: 10),
-        Center(child: Text('이전 작업물은 30일 안에 클라우드에서 가져올 수 있어요',
-            style: T.sub.copyWith(fontSize: 11))),
+        Center(child: Text(t.subResubHint, style: T.sub.copyWith(fontSize: 11))),
       ]);
     }
     return LimeButton(
-      label: '구독 시작',
+      label: t.subStartCta,
       onTap: () => showPaywallSheet(context, store, trigger: 'export'),
     );
   }
 
+  String _storeName() => Platform.isIOS ? 'App Store' : 'Google Play';
+
+  Widget _storeNotice(String msg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Symbols.info, size: 16, color: AppColors.textSecondary),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(msg,
+              style: T.sub.copyWith(fontSize: 12, height: 1.5, color: AppColors.textSecondary)),
+        ),
+      ]),
+    );
+  }
+
+  // ignore: unused_element
   void _confirmCancel(BuildContext context, ProjectStore store) {
     showDialog(
       context: context,
@@ -214,9 +216,9 @@ class SubscriptionScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text('정말 해지하시겠어요?', style: T.h2.copyWith(fontSize: 17)),
+            Text(L10n.of(dctx).subCancelConfirmTitle, style: T.h2.copyWith(fontSize: 17)),
             const SizedBox(height: 8),
-            Text('만료일까지는 모든 Pro 기능을 그대로 사용하실 수 있어요.',
+            Text(L10n.of(dctx).subCancelConfirmBody,
                 style: T.sub),
             const SizedBox(height: 18),
             Row(children: [
@@ -226,7 +228,7 @@ class SubscriptionScreen extends StatelessWidget {
                   child: Container(
                     height: 46, alignment: Alignment.center,
                     decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.border)),
-                    child: Text('취소', style: T.body.copyWith(fontWeight: FontWeight.w600)),
+                    child: Text(L10n.of(dctx).cancel, style: T.body.copyWith(fontWeight: FontWeight.w600)),
                   ),
                 ),
               ),
@@ -237,7 +239,7 @@ class SubscriptionScreen extends StatelessWidget {
                   child: Container(
                     height: 46, alignment: Alignment.center,
                     decoration: BoxDecoration(color: AppColors.danger, borderRadius: BorderRadius.circular(10)),
-                    child: Text('해지', style: T.body.copyWith(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    child: Text(L10n.of(dctx).subCancelConfirmAction, style: T.body.copyWith(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                   ),
                 ),
               ),

@@ -30,6 +30,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -52,6 +55,17 @@ dependencies:
   # 모두 graceful-degrade — env 키 미설정 시 초기화 스킵, mock 분기 유지.
   supabase_flutter: ^2.5.0
   in_app_purchase: ^3.2.0
+  # ── 네이티브 OAuth (신규: 2026-06-03) ──
+  # iOS Safari deep-link 라운드트립 회피 — AuthenticationServices 기반 native sheet.
+  # 인증 후 idToken 을 supabase.signInWithIdToken 으로 교환 → 앱 자동 복귀.
+  # constraint-guardian 후속 리뷰 필요 (3종 신규 의존성).
+  sign_in_with_apple: ^6.1.0
+  # 6.2.x 는 SwiftPM 전용 → GoogleSignIn 8.0.0 의 AppCheckCore SPM 이슈로 빌드 실패.
+  # 6.1.6 은 CocoaPods 호환 + 동일 Dart API. 향후 Xcode 업데이트로 SPM 수정되면 복귀.
+  google_sign_in: 6.1.6
+  crypto: ^3.0.3
+  # 로그인 시트 → 약관/개인정보 처리방침 풀모달 렌더링.
+  flutter_markdown: ^0.7.4
 
 dev_dependencies:
   flutter_test:
@@ -81,6 +95,8 @@ flutter_launcher_icons:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # i18n — l10n.yaml + lib/l10n/*.arb 의 코드 생성을 활성.
+  generate: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
@@ -92,6 +108,7 @@ flutter:
     - assets/sounds/TimGM6mb.sf2
     - assets/icons/instruments/
     - assets/icons/metronome.svg
+    - assets/legal/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

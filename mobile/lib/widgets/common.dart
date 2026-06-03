@@ -1,13 +1,16 @@
 // 공통 위젯/헬퍼.
 import 'package:flutter/material.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../theme/app_theme.dart';
 
 /// 미연결 기능 안내 (디자인의 40% dim 버튼 탭 시).
-void comingSoon(BuildContext context, [String label = '기능']) {
+void comingSoon(BuildContext context, [String? label]) {
+  final t = L10n.of(context);
+  final lbl = label ?? t.comingSoonFeature;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
-      content: Text('$label — 준비중입니다', style: T.body),
+      content: Text(t.comingSoonToast(lbl), style: T.body),
       backgroundColor: AppColors.surface,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 2),

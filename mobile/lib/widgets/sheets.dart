@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../audio/player.dart';
 import '../audio/synth.dart';
 import '../audio/synth_player.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../models/models.dart';
 import '../music/chord_expand.dart';
 import '../services/analytics_service.dart';
@@ -44,6 +45,7 @@ Widget _grabber() => Center(
 void showHelpSheet(BuildContext context, String title, String body) {
   showModalBottomSheet(
     context: context,
+    isScrollControlled: true,
     backgroundColor: Colors.transparent,
     useSafeArea: true,
     builder: (_) => Container(
@@ -79,7 +81,7 @@ void showHelpSheet(BuildContext context, String title, String body) {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: Text('닫기', style: T.body.copyWith(fontWeight: FontWeight.w600)),
+                child: Text(L10n.of(context).close, style: T.body.copyWith(fontWeight: FontWeight.w600)),
               ),
             ),
           ),
@@ -92,7 +94,11 @@ void showHelpSheet(BuildContext context, String title, String body) {
 // ─── 녹음 결과 사용/삭제 시트 ──────────────────────────────────────────
 // 녹음 종료 → 분석/정리 결과 미리보기 + 사용/삭제. 어시스트 토글 포함(보컬 제외).
 // 기존 인라인 트랙 박스에서 모달 시트로 승격 — 좁은 공간에 다 안 들어가는 문제 해결.
-void showPendingRecordingSheet(BuildContext context, ProjectStore store) {
+void showPendingRecordingSheet(
+  BuildContext context,
+  ProjectStore store, {
+  VoidCallback? onRetry,
+}) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
@@ -112,7 +118,7 @@ void showPendingRecordingSheet(BuildContext context, ProjectStore store) {
             });
             return const SizedBox.shrink();
           }
-          return _PendingSheetBody(store: store, p: p);
+          return _PendingSheetBody(store: store, p: p, onRetry: onRetry);
         },
       );
     },
@@ -120,9 +126,10 @@ void showPendingRecordingSheet(BuildContext context, ProjectStore store) {
 }
 
 class _PendingSheetBody extends StatefulWidget {
-  const _PendingSheetBody({required this.store, required this.p});
+  const _PendingSheetBody({required this.store, required this.p, this.onRetry});
   final ProjectStore store;
   final PendingRecording p;
+  final VoidCallback? onRetry;
 
   @override
   State<_PendingSheetBody> createState() => _PendingSheetBodyState();
@@ -178,6 +185,7 @@ class _PendingSheetBodyState extends State<_PendingSheetBody> {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final p = widget.p;
     final store = widget.store;
     final mq = MediaQuery.of(context);
@@ -194,14 +202,30 @@ class _PendingSheetBodyState extends State<_PendingSheetBody> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _grabber(),
-          Text('녹음 완료', style: T.h2.copyWith(fontSize: 18)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: Text(l.pendingRecTitle, style: T.h2.copyWith(fontSize: 18))),
+              if (widget.onRetry != null)
+                _RetryIconBtn(
+                  onTap: analyzing
+                      ? null
+                      : () async {
+                          await _synth.stop();
+                          await _audio.stop();
+                          store.discardPendingRecording();
+                          widget.onRetry!();
+                        },
+                ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
             analyzing
-                ? '분석 중…'
+                ? l.pendingAnalyzing
                 : (isVocal
-                    ? '${dur.toStringAsFixed(1)}초 보컬을 사용할까요?'
-                    : '${dur.toStringAsFixed(1)}초 · 노트 $notesCount개를 사용할까요?'),
+                    ? l.pendingVocalUseQ(dur.toStringAsFixed(1))
+                    : l.pendingNotesUseQ(dur.toStringAsFixed(1), notesCount)),
             style: T.body.copyWith(fontSize: 13, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 14),
@@ -236,7 +260,7 @@ class _PendingSheetBodyState extends State<_PendingSheetBody> {
           Row(children: [
             Expanded(
               child: _pendingSheetBtn(
-                '삭제',
+                l.delete,
                 outlined: true,
                 onTap: () async {
                   await _synth.stop();
@@ -248,7 +272,7 @@ class _PendingSheetBodyState extends State<_PendingSheetBody> {
             const SizedBox(width: 10),
             Expanded(
               child: _pendingSheetBtn(
-                '사용',
+                l.use,
                 outlined: false,
                 onTap: analyzing
                     ? null
@@ -285,7 +309,7 @@ class _PendingSheetBodyState extends State<_PendingSheetBody> {
           children: [
             Icon(_previewPlaying ? Symbols.stop : Symbols.play_arrow, size: 18, color: color),
             const SizedBox(width: 6),
-            Text(_previewPlaying ? '정지' : '미리듣기',
+            Text(_previewPlaying ? L10n.of(context).pendingStop : L10n.of(context).pendingPreview,
                 style: T.body.copyWith(fontSize: 14, fontWeight: FontWeight.w600, color: color)),
           ],
         ),
@@ -397,25 +421,26 @@ class _AddTrackItem {
 
 // 트랙 추가 카탈로그 — instrumentPalette 의 패밀리당 "대표 1개"(첫 프리셋)만 노출.
 // 세부 프리셋(P02, AG03 …)은 트랙 생성 후 악기 선택 시트(showInstrumentPicker)에서 고른다.
-const Map<TrackRole, List<_AddTrackItem>> _addTrackCatalog = {
+// i18n: name 은 런타임에 L10n 으로 해석 (시스템 언어 토글 즉시 반영).
+Map<TrackRole, List<_AddTrackItem>> _buildAddTrackCatalog(L10n l) => {
   TrackRole.keys: [
-    _AddTrackItem('피아노', 'Piano 1', 0),
-    _AddTrackItem('어쿠스틱 기타', 'Nylon Guitar', 24),
-    _AddTrackItem('일렉 기타', 'Overdrive Guitar', 29),
-    _AddTrackItem('신스', 'Poly Synth', 90),
-    _AddTrackItem('오르간', 'Organ 1', 16),
-    _AddTrackItem('스트링', 'Strings CLP', 48),
+    _AddTrackItem(l.addTrackPiano, 'Piano 1', 0),
+    _AddTrackItem(l.addTrackAcousticGuitar, 'Nylon Guitar', 24),
+    _AddTrackItem(l.addTrackElectricGuitar, 'Overdrive Guitar', 29),
+    _AddTrackItem(l.addTrackSynth, 'Poly Synth', 90),
+    _AddTrackItem(l.addTrackOrgan, 'Organ 1', 16),
+    _AddTrackItem(l.addTrackStrings, 'Strings CLP', 48),
   ],
   TrackRole.bass: [
-    _AddTrackItem('베이스 기타', 'Fingered Bass', 33),
-    _AddTrackItem('신스 베이스', 'Synth Bass 2', 39),
+    _AddTrackItem(l.addTrackBassGuitar, 'Fingered Bass', 33),
+    _AddTrackItem(l.addTrackSynthBass, 'Synth Bass 2', 39),
   ],
   TrackRole.drum: [
     // 드럼 키트 — 기본 Standard(0). 아이콘만 드럼킷, 저장 program 은 0.
-    _AddTrackItem('드럼 키트', 'Standard', kDrumKitProgram, saveProgram: 0),
+    _AddTrackItem(l.addTrackDrumKit, 'Standard', kDrumKitProgram, saveProgram: 0),
   ],
   TrackRole.vocal: [
-    _AddTrackItem('원본 보컬', '원본 그대로', kVocalProgram, saveProgram: 0),
+    _AddTrackItem(l.addTrackVocal, l.addTrackVocalSub, kVocalProgram, saveProgram: 0),
   ],
 };
 
@@ -446,12 +471,12 @@ void showAddTrackSheet(BuildContext context, ProjectStore store) {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('트랙 추가', style: T.h2.copyWith(fontSize: 17)),
+                Text(L10n.of(sheetCtx).addTrackTitle, style: T.h2.copyWith(fontSize: 17)),
                 GestureDetector(
                   onTap: () => Navigator.pop(sheetCtx),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                    child: Text('닫기',
+                    child: Text(L10n.of(sheetCtx).close,
                         style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
                   ),
                 ),
@@ -479,7 +504,8 @@ void showAddTrackSheet(BuildContext context, ProjectStore store) {
 }
 
 Widget _addTrackCategory(BuildContext context, ProjectStore store, TrackRole role) {
-  final items = _addTrackCatalog[role] ?? const <_AddTrackItem>[];
+  final catalog = _buildAddTrackCatalog(L10n.of(context));
+  final items = catalog[role] ?? const <_AddTrackItem>[];
   if (items.isEmpty) return const SizedBox.shrink();
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -523,7 +549,8 @@ const _kPcNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', '
   return null;
 }
 
-String _scaleKo(String s) => s == 'major' ? '장조' : (s == 'minor' ? '단조' : s);
+String _scaleLabel(L10n l, String s) =>
+    s == 'major' ? l.scaleMajor : (s == 'minor' ? l.scaleMinor : s);
 
 /// 전환 시점에 호출 — 키 앵커 후보가 있으면 확인 시트를 띄워 프로젝트 키 잠금.
 /// 첫 트랙이 드럼이라 키가 없으면 조용히 건너뜀(키는 첫 멜로딕에서 잠김).
@@ -532,6 +559,8 @@ Future<void> maybeConfirmAnchorKey(BuildContext context, ProjectStore store) asy
   if (prop == null) return;
   final chosen = await showModalBottomSheet<({String tonic, String scale})>(
     context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
     backgroundColor: AppColors.surface,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -550,16 +579,18 @@ class _AnchorKeySheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
+    final tagDetected = l.anchorKeyTagDetected;
     final opts = <({String tonic, String scale, String tag})>[];
     final seen = <String>{};
     void add(String t, String s, String tag) {
       if (seen.add('$t $s')) opts.add((tonic: t, scale: s, tag: tag));
     }
-    add(tonic, scale, '감지됨');
+    add(tonic, scale, tagDetected);
     final rel = _relativeKey(tonic, scale);
-    if (rel != null) add(rel.tonic, rel.scale, '상대조');
+    if (rel != null) add(rel.tonic, rel.scale, l.anchorKeyTagRelative);
     for (final c in candidates.take(3)) {
-      add(c.tonic, c.scale, '후보');
+      add(c.tonic, c.scale, l.anchorKeyTagCandidate);
     }
     return SafeArea(
       child: Padding(
@@ -568,9 +599,9 @@ class _AnchorKeySheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('프로젝트 키 정하기', style: T.h2),
+            Text(l.anchorKeyTitle, style: T.h2),
             const SizedBox(height: 4),
-            Text('이 키로 모든 트랙을 자동 정리합니다. 맞는 키를 골라주세요.', style: T.sub),
+            Text(l.anchorKeySub, style: T.sub),
             const SizedBox(height: 16),
             ...opts.map((o) => GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -582,15 +613,15 @@ class _AnchorKeySheet extends StatelessWidget {
                       color: AppColors.bg,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: o.tag == '감지됨' ? AppColors.lime : AppColors.border),
+                          color: o.tag == tagDetected ? AppColors.lime : AppColors.border),
                     ),
                     child: Row(children: [
-                      Text('${o.tonic} ${_scaleKo(o.scale)}',
+                      Text('${o.tonic} ${_scaleLabel(l, o.scale)}',
                           style: T.label.copyWith(fontSize: 16)),
                       const Spacer(),
                       Text(o.tag,
                           style: T.sub.copyWith(
-                              color: o.tag == '감지됨'
+                              color: o.tag == tagDetected
                                   ? AppColors.lime
                                   : AppColors.textSecondary)),
                     ]),
@@ -673,7 +704,7 @@ void showInstrumentPicker(BuildContext context, ProjectStore store) {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _grabber(),
-            Text('악기 선택 · ${t.role.label.toUpperCase()}', style: T.h2.copyWith(fontSize: 18)),
+            Text(L10n.of(sheetCtx).instrumentPickerTitle(t.role.label.toUpperCase()), style: T.h2.copyWith(fontSize: 18)),
             const SizedBox(height: 16),
             // 헤더는 고정, 패밀리(그룹) + 프리셋 목록 + 코드 모드 행만 스크롤.
             Flexible(
@@ -682,7 +713,7 @@ void showInstrumentPicker(BuildContext context, ProjectStore store) {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (families.isEmpty)
-                      Text('원본 보컬 트랙입니다', style: T.sub)
+                      Text(L10n.of(sheetCtx).instrumentPickerVocalOnly, style: T.sub)
                     else
                       for (final fam in families) ...[
                         Padding(
@@ -819,6 +850,7 @@ Future<void> _previewInstrument(Instrument inst, bool isDrum) async {
 
 Widget _chordModeRow(BuildContext context, ProjectStore store) {
   return StatefulBuilder(builder: (context, setLocal) {
+    final l = L10n.of(context);
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -832,14 +864,14 @@ Widget _chordModeRow(BuildContext context, ProjectStore store) {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('코드 모드', style: T.body.copyWith(fontWeight: FontWeight.w600)),
-            Text('단음을 자동 화음으로', style: T.sub.copyWith(fontSize: 11)),
+            Text(l.chordModeTitle, style: T.body.copyWith(fontWeight: FontWeight.w600)),
+            Text(l.chordModeSub, style: T.sub.copyWith(fontSize: 11)),
           ],
         ),
         const Spacer(),
         _segToggle(
-          left: '단음',
-          right: '코드',
+          left: l.chordModeMono,
+          right: l.chordModeChord,
           rightActive: store.active.chordMode,
           onLeft: () => setLocal(() => store.setChordMode(false)),
           onRight: () => setLocal(() => store.setChordMode(true)),
@@ -889,7 +921,8 @@ void showKeyPicker(BuildContext context, ProjectStore store) {
     context: context,
     backgroundColor: Colors.transparent,
     useSafeArea: true,
-    builder: (_) {
+    builder: (sheetCtx) {
+      final l = L10n.of(sheetCtx);
       Widget chip(String label, bool active, VoidCallback onTap) => GestureDetector(
             onTap: () {
               onTap();
@@ -935,16 +968,16 @@ void showKeyPicker(BuildContext context, ProjectStore store) {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _grabber(),
-              Text('키 선택', style: T.h2.copyWith(fontSize: 18)),
+              Text(l.keyPickerTitle, style: T.h2.copyWith(fontSize: 18)),
               const SizedBox(height: 4),
-              Text('Auto = 추천 키 자동 적용', style: T.sub),
+              Text(l.keyPickerSub, style: T.sub),
               const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
-                child: chip('Auto (추천)', opt.autoKey, () => store.setAutoKey(true)),
+                child: chip(l.keyPickerAuto, opt.autoKey, () => store.setAutoKey(true)),
               ),
               const SizedBox(height: 16),
-              Text('메인 키 기준 트랙 (전체 트랙이 이 키로)', style: T.label),
+              Text(l.keyPickerMainRole, style: T.label),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -954,8 +987,8 @@ void showKeyPicker(BuildContext context, ProjectStore store) {
                 ],
               ),
               const SizedBox(height: 16),
-              section('major', '메이저'),
-              section('minor', '마이너'),
+              section('major', l.keyPickerMajor),
+              section('minor', l.keyPickerMinor),
             ],
           ),
         ),
@@ -1111,7 +1144,7 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: AppColors.border),
             ),
-            child: Text('원음',
+            child: Text(L10n.of(context).noteWheelOriginal,
                 style: T.label.copyWith(fontSize: 10, color: AppColors.textSecondary)),
           ),
         ],
@@ -1121,6 +1154,7 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final mq = MediaQuery.of(context);
     const wheelHeight = 240.0;
     const itemExtent = 44.0;
@@ -1143,11 +1177,11 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
                 onTap: () => Navigator.pop(context),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                  child: Text('취소', style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
+                  child: Text(l.cancel, style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
                 ),
               ),
               Column(children: [
-                Text('노트 보정 · #${widget.noteIndex + 1}',
+                Text(l.noteWheelTitle(widget.noteIndex + 1),
                     style: T.h2.copyWith(fontSize: 16)),
               ]),
               GestureDetector(
@@ -1157,7 +1191,7 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                  child: Text('적용',
+                  child: Text(l.apply,
                       style: T.body.copyWith(color: AppColors.lime, fontSize: 14, fontWeight: FontWeight.w700)),
                 ),
               ),
@@ -1168,9 +1202,9 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             const Icon(Symbols.star, color: AppColors.lime, size: 13),
             const SizedBox(width: 4),
-            Text('추천', style: T.sub.copyWith(fontSize: 11)),
+            Text(l.noteWheelRecommended, style: T.sub.copyWith(fontSize: 11)),
             const SizedBox(width: 14),
-            Text('원음 = 부른 그대로', style: T.sub.copyWith(fontSize: 11)),
+            Text(l.noteWheelOriginalHint, style: T.sub.copyWith(fontSize: 11)),
           ]),
           const SizedBox(height: 8),
           // 휠 영역 — ListWheelScrollView + 가운데 lime divider + 위/아래 fade.
@@ -1244,7 +1278,7 @@ class _NoteWheelSheetState extends State<_NoteWheelSheet> {
                   Text(noteName(centerPitch),
                       style: T.body.copyWith(fontWeight: FontWeight.w700, fontSize: 15)),
                   const SizedBox(width: 6),
-                  Text('미리듣기',
+                  Text(l.pendingPreview,
                       style: T.sub.copyWith(fontSize: 11, color: AppColors.textSecondary)),
                 ]),
               ),
@@ -1267,6 +1301,7 @@ void showChordPicker(BuildContext context, ProjectStore store) {
   if (chunkId == null && noteIdx == null) return;
   showModalBottomSheet(
     context: context,
+    isScrollControlled: true,
     backgroundColor: Colors.transparent,
     useSafeArea: true,
     builder: (_) => _ChordPickerSheet(store: store, noteIndex: noteIdx, chunkId: chunkId),
@@ -1384,6 +1419,7 @@ class _ChordPickerSheetState extends State<_ChordPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final t = widget.store.active;
     final dk = t.analysis?.detectedKey;
     final hasKey = dk?.tonic != null && dk?.scale != null;
@@ -1441,15 +1477,15 @@ class _ChordPickerSheetState extends State<_ChordPickerSheet> {
                 onTap: () => Navigator.pop(context),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                  child: Text('취소', style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
+                  child: Text(l.cancel, style: T.body.copyWith(color: AppColors.textSecondary, fontSize: 14)),
                 ),
               ),
-              Text('코드 변환', style: T.h2.copyWith(fontSize: 16)),
+              Text(l.chordPickerTitle, style: T.h2.copyWith(fontSize: 16)),
               GestureDetector(
                 onTap: _onApply,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                  child: Text('적용',
+                  child: Text(l.apply,
                       style: T.body.copyWith(color: AppColors.lime, fontSize: 14, fontWeight: FontWeight.w700)),
                 ),
               ),
@@ -1459,10 +1495,10 @@ class _ChordPickerSheetState extends State<_ChordPickerSheet> {
           Text(
             () {
               final rootLabel = rootNote != null ? noteName(rootNote.pitch) : '—';
-              final scope = _isChunkMode ? '청크' : '루트';
-              final keyPart = hasKey ? ' · 키: ${dk!.label}' : ' (키 미감지)';
-              final chordPart = isCurrentlyChord ? ' · 현재 코드' : '';
-              return '$scope: $rootLabel$keyPart$chordPart';
+              final scope = _isChunkMode ? l.chordPickerScopeChunk : l.chordPickerScopeRoot;
+              final keyPart = hasKey ? l.chordPickerKeyPart(dk!.label) : l.chordPickerNoKey;
+              final chordPart = isCurrentlyChord ? l.chordPickerCurrent : '';
+              return l.chordPickerSummary(scope, rootLabel, keyPart, chordPart);
             }(),
             style: T.sub,
           ),
@@ -1471,7 +1507,7 @@ class _ChordPickerSheetState extends State<_ChordPickerSheet> {
             spacing: 10,
             runSpacing: 10,
             children: [
-              chip(null, '원음', '단음 (코드 해제)'),
+              chip(null, l.chordPickerMono, l.chordPickerMonoSub),
               for (final type in types) chip(type, type.label, type.intervalsLabel),
             ],
           ),
@@ -1485,40 +1521,44 @@ class _ChordPickerSheetState extends State<_ChordPickerSheet> {
 void showExportShare(BuildContext context, ProjectStore store) {
   showModalBottomSheet(
     context: context,
+    isScrollControlled: true,
     backgroundColor: Colors.transparent,
     useSafeArea: true,
-    builder: (_) => Container(
-      decoration: _sheetDeco(),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _grabber(),
-          Text('내보내기 · ${store.title}', style: T.h2.copyWith(fontSize: 18)),
-          const SizedBox(height: 14),
-          Disabled(
-            label: '클라우드 저장',
-            child: _exportRow(Symbols.cloud_done, '프로젝트에 저장', '클라우드 동기화 · 언제든 재편집', AppColors.lime),
-          ),
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () => _exportFile(context, store, midi: true),
-            child: _exportRow(Symbols.piano, 'MIDI 내보내기', '.mid', AppColors.textPrimary),
-          ),
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () => _exportFile(context, store, midi: false),
-            child: _exportRow(Symbols.graphic_eq, '오디오 내보내기', '.wav · 믹스 렌더', AppColors.textPrimary),
-          ),
-          const SizedBox(height: 10),
-          Disabled(
-            label: '공유',
-            child: _exportRow(Symbols.ios_share, '공유', '링크 · Instagram · TikTok', AppColors.textPrimary),
-          ),
-        ],
-      ),
-    ),
+    builder: (sheetCtx) {
+      final l = L10n.of(sheetCtx);
+      return Container(
+        decoration: _sheetDeco(),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _grabber(),
+            Text(l.exportTitle(store.title), style: T.h2.copyWith(fontSize: 18)),
+            const SizedBox(height: 14),
+            Disabled(
+              label: l.exportCloudSaveLabel,
+              child: _exportRow(Symbols.cloud_done, l.exportCloudSaveTitle, l.exportCloudSaveSub, AppColors.lime),
+            ),
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () => _exportFile(context, store, midi: true),
+              child: _exportRow(Symbols.piano, l.exportMidiTitle, l.exportMidiSub, AppColors.textPrimary),
+            ),
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () => _exportFile(context, store, midi: false),
+              child: _exportRow(Symbols.graphic_eq, l.exportAudioTitle, l.exportAudioSub, AppColors.textPrimary),
+            ),
+            const SizedBox(height: 10),
+            Disabled(
+              label: l.exportShareLabel,
+              child: _exportRow(Symbols.ios_share, l.exportShareLabel, l.exportShareSub, AppColors.textPrimary),
+            ),
+          ],
+        ),
+      );
+    },
   );
 }
 
@@ -1559,7 +1599,7 @@ Future<void> _exportFile(BuildContext context, ProjectStore store, {required boo
     AnalyticsService.instance.songExported(format: midi ? 'midi' : 'wav');
     await SharePlus.instance.share(ShareParams(files: [XFile(f.path)], text: store.title));
   } catch (e) {
-    if (context.mounted) comingSoon(context, '내보내기 실패: $e');
+    if (context.mounted) comingSoon(context, L10n.of(context).exportFailed('$e'));
   }
 }
 
@@ -1596,13 +1636,13 @@ class _MetroSheetBody extends StatefulWidget {
 class _MetroSheetBodyState extends State<_MetroSheetBody> {
   DateTime? _anchor;
 
-  String _tempoHint(int bpm) {
-    if (bpm < 70) return '느린 발라드';
-    if (bpm < 95) return '보통 발라드';
-    if (bpm < 115) return '팝/미디엄';
-    if (bpm < 135) return '댄스/업비트';
-    if (bpm < 160) return '빠른 곡';
-    return '매우 빠름';
+  String _tempoHint(L10n l, int bpm) {
+    if (bpm < 70) return l.tempoVerySlow;
+    if (bpm < 95) return l.tempoBallad;
+    if (bpm < 115) return l.tempoMidPop;
+    if (bpm < 135) return l.tempoDance;
+    if (bpm < 160) return l.tempoFast;
+    return l.tempoVeryFast;
   }
 
   void _refreshAnchor() {
@@ -1612,6 +1652,7 @@ class _MetroSheetBodyState extends State<_MetroSheetBody> {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final mq = MediaQuery.of(context);
     return AnimatedBuilder(
       animation: widget.store,
@@ -1626,13 +1667,13 @@ class _MetroSheetBodyState extends State<_MetroSheetBody> {
             children: [
               _grabber(),
               Row(children: [
-                Text('메트로놈', style: T.h2.copyWith(fontSize: 18)),
+                Text(l.metronomeTitle, style: T.h2.copyWith(fontSize: 18)),
                 const Spacer(),
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
-                    child: Text('완료',
+                    child: Text(l.done,
                         style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w700)),
                   ),
                 ),
@@ -1655,9 +1696,9 @@ class _MetroSheetBodyState extends State<_MetroSheetBody> {
                           child: Text('BPM', style: T.label.copyWith(color: AppColors.textSecondary)),
                         ),
                       ]),
-                      Text(_tempoHint(store.bpm),
+                      Text(_tempoHint(l, store.bpm),
                           style: T.body.copyWith(fontSize: 12, color: AppColors.textSecondary)),
-                      Text('1박 = ${(60 / store.bpm).toStringAsFixed(2)}초',
+                      Text(l.metronomeBeatSec((60 / store.bpm).toStringAsFixed(2)),
                           style: T.label.copyWith(fontSize: 10, color: AppColors.textTertiary)),
                     ],
                   ),
@@ -1720,7 +1761,7 @@ class _MetroSheetBodyState extends State<_MetroSheetBody> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      store.metroOn ? '메트로놈 끄기' : '메트로놈 켜기',
+                      store.metroOn ? l.metronomeOff : l.metronomeOn,
                       style: T.body.copyWith(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -1732,7 +1773,7 @@ class _MetroSheetBodyState extends State<_MetroSheetBody> {
               ),
               const SizedBox(height: 12),
               Text(
-                'BPM 은 프로젝트 전체에 적용돼요. 박자 보정 카드의 그리드도 이 BPM 을 기준으로 정렬합니다.',
+                l.metronomeNote,
                 style: T.body.copyWith(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
               ),
             ],
@@ -1779,6 +1820,7 @@ class _QuantizeSheetBody extends StatefulWidget {
 class _QuantizeSheetBodyState extends State<_QuantizeSheetBody> {
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final mq = MediaQuery.of(context);
     return AnimatedBuilder(
       animation: widget.store,
@@ -1794,7 +1836,7 @@ class _QuantizeSheetBodyState extends State<_QuantizeSheetBody> {
             children: [
               _grabber(),
               Row(children: [
-                Text('박자 보정', style: T.h2.copyWith(fontSize: 18)),
+                Text(l.quantizeTitle, style: T.h2.copyWith(fontSize: 18)),
                 const Spacer(),
                 Text('BPM ${store.bpm}',
                     style: T.label.copyWith(fontSize: 11, color: AppColors.textSecondary)),
@@ -1803,19 +1845,19 @@ class _QuantizeSheetBodyState extends State<_QuantizeSheetBody> {
                   onTap: () => Navigator.pop(context),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
-                    child: Text('완료',
+                    child: Text(l.done,
                         style: T.body.copyWith(color: AppColors.lime, fontWeight: FontWeight.w700)),
                   ),
                 ),
               ]),
               const SizedBox(height: 14),
               Text(
-                'BPM 은 전체 프로젝트 설정이라 트랜스포트의 메트로놈 버튼에서 조정해요.',
+                l.quantizeBpmHint,
                 style: T.body.copyWith(fontSize: 11, color: AppColors.textTertiary),
               ),
               const Divider(height: 28, color: Color(0xFF222229)),
               // 박자 단위 (그리드)
-              Text('박자 단위',
+              Text(l.quantizeGridLabel,
                   style: T.label.copyWith(
                       fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
               const SizedBox(height: 8),
@@ -1826,12 +1868,12 @@ class _QuantizeSheetBodyState extends State<_QuantizeSheetBody> {
                 ],
               ]),
               const SizedBox(height: 6),
-              Text('1박을 ${t.quantizeGrid ~/ 4}등분',
+              Text(l.quantizeGridDetail(t.quantizeGrid ~/ 4),
                   style: T.label.copyWith(fontSize: 10, color: AppColors.textTertiary)),
               const SizedBox(height: 18),
               // 강도
               Row(children: [
-                Text('강도',
+                Text(l.quantizeStrength,
                     style: T.label.copyWith(
                         fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
                 const Spacer(),
@@ -1854,14 +1896,14 @@ class _QuantizeSheetBodyState extends State<_QuantizeSheetBody> {
                 ),
               ),
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('0%: 원본 그대로',
+                Text(l.quantizeStrengthMin,
                     style: T.label.copyWith(fontSize: 10, color: AppColors.textTertiary)),
-                Text('100%: 완벽 정렬',
+                Text(l.quantizeStrengthMax,
                     style: T.label.copyWith(fontSize: 10, color: AppColors.textTertiary)),
               ]),
               const SizedBox(height: 14),
               Text(
-                '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요.',
+                l.quantizeFooter,
                 style: T.body.copyWith(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
               ),
             ],
@@ -1953,6 +1995,40 @@ class _PulseLargeState extends State<_PulseLarge> with SingleTickerProviderState
             spreadRadius: 2 * v,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 녹음 완료 시트 우상단 — 결과가 맘에 안 들 때 즉시 재녹음.
+class _RetryIconBtn extends StatelessWidget {
+  const _RetryIconBtn({required this.onTap});
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: enabled
+              ? AppColors.lime.withValues(alpha: 0.14)
+              : AppColors.surface,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: enabled ? AppColors.lime.withValues(alpha: 0.5) : AppColors.border,
+          ),
+        ),
+        child: Icon(
+          Symbols.refresh,
+          size: 20,
+          color: enabled ? AppColors.lime : AppColors.textTertiary,
+        ),
       ),
     );
   }

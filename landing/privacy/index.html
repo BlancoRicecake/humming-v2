@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>개인정보처리방침 — Humming</title>
-<meta name="description" content="Humming 개인정보처리방침 — 보컬 녹음은 광고나 AI 학습에 사용하지 않습니다.">
+<title>개인정보처리방침 — HumTrack</title>
+<meta name="description" content="HumTrack 개인정보처리방침 — 보컬 녹음은 광고나 AI 학습에 절대 사용되지 않습니다.">
 <meta property="og:type" content="article">
-<meta property="og:title" content="개인정보처리방침 — Humming">
-<meta property="og:description" content="Humming 개인정보처리방침 — 보컬 녹음은 광고나 AI 학습에 사용하지 않습니다.">
+<meta property="og:title" content="개인정보처리방침 — HumTrack">
+<meta property="og:description" content="HumTrack 개인정보처리방침 — 보컬 녹음은 광고나 AI 학습에 절대 사용되지 않습니다.">
 <meta property="og:image" content="https://hum-track.com/hummingbird.png">
 <meta property="og:url" content="https://hum-track.com/privacy">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="개인정보처리방침 — Humming">
-<meta name="twitter:description" content="Humming 개인정보처리방침 — 보컬 녹음은 광고나 AI 학습에 사용하지 않습니다.">
+<meta name="twitter:title" content="개인정보처리방침 — HumTrack">
+<meta name="twitter:description" content="HumTrack 개인정보처리방침 — 보컬 녹음은 광고나 AI 학습에 절대 사용되지 않습니다.">
 <meta name="twitter:image" content="https://hum-track.com/hummingbird.png">
 <link rel="icon" type="image/png" href="/hummingbird.png">
 <link rel="apple-touch-icon" href="/hummingbird.png">
@@ -21,38 +21,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0A0A0F;
-  --surface: #16161E;
-  --surface-alt: #1F1F27;
-  --lime: #A3E635;
-  --lime-dim: #84B82A;
-  --border: #27272A;
-  --border-strong: #3F3F46;
-  --text-primary: #FAFAFA;
-  --text-secondary: #A1A1AA;
-  --text-tertiary: #71717A;
+  --bg: #0A0A0F; --surface: #16161E; --surface-alt: #1F1F27;
+  --lime: #A3E635; --lime-dim: #84B82A;
+  --border: #27272A; --border-strong: #3F3F46;
+  --text-primary: #FAFAFA; --text-secondary: #A1A1AA; --text-tertiary: #71717A;
   --amber: #F59E0B;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 html { scroll-behavior: smooth; }
-body {
-  background: var(--bg);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  line-height: 1.5;
-}
+body { background: var(--bg); color: var(--text-primary); -webkit-font-smoothing: antialiased; line-height: 1.5; }
 
-.nav {
-  position: sticky; top: 0; z-index: 50;
-  background: rgba(10,10,15,0.85);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border);
-}
-.nav-inner {
-  max-width: 1200px; margin: 0 auto;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 24px;
-}
+.nav { position: sticky; top: 0; z-index: 50; background: rgba(10,10,15,0.85); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+.nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; }
 .nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.2px; text-decoration: none; color: var(--text-primary); }
 .nav-brand .dot { width: 22px; height: 22px; border-radius: 7px; background: var(--lime); display: grid; place-items: center; color: var(--bg); font-weight: 900; font-size: 14px; }
 .nav-links { display: flex; align-items: center; gap: 28px; }
@@ -61,102 +41,54 @@ body {
 .nav-links a.active { color: var(--lime); }
 .nav-cta { display: flex; align-items: center; gap: 12px; }
 .lang-toggle { display: inline-flex; background: var(--surface); border-radius: 999px; padding: 3px; border: 1px solid var(--border); }
-.lang-toggle button {
-  background: none; border: 0; color: var(--text-secondary);
-  padding: 6px 12px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
-}
+.lang-toggle button { background: none; border: 0; color: var(--text-secondary); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .lang-toggle button.active { background: var(--lime); color: var(--bg); }
 .back-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; font-weight: 600; }
 .back-link:hover { color: var(--lime); }
 
-/* ─── Doc layout ─── */
-.doc {
-  max-width: 760px; margin: 0 auto;
-  padding: 60px 24px 100px;
-}
-.doc-hero {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 28px;
-  margin-bottom: 40px;
-}
-.doc-eyebrow {
-  color: var(--lime); font-weight: 700; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 14px;
-}
-.doc-hero h1 {
-  font-size: 40px; font-weight: 900; letter-spacing: -1.2px; line-height: 1.1; margin-bottom: 12px;
-}
+.doc { max-width: 760px; margin: 0 auto; padding: 60px 24px 80px; }
+.doc-hero { border-bottom: 1px solid var(--border); padding-bottom: 28px; margin-bottom: 40px; }
+.doc-eyebrow { color: var(--lime); font-weight: 700; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 14px; }
+.doc-hero h1 { font-size: 40px; font-weight: 900; letter-spacing: -1.2px; line-height: 1.1; margin-bottom: 12px; }
 .doc-hero .meta { color: var(--text-tertiary); font-size: 13px; }
-.draft-banner {
-  margin-top: 18px;
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  color: var(--amber);
-  padding: 10px 14px; border-radius: 10px;
-  font-size: 12px; font-weight: 600;
-}
+.doc-hero .meta strong { color: var(--text-secondary); font-weight: 600; }
 
-/* ─── Prose ─── */
 .prose { color: var(--text-primary); font-size: 16px; line-height: 1.75; }
 .prose h1 { font-size: 32px; margin: 56px 0 16px; letter-spacing: -0.8px; font-weight: 800; }
 .prose h2 { font-size: 24px; margin: 48px 0 14px; letter-spacing: -0.4px; font-weight: 800; border-top: 1px solid var(--border); padding-top: 32px; }
-.prose h2:first-of-type { border-top: 0; padding-top: 0; }
+.prose h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
 .prose h3 { font-size: 18px; margin: 32px 0 10px; font-weight: 700; color: var(--text-primary); }
 .prose h4 { font-size: 15px; margin: 22px 0 8px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.6px; }
 .prose p { margin: 0 0 16px; color: var(--text-secondary); }
 .prose strong { color: var(--text-primary); font-weight: 700; }
 .prose em { color: var(--text-primary); font-style: italic; }
-.prose a { color: var(--lime); text-decoration: none; border-bottom: 1px solid rgba(163,230,53,0.4); }
+.prose a { color: var(--lime); text-decoration: none; border-bottom: 1px solid rgba(163,230,53,0.4); word-break: break-word; }
 .prose a:hover { border-bottom-color: var(--lime); }
 .prose ul, .prose ol { margin: 0 0 18px 22px; color: var(--text-secondary); }
 .prose li { margin-bottom: 6px; }
 .prose li::marker { color: var(--lime-dim); }
 .prose hr { border: 0; border-top: 1px solid var(--border); margin: 40px 0; }
-.prose blockquote {
-  margin: 18px 0; padding: 14px 18px;
-  border-left: 3px solid var(--lime);
-  background: var(--surface);
-  color: var(--text-secondary);
-  border-radius: 0 8px 8px 0;
-  font-size: 14px;
-}
-.prose code {
-  background: var(--surface-alt); border: 1px solid var(--border);
-  padding: 1px 6px; border-radius: 5px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--lime);
-}
+.prose blockquote { margin: 18px 0; padding: 14px 18px; border-left: 3px solid var(--lime); background: var(--surface); color: var(--text-secondary); border-radius: 0 8px 8px 0; font-size: 14px; }
+.prose code { background: var(--surface-alt); border: 1px solid var(--border); padding: 1px 6px; border-radius: 5px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--lime); }
 .prose pre { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 18px 0; }
 .prose pre code { border: 0; background: transparent; padding: 0; color: var(--text-primary); }
-.prose table {
-  width: 100%; border-collapse: collapse;
-  margin: 22px 0; font-size: 14px;
-  background: var(--surface); border-radius: 10px; overflow: hidden;
-  border: 1px solid var(--border);
-}
-.prose th, .prose td {
-  text-align: left; padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
-}
+.prose table { width: 100%; border-collapse: collapse; margin: 22px 0; font-size: 14px; background: var(--surface); border-radius: 10px; overflow: hidden; border: 1px solid var(--border); display: block; overflow-x: auto; }
+.prose th, .prose td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .prose th { background: var(--surface-alt); color: var(--text-primary); font-weight: 700; font-size: 13px; letter-spacing: 0.2px; }
 .prose tr:last-child td { border-bottom: 0; }
 
-/* lang switch */
+.lang-divider { margin: 60px 0 40px; border-top: 1px dashed var(--border-strong); padding-top: 40px; }
+.lang-divider h2 { font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.4px; margin-bottom: 8px; }
+.lang-divider p { color: var(--text-tertiary); font-size: 13px; }
+
 .lang-body[hidden] { display: none; }
 
-/* footer */
-footer.foot {
-  border-top: 1px solid var(--border);
-  padding: 40px 24px;
-  color: var(--text-tertiary);
-  font-size: 13px;
-}
-.foot-inner {
-  max-width: 1200px; margin: 0 auto;
-  display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap;
-}
-.foot-inner a { color: var(--text-secondary); text-decoration: none; margin-right: 18px; font-weight: 500; }
+footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; color: var(--text-tertiary); font-size: 12px; }
+.foot-inner { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.foot-row { display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
+.foot-inner a { color: var(--text-secondary); text-decoration: none; margin-right: 14px; font-weight: 500; }
 .foot-inner a:hover { color: var(--lime); }
+.foot-biz { color: var(--text-tertiary); font-size: 11px; line-height: 1.7; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
 
 @media (max-width: 720px) {
   .doc-hero h1 { font-size: 30px; }
@@ -170,11 +102,11 @@ footer.foot {
 
 <nav class="nav">
   <div class="nav-inner">
-    <a class="nav-brand" href="/"><span class="dot">H</span><span>Humming</span></a>
+    <a class="nav-brand" href="/"><span class="dot">H</span><span>HumTrack</span></a>
     <div class="nav-links">
       <a href="/privacy" class="active">개인정보처리방침</a>
-      <a href="/terms" class="">이용약관</a>
-      <a href="/refund" class="">환불 정책</a>
+      <a href="/terms">이용약관</a>
+      <a href="/refund">환불 정책</a>
     </div>
     <div class="nav-cta">
       <div class="lang-toggle" role="tablist" aria-label="Language">
@@ -188,26 +120,26 @@ footer.foot {
 
 <main class="doc">
   <header class="doc-hero">
-    <div class="doc-eyebrow" data-ko="Legal · Humming" data-en="Legal · Humming">Legal · Humming</div>
+    <div class="doc-eyebrow" data-ko="Legal · HumTrack" data-en="Legal · HumTrack">Legal · HumTrack</div>
     <h1 data-ko="개인정보처리방침" data-en="Privacy Policy">개인정보처리방침</h1>
-    <div class="meta" data-ko="최종 갱신: 2026-06-02" data-en="Last updated: 2026-06-02">최종 갱신: 2026-06-02</div>
-    <div class="draft-banner" data-ko="⚠ 본 문서는 변호사 검토 전 1차 초안(DRAFT)입니다. 최종 발효 전에 PIPA · GDPR · CCPA 변호사 검토를 거칩니다." data-en="⚠ DRAFT for legal counsel review. Final review by PIPA · GDPR · CCPA counsel required before publication.">⚠ 본 문서는 변호사 검토 전 1차 초안(DRAFT)입니다. 최종 발효 전에 PIPA · GDPR · CCPA 변호사 검토를 거칩니다.</div>
+    <div class="meta">
+      <span data-ko="<strong>시행일</strong>: 2026-06-04" data-en="<strong>Effective</strong>: 2026-06-04"><strong>시행일</strong>: 2026-06-04</span>
+      &nbsp;·&nbsp;
+      <span data-ko="<strong>최종개정</strong>: 2026-06-03" data-en="<strong>Last updated</strong>: 2026-06-03"><strong>최종개정</strong>: 2026-06-03</span>
+      &nbsp;·&nbsp;
+      <span>1.2-draft</span>
+    </div>
   </header>
 
   <article class="prose lang-body" data-body="ko">
-<p>본 방침은 한국어 본문과 영문 본문(English below)을 함께 제공합니다.</p>
-<hr />
-<h2>TL;DR — Privacy First, In Plain Language</h2>
+<h3>1. 개인정보 처리자</h3>
 <ul>
-<li>우리는 <strong>당신의 보컬 녹음을 광고나 AI 학습에 절대 사용하지 않습니다.</strong></li>
-<li>무료 사용자의 보컬은 분석 직후 메모리에서 폐기됩니다. 클라우드에 저장되지 않습니다.</li>
-<li>Pro 사용자의 보컬과 프로젝트만 클라우드(Cloudflare R2 / Supabase)에 저장되며, <strong>당신이 삭제하면 즉시 영구 삭제됩니다.</strong></li>
-<li>결제 정보는 Apple/Google 이 처리하며 우리는 영수증 ID 외 카드 정보를 보지 못합니다.</li>
-<li>익명 행동 분석(PostHog)은 디바이스 ID 기반이며 이름·이메일과 연결되지 않습니다.</li>
-<li>데이터 열람·수정·삭제·이전 요청은 언제든 가능합니다 → <code>support@hum-track.com</code></li>
+<li><strong>개인정보 처리자(Controller)</strong>: 에르모세아르 (대표: 김동현)</li>
+<li><strong>연락처</strong>: heobusy@gmail.com</li>
+<li><strong>사업장 주소</strong>: 경기도 용인시 기흥구 공세로 150-29, B01-G160호</li>
+<li><strong>사업자등록번호</strong>: 106-16-34319</li>
 </ul>
-<hr />
-<h3>1. 처리 항목 및 수집 방법</h3>
+<h3>2. 처리 항목 및 수집 방법</h3>
 <table>
 <thead>
 <tr>
@@ -215,139 +147,218 @@ footer.foot {
 <th>수집 시점</th>
 <th>처리 위치</th>
 <th>보유 기간</th>
+<th>법적 근거</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>이메일, OAuth 식별자 (Apple/Google sub)</td>
+<td>이메일, OAuth provider, OAuth sub</td>
 <td>회원가입 시</td>
-<td>Supabase Auth</td>
+<td>Supabase Auth (us-east-1)</td>
 <td>회원 탈퇴 시까지</td>
+<td>계약 이행</td>
 </tr>
 <tr>
-<td>디바이스 ID (익명 UUID), OS 버전, 앱 버전</td>
-<td>앱 실행 시</td>
-<td>PostHog</td>
-<td>익명 상태 유지 (재식별 불가)</td>
+<td>Apple "Hide my email" relay 주소</td>
+<td>회원가입 시 (해당 경우)</td>
+<td>Supabase Auth</td>
+<td>회원 탈퇴 또는 Apple revoke 시까지</td>
+<td>계약 이행</td>
 </tr>
 <tr>
-<td>보컬 음성 녹음 (분석용)</td>
-<td>사용자가 "분석" 실행 시</td>
-<td>서버 메모리</td>
-<td><strong>즉시 폐기</strong> (저장 안 함)</td>
-</tr>
-<tr>
-<td>보컬 WAV (Pro 전용)</td>
-<td>Pro 사용자가 동기화/업로드 시</td>
-<td>Cloudflare R2</td>
-<td>사용자 명시 삭제 시까지</td>
-</tr>
-<tr>
-<td>프로젝트 메타·MIDI 노트 (Pro 전용)</td>
-<td>Pro 사용자가 동기화 시</td>
-<td>Supabase Postgres (us-east-1)</td>
-<td>사용자 명시 삭제 시까지</td>
-</tr>
-<tr>
-<td>IAP 영수증 / 구독 상태</td>
-<td>결제 시</td>
+<td>가입일</td>
+<td>회원가입 시</td>
 <td>Supabase Postgres</td>
-<td>영수증 검증·세무 목적 5년</td>
+<td>회원 탈퇴 시까지</td>
+<td>계약 이행</td>
 </tr>
 <tr>
-<td>에러 로그 (Sentry, PII 마스킹)</td>
-<td>앱 크래시 시</td>
-<td>Sentry</td>
+<td>보컬 음성 녹음 (Opus 16kHz mono, .caf/.ogg) — 분석용</td>
+<td>"분석" 실행 시</td>
+<td>Fly.io iad 서버 메모리</td>
+<td><strong>분석 완료 즉시 폐기</strong></td>
+<td>계약 이행</td>
+</tr>
+<tr>
+<td>보컬 파일 (Pro 전용)</td>
+<td>Pro 사용자 동기화 시</td>
+<td>Cloudflare R2 (us-east-1)</td>
+<td>회원이 직접 삭제 또는 회원 탈퇴 시까지 영구 보관 (구독 만료와 무관)</td>
+<td>계약 이행</td>
+</tr>
+<tr>
+<td>프로젝트 메타 (제목, BPM, 트랙)</td>
+<td>Pro 사용자 동기화 시</td>
+<td>Supabase Postgres (us-east-1)</td>
+<td>회원이 직접 삭제 또는 회원 탈퇴 시까지 영구 보관 (구독 만료와 무관)</td>
+<td>계약 이행</td>
+</tr>
+<tr>
+<td>IAP 영수증 (transactionId, productId, expiresAt)</td>
+<td>결제·갱신 시</td>
+<td>Supabase Postgres</td>
+<td>90일 (webhook 로그) / 5년 (영수증, 세법)</td>
+<td>법령 의무</td>
+</tr>
+<tr>
+<td>사용 통계 (분석 횟수, 업로드 크기 — 5GB quota 추적)</td>
+<td>기능 사용 시</td>
+<td>Supabase Postgres</td>
+<td>회원 탈퇴 시까지</td>
+<td>계약 이행</td>
+</tr>
+<tr>
+<td>디바이스 모델, OS 버전, 앱 버전</td>
+<td>API 호출 시</td>
+<td>Supabase Postgres / 서버 로그</td>
 <td>90일</td>
+<td>정당한 이익 (보안·호환성)</td>
+</tr>
+<tr>
+<td>마지막 동기화 시각</td>
+<td>동기화 시</td>
+<td>Supabase Postgres</td>
+<td>회원 탈퇴 시까지</td>
+<td>계약 이행</td>
+</tr>
+<tr>
+<td>(예정) 에러 스택 트레이스 (PII 마스킹)</td>
+<td>앱 크래시 시</td>
+<td>Sentry (미국)</td>
+<td>90일</td>
+<td>정당한 이익 (안정성)</td>
+</tr>
+<tr>
+<td>(예정) 익명 사용 이벤트 (anonymous_id)</td>
+<td>앱 사용 시</td>
+<td>PostHog (미국 또는 EU)</td>
+<td>12개월, 개인 미연결</td>
+<td>정당한 이익 (제품 개선)</td>
 </tr>
 </tbody>
 </table>
-<h3>2. 처리 목적</h3>
-<ul>
-<li>서비스 제공 (계정 인증, 클라우드 백업, 다기기 복원, 보컬 분석)</li>
-<li>결제 및 구독 관리 (영수증 검증, 청구·환불)</li>
-<li>행동 분석을 통한 제품 개선 (익명, 집계 기반)</li>
-<li>보안 (이상 접속 탐지, 에러 추적)</li>
-<li>법령상 의무 이행 (세법, 전자상거래법 등)</li>
-</ul>
-<h3>3. 보유 및 파기</h3>
-<ul>
-<li>회원 탈퇴 또는 "계정 삭제" 요청 시: <strong>Cloudflare R2 의 모든 보컬 파일과 Supabase 의 모든 프로젝트·계정 데이터를 72시간 이내 영구 삭제</strong>합니다.</li>
-<li>IAP 영수증 등 법령상 보존 의무가 있는 데이터는 해당 기간(전자상거래법상 5년 등) 보관 후 파기합니다.</li>
-<li>익명 분석 데이터는 개인과 연결되지 않으므로 별도 삭제 대상이 아닙니다.</li>
-</ul>
-<h3>4. 처리 위탁 (Subprocessors)</h3>
+<p><strong>중요 (수집하지 않는 항목)</strong>:<br>
+- 결제 카드 번호 직접 처리 ❌ (Apple / Google 이 처리)<br>
+- 위치 정보 ❌<br>
+- 연락처 ❌<br>
+- 사진 라이브러리 접근 ❌<br>
+- 광고 추적 식별자 (IDFA, AAID) ❌ — iOS ATT 권한도 요청하지 않습니다.</p>
+<p><strong>예정 항목 표시</strong>: 위 표에 "(예정)" 으로 표기된 Sentry, PostHog 는 본 약관 시행 시점(2026-06-04) 기준 아직 통합되지 않았으며, 통합 시 본 방침을 개정하여 30일 전 사전 고지합니다.</p>
+<h3>3. 처리 목적</h3>
+<ol>
+<li>서비스 제공: 계정 인증, 보컬 분석, Pro 클라우드 동기화 및 복원</li>
+<li>결제 및 구독 관리: IAP 영수증 검증, 갱신 webhook 처리, 5GB quota 추적</li>
+<li>(예정) 안정성 개선: 에러 추적 (Sentry, 익명화)</li>
+<li>(예정) 제품 개선: 익명 사용 분석 (PostHog, anonymous_id 기반)</li>
+<li>보안: 이상 접속 탐지, API rate limiting</li>
+<li>법령상 의무: 세법, 전자상거래법, 전자금융거래법</li>
+</ol>
+<h3>4. 보유 및 파기</h3>
+<ol>
+<li><strong>회원 탈퇴 시</strong>: Cloudflare R2 의 보컬 파일, Supabase Auth/Postgres 의 계정·프로젝트 데이터를 <strong>72시간 이내 cascade 영구 삭제</strong>합니다 (SLA: 영업일 기준 3일 이내 접수 확인).</li>
+<li><strong>Pro 구독 만료 시</strong>: 클라우드 작업물은 <strong>자동 삭제되지 않으며</strong> 회원이 직접 삭제하거나 회원 탈퇴할 때까지 영구 보관됩니다. 단, 만료 후에는 신규 업로드 및 동기화가 잠금되며, 기존 작업물의 다운로드 및 삭제만 가능합니다. 별도의 휴면 계정 정책이 향후 도입될 경우 시행일 30일 전 본 방침 개정을 통해 사전 고지합니다.</li>
+<li><strong>IAP 영수증</strong>: 「전자상거래법」 및 「전자금융거래법」 상 보존 의무에 따라 결제·계약 기록은 5년 보관.</li>
+<li><strong>IAP webhook 알림 로그</strong>: 90일.</li>
+<li><strong>무료 사용자 보컬</strong>: 분석 서버 메모리에서 처리 후 즉시 폐기 (영구 저장 ❌).</li>
+</ol>
+<h3>5. 처리 위탁 (Subprocessors)</h3>
 <table>
 <thead>
 <tr>
 <th>수탁자</th>
 <th>위탁 업무</th>
-<th>국가/리전</th>
+<th>리전</th>
+<th>데이터</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Supabase Inc.</td>
 <td>DB·인증 호스팅</td>
-<td>미국 (us-east-1)</td>
+<td>미국 (AWS us-east-1)</td>
+<td>계정, 프로젝트 메타, 영수증</td>
 </tr>
 <tr>
 <td>Cloudflare, Inc.</td>
-<td>보컬 WAV 객체 스토리지 (R2)</td>
-<td>글로벌 (사용자 인접 리전)</td>
+<td>객체 스토리지 (R2), DNS</td>
+<td>미국 (us-east-1)</td>
+<td>Pro 보컬 파일</td>
 </tr>
 <tr>
-<td>Functional Software, Inc. (Sentry)</td>
-<td>에러 추적</td>
-<td>미국</td>
-</tr>
-<tr>
-<td>PostHog Inc.</td>
-<td>익명 행동 분석</td>
-<td>미국/EU</td>
+<td>Fly.io, Inc.</td>
+<td>백엔드 분석 서버 호스팅</td>
+<td>미국 (iad — Ashburn, VA)</td>
+<td>보컬 (메모리 처리, 즉시 폐기)</td>
 </tr>
 <tr>
 <td>Apple Inc.</td>
-<td>iOS IAP 처리</td>
+<td>iOS IAP 처리, Apple Sign In</td>
 <td>미국</td>
+<td>영수증, OAuth sub</td>
 </tr>
 <tr>
 <td>Google LLC</td>
-<td>Android IAP 처리</td>
+<td>Android IAP 처리, Google Sign In</td>
 <td>미국</td>
+<td>영수증, OAuth sub</td>
+</tr>
+<tr>
+<td>(예정) Functional Software, Inc. (Sentry)</td>
+<td>에러 추적</td>
+<td>미국</td>
+<td>에러 stack trace (PII 마스킹)</td>
+</tr>
+<tr>
+<td>(예정) PostHog Inc.</td>
+<td>익명 행동 분석</td>
+<td>미국 또는 EU</td>
+<td>anonymous_id, 이벤트</td>
 </tr>
 </tbody>
 </table>
-<p>EU/EEA 거주자의 개인정보가 한국·미국으로 이전되는 경우, 표준계약조항(SCC) 또는 동등한 적정성 보호 장치를 통해 보호됩니다.</p>
-<h3>5. 이용자 권리</h3>
-<p>회원은 다음 권리를 보유하며, <code>support@hum-track.com</code> 또는 앱 내 "설정 → 계정 삭제"를 통해 행사할 수 있습니다.
-- 열람권 / 정정권 / 삭제권 / 처리 정지권 / 데이터 이동권
-- (GDPR) 자동화된 의사결정 거부권 — 단, 본 서비스는 자동화된 결정을 수행하지 않습니다.
-- (CCPA/CPRA) "Do Not Sell or Share My Personal Information" — <strong>우리는 개인정보를 판매·공유하지 않습니다.</strong>
-- (한국 PIPA) 개인정보 열람·정정·삭제·처리정지 요구권</p>
-<p><strong>계정 삭제 요청 처리 SLA: 영업일 기준 3일 이내 접수 확인, 72시간 이내 R2 + Supabase 전면 삭제.</strong></p>
-<h3>6. 보안 조치</h3>
+<p>EU/EEA 거주자의 개인정보가 한국 또는 미국으로 이전되는 경우, <strong>유럽위원회 표준계약조항(SCC, 2021/914/EU)</strong> 또는 동등한 보호 장치를 통해 보호됩니다.</p>
+<h3>6. 이용자 권리</h3>
+<p>회원은 다음 권리를 보유하며, <code>heobusy@gmail.com</code> 또는 앱 내 "설정 → 계정 삭제"를 통해 행사할 수 있습니다:</p>
 <ul>
-<li>TLS 1.3 전송 암호화</li>
-<li>R2 객체 서버측 암호화 (AES-256)</li>
-<li>Supabase RLS(Row-Level Security)로 사용자별 데이터 격리</li>
-<li>Sentry PII 마스킹 (이메일·토큰·경로 자동 redact)</li>
+<li><strong>(한국 PIPA)</strong> 개인정보 열람·정정·삭제·처리정지·동의 철회 요구권</li>
+<li><strong>(GDPR, EU/EEA/UK)</strong> 열람, 정정, 삭제, 처리 제한, 데이터 이동성, 처리 이의권, 감독기구 진정권 (예: 독일 BfDI, 프랑스 CNIL, 아일랜드 DPC). 자동화된 의사결정 거부권 — <strong>본 서비스는 법적 효력이 있는 자동화된 결정을 수행하지 않습니다.</strong></li>
+<li><strong>(CCPA/CPRA, California)</strong> 알 권리(Right to Know), 삭제 요구권, 정정 요구권, 판매/공유 거부권(Opt-out of Sale/Share), 민감 개인정보 처리 제한 요구권, 비차별 권리.</li>
 </ul>
-<h3>7. 만 14세 미만 아동</h3>
-<p>회사는 만 14세 미만 아동의 개인정보를 의도적으로 수집하지 않습니다. 보호자가 자녀의 미등록 사용을 발견한 경우 위 이메일로 통보 시 즉시 삭제합니다.</p>
-<h3>8. 개인정보보호 책임자 / DPO</h3>
+<p><strong>핵심 명시 (CCPA)</strong>: <strong>회사는 개인정보를 판매하거나 cross-context behavioral advertising 목적으로 제3자와 공유하지 않습니다.</strong> 지난 12개월간 판매된 항목 = <strong>없음</strong>.</p>
+<p><strong>데이터 이동성</strong>: Pro 회원은 앱 내에서 자신의 MIDI/WAV 작업물을 직접 export 할 수 있습니다. 추가로 백엔드 보유 본인 데이터의 일괄 조회·다운로드는 향후 P1 로 UI 구현 예정이며, 현재는 이메일 요청 시 제공합니다.</p>
+<p><strong>SLA</strong>: 모든 권리 행사 요청은 영업일 기준 3일 이내 접수 확인, <strong>데이터 삭제는 72시간 이내</strong> 완료합니다. 기타 요청(열람·정정 등)은 GDPR 기준 1개월 이내(복잡한 경우 2개월 연장 가능) 처리합니다.</p>
+<h3>7. 보안 조치</h3>
 <ul>
-<li>책임자: [PLACEHOLDER 이름]</li>
-<li>직위: [PLACEHOLDER]</li>
-<li>이메일: support@hum-track.com</li>
-<li>주소: [PLACEHOLDER]</li>
+<li><strong>전송 구간</strong>: TLS 1.3 암호화</li>
+<li><strong>저장 구간</strong>: Cloudflare R2 서버측 암호화 (AES-256), Supabase 저장 데이터 암호화</li>
+<li><strong>접근 통제</strong>: Supabase Row-Level Security (사용자별 데이터 격리), 백엔드 API JWT 검증</li>
+<li><strong>인증</strong>: OAuth via Apple / Google (회사가 비밀번호를 직접 저장 ❌)</li>
+<li><strong>PII 마스킹</strong>: (예정) Sentry 통합 시 이메일·토큰·파일 경로 자동 redact</li>
 </ul>
-<p>EU 거주자는 거주국 데이터보호감독기구(예: 독일 BfDI, 프랑스 CNIL)에 진정을 제기할 권리를 가집니다.</p>
-<h3>9. 변경 고지</h3>
-<p>본 방침은 법령·서비스 변경에 따라 개정될 수 있습니다. 중대한 변경은 시행일 30일 전 앱 내 공지 및 가입 이메일로 고지합니다. 사소한 변경은 본 페이지 상단의 "최종 갱신" 일자로 안내합니다.</p>
+<p>회사는 소규모 운영 단계로, ISO 27001 등 공식 인증은 보유하지 않습니다. 인증 획득 시 본 방침에 반영합니다.</p>
+<h3>8. 만 14세 미만 아동</h3>
+<p>회사는 만 14세 미만(한국 PIPA 기준) 및 만 13세 미만(미국 COPPA 기준) 아동의 개인정보를 의도적으로 수집하지 않습니다. 보호자가 자녀의 무단 사용·계정을 발견한 경우 위 이메일로 통보 시 즉시 삭제 처리합니다. App Store / Google Play 의 앱 등급은 4+ 또는 12+ 로 설정되어 13세 미만 다운로드를 제한합니다.</p>
+<h3>9. 개인정보보호 책임자</h3>
+<ul>
+<li><strong>책임자</strong>: 김동현 (대표)</li>
+<li><strong>이메일</strong>: heobusy@gmail.com</li>
+<li><strong>EU 대리인 (GDPR Art. 27)</strong>: 현재 별도 지정하지 않습니다. EU 사용자는 GDPR 상의 모든 권리 (열람·정정·삭제·이동성·이의·진정 등) 를 위 이메일을 통해 행사하실 수 있으며, 회사가 직접 응답합니다. 향후 EU 사용자 비중이 의미있는 수준으로 증가할 경우 EU 내 대리인을 지정하고 본 방침 개정을 통해 사전 고지합니다.</li>
+</ul>
+<p>EU 거주자는 본 처리방침의 권리 행사가 충분치 않다고 판단될 경우 거주국 데이터보호감독기구에 진정을 제기할 권리를 가집니다.</p>
+<h3>10. 변경 고지</h3>
+<p>본 방침은 법령·서비스 변경에 따라 개정될 수 있습니다. <strong>중대한 변경(처리 항목·목적·보유 기간·수탁자 추가 등)은 시행일 30일 전</strong> 앱 내 공지 및 가입 이메일로 고지합니다. 사소한 변경(오탈자, 문구 명확화)은 본 페이지 상단 "최종개정" 일자로 안내합니다.</p>
   </article>
+
   <article class="prose lang-body" data-body="en" hidden>
-<h3>1. Data We Collect</h3>
+<div class="lang-divider"><h2>English Version</h2><p>The Korean text above is the primary version. The English translation below is provided for convenience.</p></div>
+<h3>1. Controller</h3>
+<ul>
+<li><strong>Data Controller</strong>: Hermosear (Representative: Kim Dong Hyun)</li>
+<li><strong>Contact</strong>: heobusy@gmail.com</li>
+<li><strong>Address</strong>: 150-29 Gongse-ro, Giheung-gu, Yongin-si, Gyeonggi-do, Republic of Korea (B01-G160)</li>
+<li><strong>Business Registration</strong>: 106-16-34319</li>
+</ul>
+<h3>2. Data We Collect</h3>
 <table>
 <thead>
 <tr>
@@ -355,92 +366,178 @@ footer.foot {
 <th>When</th>
 <th>Where</th>
 <th>Retention</th>
+<th>Legal Basis</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Email, OAuth subject (Apple/Google)</td>
+<td>Email, OAuth provider/sub</td>
+<td>Sign-up</td>
+<td>Supabase Auth (us-east-1)</td>
+<td>Until account deletion</td>
+<td>Contract</td>
+</tr>
+<tr>
+<td>Apple relay email (if used)</td>
 <td>Sign-up</td>
 <td>Supabase Auth</td>
-<td>Until account deletion</td>
+<td>Until deletion or Apple revoke</td>
+<td>Contract</td>
 </tr>
 <tr>
-<td>Anonymous device UUID, OS/app version</td>
-<td>App launch</td>
-<td>PostHog</td>
-<td>Anonymous, no re-identification</td>
-</tr>
-<tr>
-<td>Vocal audio for analysis</td>
-<td>When you tap "Analyze"</td>
-<td>Server memory only</td>
+<td>Vocal audio for analysis (Opus 16 kHz mono)</td>
+<td>"Analyze" action</td>
+<td>Fly.io iad server memory</td>
 <td><strong>Discarded immediately</strong></td>
+<td>Contract</td>
 </tr>
 <tr>
-<td>Vocal WAV (Pro only)</td>
-<td>Pro sync/upload</td>
-<td>Cloudflare R2</td>
-<td>Until you delete it</td>
+<td>Pro vocal files</td>
+<td>Pro sync</td>
+<td>Cloudflare R2 (us-east-1)</td>
+<td>Retained until you delete the content or your account (regardless of subscription state)</td>
+<td>Contract</td>
 </tr>
 <tr>
-<td>Project metadata, MIDI notes (Pro only)</td>
+<td>Project metadata (title, BPM, tracks)</td>
 <td>Pro sync</td>
 <td>Supabase Postgres (us-east-1)</td>
-<td>Until you delete it</td>
+<td>Retained until you delete the content or your account (regardless of subscription state)</td>
+<td>Contract</td>
 </tr>
 <tr>
-<td>IAP receipts, subscription status</td>
-<td>Purchase</td>
+<td>IAP receipts (transactionId, productId, expiresAt)</td>
+<td>Purchase/renewal</td>
 <td>Supabase Postgres</td>
-<td>5 years (tax/billing)</td>
+<td>90 days webhook log; 5 years receipts (tax)</td>
+<td>Legal obligation</td>
 </tr>
 <tr>
-<td>Error logs (PII masked)</td>
-<td>App crash</td>
-<td>Sentry</td>
+<td>Usage counters (analyses, upload bytes for 5 GB quota)</td>
+<td>Feature use</td>
+<td>Supabase Postgres</td>
+<td>Until deletion</td>
+<td>Contract</td>
+</tr>
+<tr>
+<td>Device model, OS / app version</td>
+<td>API call</td>
+<td>Supabase Postgres / logs</td>
 <td>90 days</td>
+<td>Legitimate interest</td>
+</tr>
+<tr>
+<td>(Planned) Error stack traces (PII masked)</td>
+<td>Crash</td>
+<td>Sentry (US)</td>
+<td>90 days</td>
+<td>Legitimate interest</td>
+</tr>
+<tr>
+<td>(Planned) Anonymous events (anonymous_id)</td>
+<td>Use</td>
+<td>PostHog (US/EU)</td>
+<td>12 months, not linked to identity</td>
+<td>Legitimate interest</td>
 </tr>
 </tbody>
 </table>
-<h3>2. How We Use Data</h3>
-<p>Service operation, payment verification, anonymous product analytics, security, and legal compliance. <strong>We never use your vocal recordings or music for advertising, ML/AI training, or resale.</strong></p>
-<h3>3. Retention and Deletion</h3>
-<p>On account deletion request, <strong>we permanently erase all R2 vocal files and Supabase project/account data within 72 hours.</strong> IAP receipts may be retained for up to 5 years for tax compliance. Anonymous analytics are not tied to identities and are not individually deletable.</p>
-<h3>4. Subprocessors</h3>
-<p>Supabase (US), Cloudflare R2 (global), Sentry (US), PostHog (US/EU), Apple (US), Google (US). International transfers (e.g., EU→US, EU→KR) rely on Standard Contractual Clauses or equivalent safeguards.</p>
-<h3>5. Your Rights</h3>
+<p><strong>We do NOT collect</strong>: payment card numbers (Apple/Google handle), location, contacts, photo library, ad identifiers (IDFA/AAID — we never request iOS ATT permission).</p>
+<p><strong>"Planned" services</strong> (Sentry, PostHog) are not integrated as of 2026-06-04. We will amend this policy with 30 days' notice before activation.</p>
+<h3>3. Purposes</h3>
+<p>Service operation, payment management, security, planned stability/product analytics, legal compliance (Korean tax law and Electronic Commerce Act).</p>
+<p><strong>We never use vocal recordings, analysis results, or generated music for advertising, AI/ML training, third-party resale, or our own marketing without your explicit consent.</strong></p>
+<h3>4. Retention and Deletion</h3>
 <ul>
-<li><strong>GDPR (EU/EEA/UK)</strong>: access, rectification, erasure, restriction, portability, objection, right to lodge a complaint with your supervisory authority.</li>
-<li><strong>CCPA/CPRA (California)</strong>: right to know, delete, correct, opt out of "sale/share." <strong>We do not sell or share personal information.</strong></li>
-<li><strong>PIPA (Korea)</strong>: access, correction, deletion, suspension of processing.</li>
+<li><strong>Free vocals</strong>: discarded immediately after analysis (memory only, never on disk).</li>
+<li><strong>Pro cloud content</strong>: retained <strong>permanently until you delete the content or your account</strong>, regardless of subscription state. After expiration, new uploads/syncs are locked but existing content can still be downloaded or deleted. A future dormant-account policy may be introduced with 30 days' prior notice.</li>
+<li><strong>Account deletion request</strong>: cascade delete from Supabase Auth, Supabase Postgres, and Cloudflare R2 within <strong>72 hours</strong>, with confirmation in 3 business days.</li>
+<li><strong>IAP receipts</strong>: retained 5 years per Korean Electronic Commerce Act / Electronic Financial Transactions Act.</li>
+<li><strong>Webhook logs</strong>: 90 days.</li>
 </ul>
-<p>Submit requests to <code>support@hum-track.com</code> or via Settings → Delete Account. <strong>SLA: confirmation within 3 business days, full deletion within 72 hours.</strong></p>
-<h3>6. Security</h3>
-<p>TLS 1.3 in transit; AES-256 at rest in R2; Supabase Row-Level Security; Sentry PII scrubbing.</p>
-<h3>7. Children</h3>
-<p>We do not knowingly collect data from children under 14 (under 13 for U.S. users under COPPA). Parents may contact us to delete a child's account.</p>
-<h3>8. Data Protection Officer</h3>
+<h3>5. Subprocessors</h3>
+<table>
+<thead>
+<tr>
+<th>Subprocessor</th>
+<th>Purpose</th>
+<th>Region</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Supabase, Inc.</td>
+<td>DB and auth hosting</td>
+<td>US (AWS us-east-1)</td>
+</tr>
+<tr>
+<td>Cloudflare, Inc.</td>
+<td>R2 object storage, DNS</td>
+<td>US (us-east-1)</td>
+</tr>
+<tr>
+<td>Fly.io, Inc.</td>
+<td>Backend analysis</td>
+<td>US (iad, Ashburn VA)</td>
+</tr>
+<tr>
+<td>Apple Inc.</td>
+<td>iOS IAP, Sign In with Apple</td>
+<td>US</td>
+</tr>
+<tr>
+<td>Google LLC</td>
+<td>Android IAP, Google Sign In</td>
+<td>US</td>
+</tr>
+<tr>
+<td>(Planned) Sentry</td>
+<td>Error tracking</td>
+<td>US</td>
+</tr>
+<tr>
+<td>(Planned) PostHog</td>
+<td>Anonymous analytics</td>
+<td>US or EU</td>
+</tr>
+</tbody>
+</table>
+<p>International transfers (EU→US, EU→KR) rely on the <strong>EU Commission Standard Contractual Clauses (2021/914/EU)</strong> or equivalent safeguards. Counsel review pending for completeness of vendor DPAs.</p>
+<h3>6. Your Rights</h3>
 <ul>
-<li>Name: [PLACEHOLDER]</li>
-<li>Email: support@hum-track.com</li>
-<li>Address: [PLACEHOLDER]</li>
+<li><strong>GDPR (EU/EEA/UK)</strong>: access, rectification, erasure, restriction, portability, objection, withdrawal of consent, lodging a complaint with your supervisory authority. We do not perform automated decisions producing legal effects.</li>
+<li><strong>CCPA/CPRA (California)</strong>: right to know, delete, correct, opt out of sale/share, limit sensitive PI, non-discrimination. <strong>We do not sell or share personal information</strong> for cross-context behavioral advertising. Categories sold in the past 12 months: <strong>none</strong>.</li>
+<li><strong>PIPA (Korea)</strong>: access, correction, deletion, suspension of processing, withdrawal of consent.</li>
 </ul>
-<h3>9. Changes</h3>
-<p>We will notify material changes at least 30 days in advance via in-app notice and email. The "Last Updated" date at the top reflects the current version.</p>
-<hr />
-<p><strong>Contact</strong>: support@hum-track.com</p>
+<p>Submit requests to <code>heobusy@gmail.com</code> or via Settings → Delete Account. <strong>SLA: confirmation in 3 business days; deletion within 72 hours; other requests within 1 month (GDPR), extendable to 2 months for complex cases.</strong></p>
+<p>Pro Members can export their MIDI/WAV directly in-app. Bulk backend data export UI is planned for a P1 release; meanwhile available on email request.</p>
+<h3>7. Security</h3>
+<p>TLS 1.3 in transit; AES-256 at rest in R2; Supabase Row-Level Security; OAuth via Apple/Google (we never store your password); planned PII scrubbing in Sentry. We are a small operation and do not currently hold formal certifications (e.g., ISO 27001, SOC 2).</p>
+<h3>8. Children</h3>
+<p>We do not knowingly collect data from children under 14 (under 13 for U.S. COPPA). App Store / Google Play age rating is set to restrict download. Parents may contact us to delete a child's data.</p>
+<h3>9. Data Protection</h3>
+<ul>
+<li><strong>Privacy lead</strong>: Kim Dong Hyun (Representative), heobusy@gmail.com</li>
+<li><strong>EU Representative (GDPR Art. 27)</strong>: Not designated at this time. EU/EEA users may exercise all GDPR rights (access, rectification, erasure, portability, objection, complaint, etc.) directly via the email above and we will respond. We will appoint an EU representative and amend this policy if EU usage grows to a material level.</li>
+</ul>
+<p>EU/EEA residents may also lodge a complaint with their national supervisory authority if they consider this insufficient.</p>
+<h3>10. Changes</h3>
+<p>We give 30 days' in-app and email notice for material changes. Minor edits are reflected in the "Last updated" date.</p>
   </article>
 </main>
 
 <footer class="foot">
   <div class="foot-inner">
-    <div>© 2026 Humming Labs · hum-track.com</div>
-    <div>
-      <a href="/privacy">개인정보처리방침</a>
-      <a href="/terms">이용약관</a>
-      <a href="/refund">환불 정책</a>
-      <a href="mailto:support@hum-track.com">support@hum-track.com</a>
+    <div class="foot-row">
+      <div data-ko="© 2026 에르모세아르 · hum-track.com" data-en="© 2026 Hermosear · hum-track.com">© 2026 에르모세아르 · hum-track.com</div>
+      <div>
+        <a href="/privacy" data-ko="개인정보처리방침" data-en="Privacy Policy">개인정보처리방침</a>
+        <a href="/terms" data-ko="이용약관" data-en="Terms">이용약관</a>
+        <a href="/refund" data-ko="환불 정책" data-en="Refund">환불 정책</a>
+        <a href="mailto:heobusy@gmail.com">heobusy@gmail.com</a>
+      </div>
     </div>
+    <div class="foot-biz" data-ko="에르모세아르 | 대표자: 김동현 | 주소: 경기도 용인시 기흥구 공세로 150-29, B01-G160호 | 통신판매업 신고번호: 2024-용인기흥-2437 | 사업자등록번호: 106-16-34319 | 유선전화번호: 010-9611-1711 | heobusy@gmail.com" data-en="Hermosear | Representative: Kim Dong Hyun | Address: 150-29 Gongse-ro, Giheung-gu, Yongin-si, Gyeonggi-do (B01-G160) | E-Commerce Reg.: 2024-Yongin-Giheung-2437 | Business Reg.: 106-16-34319 | Phone: +82-10-9611-1711 | heobusy@gmail.com">에르모세아르 | 대표자: 김동현 | 주소: 경기도 용인시 기흥구 공세로 150-29, B01-G160호 | 통신판매업 신고번호: 2024-용인기흥-2437 | 사업자등록번호: 106-16-34319 | 유선전화번호: 010-9611-1711 | heobusy@gmail.com</div>
   </div>
 </footer>
 
@@ -450,20 +547,21 @@ footer.foot {
   const bodies = document.querySelectorAll('.lang-body');
   function setLang(lang) {
     buttons.forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
-    bodies.forEach(b => {
-      b.hidden = b.dataset.body !== lang;
-    });
+    bodies.forEach(b => { b.hidden = b.dataset.body !== lang; });
     document.querySelectorAll('[data-ko]').forEach(el => {
       const v = el.getAttribute('data-' + lang);
-      if (v) el.textContent = v;
+      if (v != null) {
+        if (v.includes('<')) el.innerHTML = v;
+        else el.textContent = v;
+      }
     });
     document.documentElement.lang = lang;
-    try { localStorage.setItem('humming-lang', lang); } catch (e) {}
+    try { localStorage.setItem('humtrack-lang', lang); } catch (e) {}
   }
   buttons.forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)));
   let initial = 'ko';
   try {
-    const saved = localStorage.getItem('humming-lang');
+    const saved = localStorage.getItem('humtrack-lang');
     if (saved === 'en' || saved === 'ko') initial = saved;
     else if (navigator.language && navigator.language.toLowerCase().startsWith('en')) initial = 'en';
   } catch (e) {}

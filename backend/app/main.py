@@ -32,6 +32,7 @@ from .routes import projects as projects_routes
 from .routes import storage as storage_routes
 from .routes import iap as iap_routes
 from .routes import health as health_routes
+from .routes import account as account_routes
 
 logger = logging.getLogger("soundlab")
 logging.basicConfig(level=logging.INFO)
@@ -113,6 +114,7 @@ app.include_router(health_routes.router)
 app.include_router(projects_routes.router)
 app.include_router(storage_routes.router)
 app.include_router(iap_routes.router)
+app.include_router(account_routes.router)
 
 
 # --- sample library --------------------------------------------------------

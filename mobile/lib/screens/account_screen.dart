@@ -8,9 +8,14 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/generated/app_localizations.dart';
+import '../services/iap_pricing.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_sheets.dart';
+import '../widgets/cloud_settings_card.dart';
+import 'account_detail_screen.dart';
+import 'language_screen.dart';
 import 'static_screens.dart';
 import 'subscription_screen.dart';
 
@@ -30,7 +35,7 @@ class AccountScreen extends StatelessWidget {
           icon: const Icon(Symbols.arrow_back_ios, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('계정', style: T.h2.copyWith(fontSize: 17)),
+        title: Text(L10n.of(context).accountTitle, style: T.h2.copyWith(fontSize: 17)),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -42,6 +47,11 @@ class AccountScreen extends StatelessWidget {
             const SizedBox(height: 18),
             _subscriptionCard(context, store),
             const SizedBox(height: 18),
+            // 시안 ⑭ — Pro 사용자에게만 "내 클라우드" 카드 노출.
+            if (store.subscription.hasProAccess) ...[
+              const CloudSettingsCard(),
+              const SizedBox(height: 18),
+            ],
             _menu(context, store, loggedIn),
             if (kDebugMode) ...[
               const SizedBox(height: 28),
@@ -54,9 +64,10 @@ class AccountScreen extends StatelessWidget {
   }
 
   Widget _header(BuildContext context, ProjectStore store, bool loggedIn) {
+    final t = L10n.of(context);
     final email = store.accountEmail;
     final provider = store.accountProvider;
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -76,11 +87,11 @@ class AccountScreen extends StatelessWidget {
         const SizedBox(width: 14),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text(loggedIn ? (email ?? '—') : '로그인되지 않음',
+            Text(loggedIn ? (email ?? '—') : t.accountNotSignedIn,
                 style: T.body.copyWith(fontWeight: FontWeight.w700, fontSize: 15),
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 4),
-            Text(loggedIn ? (provider != null ? '${provider.toUpperCase()} 계정' : '계정 연동됨') : '로그인하면 결제와 동기화가 가능해요',
+            Text(loggedIn ? (provider != null ? t.accountProviderSuffix(provider.toUpperCase()) : t.accountLinked) : t.accountSignInHint,
                 style: T.sub),
           ]),
         ),
@@ -92,15 +103,39 @@ class AccountScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.lime, borderRadius: BorderRadius.circular(20),
               ),
-              child: Text('로그인',
+              child: Text(t.accountSignIn,
                   style: T.label.copyWith(color: AppColors.bg, fontWeight: FontWeight.w700, fontSize: 12)),
+            ),
+          )
+        else
+          // 로그인 상태: 우측에 로그아웃 아이콘 버튼. 카드 자체는 탭하면 상세로 이동.
+          // 로그아웃은 destructive 아니므로 중립 톤 (danger 색은 회원 탈퇴 전용).
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showLogoutConfirm(context, store),
+            child: Container(
+              width: 38, height: 38, alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Icon(Symbols.logout, color: AppColors.textSecondary, size: 18),
             ),
           ),
       ]),
     );
+    if (!loggedIn) return card;
+    // 로그인 상태일 때만 카드 자체를 탭 가능하게 → 계정 정보 상세.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccountDetailScreen())),
+      child: card,
+    );
   }
 
   Widget _subscriptionCard(BuildContext context, ProjectStore store) {
+    final t = L10n.of(context);
     final s = store.subscription;
     final renews = store.subscriptionRenewsAt;
     String title;
@@ -109,32 +144,32 @@ class AccountScreen extends StatelessWidget {
     IconData ic;
     switch (s) {
       case SubscriptionStatus.anonymous:
-        title = '무료 플랜';
-        sub = '내보내기와 클라우드 동기화는 Pro 에서 잠금이 풀려요';
+        title = t.subFreePlan;
+        sub = t.subFreePlanSub;
         badgeColor = AppColors.textTertiary;
         ic = Symbols.lock;
         break;
       case SubscriptionStatus.trial:
-        title = '무료 체험 중';
-        sub = renews != null ? '${_fmtDate(renews)}에 자동 결제 시작' : '7일 체험';
+        title = t.subTrial;
+        sub = renews != null ? t.subTrialBillsOn(_fmtDate(renews)) : t.subTrialNDays(IapPricing.trialDays);
         badgeColor = AppColors.lime;
         ic = Symbols.bolt;
         break;
       case SubscriptionStatus.active:
-        title = 'Humming Pro';
-        sub = renews != null ? '${_fmtDate(renews)} 자동 갱신' : '모든 기능 활성화됨';
+        title = t.subActive;
+        sub = renews != null ? t.subActiveRenewsOn(_fmtDate(renews)) : t.subActiveAllOn;
         badgeColor = AppColors.lime;
         ic = Symbols.check_circle;
         break;
       case SubscriptionStatus.cancelled:
-        title = 'Pro · 해지 예약';
-        sub = renews != null ? '${_fmtDate(renews)}까지 이용 가능' : '만료 전까지 사용 가능';
+        title = t.subCancelled;
+        sub = renews != null ? t.subCancelledValidUntil(_fmtDate(renews)) : t.subCancelledUntilExpiry;
         badgeColor = AppColors.textSecondary;
         ic = Symbols.schedule;
         break;
       case SubscriptionStatus.expired:
-        title = '구독이 만료됐어요';
-        sub = '다시 구독하면 즉시 복원돼요';
+        title = t.subExpired;
+        sub = t.subExpiredRestoreHint;
         badgeColor = AppColors.danger;
         ic = Symbols.error;
         break;
@@ -214,29 +249,36 @@ class AccountScreen extends StatelessWidget {
       );
     }
 
+    final t = L10n.of(context);
     return Column(children: [
       if (store.subscription != SubscriptionStatus.anonymous)
-        tile(Symbols.workspace_premium, '구독 관리', onTap: () {
+        tile(Symbols.workspace_premium, t.accountMenuManage, onTap: () {
           Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SubscriptionScreen()));
         }),
       if (store.subscription == SubscriptionStatus.expired)
-        tile(Symbols.cloud_download, '클라우드에서 가져오기', sub: '만료 전 작업물 30일 동안 보관됨', onTap: () {
+        tile(Symbols.cloud_download, t.accountMenuCloudRecover, sub: t.accountMenuCloudRecoverSub, onTap: () {
           Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CloudDownloadScreen()));
         }),
-      tile(Symbols.help, 'FAQ', onTap: () {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FaqScreen()));
+      tile(Symbols.language, t.accountMenuLanguage, onTap: () {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LanguageScreen()));
       }),
-      tile(Symbols.support_agent, '문의하기', onTap: () {
+      // FAQ — 본문 컨텐츠 확정 전까지 메뉴에서 숨김. 본문 정리되면 주석 해제.
+      // tile(Symbols.help, t.accountMenuFaq, onTap: () {
+      //   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FaqScreen()));
+      // }),
+      tile(Symbols.support_agent, t.accountMenuContact, onTap: () {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ContactScreen()));
       }),
-      tile(Symbols.gavel, '서비스 약관', onTap: () {
+      tile(Symbols.gavel, t.accountMenuTerms, onTap: () {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TermsScreen()));
       }),
-      tile(Symbols.shield, '개인정보처리방침', onTap: () {
+      tile(Symbols.shield, t.accountMenuPrivacy, onTap: () {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrivacyScreen()));
       }),
-      if (loggedIn)
-        tile(Symbols.logout, '로그아웃', danger: true, onTap: () => showLogoutConfirm(context, store)),
+      tile(Symbols.receipt_long, t.accountMenuRefund, onTap: () {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RefundScreen()));
+      }),
+      // 로그아웃은 헤더 카드 우측 아이콘 버튼으로 이동.
     ]);
   }
 
@@ -259,10 +301,10 @@ class AccountScreen extends StatelessWidget {
         Row(children: [
           const Icon(Symbols.code, color: AppColors.lime, size: 16),
           const SizedBox(width: 8),
-          Text('개발자 모드', style: T.label.copyWith(color: AppColors.lime, fontSize: 11, fontWeight: FontWeight.w800)),
+          Text(L10n.of(context).devModeTitle, style: T.label.copyWith(color: AppColors.lime, fontSize: 11, fontWeight: FontWeight.w800)),
         ]),
         const SizedBox(height: 10),
-        Text('구독 상태 (디버그 빌드만 노출)', style: T.sub.copyWith(fontSize: 11)),
+        Text(L10n.of(context).devSubscriptionLabel, style: T.sub.copyWith(fontSize: 11)),
         const SizedBox(height: 8),
         Wrap(spacing: 6, runSpacing: 6, children: [
           for (final s in order)
@@ -279,6 +321,37 @@ class AccountScreen extends StatelessWidget {
                     style: T.label.copyWith(fontSize: 10, color: store.subscription == s ? AppColors.bg : AppColors.textPrimary)),
               ),
             ),
+        ]),
+        const SizedBox(height: 12),
+        Text(L10n.of(context).devCloudMockLabel, style: T.sub.copyWith(fontSize: 11)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          GestureDetector(
+            onTap: () => store.devSeedCloudMock(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Text('Seed 4 cards',
+                  style: T.label.copyWith(fontSize: 10, color: AppColors.textPrimary)),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => store.devClearCloudMock(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Text('Clear',
+                  style: T.label.copyWith(fontSize: 10, color: AppColors.textPrimary)),
+            ),
+          ),
         ]),
       ]),
     );

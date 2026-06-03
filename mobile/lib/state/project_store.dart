@@ -3,10 +3,12 @@
 // 여러 트랙을 가질 수 있음(예: Chords 안에 Piano + Guitar). 각 트랙은 고유 id 로
 // 식별되며 독립적으로 녹음/분석/편집.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import '../api/engine_api.dart';
 import '../models/models.dart';
 import '../music/chords.dart';
@@ -15,8 +17,10 @@ import '../music/strum.dart';
 import '../music/bass_placement.dart';
 import '../services/analytics_service.dart';
 import '../services/auth_service.dart';
+import '../services/cloud_api.dart';
 import '../services/iap_service.dart';
 import '../services/observability_service.dart';
+import 'local_storage.dart';
 
 double _midiToHz(int m) => 440.0 * math.pow(2, (m - 69) / 12.0);
 
@@ -249,6 +253,73 @@ extension SubscriptionStatusX on SubscriptionStatus {
   }
 }
 
+/// 클라우드 작업물 메타. UI 표시·옵션 시트용 — 실제 백엔드 페이로드는 후속 작업.
+enum CloudProjectStatus { localOnly, cloudOnly, syncedClean, syncedDirty, conflict }
+
+class CloudProjectMeta {
+  CloudProjectMeta({
+    required this.id,
+    required this.title,
+    required this.uploadedAt,
+    required this.lastModifiedAt,
+    required this.sizeBytes,
+    required this.onThisDevice,
+    this.serverMeta,
+  });
+  final String id;
+  final String title;
+  final DateTime uploadedAt;
+  final DateTime lastModifiedAt;
+  final int sizeBytes;
+  /// 이 기기에도 같은 프로젝트가 있는지(다운로드 받았거나 업로드한 기기).
+  final bool onThisDevice;
+  /// 백엔드 응답의 `meta` JSON 통째 — `getProject(id)` 또는 `?include=meta` 시 채워짐.
+  /// 다운로드 시 `vocal_files` 안의 public_url 을 읽어 R2 GET.
+  final Map<String, dynamic>? serverMeta;
+
+  CloudProjectMeta copyWith({
+    String? title,
+    DateTime? uploadedAt,
+    DateTime? lastModifiedAt,
+    int? sizeBytes,
+    bool? onThisDevice,
+    Map<String, dynamic>? serverMeta,
+  }) =>
+      CloudProjectMeta(
+        id: id,
+        title: title ?? this.title,
+        uploadedAt: uploadedAt ?? this.uploadedAt,
+        lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
+        sizeBytes: sizeBytes ?? this.sizeBytes,
+        onThisDevice: onThisDevice ?? this.onThisDevice,
+        serverMeta: serverMeta ?? this.serverMeta,
+      );
+
+  /// 썸네일 색상 인덱스(0..3) — id 해시 기반.
+  int get thumbIndex {
+    var h = 0;
+    for (final code in id.codeUnits) {
+      h = (h * 31 + code) & 0x7fffffff;
+    }
+    return h % 4;
+  }
+}
+
+/// 회원 탈퇴 실패 사유 — UI 에서 L10n 으로 해석.
+class AccountDeleteError {
+  const AccountDeleteError._({required this.code, this.status, this.detail, this.raw});
+  final String code;       // 'noSession' | 'serverDelete' | 'raw'
+  final int? status;
+  final String? detail;
+  final String? raw;
+
+  factory AccountDeleteError.noSession() => const AccountDeleteError._(code: 'noSession');
+  factory AccountDeleteError.serverDelete(int status, String detail) =>
+      AccountDeleteError._(code: 'serverDelete', status: status, detail: detail);
+  factory AccountDeleteError.raw(String raw) =>
+      AccountDeleteError._(code: 'raw', raw: raw);
+}
+
 class ProjectStore extends ChangeNotifier {
   ProjectStore({EngineApi? api}) : _api = api ?? EngineApi() {
     projectId = 'p_${DateTime.now().millisecondsSinceEpoch}';
@@ -270,10 +341,10 @@ class ProjectStore extends ChangeNotifier {
       if (s.isSignedIn) {
         accountEmail = s.email;
         accountProvider = s.provider;
-        if (subscription == SubscriptionStatus.anonymous) {
-          subscription = SubscriptionStatus.trial;
-          subscriptionRenewsAt = DateTime.now().add(const Duration(days: 7));
-        }
+        // 로그인 = anonymous → trial 자동 전환 *금지*.
+        // 실제 trial 은 paywall → Apple/Google IAP Introductory Offer 통과 후
+        // IapService.onPurchaseResult 가 SubscriptionStatus.trial 로 전환.
+        // (#61 — fake trial 표시 제거)
         ObservabilityService.instance.setUser(id: s.userId, email: s.email);
         if (s.userId != null) AnalyticsService.instance.identify(s.userId!);
         AnalyticsService.instance.userSignedUp(
@@ -372,11 +443,7 @@ class ProjectStore extends ChangeNotifier {
   void mockLogin({required String provider, required String email}) {
     accountProvider = provider;
     accountEmail = email;
-    // 가입 직후 무료 체험 — 시안 ⑥/Trial 상태.
-    if (subscription == SubscriptionStatus.anonymous) {
-      subscription = SubscriptionStatus.trial;
-      subscriptionRenewsAt = DateTime.now().add(const Duration(days: 7));
-    }
+    // anonymous → trial 자동 전환은 #61 에서 제거됨. 실제 trial 은 IAP 결제 통과 후 활성.
     notifyListeners();
   }
 
@@ -386,6 +453,47 @@ class ProjectStore extends ChangeNotifier {
     subscription = SubscriptionStatus.anonymous;
     subscriptionRenewsAt = null;
     notifyListeners();
+  }
+
+  /// 회원 탈퇴 — backend /account 엔드포인트로 Supabase user 삭제 + 로컬 데이터 wipe.
+  /// 성공 시 null, 실패 시 사용자 표시용 에러 (UI 에서 L10n 으로 해석) 반환.
+  Future<AccountDeleteError?> deleteAccount() async {
+    try {
+      // 1) Backend 에 user 삭제 요청 (JWT 인증).
+      if (AuthService.instance.enabled && AuthService.instance.current.userId != null) {
+        final accessToken = await AuthService.instance.currentAccessToken();
+        if (accessToken == null) {
+          return AccountDeleteError.noSession();
+        }
+        final dio = Dio(BaseOptions(
+          baseUrl: EngineConfig.baseUrl,
+          // 4xx/5xx 도 throw 안 하고 응답으로 받아 직접 처리 → 깔끔한 에러 메시지.
+          validateStatus: (_) => true,
+        ));
+        final res = await dio.delete<dynamic>(
+          '/account',
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
+        );
+        if (res.statusCode != 200 && res.statusCode != 204) {
+          final detail = (res.data is Map ? res.data['detail'] : null) ?? '';
+          return AccountDeleteError.serverDelete(res.statusCode ?? 0, detail.toString());
+        }
+      }
+      // 2) 로컬 데이터 wipe.
+      await LocalStorage.instance.wipeAll();
+      // 3) 클라이언트 세션 정리.
+      await AuthService.instance.signOut();
+      // 4) 메모리 상태 리셋.
+      accountProvider = null;
+      accountEmail = null;
+      subscription = SubscriptionStatus.anonymous;
+      subscriptionRenewsAt = null;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      debugPrint('[store] deleteAccount failed: $e');
+      return AccountDeleteError.raw(e.toString());
+    }
   }
 
   /// 개발자 모드 — 디버그 토글로 임의 상태 전환.
@@ -419,6 +527,470 @@ class ProjectStore extends ChangeNotifier {
       subscription = SubscriptionStatus.cancelled;
       notifyListeners();
     }
+  }
+
+  // ─── Cloud Sync (실 백엔드 — api.hum-track.com) ────────────────────────
+  // mock 메서드는 호환 wrapper 로 유지(아래 mockUploadToCloud 등) — 실 흐름은
+  // uploadProject() / downloadProject() / deleteFromCloud() 로 라우팅.
+  /// 클라우드 사용량 한도(기본 표시용). 실제 quota 는 백엔드 응답으로 갱신.
+  static const double cloudQuotaBytes = 5 * 1024 * 1024 * 1024;
+  /// 클라우드 작업물 목록 — refreshCloudData() 가 백엔드에서 채움.
+  final List<CloudProjectMeta> cloudProjects = [];
+  /// 사용량/quota — getUsage() 응답으로 갱신. fallback 은 cloudProjects 합.
+  int _cloudUsedBytes = 0;
+  int _cloudQuotaBytes = (cloudQuotaBytes).toInt();
+  double get cloudUsageBytes => _cloudUsedBytes > 0
+      ? _cloudUsedBytes.toDouble()
+      : cloudProjects.fold<double>(0, (a, b) => a + b.sizeBytes);
+  int get cloudQuotaBytesEffective => _cloudQuotaBytes;
+  /// 마지막 sync 시도의 사용자 표시용 에러 (null = 정상).
+  String? lastSyncError;
+  /// 업로드/다운로드 진행률 — 키는 projectId, 값은 0..1.
+  final Map<String, double> _syncProgress = {};
+  double syncProgressFor(String projectId) => _syncProgress[projectId] ?? 0.0;
+  void _setProgress(String projectId, double v) {
+    _syncProgress[projectId] = v.clamp(0.0, 1.0);
+    notifyListeners();
+  }
+  /// 자동 동기화 토글 — Documents/cloud_prefs.json 로 영속화.
+  bool autoSyncEnabled = true;
+  bool _cloudPrefsLoaded = false;
+
+  /// LocalStorage 초기화 등 앱 부팅 시 1회 호출 — 자동 동기화 토글 로드.
+  Future<void> loadCloudPrefs() async {
+    if (_cloudPrefsLoaded) return;
+    _cloudPrefsLoaded = true;
+    try {
+      final v = await LocalStorage.instance.readCloudPrefs();
+      autoSyncEnabled = v['auto_sync'] as bool? ?? true;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> setAutoSyncEnabled(bool on) async {
+    if (on == autoSyncEnabled) return;
+    autoSyncEnabled = on;
+    notifyListeners();
+    try {
+      await LocalStorage.instance.writeCloudPrefs({'auto_sync': on});
+    } catch (_) {}
+  }
+
+  /// 시안 ⑪/⑫ — Pro 결제 통과 직후 1회 표시할 환영 화면 플래그.
+  bool pendingProWelcome = false;
+  void markProWelcomeSeen() {
+    if (!pendingProWelcome) return;
+    pendingProWelcome = false;
+    notifyListeners();
+  }
+
+  // ─── 실 백엔드 호출 ─────────────────────────────────────────────────────
+
+  bool get _isCloudAuthenticated =>
+      AuthService.instance.enabled && AuthService.instance.current.isSignedIn;
+
+  /// 클라우드 탭 진입 시 호출 — 목록 + 사용량 동시 갱신.
+  /// 인증 안 됐으면 skip (anonymous). 에러 시 stale 데이터 유지 + lastSyncError 기록.
+  Future<void> refreshCloudData() async {
+    if (!_isCloudAuthenticated) {
+      lastSyncError = null;
+      return;
+    }
+    try {
+      final results = await Future.wait([
+        CloudApi.instance.listProjects(),
+        CloudApi.instance.getUsage(),
+      ]);
+      final list = results[0] as List<CloudProject>;
+      final usage = results[1] as Usage;
+      // 기존 로컬 onThisDevice 표시 보존: localStorage 의 프로젝트 id 와 일치하면 true.
+      final localIds = (await LocalStorage.instance.listProjects())
+          .map((m) => m.id)
+          .toSet();
+      cloudProjects
+        ..clear()
+        ..addAll(list.map((p) => CloudProjectMeta(
+              id: p.projectId,
+              title: p.title,
+              uploadedAt: p.uploadedAt,
+              lastModifiedAt: p.updatedAt,
+              sizeBytes: p.sizeBytes,
+              onThisDevice: localIds.contains(p.projectId),
+              serverMeta: p.meta,
+            )));
+      _cloudUsedBytes = usage.usedBytes;
+      _cloudQuotaBytes = usage.quotaBytes;
+      lastSyncError = null;
+      notifyListeners();
+    } on UnauthorizedException catch (e) {
+      lastSyncError = e.message;
+      debugPrint('[cloud] refresh unauth: ${e.message}');
+      notifyListeners();
+    } on CloudApiException catch (e) {
+      lastSyncError = e.message;
+      debugPrint('[cloud] refresh failed: $e');
+      notifyListeners();
+    }
+  }
+
+  /// 로컬 프로젝트를 백엔드에 업로드 — 보컬 파일은 R2 PUT, 메타는 /projects upsert.
+  ///
+  /// 흐름:
+  ///   1) ProjectMeta 조회 + 사전 quota_check
+  ///   2) 각 보컬 파일 presign + R2 PUT (진행률 누적)
+  ///   3) /projects upsert (expected_updated_at 으로 충돌 감지)
+  ///   4) cloudProjects + usage 갱신
+  ///
+  /// 예외:
+  ///   - UnauthorizedException — 로그인 필요
+  ///   - QuotaExceededException — 용량 부족
+  ///   - ConflictException — 다른 기기에서 변경됨
+  ///   - NetworkException / CloudApiException — 기타
+  Future<void> uploadProject(String projectId) async {
+    if (!_isCloudAuthenticated) {
+      throw UnauthorizedException('클라우드 업로드는 로그인이 필요해요');
+    }
+
+    // 1) 로컬 메타 + 보컬 파일 수집.
+    final localList = await LocalStorage.instance.listProjects();
+    final local = localList.firstWhere(
+      (m) => m.id == projectId,
+      orElse: () => throw CloudApiException('로컬 프로젝트 없음: $projectId'),
+    );
+    final vocalFiles = await _collectVocalFiles(projectId);
+    final vocalBytes = vocalFiles.fold<int>(0, (a, f) {
+      try {
+        return a + f.lengthSync();
+      } catch (_) {
+        return a;
+      }
+    });
+    final totalBytes = local.sizeBytes > 0 ? local.sizeBytes : vocalBytes;
+
+    _setProgress(projectId, 0.0);
+
+    // 2) 사전 quota check (선택적 — upsert 도 한 번 더 확인하지만 UX 친화).
+    final qc = await CloudApi.instance.quotaCheck(totalBytes);
+    if (!qc.allowed) {
+      _syncProgress.remove(projectId);
+      throw QuotaExceededException(used: qc.used, quota: qc.quota, deficit: qc.deficit);
+    }
+
+    // 3) 보컬 파일들 R2 PUT — 진행률은 각 파일 크기 비율로 누적.
+    final uploadedFiles = <Map<String, dynamic>>[];
+    int sentBytes = 0;
+    for (final f in vocalFiles) {
+      final bytes = await f.readAsBytes();
+      final fileName = f.uri.pathSegments.last;
+      final contentType = _guessContentType(fileName);
+      final presign = await CloudApi.instance.presignUpload(
+        projectId: projectId,
+        fileName: fileName,
+        contentType: contentType,
+      );
+      await CloudApi.instance.putToR2(
+        presign: presign,
+        bytes: bytes,
+        onProgress: (frac) {
+          final localProgress = sentBytes + (bytes.length * frac);
+          _setProgress(projectId, totalBytes > 0 ? localProgress / totalBytes : 1.0);
+        },
+      );
+      sentBytes += bytes.length;
+      uploadedFiles.add({
+        'file_name': fileName,
+        'size_bytes': bytes.length,
+        'content_type': contentType,
+        'key': presign.key,
+        'public_url': presign.publicUrl,
+      });
+    }
+
+    // 4) 메타 + size_bytes upsert.
+    final localMetaJson = await _loadLocalMetaJson(projectId);
+    final upsertMeta = <String, dynamic>{
+      ...?localMetaJson,
+      'vocal_files': uploadedFiles,
+      'app_version': 1,
+    };
+    final existing = cloudProjects.firstWhere(
+      (c) => c.id == projectId,
+      orElse: () => CloudProjectMeta(
+        id: '',
+        title: '',
+        uploadedAt: DateTime.now(),
+        lastModifiedAt: DateTime.now(),
+        sizeBytes: 0,
+        onThisDevice: true,
+      ),
+    );
+    final result = await CloudApi.instance.upsertProject(
+      projectId: projectId,
+      title: local.title,
+      meta: upsertMeta,
+      sizeBytes: totalBytes,
+      expectedUpdatedAt: existing.id.isEmpty ? null : existing.lastModifiedAt,
+    );
+
+    // 5) 상태 갱신.
+    _cloudUsedBytes = result.usedBytes;
+    _cloudQuotaBytes = result.quotaBytes;
+    final now = DateTime.now();
+    final idx = cloudProjects.indexWhere((c) => c.id == projectId);
+    final updated = CloudProjectMeta(
+      id: projectId,
+      title: local.title,
+      uploadedAt: idx >= 0 ? cloudProjects[idx].uploadedAt : now,
+      lastModifiedAt: now,
+      sizeBytes: totalBytes,
+      onThisDevice: true,
+      serverMeta: upsertMeta,
+    );
+    if (idx >= 0) {
+      cloudProjects[idx] = updated;
+    } else {
+      cloudProjects.insert(0, updated);
+    }
+    _syncProgress.remove(projectId);
+    lastSyncError = null;
+    notifyListeners();
+    debugPrint('[cloud] uploadProject ok: $projectId ($totalBytes B, vocal=$vocalBytes)');
+  }
+
+  /// 클라우드에서 프로젝트 다운로드. 백엔드의 `getProject` 응답 meta 안의
+  /// `vocal_files[].public_url` 로 R2 GET. publicUrl 이 없으면 mock 으로 폴백
+  /// (백엔드 presigned-GET endpoint 가 아직 없음 — 별도 task 권장).
+  Future<void> downloadProject(String projectId) async {
+    if (!_isCloudAuthenticated) {
+      throw UnauthorizedException('클라우드 다운로드는 로그인이 필요해요');
+    }
+    _setProgress(projectId, 0.0);
+
+    final p = await CloudApi.instance.getProject(projectId);
+    final meta = p.meta ?? const <String, dynamic>{};
+    final vocalFiles = (meta['vocal_files'] as List?) ?? const [];
+
+    // 어떤 파일도 publicUrl 이 없으면 mock fallback — 백엔드 presigned-GET 필요.
+    final hasUrls = vocalFiles.any((e) {
+      if (e is! Map) return false;
+      final u = e['public_url'];
+      return u is String && u.isNotEmpty;
+    });
+    if (vocalFiles.isNotEmpty && !hasUrls) {
+      debugPrint('[cloud] downloadProject: no public_url — backend presigned_get needed. fallback to mock.');
+      await mockDownloadFromCloud(projectId);
+      return;
+    }
+
+    // 1) 로컬 프로젝트 디렉터리 준비 + 보컬 파일 GET.
+    final totalBytes = p.sizeBytes <= 0 ? 1 : p.sizeBytes;
+    int gotBytes = 0;
+    final localVocals = <Map<String, dynamic>>[];
+    for (final entry in vocalFiles) {
+      if (entry is! Map) continue;
+      final url = entry['public_url'] as String?;
+      final name = (entry['file_name'] ?? '') as String;
+      final size = (entry['size_bytes'] as num?)?.toInt() ?? 0;
+      if (url == null || url.isEmpty || name.isEmpty) continue;
+      final bytes = await CloudApi.instance.getFromUrl(
+        url,
+        onProgress: (frac) {
+          final localProgress = gotBytes + (size * frac);
+          _setProgress(projectId, localProgress / totalBytes);
+        },
+      );
+      gotBytes += size;
+      final savedPath = await LocalStorage.instance.saveDownloadedVocal(
+        projectId: projectId,
+        fileName: name,
+        bytes: bytes,
+      );
+      localVocals.add({'file_name': name, 'local_path': savedPath});
+    }
+
+    // 2) 로컬 meta.json 갱신.
+    await LocalStorage.instance.writeDownloadedMeta(
+      projectId: projectId,
+      title: p.title,
+      serverMeta: meta,
+    );
+
+    // 3) 카드 상태 갱신.
+    final idx = cloudProjects.indexWhere((c) => c.id == projectId);
+    if (idx >= 0) {
+      cloudProjects[idx] = cloudProjects[idx].copyWith(onThisDevice: true, serverMeta: meta);
+    }
+    _syncProgress.remove(projectId);
+    notifyListeners();
+    debugPrint('[cloud] downloadProject ok: $projectId files=${localVocals.length}');
+  }
+
+  /// 클라우드에서만 삭제 — 로컬은 그대로 둠.
+  /// UI 카피: "내 기기 작업물은 그대로 남아요" 와 일치.
+  Future<void> deleteFromCloud(String projectId) async {
+    if (!_isCloudAuthenticated) {
+      throw UnauthorizedException('로그인이 필요해요');
+    }
+    await CloudApi.instance.deleteProject(projectId);
+    cloudProjects.removeWhere((c) => c.id == projectId);
+    // 사용량은 다음 getUsage 에서 정확히 갱신 — 우선 로컬 추정으로 줄임.
+    try {
+      final usage = await CloudApi.instance.getUsage();
+      _cloudUsedBytes = usage.usedBytes;
+      _cloudQuotaBytes = usage.quotaBytes;
+    } catch (_) {/* best-effort */}
+    notifyListeners();
+  }
+
+  /// 로컬 + 클라우드 둘 다 삭제. 사용자가 명시 선택 시.
+  Future<void> deleteEverywhere(String projectId) async {
+    try {
+      await deleteFromCloud(projectId);
+    } on CloudApiException catch (e) {
+      debugPrint('[cloud] deleteEverywhere: cloud delete failed (계속): $e');
+    }
+    await LocalStorage.instance.deleteProject(projectId);
+    notifyListeners();
+  }
+
+  // ── 내부 유틸 ───────────────────────────────────────────────────────────
+  Future<List<File>> _collectVocalFiles(String projectId) async {
+    final docs = await getApplicationDocumentsDirectory();
+    final vocalsDir = Directory('${docs.path}/projects/$projectId/vocals');
+    if (!vocalsDir.existsSync()) return const [];
+    return vocalsDir
+        .listSync()
+        .whereType<File>()
+        .toList();
+  }
+
+  Future<Map<String, dynamic>?> _loadLocalMetaJson(String projectId) async {
+    final docs = await getApplicationDocumentsDirectory();
+    final f = File('${docs.path}/projects/$projectId/meta.json');
+    if (!f.existsSync()) return null;
+    try {
+      return jsonDecode(await f.readAsString()) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _guessContentType(String fileName) {
+    final n = fileName.toLowerCase();
+    if (n.endsWith('.caf')) return 'audio/x-caf';
+    if (n.endsWith('.ogg')) return 'audio/ogg';
+    if (n.endsWith('.opus')) return 'audio/opus';
+    if (n.endsWith('.wav')) return 'audio/wav';
+    if (n.endsWith('.m4a')) return 'audio/mp4';
+    return 'application/octet-stream';
+  }
+
+  // ─── Mock 호환 wrapper (기존 호출처 보존) ────────────────────────────────
+  /// @deprecated — uploadProject() 로 라우팅. 백엔드 호출 실패 시 mock 폴백.
+  Future<void> mockUploadToCloud(String projectId, String title, {int sizeBytes = 8 * 1024 * 1024}) async {
+    if (_isCloudAuthenticated) {
+      try {
+        await uploadProject(projectId);
+        return;
+      } catch (e) {
+        debugPrint('[cloud] mockUploadToCloud: uploadProject 실패 → mock 폴백: $e');
+        rethrow;
+      }
+    }
+    // 익명 fallback (개발자 모드 / 비로그인 데모) — 기존 mock 동작.
+    await Future.delayed(const Duration(milliseconds: 600));
+    final i = cloudProjects.indexWhere((c) => c.id == projectId);
+    if (i >= 0) {
+      cloudProjects[i] = cloudProjects[i].copyWith(lastModifiedAt: DateTime.now(), onThisDevice: true);
+    } else {
+      cloudProjects.add(CloudProjectMeta(
+        id: projectId,
+        title: title,
+        uploadedAt: DateTime.now(),
+        lastModifiedAt: DateTime.now(),
+        sizeBytes: sizeBytes,
+        onThisDevice: true,
+      ));
+    }
+    notifyListeners();
+  }
+
+  /// @deprecated — downloadProject() 로 라우팅. 폴백은 onThisDevice 만 토글.
+  Future<void> mockDownloadFromCloud(String cloudId) async {
+    if (_isCloudAuthenticated) {
+      try {
+        await downloadProject(cloudId);
+        return;
+      } catch (e) {
+        debugPrint('[cloud] mockDownloadFromCloud: downloadProject 실패: $e');
+        // 폴백 — 카드만 marked
+      }
+    }
+    await Future.delayed(const Duration(milliseconds: 600));
+    final i = cloudProjects.indexWhere((c) => c.id == cloudId);
+    if (i >= 0) {
+      cloudProjects[i] = cloudProjects[i].copyWith(onThisDevice: true);
+      notifyListeners();
+    }
+  }
+
+  /// @deprecated — deleteFromCloud() 로 라우팅. 익명이면 in-memory 만 제거.
+  void mockDeleteFromCloud(String cloudId) {
+    if (_isCloudAuthenticated) {
+      // 비동기 호출이지만 UI 가 await 안 함 — fire-and-forget.
+      deleteFromCloud(cloudId).catchError((e) {
+        debugPrint('[cloud] mockDeleteFromCloud: 백엔드 삭제 실패: $e');
+      });
+      return;
+    }
+    cloudProjects.removeWhere((c) => c.id == cloudId);
+    notifyListeners();
+  }
+
+  /// 데모/스타터 데이터 — 시안 ④ 의 4개 카드 (개발자 모드에서만 사용).
+  void devSeedCloudMock() {
+    cloudProjects
+      ..clear()
+      ..addAll([
+        CloudProjectMeta(
+          id: 'cm_1',
+          title: '봄밤의 산책',
+          uploadedAt: DateTime.now().subtract(const Duration(minutes: 2)),
+          lastModifiedAt: DateTime.now().subtract(const Duration(minutes: 2)),
+          sizeBytes: 11 * 1024 * 1024,
+          onThisDevice: true,
+        ),
+        CloudProjectMeta(
+          id: 'cm_2',
+          title: '아이패드에서 작업한 곡',
+          uploadedAt: DateTime.now().subtract(const Duration(days: 4)),
+          lastModifiedAt: DateTime.now().subtract(const Duration(days: 4)),
+          sizeBytes: (24.8 * 1024 * 1024).round(),
+          onThisDevice: false,
+        ),
+        CloudProjectMeta(
+          id: 'cm_3',
+          title: 'EDM 데모 v3',
+          uploadedAt: DateTime.now().subtract(const Duration(days: 7)),
+          lastModifiedAt: DateTime.now().subtract(const Duration(days: 7)),
+          sizeBytes: (42.1 * 1024 * 1024).round(),
+          onThisDevice: false,
+        ),
+        CloudProjectMeta(
+          id: 'cm_4',
+          title: '새벽 4시의 발라드',
+          uploadedAt: DateTime.now().subtract(const Duration(days: 12)),
+          lastModifiedAt: DateTime.now().subtract(const Duration(days: 12)),
+          sizeBytes: (18.2 * 1024 * 1024).round(),
+          onThisDevice: true,
+        ),
+      ]);
+    notifyListeners();
+  }
+
+  void devClearCloudMock() {
+    cloudProjects.clear();
+    notifyListeners();
   }
 
   String title = 'My Song';
@@ -522,9 +1094,14 @@ class ProjectStore extends ChangeNotifier {
     return applyGuitarStrum(quantized, program: t.program, bpm: bpm);
   }
 
-  /// 박자 보정 — 노트 start·end 를 (포켓에 맞춘) 그리드에 스냅. start 와 end 를
-  /// 각각 스냅하므로 위치뿐 아니라 **길이**도 그리드에 맞게 변한다. strength 로 블렌드.
-  /// 렌더(재생/내보내기)와 에디터 표시가 같은 결과를 보도록 단일 경로로 사용.
+  /// 박자 보정 — 노트 **onset(start) 만** 그리드에 스냅하고 원본 duration 은 보존.
+  /// DAW 표준 동작("Start only" quantize). 길이까지 그리드에 맞추는 옵션은 별도.
+  /// strength 로 블렌드. 렌더(재생/내보내기)와 에디터 표시가 같은 결과를 보도록 단일 경로로 사용.
+  ///
+  /// 이전 구현은 start·end 를 독립적으로 스냅 + end 가 start 와 같은 셀로 붕괴하면
+  /// 1셀 길이로 강제 늘리는 가드를 가졌는데, 거친 그리드(예: BPM 90 의 1/4 = 0.667s) +
+  /// 짧은 노트(0.3s) 조합에서 모든 노트가 1셀로 강제 늘어나 인접 노트들과 겹치고
+  /// 시각적으로 몰리는 결함이 있었음.
   List<Note> quantizeNotes(TrackData t, List<Note> base) {
     if (!t.quantizeEnabled || t.quantizeGrid <= 0 || base.isEmpty) return base;
     final cellSec = (60.0 / bpm) * 4 / t.quantizeGrid;
@@ -533,17 +1110,15 @@ class ProjectStore extends ChangeNotifier {
     final str = t.quantizeStrength;
     return base.map((n) {
       final sStart = ((n.start - phase) / cellSec).round() * cellSec + phase;
-      final sEnd = ((n.end - phase) / cellSec).round() * cellSec + phase;
-      var newStart = n.start + (sStart - n.start) * str;
-      var newEnd = n.end + (sEnd - n.end) * str;
-      // 길이가 너무 짧게 붕괴하면 최소 한 셀 보장(짧은 노트도 보이게).
-      if (newEnd - newStart < cellSec * 0.5) newEnd = newStart + cellSec;
-      if ((newStart - n.start).abs() < 1e-4 && (newEnd - n.end).abs() < 1e-4) return n;
+      final newStart = n.start + (sStart - n.start) * str;
+      final origDur = n.end - n.start;
+      final newEnd = newStart + origDur;
+      if ((newStart - n.start).abs() < 1e-4) return n;
       final clone = Note.fromJson(n.toJson())
         ..start = newStart
         ..end = newEnd
         ..chunkId = n.chunkId;
-      clone.duration = clone.end - clone.start;
+      clone.duration = origDur;
       return clone;
     }).toList();
   }

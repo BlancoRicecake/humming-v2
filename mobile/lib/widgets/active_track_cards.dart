@@ -7,6 +7,7 @@
 // - 각 카드의 ⓘ → showHelpSheet(title, body)
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../models/models.dart';
 import '../music/instrument_icons.dart';
 import '../state/project_store.dart';
@@ -73,11 +74,14 @@ Widget _helpIcon(BuildContext context, {required String title, required String b
   );
 }
 
-String _instrumentDisplayName(TrackData t) {
+String _instrumentDisplayName(BuildContext context, TrackData t) {
   for (final i in instrumentsForRole(t.role)) {
     if (i.program == t.program) return i.label;
   }
-  return t.role == TrackRole.drum ? '드럼 키트' : (t.role == TrackRole.vocal ? '원본 보컬' : '악기');
+  final l = L10n.of(context);
+  return t.role == TrackRole.drum
+      ? l.addTrackDrumKit
+      : (t.role == TrackRole.vocal ? l.addTrackVocal : l.cardInstrumentFallback);
 }
 
 int _iconProgram(TrackData t) {
@@ -101,7 +105,8 @@ class _InstrumentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final program = _iconProgram(track);
-    final name = _instrumentDisplayName(track);
+    final name = _instrumentDisplayName(context, track);
+    final l = L10n.of(context);
     return GestureDetector(
       onTap: () => showInstrumentPicker(context, store),
       behavior: HitTestBehavior.opaque,
@@ -115,13 +120,11 @@ class _InstrumentCard extends StatelessWidget {
               children: [
                 instrumentIcon(program, size: 11, color: AppColors.textSecondary),
                 const SizedBox(width: 6),
-                Text('INSTRUMENT', style: _labelStyle),
+                Text(l.cardInstrumentLabel, style: _labelStyle),
                 _helpIcon(
                   context,
-                  title: 'INSTRUMENT',
-                  body:
-                      '이 트랙을 어떤 악기 소리로 재생할지 선택해요. '
-                      '분석된 음정에 SoundFont 악기 음색을 입혀 들려줘요.',
+                  title: l.cardInstrumentLabel,
+                  body: l.helpInstrumentBody,
                 ),
                 const Spacer(),
                 const Icon(Symbols.keyboard_arrow_down, size: 18, color: AppColors.textSecondary),
@@ -162,9 +165,12 @@ class _KeyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final isAuto = track.options.autoKey;
     final tierLabel = dk?.keyTier == null ? '' : ' · ${dk!.keyTier}';
-    final confText = dk == null ? '녹음 후 분석' : '신뢰도 ${dk!.confidence.toStringAsFixed(2)}$tierLabel';
+    final confText = dk == null
+        ? l.keyAnalysisPending
+        : l.keyConfidence(dk!.confidence.toStringAsFixed(2), tierLabel);
     return GestureDetector(
       onTap: () => showKeyPicker(context, store),
       behavior: HitTestBehavior.opaque,
@@ -178,14 +184,11 @@ class _KeyCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(children: [
-                  Text('KEY', style: _labelStyle),
+                  Text(l.cardKeyLabel, style: _labelStyle),
                   _helpIcon(
                     context,
-                    title: 'KEY',
-                    body:
-                        '곡의 으뜸음(C, D…)과 모드(메이저/마이너)예요. '
-                        'AUTO = 분석이 자동 추정한 키. 카드를 탭하면 수동으로 바꿀 수 있어요. '
-                        '신뢰도 = 추정이 얼마나 확실한지 (0~1).',
+                    title: l.cardKeyLabel,
+                    body: l.helpKeyBody,
                   ),
                 ]),
                 Container(
@@ -195,7 +198,7 @@ class _KeyCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    isAuto ? 'AUTO' : '수동',
+                    isAuto ? l.keyAuto : l.keyManual,
                     style: T.label.copyWith(
                       color: AppColors.lime,
                       fontSize: 8,
@@ -237,6 +240,7 @@ class _AssistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final on = track.options.pitchAssistant;
     final count = track.analysis?.assistAppliedCount ?? 0;
     return Container(
@@ -249,13 +253,11 @@ class _AssistCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(children: [
-                Text('피치 어시스트', style: _labelStyle),
+                Text(l.cardAssistLabel, style: _labelStyle),
                 _helpIcon(
                   context,
-                  title: '피치 어시스트',
-                  body:
-                      '키 밖으로 살짝 빗나간 음을 가장 가까운 in-key 음으로 자동 보정해 줘요. '
-                      '"보정됨" 숫자 = 실제로 끌어당겨진 노트 개수.',
+                  title: l.cardAssistLabel,
+                  body: l.helpAssistBody,
                 ),
               ]),
               _MiniToggle(on: on, onTap: () => store.togglePitchAssistant(!on)),
@@ -271,13 +273,13 @@ class _AssistCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 2),
               child: Text(
-                '보정됨',
+                l.assistCorrected,
                 style: T.body.copyWith(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
               ),
             ),
           ]),
           const SizedBox(height: 6),
-          Text('키 밖 음 자동 정리', style: T.sub.copyWith(fontSize: 11, color: AppColors.textSecondary)),
+          Text(l.assistDesc, style: T.sub.copyWith(fontSize: 11, color: AppColors.textSecondary)),
         ],
       ),
     );
@@ -292,10 +294,11 @@ class _QuantizeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final on = track.quantizeEnabled;
     final summary = on
-        ? '1/${track.quantizeGrid} · ${(track.quantizeStrength * 100).round()}% · BPM ${store.bpm}'
-        : 'off';
+        ? l.quantizeSummary(track.quantizeGrid, (track.quantizeStrength * 100).round(), store.bpm)
+        : l.quantizeOff;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => showQuantizeSheet(context, store),
@@ -309,13 +312,11 @@ class _QuantizeCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(children: [
-                  Text('박자 보정', style: _labelStyle),
+                  Text(l.cardQuantizeLabel, style: _labelStyle),
                   _helpIcon(
                     context,
-                    title: '박자 보정',
-                    body:
-                        '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요. '
-                        '원본 timing 은 그대로 보존돼, 토글을 꺼면 원래대로 돌아옵니다.',
+                    title: l.cardQuantizeLabel,
+                    body: l.helpQuantizeBody,
                   ),
                 ]),
                 Row(children: [

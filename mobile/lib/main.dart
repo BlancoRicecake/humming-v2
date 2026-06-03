@@ -13,9 +13,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'l10n/generated/app_localizations.dart';
 import 'services/analytics_service.dart';
 import 'services/auth_service.dart';
 import 'services/iap_service.dart';
+import 'services/locale_service.dart';
 import 'services/observability_service.dart';
 import 'state/project_store.dart';
 import 'theme/app_theme.dart';
@@ -29,6 +31,7 @@ Future<void> main() async {
       AuthService.instance.bootstrap(),
       AnalyticsService.instance.init(),
       IapService.instance.init(),
+      LocaleService.instance.bootstrap(),
     ]);
     runApp(const HummingApp());
   });
@@ -44,13 +47,24 @@ class HummingApp extends StatelessWidget {
         final store = ProjectStore();
         // IAP 영수증 검증을 같은 엔진 백엔드(/iap/verify) 로.
         IapService.instance.configureVerify(store.engineDio);
+        // 클라우드 prefs(자동 동기화 토글 등) 비동기 로드 — UI 렌더에는 영향 없음.
+        store.loadCloudPrefs();
         return store;
       },
-      child: MaterialApp(
-        title: 'HumTrack',
-        theme: hummingTheme(),
-        debugShowCheckedModeBanner: false,
-        home: const SongsScreen(),
+      child: ValueListenableBuilder<Locale?>(
+        valueListenable: LocaleService.instance.selected,
+        builder: (_, override, __) {
+          return MaterialApp(
+            title: 'HumTrack',
+            theme: hummingTheme(),
+            debugShowCheckedModeBanner: false,
+            // null = 시스템 기본 locale (OS 설정 따라감). override 시 강제.
+            locale: override,
+            localizationsDelegates: L10n.localizationsDelegates,
+            supportedLocales: L10n.supportedLocales,
+            home: const SongsScreen(),
+          );
+        },
       ),
     );
   }
