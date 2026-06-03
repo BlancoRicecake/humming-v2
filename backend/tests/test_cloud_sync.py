@@ -144,6 +144,39 @@ def test_presign(client, auth, pid):
     assert "url" in j
 
 
+def test_presign_get_happy_path(client, auth):
+    """본인 user_id prefix 의 key 는 정상적으로 download URL 발급."""
+    import jwt as pyjwt
+
+    payload = pyjwt.decode(JWT, options={"verify_signature": False})
+    uid = payload["sub"]
+    key = f"vocals/{uid}/test_project/vocal.wav"
+    r = client.post("/storage/presign_get", json={"key": key}, headers=auth)
+    if r.status_code == 503:
+        pytest.skip("R2 not configured in this env")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["url"].startswith("http")
+    assert "expires_at" in j
+
+
+def test_presign_get_other_user_forbidden(client, auth):
+    """다른 user prefix 의 key 는 403."""
+    other_uid = "00000000-0000-0000-0000-000000000000"
+    key = f"vocals/{other_uid}/their_project/vocal.wav"
+    r = client.post("/storage/presign_get", json={"key": key}, headers=auth)
+    assert r.status_code == 403, r.text
+
+
+def test_presign_get_no_token_401(client):
+    """토큰 없이는 401."""
+    r = client.post(
+        "/storage/presign_get",
+        json={"key": "vocals/anything/x/y.wav"},
+    )
+    assert r.status_code == 401
+
+
 @pytest.mark.skipif(not JWT2, reason="TEST_USER_JWT_OTHER not set")
 def test_rls_isolation(client, auth, pid):
     body = {"project_id": pid, "title": "RLS", "meta": {}, "size_bytes": 100}

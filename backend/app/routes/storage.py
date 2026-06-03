@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from ..auth import extract_user_id
 from ..deps import require_supabase
 from ..settings import get_settings
-from ..storage_r2 import presign_put
+from ..storage_r2 import presign_get, presign_put
 
 logger = logging.getLogger("humming.storage")
 router = APIRouter(prefix="/storage", tags=["storage"])
@@ -77,6 +77,15 @@ class PresignOut(BaseModel):
     expires_at: datetime
 
 
+class PresignGetIn(BaseModel):
+    key: str = Field(..., min_length=1, max_length=512)
+
+
+class PresignGetOut(BaseModel):
+    url: str
+    expires_at: datetime
+
+
 class UsageOut(BaseModel):
     used_bytes: int
     quota_bytes: int
@@ -122,6 +131,43 @@ def presign(
         public_url=public_url,
         expires_at=expires_at,
     )
+
+
+# ── POST /storage/presign_get ───────────────────────────────────────────────
+@router.post("/presign_get", response_model=PresignGetOut)
+def presign_download(
+    payload: PresignGetIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    """Issue a short-lived presigned GET URL for downloading a vocal chunk.
+
+    Key must start with ``vocals/{user_id}/`` matching the JWT sub claim —
+    prevents one user from downloading another user's audio (R2 itself has
+    no per-user ACL, so this check is the only enforcement).
+    """
+    user_id = extract_user_id(authorization, tag="/storage/presign_get")
+    s = get_settings()
+
+    expected_prefix = f"vocals/{user_id}/"
+    if not payload.key.startswith(expected_prefix):
+        logger.warning(
+            "/storage/presign_get: prefix mismatch user_id=%s key=%s",
+            user_id,
+            payload.key,
+        )
+        raise HTTPException(403, "key does not belong to caller")
+
+    try:
+        url = presign_get(payload.key, expires_in=s.presign_ttl_sec)
+    except Exception as e:
+        logger.exception("/storage/presign_get: R2 client error")
+        raise HTTPException(500, f"presign failed: {e}")
+
+    if url is None:
+        raise HTTPException(503, "R2 not configured")
+
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=s.presign_ttl_sec)
+    return PresignGetOut(url=url, expires_at=expires_at)
 
 
 # ── GET /storage/usage ──────────────────────────────────────────────────────

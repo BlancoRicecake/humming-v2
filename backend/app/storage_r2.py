@@ -38,6 +38,28 @@ def presign_put(
     )
 
 
+def presign_get(key: str, *, expires_in: int = 300) -> Optional[str]:
+    """Return a presigned GET URL for `key`, or None if R2 not configured.
+
+    Used by mobile client to download vocal chunks from cloud sync. Caller is
+    responsible for any authorisation checks (e.g. user_id prefix match) —
+    R2 itself has no per-user ACL.
+    """
+    r2 = get_r2_client()
+    if r2 is None:
+        return None
+    s = get_settings()
+    return r2.generate_presigned_url(
+        ClientMethod="get_object",
+        Params={
+            "Bucket": s.r2_bucket,
+            "Key": key,
+        },
+        ExpiresIn=expires_in,
+        HttpMethod="GET",
+    )
+
+
 def delete_objects(keys: Iterable[str]) -> int:
     """Delete listed object keys. Returns count of deleted keys (best-effort)."""
     keys = list(keys)
