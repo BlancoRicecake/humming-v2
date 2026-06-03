@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>HumTrack — Quantize v2 (앵커 기반 박자 보정)</title>
+<title>HumTrack — 박자 보정 v2 (active_track_cards 기반)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -11,15 +11,11 @@
   --bg: #0A0A0F;
   --surface: #16161E;
   --surface-alt: #1F1F27;
-  --surface-3: #26262F;
   --lime: #A3E635;
   --active-lane: #1F2A0F;
   --border: #27272A;
-  --border-strong: #3F3F46;
   --danger: #EF4444;
   --danger-bg: #3F1D1D;
-  --amber: #F59E0B;
-  --blue: #3B82F6;
   --text-primary: #FAFAFA;
   --text-secondary: #A1A1AA;
   --text-tertiary: #71717A;
@@ -29,56 +25,26 @@ html { overflow-x: hidden; }
 body {
   background: #1a1a22;
   color: var(--text-primary);
-  padding: 70px 16px 60px;
+  padding: 60px 16px 60px;
   display: grid;
   grid-template-columns: repeat(3, 390px);
-  gap: 110px 36px;
+  gap: 100px 36px;
   justify-content: center;
   align-items: start;
   min-height: 100vh;
 }
 @media (max-width: 1280px) { body { grid-template-columns: repeat(2, 390px); } }
 @media (max-width: 860px) {
-  body { grid-template-columns: 390px; padding: 60px 0 40px; gap: 90px 0; }
+  body { grid-template-columns: 390px; padding: 60px 0 40px; gap: 80px 0; }
 }
-@media (max-width: 430px) {
-  body { grid-template-columns: 100%; padding: 50px 8px 40px; }
-  .frame { width: 100% !important; max-width: 390px; margin: 0 auto; }
-  .frame-title { padding: 0 8px; }
-}
-
-.intro {
-  grid-column: 1 / -1;
-  max-width: 980px;
-  margin: 0 auto 12px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
-}
-.intro h1 {
-  color: var(--text-primary);
-  font-size: 22px;
-  font-weight: 800;
-  margin-bottom: 10px;
-  letter-spacing: -0.3px;
-}
-.intro h1 b { color: var(--lime); }
-.intro code {
-  background: #0e0e15;
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: var(--lime);
-  font-size: 12px;
-}
-
+.frame-wrap { position: relative; }
 .frame-title {
   position: absolute;
-  top: -62px;
+  top: -64px;
   left: 0; right: 0;
   color: #d8d8e0;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.3px;
 }
 .frame-title b { color: var(--lime); }
 .frame-title em {
@@ -118,1301 +84,880 @@ body {
   padding: 0 28px 6px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
   flex-shrink: 0;
 }
-.statusbar .icons { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.body { flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; }
 
-.body { flex: 1; overflow: hidden; position: relative; }
+/* edit_screen header */
+.edit-header {
+  padding: 8px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.edit-header .title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.edit-header .left, .edit-header .right { display: flex; align-items: center; gap: 16px; }
+.edit-header .chev { font-size: 22px; color: var(--text-primary); }
+.edit-header .share { font-size: 20px; color: var(--text-primary); }
+.edit-header .done { font-size: 14px; font-weight: 600; color: var(--lime); }
 
-/* ====== shared sheet ====== */
-.sheet {
+.section-label {
+  padding: 12px 20px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+/* active_track_cards */
+.cards { padding: 8px 16px; display: flex; flex-direction: column; gap: 8px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+.card-row { display: flex; align-items: center; justify-content: space-between; }
+.card-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.info { font-size: 11px; color: var(--text-tertiary); padding: 0 4px; }
+.chev-down { font-size: 18px; color: var(--text-secondary); }
+
+.row-2 { display: flex; gap: 10px; }
+.row-2 > .card { flex: 1; }
+
+.inst-name { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.inst-name .ic { font-size: 20px; color: var(--lime); }
+.inst-name .nm { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+
+.key-tag {
+  background: var(--active-lane);
+  color: var(--lime);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.key-name { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-top: 6px; }
+.key-conf { display:flex; align-items:center; justify-content: space-between; margin-top: 6px; }
+.key-conf .t { font-size: 11px; color: var(--text-secondary); }
+.key-conf .c { font-size: 12px; color: var(--text-secondary); }
+
+.assist-num { display:flex; align-items:flex-end; margin-top: 6px; gap: 4px; }
+.assist-num .n { font-size: 18px; font-weight: 700; color: var(--lime); }
+.assist-num .l { font-size: 13px; font-weight: 600; color: var(--text-secondary); padding-bottom: 2px; }
+.assist-desc { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+
+/* mini toggle (active_track_cards 의 _MiniToggle 패턴) */
+.mini-toggle {
+  width: 32px; height: 18px;
+  border-radius: 10px;
+  background: var(--border);
+  position: relative;
+  flex-shrink: 0;
+}
+.mini-toggle .knob {
   position: absolute;
-  left: 0; right: 0; bottom: 0;
+  top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+.mini-toggle.on { background: var(--lime); }
+.mini-toggle.on .knob { left: 16px; background: var(--bg); }
+
+.pulse-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow: 0 0 8px rgba(163, 230, 53, 0.6);
+}
+
+.quant-summary { font-size: 14px; font-weight: 700; margin-top: 6px; }
+.quant-summary.off { color: var(--text-secondary); }
+.quant-summary.on { color: var(--text-primary); }
+.quant-meta-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.quant-meta-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); }
+.quant-meta-chip b { color: var(--text-primary); font-weight: 600; }
+.quant-anchor-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--active-lane);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 11px;
+  color: var(--lime);
+  font-weight: 600;
+}
+
+/* bottom sheet */
+.sheet-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: flex-end;
+}
+.sheet {
+  width: 100%;
   background: var(--surface);
   border-radius: 28px 28px 0 0;
-  padding: 12px 22px 28px;
+  padding: 12px 20px 24px;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--border);
 }
-.grab {
+.grabber {
   width: 40px; height: 4px;
-  background: #3a3a44;
+  background: var(--border);
   border-radius: 2px;
   margin: 0 auto 14px;
 }
-.sheet-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
-}
-.sheet-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-.sheet-close {
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  background: var(--surface-alt);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
+.sheet-head { display: flex; align-items: center; }
+.sheet-head .ttl { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+.sheet-head .spacer { flex: 1; }
 
-/* ====== toggle ====== */
-.toggle {
-  width: 46px; height: 28px;
-  background: var(--lime);
-  border-radius: 999px;
-  position: relative;
-  flex-shrink: 0;
-}
-.toggle::after {
-  content: '';
-  position: absolute;
-  top: 3px; right: 3px;
-  width: 22px; height: 22px;
-  background: var(--bg);
-  border-radius: 50%;
-}
-.toggle.off { background: #3a3a44; }
-.toggle.off::after { right: auto; left: 3px; background: #71717a; }
-
-/* ====== section blocks ====== */
-.section {
-  margin-bottom: 18px;
-}
-.section-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  color: var(--text-tertiary);
-  margin-bottom: 8px;
-  text-transform: uppercase;
-}
-.row-card {
-  background: var(--surface-alt);
-  border: 1px solid var(--border);
+.big-toggle {
+  width: 42px; height: 24px;
   border-radius: 14px;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  background: var(--border);
+  position: relative;
 }
-.anchor-name {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 15px; font-weight: 600;
-  color: var(--text-primary);
+.big-toggle .knob {
+  position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--text-secondary);
 }
-.anchor-name .ic {
-  width: 32px; height: 32px;
-  background: #2a2a36;
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px;
-}
-.auto-tag {
-  font-size: 10px;
-  color: var(--lime);
-  background: rgba(163,230,53,0.12);
-  padding: 2px 7px;
-  border-radius: 4px;
-  font-weight: 600;
-  margin-left: 6px;
-}
-.change-btn {
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  padding: 5px 10px;
-  border-radius: 999px;
-  display: flex; align-items: center; gap: 4px;
-}
+.big-toggle.on { background: var(--lime); }
+.big-toggle.on .knob { left: 21px; background: var(--bg); }
 
-.hint {
+.sheet-section { margin-top: 18px; }
+.sheet-section .lbl {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+.sheet-section .helper {
   font-size: 11px;
   color: var(--text-tertiary);
-  margin-top: 8px;
+  margin-top: 6px;
   line-height: 1.5;
 }
-.hint b { color: var(--text-secondary); font-weight: 500; }
+.divider { height: 1px; background: #222229; margin: 18px 0 0; }
 
-/* ====== slider ====== */
-.slider-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 6px;
+.anchor-row {
+  display: flex; align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  gap: 12px;
+  margin-top: 10px;
 }
-.slider-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.slider-val {
-  font-size: 18px;
-  font-weight: 700;
+.anchor-row .ic {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: var(--active-lane);
   color: var(--lime);
-  font-variant-numeric: tabular-nums;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
 }
+.anchor-row .tx { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.anchor-row .tx .nm { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.anchor-row .tx .sub { font-size: 11px; color: var(--text-tertiary); }
+.anchor-row .badge {
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--active-lane);
+  color: var(--lime);
+  padding: 3px 7px;
+  border-radius: 6px;
+  letter-spacing: 0.6px;
+}
+.anchor-row .change {
+  font-size: 12px; color: var(--lime); font-weight: 600;
+}
+
+.slider-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.slider-row .pct { font-size: 14px; font-weight: 700; color: var(--text-primary); }
 .slider {
   position: relative;
-  height: 6px;
-  background: #2a2a36;
-  border-radius: 3px;
-  margin: 8px 0 6px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 14px;
 }
 .slider .fill {
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
+  position: absolute; top: 0; left: 0;
+  height: 100%;
   background: var(--lime);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 .slider .thumb {
-  position: absolute;
-  top: 50%;
-  width: 18px; height: 18px;
+  position: absolute; top: 50%;
+  width: 16px; height: 16px;
   background: var(--lime);
-  border: 3px solid var(--bg);
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  box-shadow: 0 0 0 1px var(--lime);
 }
-.slider-cap {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  line-height: 1.5;
-}
-.slider.disabled .fill { background: #3a3a44; }
-.slider.disabled .thumb { background: #4a4a55; box-shadow: 0 0 0 1px #4a4a55; }
-.slider-val.dim { color: var(--text-tertiary); }
-.slider-name.dim { color: var(--text-tertiary); }
 
-/* ====== visual compare ====== */
 .compare {
-  background: var(--surface-alt);
+  background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 14px 16px 16px;
-}
-.compare-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  border-radius: 12px;
+  padding: 12px;
   margin-top: 10px;
 }
-.compare-row:first-of-type { margin-top: 6px; }
-.compare-label {
+.compare .row { margin-bottom: 10px; }
+.compare .row:last-child { margin-bottom: 0; }
+.compare .row-label {
   font-size: 10px;
+  letter-spacing: 0.6px;
   font-weight: 700;
-  letter-spacing: 0.5px;
   color: var(--text-tertiary);
-  width: 36px;
-  flex-shrink: 0;
+  margin-bottom: 6px;
+  text-transform: uppercase;
 }
-.compare-label.after { color: var(--lime); }
+.compare .row-label.on { color: var(--lime); }
 .lane {
   position: relative;
-  flex: 1;
-  height: 30px;
-  background: #0e0e15;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.lane .bar {
-  position: absolute;
-  top: 4px; bottom: 4px;
-  width: 3px;
-  background: var(--text-secondary);
-  border-radius: 1.5px;
-}
-.lane.after .bar { background: var(--lime); }
-/* anchor grid lines */
-.lane .grid {
-  position: absolute;
-  top: 0; bottom: 0;
-  width: 1px;
-  background: rgba(163,230,53,0.18);
-}
-
-/* ====== footer hint ====== */
-.foot-hint {
-  margin-top: 10px;
-  background: var(--surface-alt);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-.foot-hint .ic {
-  width: 18px; height: 18px;
-  border-radius: 50%;
-  background: var(--surface-3);
-  color: var(--text-secondary);
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 700;
-  margin-top: 1px;
-}
-.foot-hint .arrow { margin-left: auto; color: var(--text-tertiary); }
-
-/* ====== quantize card (in track list) ====== */
-.app-header {
-  padding: 16px 22px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.proj-name {
-  font-size: 18px; font-weight: 700; color: var(--text-primary);
-}
-.proj-meta {
-  font-size: 11px; color: var(--text-tertiary); margin-top: 2px;
-}
-.back-btn {
-  width: 36px; height: 36px;
-  border-radius: 50%;
-  background: var(--surface);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--text-secondary);
-  font-size: 18px;
-}
-
-.tracks-area {
-  padding: 0 16px;
-  display: flex; flex-direction: column; gap: 8px;
-}
-.track-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px 14px;
-  display: flex; align-items: center; gap: 12px;
-}
-.track-card .ic {
-  width: 36px; height: 36px;
-  background: var(--surface-alt);
-  border-radius: 9px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px;
-}
-.track-card .nm { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-.track-card .sm { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
-.track-card .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.track-card.anchor {
-  border-color: rgba(163,230,53,0.4);
-  background: linear-gradient(180deg, var(--surface) 0%, rgba(31,42,15,0.3) 100%);
-}
-.anchor-pill {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: var(--lime);
-  background: rgba(163,230,53,0.12);
-  padding: 3px 7px;
+  height: 22px;
+  background: rgba(255,255,255,0.02);
   border-radius: 4px;
 }
-
-/* quantize summary card (small variant) */
-.q-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+.lane.active { background: var(--active-lane); }
+.lane .grid {
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(to right, transparent 0, transparent 41px, rgba(255,255,255,0.06) 41px, rgba(255,255,255,0.06) 42px);
 }
-.q-card .dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  flex-shrink: 0;
-}
-.q-card.on .dot {
-  background: var(--lime);
-  box-shadow: 0 0 0 4px rgba(163,230,53,0.15);
-  animation: pulse 1.8s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 4px rgba(163,230,53,0.15); }
-  50% { box-shadow: 0 0 0 7px rgba(163,230,53,0.06); }
-}
-.q-card .lbl {
-  font-size: 13px; font-weight: 600; color: var(--text-primary);
-}
-.q-card .sm { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
-.q-card .chev { margin-left: auto; color: var(--text-tertiary); font-size: 14px; }
-
-/* ====== transport bar (edit screen) ====== */
-.edit-bg { padding: 0; }
-.transport {
-  position: absolute;
-  left: 12px; right: 12px;
-  bottom: 24px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.t-play {
-  width: 44px; height: 44px;
-  border-radius: 50%;
-  background: var(--lime);
-  color: var(--bg);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-.t-time {
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  padding: 0 4px;
-}
-.t-bpm {
-  display: flex;
-  align-items: center;
-  background: var(--surface-alt);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 4px;
-  gap: 2px;
-  margin-left: auto;
-}
-.t-bpm .step {
-  width: 24px; height: 26px;
-  border-radius: 7px;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 700;
-}
-.t-bpm .step.lg { width: 28px; }
-.t-bpm .val {
-  padding: 0 8px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  display: flex; align-items: baseline; gap: 3px;
-}
-.t-bpm .val .u {
-  font-size: 9px;
-  color: var(--text-tertiary);
-  font-weight: 600;
-}
-.t-bpm .val .n { font-size: 13px; }
-.t-metro {
-  width: 32px; height: 32px;
-  border-radius: 9px;
-  background: var(--surface-alt);
-  border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-.t-metro.on { background: rgba(163,230,53,0.12); border-color: rgba(163,230,53,0.4); color: var(--lime); }
-.callout {
-  position: absolute;
-  bottom: 90px;
-  left: 60px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  color: var(--lime);
-}
-.callout .line {
-  width: 1px; height: 24px;
-  background: var(--lime);
-  margin: 4px auto 0;
-}
-
-/* ====== timeline ruler ====== */
-.ruler-frame {
-  padding: 18px 0 0;
-}
-.ruler-title {
-  padding: 0 22px 14px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-secondary);
-}
-.tl-track {
-  margin: 0 16px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 12px;
-}
-.tl-track .head {
-  display: flex; align-items: center; gap: 8px;
-  margin-bottom: 8px;
-}
-.tl-track .head .ic {
-  width: 24px; height: 24px;
-  border-radius: 6px;
-  background: var(--surface-alt);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px;
-}
-.tl-track .head .nm { font-size: 12px; font-weight: 600; color: var(--text-primary); }
-.tl-lane {
-  position: relative;
-  height: 38px;
-  background: #0e0e15;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  overflow: hidden;
-}
-.tl-lane.anchor { background: linear-gradient(180deg, rgba(31,42,15,0.45), #0e0e15); border-color: rgba(163,230,53,0.3); }
-.tl-lane .onset {
-  position: absolute;
-  top: 5px; bottom: 5px;
-  width: 3px;
-  border-radius: 1.5px;
+.lane .note {
+  position: absolute; top: 5px; height: 12px;
   background: var(--text-secondary);
+  border-radius: 2px;
+  opacity: 0.9;
 }
-.tl-lane.anchor .onset {
-  background: var(--lime);
-  box-shadow: 0 0 6px rgba(163,230,53,0.6);
-}
-/* anchor grid overlay on other tracks */
-.tl-lane .anc {
-  position: absolute;
-  top: 0; bottom: 0;
-  width: 1px;
-  background: rgba(163,230,53,0.22);
-}
-.tl-lane .anc .dot {
-  position: absolute;
-  top: -1px; left: -2px;
-  width: 5px; height: 5px;
-  border-radius: 50%;
-  background: var(--lime);
-}
+.lane.active .note { background: var(--lime); }
 
-.ruler {
-  margin: 14px 16px 0;
-  height: 22px;
-  border-top: 1px solid var(--border);
-  position: relative;
-}
-.ruler .tick {
-  position: absolute;
-  top: 0;
-  width: 1px;
-  height: 6px;
-  background: var(--text-tertiary);
-}
-.ruler .lbl {
-  position: absolute;
-  top: 8px;
-  font-size: 9px;
-  color: var(--text-tertiary);
-  transform: translateX(-50%);
-}
-.ruler .anc-tick {
-  position: absolute;
-  top: 0;
-  width: 1px;
-  height: 10px;
-  background: var(--lime);
-}
-.ruler .anc-tick .d {
-  position: absolute;
-  top: -3px; left: -2px;
-  width: 5px; height: 5px;
-  border-radius: 50%;
-  background: var(--lime);
-}
-
-.legend {
-  margin: 12px 22px 0;
-  display: flex; gap: 14px;
-  font-size: 10px;
-  color: var(--text-tertiary);
-}
-.legend .it { display: flex; align-items: center; gap: 5px; }
-.legend .sw { width: 8px; height: 8px; border-radius: 50%; }
-.legend .sw.lime { background: var(--lime); box-shadow: 0 0 4px rgba(163,230,53,0.5); }
-.legend .sw.gray { background: var(--text-secondary); }
-
-/* ====== empty state ====== */
-.empty {
-  margin-top: 20px;
-  background: var(--surface-alt);
-  border: 1px dashed var(--border-strong);
-  border-radius: 14px;
-  padding: 28px 18px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-.empty .em-ic {
-  width: 52px; height: 52px;
-  border-radius: 50%;
-  background: var(--surface);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 22px;
-  margin-bottom: 10px;
-  opacity: 0.6;
-}
-.empty .em-t {
-  font-size: 14px; font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-.empty .em-d {
-  font-size: 12px; color: var(--text-tertiary);
+.sheet-footer {
+  margin-top: 16px;
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 12px; color: var(--text-secondary);
   line-height: 1.5;
 }
+.sheet-footer .ic { color: var(--text-tertiary); font-size: 14px; flex-shrink: 0; margin-top: 1px; }
 
-/* ====== anchor dropdown ====== */
-.drop-list {
-  background: var(--surface-alt);
+/* dropdown */
+.dropdown {
+  background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
+  margin-top: 10px;
   overflow: hidden;
 }
-.drop-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+.dd-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border);
 }
-.drop-item:last-child { border-bottom: none; }
-.drop-item .ic {
-  width: 32px; height: 32px;
+.dd-row:last-child { border-bottom: none; }
+.dd-row.selected { background: var(--active-lane); }
+.dd-row .ic {
+  width: 30px; height: 30px;
   border-radius: 8px;
   background: var(--surface);
   display: flex; align-items: center; justify-content: center;
-  font-size: 15px;
+  font-size: 16px;
+  color: var(--text-primary);
 }
-.drop-item .nm { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-.drop-item .sm { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
-.drop-item .check {
-  margin-left: auto;
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border-strong);
-}
-.drop-item.sel .check {
-  background: var(--lime);
-  border-color: var(--lime);
-  position: relative;
-}
-.drop-item.sel .check::after {
-  content: '✓';
-  position: absolute;
-  inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--bg);
-  font-size: 13px;
-  font-weight: 800;
-}
-.drop-item.sel { background: rgba(163,230,53,0.06); }
-.drop-item.dim .nm, .drop-item.dim .sm { color: var(--text-tertiary); }
-.divider {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-}
-
-/* slim track-list above sheet — show context that sheet is on top of project */
-.dim-bg::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.5);
-  z-index: 1;
-}
-.sheet { z-index: 2; }
-
-/* edit-screen header */
-.edit-head {
-  padding: 14px 16px 8px;
-  display: flex; align-items: center; gap: 10px;
-}
-.edit-head .ttl { font-size: 16px; font-weight: 700; color: var(--text-primary); }
-.edit-head .sub { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
-.edit-head .menu {
-  margin-left: auto;
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  background: var(--surface);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-.edit-canvas {
-  margin: 6px 12px 0;
-  flex: 1;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 10px;
-  display: flex; flex-direction: column; gap: 6px;
-  position: relative;
-}
-.mini-track {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--surface-alt);
-  border-radius: 8px;
-  padding: 6px 8px;
-}
-.mini-track .ic {
-  width: 20px; height: 20px;
+.dd-row.selected .ic { color: var(--lime); }
+.dd-row .tx { flex: 1; display: flex; flex-direction: column; }
+.dd-row .nm { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.dd-row .sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+.dd-row.disabled { opacity: 0.5; }
+.dd-row.disabled .nm { color: var(--text-secondary); }
+.dd-row .check { color: var(--lime); font-size: 16px; }
+.dd-row.auto .ic { background: var(--active-lane); color: var(--lime); }
+.warn-pill {
+  font-size: 10px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  padding: 2px 7px;
   border-radius: 5px;
-  background: #2a2a36;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px;
+  font-weight: 600;
 }
-.mini-track .nm { font-size: 10px; color: var(--text-secondary); font-weight: 600; flex-shrink: 0; width: 56px; }
-.mini-lane {
-  position: relative;
+
+.empty-banner {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 14px;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.empty-banner .ic { color: #F59E0B; font-size: 18px; margin-top: 1px; }
+.empty-banner .tx .et { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.empty-banner .tx .eb { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
+.disabled-section { opacity: 0.35; }
+
+.timeline-stub {
   flex: 1;
-  height: 22px;
-  background: #0e0e15;
-  border-radius: 4px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  position: relative;
   overflow: hidden;
 }
-.mini-lane.anchor { background: linear-gradient(180deg, rgba(31,42,15,0.4), #0e0e15); }
-.mini-lane .b {
-  position: absolute;
-  top: 3px; bottom: 3px;
-  width: 2px;
-  background: var(--text-secondary);
-  border-radius: 1px;
+.tl-ruler {
+  height: 22px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 12px;
+  font-size: 9px; color: var(--text-tertiary);
+  letter-spacing: 1px;
 }
-.mini-lane.anchor .b { background: var(--lime); }
-.mini-lane .ag {
-  position: absolute;
-  top: 0; bottom: 0;
-  width: 1px;
-  background: rgba(163,230,53,0.18);
+.tl-lane { display: flex; height: 56px; border-bottom: 1px solid var(--border); }
+.tl-lane .side {
+  width: 76px;
+  background: var(--surface);
+  padding: 8px 10px;
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  border-right: 1px solid var(--border);
+}
+.tl-lane .side .ic { font-size: 14px; color: var(--text-secondary); }
+.tl-lane .side .nm { font-size: 10px; color: var(--text-primary); font-weight: 600; }
+.tl-lane.active .side { background: var(--active-lane); }
+.tl-lane .lane-body {
+  flex: 1;
+  position: relative;
+  background-image: repeating-linear-gradient(to right, transparent 0, transparent 31px, rgba(255,255,255,0.04) 31px, rgba(255,255,255,0.04) 32px);
+}
+.tl-lane.active .lane-body { background-color: rgba(163, 230, 53, 0.04); }
+.tl-lane .chunk {
+  position: absolute; top: 10px; height: 36px;
+  border-radius: 6px;
+  background: var(--surface-alt);
+  border-left: 3px solid var(--lime);
+}
+.tl-lane .chunk.dim { border-left-color: var(--text-tertiary); }
+
+.transport-stub {
+  height: 64px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+.transport-stub .mini { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.transport-stub .mini .ic { font-size: 22px; color: var(--text-primary); }
+.transport-stub .mini .lbl { font-size: 9px; color: var(--text-secondary); font-weight: 700; }
+.transport-stub .play {
+  width: 48px; height: 48px;
+  border-radius: 50%; background: var(--lime);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--bg); font-size: 22px;
+}
+
+.spotlight {
+  outline: 2px dashed rgba(163,230,53,0.4);
+  outline-offset: 3px;
+}
+.note-block {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--surface-alt);
+  border-radius: 8px;
+  font-size: 10px;
+  color: var(--text-tertiary);
 }
 </style>
 </head>
 <body>
 
-<div class="intro">
-  <h1>HumTrack — <b>박자 보정 v2</b> (앵커 기반 상대 정렬)</h1>
-  <p>
-    기존 <code>BPM × 그리드 snap</code> 방식을 완전히 대체합니다. 음악 자체(앵커 트랙의 onset)가 "박자의 진실"이 되고,
-    다른 트랙은 거기에 상대적으로 정렬됩니다. 트랙 내 반복 패턴은 평균 위치로 정형화되어 인간적인 표현은 유지하면서 흔들림은 줄어듭니다.
-    <br>BPM/메트로놈은 박자 보정 시트에서 분리되어 <b>트랜스포트 바</b>로 이동했습니다.
-  </p>
-</div>
-
-<!-- ============ 1. 박자 보정 카드 (off) ============ -->
-<div class="frame-wrap" style="position: relative;">
+<!-- 1: quantize card OFF -->
+<div class="frame-wrap">
   <div class="frame-title">
-    ① 박자 보정 카드 — <b>off</b>
-    <em>edit_screen 상단 active_track_cards 영역. 탭하면 시트가 열림.</em>
+    <b>① 박자 보정 카드 — off</b>
+    <em>토글 자체가 on/off 표시 → off 상태에서도 동일 정보 (기준 트랙 / sync / 패턴) 표시. 토글만 off.</em>
   </div>
   <div class="frame">
     <div class="notch"></div>
-    <div class="statusbar"><span>9:41</span><span class="icons">●●● ▮▮ ▰</span></div>
+    <div class="statusbar"><span>9:41</span><span>5G ▮</span></div>
     <div class="body">
-      <div class="app-header">
-        <div>
-          <div class="proj-name">Untitled · 2025-06-03</div>
-          <div class="proj-meta">4 트랙 · 0:32</div>
-        </div>
-        <div class="back-btn">⋯</div>
+      <div class="edit-header">
+        <div class="left"><span class="chev">‹</span></div>
+        <div class="title">새 곡</div>
+        <div class="right"><span class="share">↑</span><span class="done">완료</span></div>
       </div>
-
-      <div style="padding: 0 16px;">
-        <div class="section-label" style="margin: 6px 0 8px;">활성 트랙</div>
-
-        <div class="track-card">
-          <div class="ic">🥁</div>
-          <div>
-            <div class="nm">Drum 1</div>
-            <div class="sm">킥+스네어 · 0:32</div>
+      <div class="section-label">활성 트랙</div>
+      <div class="cards">
+        <div class="card">
+          <div class="card-row">
+            <span class="card-label">♪ INSTRUMENT <span class="info">ⓘ</span></span>
+            <span class="chev-down">▾</span>
           </div>
-          <div class="right">
-            <div style="color: var(--text-tertiary); font-size: 12px;">−6 dB</div>
+          <div class="inst-name"><span class="ic">🎹</span><span class="nm">Bright Piano</span></div>
+        </div>
+        <div class="row-2">
+          <div class="card">
+            <div class="card-row">
+              <span class="card-label">KEY <span class="info">ⓘ</span></span>
+              <span class="key-tag">AUTO</span>
+            </div>
+            <div class="key-name">C Major</div>
+            <div class="key-conf"><span class="t">신뢰도 0.92 · A</span><span class="c">▾</span></div>
+          </div>
+          <div class="card">
+            <div class="card-row">
+              <span class="card-label">피치 어시스트 <span class="info">ⓘ</span></span>
+              <div class="mini-toggle on"><div class="knob"></div></div>
+            </div>
+            <div class="assist-num"><span class="n">12</span><span class="l">개 보정</span></div>
+            <div class="assist-desc">키에 맞춰 음정 보정</div>
           </div>
         </div>
-        <div class="track-card" style="margin-top: 8px;">
-          <div class="ic">🎸</div>
-          <div>
-            <div class="nm">Bass</div>
-            <div class="sm">픽킹 · 0:32</div>
+        <div class="card spotlight">
+          <div class="card-row">
+            <span class="card-label">박자 보정 <span class="info">ⓘ</span></span>
+            <div class="mini-toggle"><div class="knob"></div></div>
           </div>
-          <div class="right">
-            <div style="color: var(--text-tertiary); font-size: 12px;">−4 dB</div>
+          <div class="quant-summary on">Drum 1 기준 · sync 75% · 패턴 30%</div>
+          <div class="quant-meta-row">
+            <span class="quant-anchor-chip">🥁 기준</span>
+            <span class="quant-meta-chip"><b>5</b>개 트랙 동기화</span>
           </div>
-        </div>
-        <div class="track-card" style="margin-top: 8px;">
-          <div class="ic">🎤</div>
-          <div>
-            <div class="nm">Vocal</div>
-            <div class="sm">허밍 · 0:32</div>
-          </div>
-          <div class="right">
-            <div style="color: var(--text-tertiary); font-size: 12px;">−3 dB</div>
-          </div>
-        </div>
-
-        <div class="q-card" style="margin-top: 14px;">
-          <div class="dot"></div>
-          <div>
-            <div class="lbl">박자 보정 off</div>
-            <div class="sm">탭해서 켜기</div>
-          </div>
-          <div class="chev">›</div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ============ 2. 박자 보정 카드 (on) ============ -->
-<div class="frame-wrap" style="position: relative;">
+<!-- 2: quantize card ON (new info) -->
+<div class="frame-wrap">
   <div class="frame-title">
-    ② 박자 보정 카드 — <b>on</b>
-    <em>앵커 트랙 + sync % + 패턴 % 를 한 줄로 요약. 펄스 dot 으로 활성 상태 표시.</em>
+    <b>② 박자 보정 카드 — on (새 정보 표시)</b>
+    <em>이전: "1/8 · 75% · BPM 90". 신규: "Drum 1 기준 · sync 75% · 패턴 30%" + 기준 트랙 chip + 동기화 트랙 수. pulse dot 유지안 / 제거안 비교.</em>
   </div>
   <div class="frame">
     <div class="notch"></div>
-    <div class="statusbar"><span>9:41</span><span class="icons">●●● ▮▮ ▰</span></div>
+    <div class="statusbar"><span>9:41</span><span>5G ▮</span></div>
     <div class="body">
-      <div class="app-header">
-        <div>
-          <div class="proj-name">Untitled · 2025-06-03</div>
-          <div class="proj-meta">4 트랙 · 0:32</div>
-        </div>
-        <div class="back-btn">⋯</div>
+      <div class="edit-header">
+        <div class="left"><span class="chev">‹</span></div>
+        <div class="title">새 곡</div>
+        <div class="right"><span class="share">↑</span><span class="done">완료</span></div>
       </div>
-
-      <div style="padding: 0 16px;">
-        <div class="section-label" style="margin: 6px 0 8px;">활성 트랙</div>
-
-        <div class="track-card anchor">
-          <div class="ic">🥁</div>
-          <div>
-            <div class="nm">Drum 1 <span class="anchor-pill">앵커</span></div>
-            <div class="sm">박자의 기준</div>
+      <div class="section-label">활성 트랙</div>
+      <div class="cards">
+        <div class="card">
+          <div class="card-row">
+            <span class="card-label">♪ INSTRUMENT <span class="info">ⓘ</span></span>
+            <span class="chev-down">▾</span>
           </div>
-          <div class="right">
-            <div style="color: var(--text-tertiary); font-size: 12px;">−6 dB</div>
-          </div>
+          <div class="inst-name"><span class="ic">🎹</span><span class="nm">Bright Piano</span></div>
         </div>
-        <div class="track-card" style="margin-top: 8px;">
-          <div class="ic">🎸</div>
-          <div>
-            <div class="nm">Bass</div>
-            <div class="sm">앵커에 정렬됨</div>
-          </div>
-          <div class="right">
-            <div style="color: var(--text-tertiary); font-size: 12px;">−4 dB</div>
-          </div>
-        </div>
-        <div class="track-card" style="margin-top: 8px;">
-          <div class="ic">🎤</div>
-          <div>
-            <div class="nm">Vocal</div>
-            <div class="sm">앵커에 정렬됨</div>
-          </div>
-          <div class="right">
-            <div style="color: var(--text-tertiary); font-size: 12px;">−3 dB</div>
-          </div>
-        </div>
-
-        <div class="q-card on" style="margin-top: 14px;">
-          <div class="dot"></div>
-          <div>
-            <div class="lbl">박자 보정 on</div>
-            <div class="sm">앵커 🥁 Drum 1 · sync 75% · 패턴 30%</div>
-          </div>
-          <div class="chev">›</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ============ 3. 박자 보정 시트 v2 (default) ============ -->
-<div class="frame-wrap" style="position: relative;">
-  <div class="frame-title">
-    ③ 박자 보정 시트 — <b>v2 default</b>
-    <em>핵심 시안. 앵커 트랙 + sync/패턴 슬라이더 + 시각 비교 + BPM 안내 footer.</em>
-  </div>
-  <div class="frame">
-    <div class="notch"></div>
-    <div class="statusbar"><span>9:41</span><span class="icons">●●● ▮▮ ▰</span></div>
-    <div class="body dim-bg">
-      <div class="sheet" style="height: 720px;">
-        <div class="grab"></div>
-        <div class="sheet-head">
-          <div class="sheet-title">박자 보정</div>
-          <div style="display:flex; align-items:center; gap:10px;">
-            <div class="toggle"></div>
-            <div class="sheet-close">✕</div>
-          </div>
-        </div>
-
-        <!-- anchor -->
-        <div class="section">
-          <div class="section-label">앵커 트랙</div>
-          <div class="row-card">
-            <div class="anchor-name">
-              <div class="ic">🥁</div>
-              <div>
-                Drum 1
-                <span class="auto-tag">자동</span>
-              </div>
+        <div class="row-2">
+          <div class="card">
+            <div class="card-row">
+              <span class="card-label">KEY <span class="info">ⓘ</span></span>
+              <span class="key-tag">AUTO</span>
             </div>
-            <div class="change-btn">변경 ▾</div>
+            <div class="key-name">C Major</div>
+            <div class="key-conf"><span class="t">신뢰도 0.92</span><span class="c">▾</span></div>
           </div>
-          <div class="hint">
-            "내가 의도한 박자"의 기준이 되는 트랙이에요. <b>다른 트랙의 노트가 여기에 맞춰져요.</b>
-          </div>
-        </div>
-
-        <!-- sync slider -->
-        <div class="section">
-          <div class="slider-row">
-            <div class="slider-name">트랙 간 동기</div>
-            <div class="slider-val">75%</div>
-          </div>
-          <div class="slider">
-            <div class="fill" style="width: 75%;"></div>
-            <div class="thumb" style="left: 75%;"></div>
-          </div>
-          <div class="slider-cap">앵커 박자에 다른 트랙 노트들을 얼마나 강하게 끌어당길지</div>
-        </div>
-
-        <!-- pattern slider -->
-        <div class="section">
-          <div class="slider-row">
-            <div class="slider-name">패턴 정형화</div>
-            <div class="slider-val">30%</div>
-          </div>
-          <div class="slider">
-            <div class="fill" style="width: 30%;"></div>
-            <div class="thumb" style="left: 30%;"></div>
-          </div>
-          <div class="slider-cap">반복되는 부분의 박자를 평균 위치로 통일</div>
-        </div>
-
-        <!-- visual compare -->
-        <div class="section">
-          <div class="section-label">시각 비교</div>
-          <div class="compare">
-            <div class="compare-row">
-              <div class="compare-label">원본</div>
-              <div class="lane">
-                <div class="grid" style="left: 12%;"></div>
-                <div class="grid" style="left: 30%;"></div>
-                <div class="grid" style="left: 48%;"></div>
-                <div class="grid" style="left: 66%;"></div>
-                <div class="grid" style="left: 84%;"></div>
-                <div class="bar" style="left: 9%;"></div>
-                <div class="bar" style="left: 14%;"></div>
-                <div class="bar" style="left: 27%;"></div>
-                <div class="bar" style="left: 33%;"></div>
-                <div class="bar" style="left: 45%;"></div>
-                <div class="bar" style="left: 50%;"></div>
-                <div class="bar" style="left: 63%;"></div>
-                <div class="bar" style="left: 70%;"></div>
-                <div class="bar" style="left: 82%;"></div>
-                <div class="bar" style="left: 88%;"></div>
-              </div>
+          <div class="card">
+            <div class="card-row">
+              <span class="card-label">피치 어시스트 <span class="info">ⓘ</span></span>
+              <div class="mini-toggle on"><div class="knob"></div></div>
             </div>
-            <div class="compare-row">
-              <div class="compare-label after">보정</div>
-              <div class="lane after">
-                <div class="grid" style="left: 12%;"></div>
-                <div class="grid" style="left: 30%;"></div>
-                <div class="grid" style="left: 48%;"></div>
-                <div class="grid" style="left: 66%;"></div>
-                <div class="grid" style="left: 84%;"></div>
-                <div class="bar" style="left: 12%;"></div>
-                <div class="bar" style="left: 16%;"></div>
-                <div class="bar" style="left: 30%;"></div>
-                <div class="bar" style="left: 34%;"></div>
-                <div class="bar" style="left: 48%;"></div>
-                <div class="bar" style="left: 52%;"></div>
-                <div class="bar" style="left: 66%;"></div>
-                <div class="bar" style="left: 70%;"></div>
-                <div class="bar" style="left: 84%;"></div>
-                <div class="bar" style="left: 88%;"></div>
-              </div>
+            <div class="assist-num"><span class="n">12</span><span class="l">개 보정</span></div>
+            <div class="assist-desc">키에 맞춰 음정 보정</div>
+          </div>
+        </div>
+        <!-- 옵션 A: pulse dot 유지 (기준 트랙 onset 박자에 깜박) -->
+        <div class="card spotlight">
+          <div class="card-row">
+            <span class="card-label">박자 보정 <span class="info">ⓘ</span></span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div class="pulse-dot"></div>
+              <div class="mini-toggle on"><div class="knob"></div></div>
             </div>
           </div>
+          <div class="quant-summary on">Drum 1 기준 · sync 75% · 패턴 30%</div>
+          <div class="quant-meta-row">
+            <span class="quant-anchor-chip">🥁 기준</span>
+            <span class="quant-meta-chip"><b>5</b>개 트랙 동기화</span>
+          </div>
         </div>
+        <div class="note-block">옵션 A: pulse dot 유지 — 기준 트랙 onset 박자에 맞춰 깜박</div>
 
-        <!-- BPM hint footer -->
-        <div class="foot-hint">
-          <div class="ic">i</div>
-          <div>BPM·메트로놈은 <b>트랜스포트 바</b>에서 따로 설정해요.</div>
-          <div class="arrow">→</div>
+        <!-- 옵션 B: pulse dot 제거 -->
+        <div class="card">
+          <div class="card-row">
+            <span class="card-label">박자 보정 <span class="info">ⓘ</span></span>
+            <div class="mini-toggle on"><div class="knob"></div></div>
+          </div>
+          <div class="quant-summary on">Drum 1 기준 · sync 75% · 패턴 30%</div>
+          <div class="quant-meta-row">
+            <span class="quant-anchor-chip">🥁 기준</span>
+            <span class="quant-meta-chip"><b>5</b>개 트랙 동기화</span>
+          </div>
         </div>
+        <div class="note-block">옵션 B: pulse dot 제거 — BPM 그리드 안 쓰니 의미 모호 → 깔끔하게 빼는 안</div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ============ 4. 앵커 트랙 변경 dropdown ============ -->
-<div class="frame-wrap" style="position: relative;">
+<!-- 3: quantize sheet v2 default -->
+<div class="frame-wrap">
   <div class="frame-title">
-    ④ 앵커 트랙 <b>변경 dropdown</b>
-    <em>"변경 ▾" 탭 시 inline expand. 보컬은 dim — 앵커로 권장 안 함.</em>
+    <b>③ 박자 보정 시트 v2 — default</b>
+    <em>BPM stepper / grid chips / strength slider / 메트로놈 토글 모두 제거. 기준 트랙 + 두 슬라이더 + 시각 비교 + 푸터.</em>
   </div>
   <div class="frame">
     <div class="notch"></div>
-    <div class="statusbar"><span>9:41</span><span class="icons">●●● ▮▮ ▰</span></div>
-    <div class="body dim-bg">
-      <div class="sheet" style="height: 660px;">
-        <div class="grab"></div>
-        <div class="sheet-head">
-          <div class="sheet-title">앵커 트랙 선택</div>
-          <div class="sheet-close">✕</div>
+    <div class="statusbar"><span>9:41</span><span>5G ▮</span></div>
+    <div class="body">
+      <div style="opacity: 0.25; padding: 8px 18px;">
+        <div class="edit-header">
+          <div class="left"><span class="chev">‹</span></div>
+          <div class="title">새 곡</div>
+          <div class="right"><span class="share">↑</span><span class="done">완료</span></div>
         </div>
-
-        <div class="section">
-          <div class="section-label">권장</div>
-          <div class="drop-list">
-            <div class="drop-item sel">
-              <div class="ic">✨</div>
-              <div>
-                <div class="nm">자동 선택</div>
-                <div class="sm">첫 비-보컬 트랙 (현재: Drum 1)</div>
-              </div>
-              <div class="check"></div>
-            </div>
+      </div>
+      <div class="sheet-overlay">
+        <div class="sheet">
+          <div class="grabber"></div>
+          <div class="sheet-head">
+            <div class="ttl">박자 보정</div>
+            <div class="spacer"></div>
+            <div class="big-toggle on"><div class="knob"></div></div>
           </div>
-        </div>
 
-        <div class="section">
-          <div class="section-label">트랙</div>
-          <div class="drop-list">
-            <div class="drop-item">
+          <div class="sheet-section">
+            <div class="lbl">기준 트랙</div>
+            <div class="anchor-row">
               <div class="ic">🥁</div>
-              <div>
+              <div class="tx">
                 <div class="nm">Drum 1</div>
-                <div class="sm">킥+스네어 · onset 48개</div>
+                <div class="sub">onset 32개 · 가장 또렷한 박자</div>
               </div>
-              <div class="check"></div>
+              <div class="badge">AUTO</div>
+              <div class="change">변경 ▾</div>
             </div>
-            <div class="drop-item">
-              <div class="ic">🎸</div>
-              <div>
-                <div class="nm">Bass</div>
-                <div class="sm">픽킹 · onset 32개</div>
-              </div>
-              <div class="check"></div>
+            <div class="helper">기준 트랙의 박자에 맞춰 다른 트랙들을 정렬해요.</div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="sheet-section">
+            <div class="slider-row">
+              <div class="lbl">트랙 간 동기</div>
+              <div class="pct">75%</div>
             </div>
-            <div class="drop-item">
-              <div class="ic">🎹</div>
-              <div>
-                <div class="nm">Keys</div>
-                <div class="sm">코드 백킹 · onset 16개</div>
-              </div>
-              <div class="check"></div>
+            <div class="slider">
+              <div class="fill" style="width:75%;"></div>
+              <div class="thumb" style="left:75%;"></div>
             </div>
-            <div class="drop-item dim">
-              <div class="ic">🎤</div>
-              <div>
-                <div class="nm">Vocal <span style="font-size:9px; color: var(--text-tertiary); margin-left:4px;">권장 안 함</span></div>
-                <div class="sm">허밍은 onset 이 흐릿할 수 있어요</div>
+            <div class="helper">트랙들이 기준 트랙 박자에 얼마나 단단히 붙을지.</div>
+          </div>
+
+          <div class="sheet-section">
+            <div class="slider-row">
+              <div class="lbl">패턴 정형화</div>
+              <div class="pct">30%</div>
+            </div>
+            <div class="slider">
+              <div class="fill" style="width:30%;"></div>
+              <div class="thumb" style="left:30%;"></div>
+            </div>
+            <div class="helper">반복 패턴을 더 또렷하게. 0% 면 인간적 흔들림 유지.</div>
+          </div>
+
+          <div class="sheet-section">
+            <div class="lbl">미리보기</div>
+            <div class="compare">
+              <div class="row">
+                <div class="row-label">원본</div>
+                <div class="lane">
+                  <div class="grid"></div>
+                  <div class="note" style="left:5%; width:8%;"></div>
+                  <div class="note" style="left:21%; width:6%;"></div>
+                  <div class="note" style="left:32%; width:10%;"></div>
+                  <div class="note" style="left:51%; width:7%;"></div>
+                  <div class="note" style="left:67%; width:8%;"></div>
+                  <div class="note" style="left:84%; width:9%;"></div>
+                </div>
               </div>
-              <div class="check"></div>
+              <div class="row">
+                <div class="row-label on">보정 후</div>
+                <div class="lane active">
+                  <div class="grid"></div>
+                  <div class="note" style="left:4%; width:8%;"></div>
+                  <div class="note" style="left:21%; width:7%;"></div>
+                  <div class="note" style="left:33%; width:9%;"></div>
+                  <div class="note" style="left:50%; width:8%;"></div>
+                  <div class="note" style="left:67%; width:8%;"></div>
+                  <div class="note" style="left:84%; width:8%;"></div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="hint" style="margin-top: 4px;">
-          앵커 트랙은 보정에서 <b>제외</b>됩니다 — 다른 트랙이 여기에 맞춰져요.
+          <div class="sheet-footer">
+            <span class="ic">ⓘ</span>
+            <span>BPM · 메트로놈은 트랜스포트의 메트로놈 버튼에서 조정해요.</span>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ============ 5. Transport bar — BPM stepper ============ -->
-<div class="frame-wrap" style="position: relative;">
+<!-- 4: anchor dropdown inline -->
+<div class="frame-wrap">
   <div class="frame-title">
-    ⑤ 트랜스포트 바 — <b>BPM stepper (새 위치)</b>
-    <em>박자 보정 시트에서 빠진 BPM/메트로놈이 edit_screen 하단 transport 로 이동.</em>
+    <b>④ 기준 트랙 변경 — inline expand</b>
+    <em>"변경 ▾" 탭 시 시트 안에서 펼침. 두 레이어 모달 ❌. 자동 선택 맨 위. 보컬 dim + "권장 ✗".</em>
   </div>
   <div class="frame">
     <div class="notch"></div>
-    <div class="statusbar"><span>9:41</span><span class="icons">●●● ▮▮ ▰</span></div>
+    <div class="statusbar"><span>9:41</span><span>5G ▮</span></div>
     <div class="body">
-      <div class="edit-head">
-        <div>
-          <div class="ttl">Untitled · 2025-06-03</div>
-          <div class="sub">4 트랙 · 0:32 · 박자 보정 on</div>
-        </div>
-        <div class="menu">⋯</div>
-      </div>
-
-      <div class="edit-canvas">
-        <div class="mini-track">
-          <div class="ic">🥁</div>
-          <div class="nm">Drum 1</div>
-          <div class="mini-lane anchor">
-            <div class="b" style="left: 8%;"></div>
-            <div class="b" style="left: 22%;"></div>
-            <div class="b" style="left: 36%;"></div>
-            <div class="b" style="left: 50%;"></div>
-            <div class="b" style="left: 64%;"></div>
-            <div class="b" style="left: 78%;"></div>
-            <div class="b" style="left: 92%;"></div>
-          </div>
-        </div>
-        <div class="mini-track">
-          <div class="ic">🎸</div>
-          <div class="nm">Bass</div>
-          <div class="mini-lane">
-            <div class="ag" style="left: 8%;"></div>
-            <div class="ag" style="left: 22%;"></div>
-            <div class="ag" style="left: 36%;"></div>
-            <div class="ag" style="left: 50%;"></div>
-            <div class="ag" style="left: 64%;"></div>
-            <div class="ag" style="left: 78%;"></div>
-            <div class="ag" style="left: 92%;"></div>
-            <div class="b" style="left: 9%;"></div>
-            <div class="b" style="left: 37%;"></div>
-            <div class="b" style="left: 51%;"></div>
-            <div class="b" style="left: 79%;"></div>
-          </div>
-        </div>
-        <div class="mini-track">
-          <div class="ic">🎹</div>
-          <div class="nm">Keys</div>
-          <div class="mini-lane">
-            <div class="ag" style="left: 8%;"></div>
-            <div class="ag" style="left: 22%;"></div>
-            <div class="ag" style="left: 36%;"></div>
-            <div class="ag" style="left: 50%;"></div>
-            <div class="ag" style="left: 64%;"></div>
-            <div class="ag" style="left: 78%;"></div>
-            <div class="ag" style="left: 92%;"></div>
-            <div class="b" style="left: 22%;"></div>
-            <div class="b" style="left: 50%;"></div>
-            <div class="b" style="left: 78%;"></div>
-          </div>
-        </div>
-        <div class="mini-track">
-          <div class="ic">🎤</div>
-          <div class="nm">Vocal</div>
-          <div class="mini-lane">
-            <div class="ag" style="left: 8%;"></div>
-            <div class="ag" style="left: 22%;"></div>
-            <div class="ag" style="left: 36%;"></div>
-            <div class="ag" style="left: 50%;"></div>
-            <div class="ag" style="left: 64%;"></div>
-            <div class="ag" style="left: 78%;"></div>
-            <div class="ag" style="left: 92%;"></div>
-            <div class="b" style="left: 23%;"></div>
-            <div class="b" style="left: 38%;"></div>
-            <div class="b" style="left: 65%;"></div>
-            <div class="b" style="left: 91%;"></div>
-          </div>
+      <div style="opacity: 0.25; padding: 8px 18px;">
+        <div class="edit-header">
+          <div class="left"><span class="chev">‹</span></div>
+          <div class="title">새 곡</div>
+          <div class="right"><span class="share">↑</span><span class="done">완료</span></div>
         </div>
       </div>
+      <div class="sheet-overlay">
+        <div class="sheet" style="max-height: 92%;">
+          <div class="grabber"></div>
+          <div class="sheet-head">
+            <div class="ttl">박자 보정</div>
+            <div class="spacer"></div>
+            <div class="big-toggle on"><div class="knob"></div></div>
+          </div>
 
-      <div class="callout">
-        BPM 새 위치
-        <div class="line"></div>
-      </div>
+          <div class="sheet-section">
+            <div class="lbl">기준 트랙</div>
+            <div class="anchor-row">
+              <div class="ic">🥁</div>
+              <div class="tx">
+                <div class="nm">Drum 1</div>
+                <div class="sub">현재 기준 트랙</div>
+              </div>
+              <div class="change">접기 ▴</div>
+            </div>
 
-      <div class="transport">
-        <div class="t-play">▶</div>
-        <div class="t-time">0:12 / 0:32</div>
-        <div class="t-bpm">
-          <div class="step">−</div>
-          <div class="val"><span style="color: var(--lime); font-size:11px;">♩</span><span class="n">90</span><span class="u">BPM</span></div>
-          <div class="step">+</div>
+            <div class="dropdown">
+              <div class="dd-row auto selected">
+                <div class="ic">✨</div>
+                <div class="tx">
+                  <div class="nm">자동 선택</div>
+                  <div class="sub">onset 가장 또렷한 트랙 (현재 Drum 1)</div>
+                </div>
+                <div class="check">✓</div>
+              </div>
+              <div class="dd-row">
+                <div class="ic">🥁</div>
+                <div class="tx">
+                  <div class="nm">Drum 1</div>
+                  <div class="sub">onset 32개 · 신뢰도 ●●●</div>
+                </div>
+              </div>
+              <div class="dd-row">
+                <div class="ic">🎸</div>
+                <div class="tx">
+                  <div class="nm">Bass 1</div>
+                  <div class="sub">onset 24개 · 신뢰도 ●●○</div>
+                </div>
+              </div>
+              <div class="dd-row">
+                <div class="ic">🎹</div>
+                <div class="tx">
+                  <div class="nm">Keys 1</div>
+                  <div class="sub">onset 18개 · 신뢰도 ●○○</div>
+                </div>
+              </div>
+              <div class="dd-row disabled">
+                <div class="ic">🎤</div>
+                <div class="tx">
+                  <div class="nm">보컬</div>
+                  <div class="sub">멜로디 트랙은 박자 기준으로 추천하지 않아요</div>
+                </div>
+                <div class="warn-pill">권장 ✗</div>
+              </div>
+            </div>
+            <div class="helper">보통 드럼 / 베이스가 가장 단단한 박자를 가져요.</div>
+          </div>
         </div>
-        <div class="t-metro on">♪</div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ============ 6. 타임라인 ruler — 앵커 onset 표시 ============ -->
-<div class="frame-wrap" style="position: relative;">
+<!-- 5: empty/disabled state -->
+<div class="frame-wrap">
   <div class="frame-title">
-    ⑥ 타임라인 ruler — <b>앵커 onset 표시</b>
-    <em>앵커 트랙 활성 시 ruler 위에 lime 점/세로선으로 "음악 내부 박자"가 보임.</em>
+    <b>⑤ 빈 상태 — onset 부족</b>
+    <em>시트는 열리되 컨트롤 disabled (opacity 0.35). 상단 amber 안내 배너. 토글 off 잠금.</em>
   </div>
   <div class="frame">
     <div class="notch"></div>
-    <div class="statusbar"><span>9:41</span><span class="icons">●●● ▮▮ ▰</span></div>
-    <div class="body ruler-frame">
-      <div class="ruler-title">타임라인 (박자 보정 on)</div>
-
-      <div class="tl-track">
-        <div class="head">
-          <div class="ic">🥁</div>
-          <div>
-            <div class="nm">Drum 1 <span class="anchor-pill" style="margin-left:4px;">앵커</span></div>
+    <div class="statusbar"><span>9:41</span><span>5G ▮</span></div>
+    <div class="body">
+      <div style="opacity: 0.25; padding: 8px 18px;">
+        <div class="edit-header">
+          <div class="left"><span class="chev">‹</span></div>
+          <div class="title">새 곡</div>
+          <div class="right"><span class="share">↑</span><span class="done">완료</span></div>
+        </div>
+      </div>
+      <div class="sheet-overlay">
+        <div class="sheet">
+          <div class="grabber"></div>
+          <div class="sheet-head">
+            <div class="ttl">박자 보정</div>
+            <div class="spacer"></div>
+            <div class="big-toggle"><div class="knob"></div></div>
           </div>
-        </div>
-        <div class="tl-lane anchor">
-          <div class="onset" style="left: 8%;"></div>
-          <div class="onset" style="left: 22%;"></div>
-          <div class="onset" style="left: 36%;"></div>
-          <div class="onset" style="left: 50%;"></div>
-          <div class="onset" style="left: 64%;"></div>
-          <div class="onset" style="left: 78%;"></div>
-          <div class="onset" style="left: 92%;"></div>
-        </div>
-      </div>
 
-      <div class="tl-track">
-        <div class="head">
-          <div class="ic">🎸</div>
-          <div><div class="nm">Bass</div></div>
-        </div>
-        <div class="tl-lane">
-          <div class="anc" style="left: 8%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 22%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 36%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 50%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 64%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 78%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 92%;"><div class="dot"></div></div>
-          <div class="onset" style="left: 8%;"></div>
-          <div class="onset" style="left: 36%;"></div>
-          <div class="onset" style="left: 50%;"></div>
-          <div class="onset" style="left: 78%;"></div>
-        </div>
-      </div>
-
-      <div class="tl-track">
-        <div class="head">
-          <div class="ic">🎤</div>
-          <div><div class="nm">Vocal</div></div>
-        </div>
-        <div class="tl-lane">
-          <div class="anc" style="left: 8%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 22%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 36%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 50%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 64%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 78%;"><div class="dot"></div></div>
-          <div class="anc" style="left: 92%;"><div class="dot"></div></div>
-          <div class="onset" style="left: 22%;"></div>
-          <div class="onset" style="left: 50%;"></div>
-          <div class="onset" style="left: 64%;"></div>
-          <div class="onset" style="left: 92%;"></div>
-        </div>
-      </div>
-
-      <div class="ruler">
-        <div class="tick" style="left: 0;"></div>
-        <div class="lbl" style="left: 0;">0s</div>
-        <div class="tick" style="left: 25%;"></div>
-        <div class="lbl" style="left: 25%;">0.5s</div>
-        <div class="tick" style="left: 50%;"></div>
-        <div class="lbl" style="left: 50%;">1.0s</div>
-        <div class="tick" style="left: 75%;"></div>
-        <div class="lbl" style="left: 75%;">1.5s</div>
-        <div class="tick" style="left: 99%;"></div>
-        <div class="lbl" style="left: 99%;">2.0s</div>
-
-        <div class="anc-tick" style="left: 8%;"><div class="d"></div></div>
-        <div class="anc-tick" style="left: 22%;"><div class="d"></div></div>
-        <div class="anc-tick" style="left: 36%;"><div class="d"></div></div>
-        <div class="anc-tick" style="left: 50%;"><div class="d"></div></div>
-        <div class="anc-tick" style="left: 64%;"><div class="d"></div></div>
-        <div class="anc-tick" style="left: 78%;"><div class="d"></div></div>
-        <div class="anc-tick" style="left: 92%;"><div class="d"></div></div>
-      </div>
-
-      <div class="legend">
-        <div class="it"><div class="sw lime"></div>앵커 onset (동적 그리드)</div>
-        <div class="it"><div class="sw gray"></div>트랙 노트</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ============ 7. 빈 상태 / 앵커 없음 ============ -->
-<div class="frame-wrap" style="position: relative;">
-  <div class="frame-title">
-    ⑦ 박자 보정 시트 — <b>빈 상태 / 앵커 없음</b>
-    <em>아직 트랙이 없을 때. 컨트롤은 비활성, 안내 카드 표시.</em>
-  </div>
-  <div class="frame">
-    <div class="notch"></div>
-    <div class="statusbar"><span>9:41</span><span class="icons">●●● ▮▮ ▰</span></div>
-    <div class="body dim-bg">
-      <div class="sheet" style="height: 640px;">
-        <div class="grab"></div>
-        <div class="sheet-head">
-          <div class="sheet-title">박자 보정</div>
-          <div style="display:flex; align-items:center; gap:10px;">
-            <div class="toggle off"></div>
-            <div class="sheet-close">✕</div>
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="section-label">앵커 트랙</div>
-          <div class="empty">
-            <div class="em-ic">🎙️</div>
-            <div class="em-t">먼저 녹음을 시작해 주세요</div>
-            <div class="em-d">
-              첫 트랙이 녹음되면 자동으로 앵커가 잡혀요.<br>
-              드럼·베이스처럼 박자가 또렷한 악기를 추천해요.
+          <div class="empty-banner">
+            <span class="ic">⚠</span>
+            <div class="tx">
+              <div class="et">박자 분석에 충분한 노트가 없어요</div>
+              <div class="eb">트랙 하나에 onset 16개 이상이 모이면 박자 보정을 켤 수 있어요. 녹음을 좀 더 이어서 진행해 주세요.</div>
             </div>
           </div>
-        </div>
 
-        <div class="section">
-          <div class="slider-row">
-            <div class="slider-name dim">트랙 간 동기</div>
-            <div class="slider-val dim">—</div>
+          <div class="disabled-section">
+            <div class="sheet-section">
+              <div class="lbl">기준 트랙</div>
+              <div class="anchor-row">
+                <div class="ic" style="background: var(--surface-alt); color: var(--text-tertiary);">—</div>
+                <div class="tx">
+                  <div class="nm">선택 안 됨</div>
+                  <div class="sub">충분한 onset 없음</div>
+                </div>
+              </div>
+            </div>
+            <div class="divider"></div>
+            <div class="sheet-section">
+              <div class="slider-row"><div class="lbl">트랙 간 동기</div><div class="pct">—</div></div>
+              <div class="slider"><div class="fill" style="width:0;"></div><div class="thumb" style="left:0;"></div></div>
+            </div>
+            <div class="sheet-section">
+              <div class="slider-row"><div class="lbl">패턴 정형화</div><div class="pct">—</div></div>
+              <div class="slider"><div class="fill" style="width:0;"></div><div class="thumb" style="left:0;"></div></div>
+            </div>
           </div>
-          <div class="slider disabled">
-            <div class="fill" style="width: 0%;"></div>
-            <div class="thumb" style="left: 0%;"></div>
-          </div>
-          <div class="slider-cap" style="opacity: 0.5;">앵커 박자에 다른 트랙 노트들을 정렬</div>
-        </div>
 
-        <div class="section">
-          <div class="slider-row">
-            <div class="slider-name dim">패턴 정형화</div>
-            <div class="slider-val dim">—</div>
+          <div class="sheet-footer">
+            <span class="ic">ⓘ</span>
+            <span>BPM · 메트로놈은 트랜스포트의 메트로놈 버튼에서 조정해요.</span>
           </div>
-          <div class="slider disabled">
-            <div class="fill" style="width: 0%;"></div>
-            <div class="thumb" style="left: 0%;"></div>
-          </div>
-          <div class="slider-cap" style="opacity: 0.5;">반복되는 부분 박자를 평균 위치로 통일</div>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-        <div class="foot-hint">
-          <div class="ic">i</div>
-          <div>BPM·메트로놈은 트랜스포트 바에서 따로 설정해요.</div>
+<!-- 6: full edit_screen context -->
+<div class="frame-wrap">
+  <div class="frame-title">
+    <b>⑥ edit_screen 전체 컨텍스트</b>
+    <em>4 카드 + timeline 일부 + transport. 박자 보정 카드만 새 정보로 렌더링. 다른 카드들과의 시각 균형 확인용.</em>
+  </div>
+  <div class="frame">
+    <div class="notch"></div>
+    <div class="statusbar"><span>9:41</span><span>5G ▮</span></div>
+    <div class="body">
+      <div class="edit-header">
+        <div class="left"><span class="chev">‹</span></div>
+        <div class="title">새 곡</div>
+        <div class="right"><span class="share">↑</span><span class="done">완료</span></div>
+      </div>
+      <div class="section-label">활성 트랙</div>
+      <div class="cards">
+        <div class="card">
+          <div class="card-row">
+            <span class="card-label">♪ INSTRUMENT <span class="info">ⓘ</span></span>
+            <span class="chev-down">▾</span>
+          </div>
+          <div class="inst-name"><span class="ic">🥁</span><span class="nm">Standard Kit</span></div>
         </div>
+        <div class="row-2">
+          <div class="card">
+            <div class="card-row">
+              <span class="card-label">KEY <span class="info">ⓘ</span></span>
+              <span class="key-tag">AUTO</span>
+            </div>
+            <div class="key-name">C Major</div>
+            <div class="key-conf"><span class="t">신뢰도 0.92</span><span class="c">▾</span></div>
+          </div>
+          <div class="card">
+            <div class="card-row">
+              <span class="card-label">피치 어시스트 <span class="info">ⓘ</span></span>
+              <div class="mini-toggle"><div class="knob"></div></div>
+            </div>
+            <div class="assist-num"><span class="n">0</span><span class="l">개 보정</span></div>
+            <div class="assist-desc">키에 맞춰 음정 보정</div>
+          </div>
+        </div>
+        <div class="card spotlight">
+          <div class="card-row">
+            <span class="card-label">박자 보정 <span class="info">ⓘ</span></span>
+            <div class="mini-toggle on"><div class="knob"></div></div>
+          </div>
+          <div class="quant-summary on">Drum 1 기준 · sync 75% · 패턴 30%</div>
+          <div class="quant-meta-row">
+            <span class="quant-anchor-chip">🥁 기준</span>
+            <span class="quant-meta-chip"><b>5</b>개 트랙 동기화</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline-stub">
+        <div class="tl-ruler">0:00 · · · 0:04 · · · 0:08 · · · 0:12</div>
+        <div class="tl-lane active">
+          <div class="side"><span class="ic">🥁</span><span class="nm">Drum 1</span></div>
+          <div class="lane-body">
+            <div class="chunk" style="left:8px; width:80px;"></div>
+            <div class="chunk" style="left:108px; width:80px;"></div>
+            <div class="chunk" style="left:208px; width:80px;"></div>
+          </div>
+        </div>
+        <div class="tl-lane">
+          <div class="side"><span class="ic">🎸</span><span class="nm">Bass 1</span></div>
+          <div class="lane-body">
+            <div class="chunk dim" style="left:12px; width:120px;"></div>
+            <div class="chunk dim" style="left:148px; width:120px;"></div>
+          </div>
+        </div>
+        <div class="tl-lane">
+          <div class="side"><span class="ic">🎹</span><span class="nm">Keys 1</span></div>
+          <div class="lane-body">
+            <div class="chunk dim" style="left:18px; width:100px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="transport-stub">
+        <div class="mini"><span class="ic">🎤</span><span class="lbl">내 목소리</span></div>
+        <div class="play">▶</div>
+        <div class="mini"><span class="ic">⏱</span><span class="lbl">90 BPM</span></div>
       </div>
     </div>
   </div>
