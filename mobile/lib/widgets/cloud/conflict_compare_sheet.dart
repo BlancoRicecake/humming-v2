@@ -3,8 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../l10n/generated/app_localizations.dart';
-import '../theme/app_theme.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../theme/app_theme.dart';
 
 enum ConflictResolution { keepBoth, overwriteCloud, pullFromCloud }
 

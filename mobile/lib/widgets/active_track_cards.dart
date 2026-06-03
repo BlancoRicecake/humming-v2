@@ -14,6 +14,9 @@ import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import 'sheets.dart';
 
+part 'controls/mini_toggle.dart';
+part 'controls/pulse_dot.dart';
+
 class ActiveTrackCards extends StatelessWidget {
   const ActiveTrackCards({super.key, required this.store});
   final ProjectStore store;
@@ -342,90 +345,4 @@ class _QuantizeCard extends StatelessWidget {
   }
 }
 
-class _PulseDot extends StatefulWidget {
-  const _PulseDot({required this.bpm});
-  final int bpm;
-  @override
-  State<_PulseDot> createState() => _PulseDotState();
-}
-
-class _PulseDotState extends State<_PulseDot> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _pulse;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: _period())..repeat();
-    _pulse = _buildPulse();
-  }
-
-  Duration _period() => Duration(milliseconds: (60000 / widget.bpm).round().clamp(150, 2000));
-
-  /// 비트 시작 시 즉시 피크, 이후 감쇠 — 메트로놈 클릭과 위상 일치.
-  Animation<double> _buildPulse() => Tween<double>(begin: 1, end: 0)
-      .chain(CurveTween(curve: Curves.easeIn))
-      .animate(_ctrl);
-
-  @override
-  void didUpdateWidget(covariant _PulseDot old) {
-    super.didUpdateWidget(old);
-    if (old.bpm != widget.bpm) {
-      _ctrl.duration = _period();
-      _ctrl.stop();
-      _ctrl.repeat();
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _pulse,
-      builder: (_, __) => Container(
-        width: 10,
-        height: 10,
-        decoration: BoxDecoration(
-          color: AppColors.lime.withValues(alpha: 0.2 + 0.8 * _pulse.value),
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniToggle extends StatelessWidget {
-  const _MiniToggle({required this.on, required this.onTap});
-  final bool on;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: 36,
-        height: 20,
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: on ? AppColors.lime : AppColors.border,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Align(
-          alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            width: 16,
-            height: 16,
-            decoration: const BoxDecoration(color: AppColors.bg, shape: BoxShape.circle),
-          ),
-        ),
-      ),
-    );
-  }
-}
+// _PulseDot / _MiniToggle 는 widgets/controls/ 하위 part 파일에서 정의.

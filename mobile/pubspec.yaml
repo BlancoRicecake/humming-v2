@@ -66,6 +66,7 @@ dependencies:
   crypto: ^3.0.3
   # 로그인 시트 → 약관/개인정보 처리방침 풀모달 렌더링.
   flutter_markdown: ^0.7.4
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

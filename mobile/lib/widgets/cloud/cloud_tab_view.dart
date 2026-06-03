@@ -6,13 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 
-import '../l10n/generated/app_localizations.dart';
-import '../services/iap_pricing.dart';
-import '../state/project_store.dart';
-import '../theme/app_theme.dart';
-import '../widgets/account_sheets.dart';
-import '../widgets/common.dart';
-import '../widgets/sync_progress_sheet.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../services/iap_pricing.dart';
+import '../../state/project_store.dart';
+import '../../theme/app_theme.dart';
+import '../account_sheets.dart';
+import '../common.dart';
+import 'sync_progress_sheet.dart';
 
 class CloudTabView extends StatefulWidget {
   const CloudTabView({super.key, required this.onGoToLocalTab});

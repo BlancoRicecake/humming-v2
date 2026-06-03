@@ -3,10 +3,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../l10n/generated/app_localizations.dart';
-import '../state/project_store.dart';
-import '../theme/app_theme.dart';
-import '../widgets/common.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../state/project_store.dart';
+import '../../theme/app_theme.dart';
+import '../common.dart';
 
 class CloudSettingsCard extends StatelessWidget {
   const CloudSettingsCard({super.key});

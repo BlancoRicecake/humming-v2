@@ -1,7 +1,7 @@
 // 세그먼트 컨트롤 — pill 안의 두 탭. lime fill = active.
 // 시안: cloud-sync-p3.html .segment / .seg-tab
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
+import '../../theme/app_theme.dart';
 
 class SegmentedControl extends StatelessWidget {
   const SegmentedControl({

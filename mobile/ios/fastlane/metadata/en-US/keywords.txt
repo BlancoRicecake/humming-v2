@@ -1,1 +1,1 @@
-humming,sheet music,songwriting,pitch,rhythm,metronome,chords,MIDI,music memo,melody
+humming,melody,songwriting,pitch,rhythm,metronome,chords,MIDI,music memo,songwriter,vocal,demo

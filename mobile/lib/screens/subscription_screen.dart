@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/generated/app_localizations.dart';
 import '../services/iap_pricing.dart';
@@ -194,16 +195,60 @@ class SubscriptionScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(Symbols.info, size: 16, color: AppColors.textSecondary),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(msg,
-              style: T.sub.copyWith(fontSize: 12, height: 1.5, color: AppColors.textSecondary)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Symbols.info, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(msg,
+                style: T.sub.copyWith(fontSize: 12, height: 1.5, color: AppColors.textSecondary)),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: GestureDetector(
+            onTap: _openStoreSubscriptions,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Symbols.open_in_new, size: 13, color: AppColors.textPrimary),
+                const SizedBox(width: 6),
+                Text(_openStoreLabel(),
+                    style: T.label.copyWith(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          ),
         ),
       ]),
     );
   }
+
+  /// 디바이스 OS 에 맞춰 store 구독 관리 페이지 열기.
+  /// iOS: itms-apps deep link → App Store 앱 직접 진입
+  /// Android: https → Play Store 자동 처리
+  Future<void> _openStoreSubscriptions() async {
+    final url = Platform.isIOS
+        ? Uri.parse('itms-apps://apps.apple.com/account/subscriptions')
+        : Uri.parse('https://play.google.com/store/account/subscriptions');
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      // fallback — https 로 재시도
+      await launchUrl(Uri.parse(
+        Platform.isIOS
+            ? 'https://apps.apple.com/account/subscriptions'
+            : 'https://play.google.com/store/account/subscriptions',
+      ));
+    }
+  }
+
+  String _openStoreLabel() => Platform.isIOS
+      ? 'App Store 에서 관리'
+      : 'Google Play 에서 관리';
 
   // ignore: unused_element
   void _confirmCancel(BuildContext context, ProjectStore store) {

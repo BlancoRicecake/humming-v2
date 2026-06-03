@@ -13,7 +13,7 @@ import '../services/iap_pricing.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_sheets.dart';
-import '../widgets/cloud_settings_card.dart';
+import '../widgets/cloud/cloud_settings_card.dart';
 import 'account_detail_screen.dart';
 import 'language_screen.dart';
 import 'static_screens.dart';

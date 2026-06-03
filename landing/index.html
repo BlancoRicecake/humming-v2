@@ -227,6 +227,16 @@ section { padding: 100px 24px; max-width: 1200px; margin: 0 auto; }
 .price-card .price-cta.pro { background: var(--lime); color: var(--bg); }
 .ribbon { position: absolute; top: -1px; right: 28px; background: var(--lime); color: var(--bg); padding: 6px 14px; border-radius: 0 0 10px 10px; font-size: 11px; font-weight: 800; letter-spacing: 0.6px; }
 
+/* Pro 카드 — 월/연 결제 토글 */
+.billing-toggle { display: inline-flex; gap: 4px; padding: 4px; margin-top: 18px; background: var(--surface-alt, rgba(255,255,255,0.04)); border: 1px solid var(--border); border-radius: 999px; }
+.billing-opt { background: transparent; border: 0; cursor: pointer; padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; transition: background 0.18s, color 0.18s; font-family: inherit; }
+.billing-opt:hover { color: var(--text-primary); }
+.billing-opt.active { background: var(--lime); color: var(--bg); }
+.billing-opt .save-pill { font-size: 10px; font-weight: 800; letter-spacing: 0.4px; padding: 2px 7px; border-radius: 999px; background: rgba(255,255,255,0.18); color: inherit; }
+.billing-opt:not(.active) .save-pill { background: rgba(213,255,114,0.16); color: var(--lime); }
+.billing-pane[hidden] { display: none; }
+.billing-pane { margin-top: 14px; }
+
 /* ─── FAQ ─── */
 .faq-list { margin-top: 36px; max-width: 820px; }
 .faq-item {
@@ -523,11 +533,31 @@ footer { border-top: 1px solid var(--border); padding: 60px 24px 40px; }
       <a href="#" class="price-cta free" data-ko="무료로 시작" data-en="Start free">무료로 시작</a>
     </div>
 
-    <div class="price-card pro">
+    <div class="price-card pro" id="proCard">
       <div class="ribbon" data-ko="추천" data-en="POPULAR">추천</div>
-      <div class="tier">Humming Pro</div>
-      <div class="price">$4.99<small data-ko=" / 월" data-en=" / month"> / 월</small></div>
-      <div class="yearly" data-ko="또는 연간 $29.99 (월 $2.50 · 50% 할인)" data-en="or $29.99 / year ($2.50/mo · 50% off)">또는 연간 $29.99 (월 $2.50 · 50% 할인)</div>
+      <div class="tier">HumTrack Pro</div>
+
+      <div class="billing-toggle" role="tablist" aria-label="결제 주기">
+        <button type="button" class="billing-opt" data-billing="monthly" role="tab" aria-selected="false"
+                data-ko="월간" data-en="Monthly">월간</button>
+        <button type="button" class="billing-opt active" data-billing="yearly" role="tab" aria-selected="true">
+          <span data-ko="연간" data-en="Yearly">연간</span>
+          <span class="save-pill" data-ko="20% 할인" data-en="Save 20%">20% 할인</span>
+        </button>
+      </div>
+
+      <!-- 월간 -->
+      <div class="billing-pane" data-pane="monthly" hidden>
+        <div class="price">$3.49<small data-ko=" / 월" data-en=" / month"> / 월</small></div>
+        <div class="yearly" data-ko="매월 결제 · 언제든 해지" data-en="Billed monthly · cancel anytime">매월 결제 · 언제든 해지</div>
+      </div>
+
+      <!-- 연간 (기본 노출) -->
+      <div class="billing-pane" data-pane="yearly">
+        <div class="price">$2.79<small data-ko=" / 월" data-en=" / month"> / 월</small></div>
+        <div class="yearly" data-ko="연 1회 $33.49 결제 · 월 $3.49 대비 약 20% 할인" data-en="$33.49 billed yearly · ~20% off the monthly rate">연 1회 $33.49 결제 · 월 $3.49 대비 약 20% 할인</div>
+      </div>
+
       <ul>
         <li data-ko="무료 기능 모두 포함" data-en="Everything in Free">무료 기능 모두 포함</li>
         <li data-ko="WAV / MIDI / 스템 무제한 내보내기" data-en="Unlimited WAV / MIDI / stem export">WAV / MIDI / 스템 무제한 내보내기</li>
@@ -657,6 +687,21 @@ function setLang(lang) {
 }
 document.querySelectorAll('.faq-item').forEach(item => {
   item.addEventListener('click', () => item.classList.toggle('open'));
+});
+
+// Pro 카드 월/연 토글
+document.querySelectorAll('.billing-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.billing; // 'monthly' | 'yearly'
+    document.querySelectorAll('.billing-opt').forEach(b => {
+      const on = b.dataset.billing === target;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.billing-pane').forEach(p => {
+      p.hidden = (p.dataset.pane !== target);
+    });
+  });
 });
 </script>
 </body>

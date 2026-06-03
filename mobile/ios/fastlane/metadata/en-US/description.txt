@@ -1,7 +1,25 @@
-HumTrack turns hummed or sung melodies into sheet music, chords, and beat-aligned takes.
+HumTrack turns hummed or sung melodies into sheet music, chords, and beat-aligned takes — your musical sketchpad.
 
-- Auto-detects pitch, rhythm, and chords from voice or instrument recordings
-- Multi-track editor with metronome and beat quantize
-- Export your songs to MIDI and audio
+[ Features ]
+- Hum, sing, or play → auto pitch, rhythm, and chord detection
+- Multi-track editor: vocal + piano + bass + drums + synth
+- Metronome · Quantize (beat correction) · Auto key detection
+- Export to MIDI · WAV
+- Local save — start instantly, no login required
 
-Unlock unlimited recording and advanced analysis with HumTrack Pro.
+[ HumTrack Pro ($3.49/mo or $33.49/yr · 7-day free trial) ]
+- Unlimited export (MIDI · WAV · stems)
+- 5GB Cloud sync across all your devices
+- Permanent vocal backup
+- Priority analysis
+
+[ Privacy ]
+- No ads
+- No user tracking, no advertising identifiers
+- Vocal recordings are never used to train AI
+- Account deletion removes all your data
+
+Contact: heobusy@gmail.com
+Terms: https://hum-track.com/terms
+Privacy Policy: https://hum-track.com/privacy
+Refund Policy: https://hum-track.com/refund
