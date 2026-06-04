@@ -152,30 +152,32 @@ class _SongsScreenState extends State<SongsScreen> {
 
   Widget _emptyState() {
     final t = L10n.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _brandMark(),
-          const SizedBox(height: 28),
-          Text(t.songsEmptyTitle, style: T.h2),
-          const SizedBox(height: 10),
-          Text(
-            t.songsEmptySub,
-            style: T.sub,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 28),
-          SizedBox(
-            width: 240,
-            child: LimeButton(
-              label: t.songsEmptyCta,
-              icon: Symbols.arrow_forward,
-              onTap: _newProject,
+    return TabletConstrain(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _brandMark(),
+            const SizedBox(height: 28),
+            Text(t.songsEmptyTitle, style: T.h2),
+            const SizedBox(height: 10),
+            Text(
+              t.songsEmptySub,
+              style: T.sub,
+              textAlign: TextAlign.center,
             ),
-          ),
-        ],
+            const SizedBox(height: 28),
+            SizedBox(
+              width: 240,
+              child: LimeButton(
+                label: t.songsEmptyCta,
+                icon: Symbols.arrow_forward,
+                onTap: _newProject,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

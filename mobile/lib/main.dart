@@ -21,6 +21,9 @@ import 'services/locale_service.dart';
 import 'services/observability_service.dart';
 import 'state/project_store.dart';
 import 'theme/app_theme.dart';
+import 'models/models.dart';
+import 'screens/edit_screen.dart';
+import 'screens/recording_screen.dart';
 import 'screens/songs_screen.dart';
 
 Future<void> main() async {
@@ -37,6 +40,49 @@ Future<void> main() async {
   });
 }
 
+/// 스크린샷용 디버그 진입 — 빌드 시 `--dart-define=DEBUG_GOTO=edit` 등을 주면
+/// Songs 마운트 직후 해당 화면을 push 한다. 프로덕션 영향 없음(default '').
+class _DebugGotoWrapper extends StatefulWidget {
+  const _DebugGotoWrapper({required this.child});
+  final Widget child;
+  @override
+  State<_DebugGotoWrapper> createState() => _DebugGotoWrapperState();
+}
+
+class _DebugGotoWrapperState extends State<_DebugGotoWrapper> {
+  static const _goto = String.fromEnvironment('DEBUG_GOTO');
+
+  @override
+  void initState() {
+    super.initState();
+    if (_goto.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return;
+      final store = context.read<ProjectStore>();
+      switch (_goto) {
+        case 'edit':
+          store.newProject();
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const EditScreen()),
+          );
+          break;
+        case 'recording':
+          store.newProject();
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const RecordingScreen(role: TrackRole.vocal),
+            ),
+          );
+          break;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 class HummingApp extends StatelessWidget {
   const HummingApp({super.key});
 
@@ -51,7 +97,7 @@ class HummingApp extends StatelessWidget {
         store.loadCloudPrefs();
         return store;
       },
-      child: ValueListenableBuilder<Locale?>(
+      child: ValueListenableBuilder<Locale?>( // keep formatting
         valueListenable: LocaleService.instance.selected,
         builder: (_, override, __) {
           return MaterialApp(
@@ -62,7 +108,7 @@ class HummingApp extends StatelessWidget {
             locale: override,
             localizationsDelegates: L10n.localizationsDelegates,
             supportedLocales: L10n.supportedLocales,
-            home: const SongsScreen(),
+            home: const _DebugGotoWrapper(child: SongsScreen()),
           );
         },
       ),

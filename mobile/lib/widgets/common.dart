@@ -3,6 +3,32 @@ import 'package:flutter/material.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../theme/app_theme.dart';
 
+/// 태블릿 / 큰 화면에서 컨텐츠 가로 폭을 모바일 폭(<= [maxWidth])으로 제한하고
+/// 가운데 정렬한다. iPhone 등 좁은 화면(< [maxWidth])에서는 child 가 그대로
+/// 풀폭으로 표시되어 regression 없다.
+///
+/// 사용처: SongsScreen 같은 풀-스크린 컬럼, 빈 상태, 하단 탭바 등.
+class TabletConstrain extends StatelessWidget {
+  const TabletConstrain({super.key, required this.child, this.maxWidth = 640});
+  final Widget child;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// 화면 폭 >= 600 이면 태블릿으로 간주.
+bool isTabletWidth(BuildContext context) =>
+    MediaQuery.of(context).size.shortestSide >= 600;
+
 /// 미연결 기능 안내 (디자인의 40% dim 버튼 탭 시).
 void comingSoon(BuildContext context, [String? label]) {
   final t = L10n.of(context);
