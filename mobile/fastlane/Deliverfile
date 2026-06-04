@@ -18,7 +18,7 @@ api_key_path "/Users/heojeongmin/WebstormProjects/humming-v2/backend/secrets/asc
 # iPhone-only staging dir; populated by :screenshots_only lane.
 screenshots_path "./fastlane/screenshots-staging"
 
-skip_metadata true
+skip_metadata false
 skip_binary_upload true
 overwrite_screenshots true
 force true
