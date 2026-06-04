@@ -1,0 +1,122 @@
+# HumTrack Fastfile
+#
+# Lanes:
+#   screenshots_only  - upload iPhone 6.9" screenshots to App Store Connect
+#   beta              - build IPA via flutter then upload to TestFlight
+#   release           - same as beta plus deliver (no auto-submit)
+#
+# Apple Developer Team:  766Q6P7JRQ
+# Bundle ID:             com.humtrack.app
+# API key:               HumTrack ASC Automation (TF99MYSPK2) — backend/secrets/asc_api_key.json
+#
+# Flutter builds the IPA via `flutter build ipa --release` (option A).
+# Resulting artifact: mobile/build/ios/ipa/Runner.ipa (or *.ipa in that dir).
+
+default_platform(:ios)
+
+API_KEY_PATH = "/Users/heojeongmin/WebstormProjects/humming-v2/backend/secrets/asc_api_key.json".freeze
+IPA_GLOB = "../build/ios/ipa/*.ipa".freeze
+
+platform :ios do
+  desc "Upload iPhone 6.9-inch screenshots only (ko, en-US)"
+  lane :screenshots_only do
+    stage_iphone_only_screenshots
+    deliver(
+      api_key_path: API_KEY_PATH,
+      screenshots_path: "./fastlane/screenshots-staging",
+      skip_metadata: true,
+      skip_binary_upload: true,
+      overwrite_screenshots: true,
+      force: true,
+      run_precheck_before_submit: false,
+      languages: ["ko", "en-US"]  # iOS Locale codes (fastlane 표준),
+    )
+  end
+
+  desc "Upload an already-built Flutter IPA to TestFlight"
+  lane :beta do
+    ipa_path = resolve_ipa_path
+    UI.user_error!("No IPA found. Run: flutter build ipa --release") unless ipa_path
+
+    pilot(
+      api_key_path: API_KEY_PATH,
+      ipa: ipa_path,
+      skip_waiting_for_build_processing: true,
+      distribute_external: false,
+    )
+  end
+
+  desc "Build IPA via Flutter and upload to TestFlight"
+  lane :build_and_beta do
+    flutter_build_ipa
+    beta
+  end
+
+  desc "Upload to TestFlight plus push current metadata/screenshots (no auto submit)"
+  lane :release do
+    beta
+    deliver(
+      api_key_path: API_KEY_PATH,
+      skip_metadata: true,
+      skip_binary_upload: true,
+      overwrite_screenshots: true,
+      submit_for_review: false,
+      automatic_release: false,
+      force: true,
+      languages: ["ko", "en-US"]  # iOS Locale codes (fastlane 표준),
+    )
+  end
+
+  # -- helpers --------------------------------------------------------------
+
+  desc "Stage iPhone-only screenshots into ./fastlane/screenshots-staging"
+  private_lane :stage_iphone_only_screenshots do
+    require "fileutils"
+    src = File.expand_path("screenshots", __dir__)
+    dst = File.expand_path("screenshots-staging", __dir__)
+    FileUtils.rm_rf(dst)
+    FileUtils.mkdir_p(dst)
+    Dir.children(src).each do |locale|
+      locale_src = File.join(src, locale)
+      next unless File.directory?(locale_src)
+      locale_dst = File.join(dst, locale)
+      FileUtils.mkdir_p(locale_dst)
+      Dir.glob(File.join(locale_src, "iPhone-*.png")).each do |png|
+        FileUtils.cp(png, locale_dst)
+      end
+    end
+    UI.message("Staged iPhone-only screenshots at #{dst}")
+  end
+
+  desc "Build a release IPA via Flutter with dart-define from backend/.env.secrets"
+  private_lane :flutter_build_ipa do
+    repo_root = File.expand_path("../..", __dir__)
+    secrets_path = File.join(repo_root, "backend/.env.secrets")
+    UI.user_error!("backend/.env.secrets not found at #{secrets_path}") unless File.exist?(secrets_path)
+    env = parse_dotenv(secrets_path)
+    defines = {
+      "SUPABASE_URL"         => env.fetch("SUPABASE_URL"),
+      "SUPABASE_ANON_KEY"    => env.fetch("SUPABASE_ANON_KEY"),
+      "GOOGLE_WEB_CLIENT_ID" => env.fetch("GOOGLE_OAUTH_CLIENT_ID"),
+      "ENGINE_URL"           => "https://api.hum-track.com",
+    }
+    define_args = defines.map { |k, v| "--dart-define=#{k}=#{v}" }.join(" ")
+    Dir.chdir(File.expand_path("..", __dir__)) do
+      sh("flutter build ipa --release #{define_args}")
+    end
+  end
+
+  def parse_dotenv(path)
+    File.readlines(path).each_with_object({}) do |line, h|
+      next if line.strip.empty? || line.start_with?("#")
+      k, _, v = line.chomp.partition("=")
+      h[k] = v
+    end
+  end
+
+  def resolve_ipa_path
+    candidates = Dir.glob(File.expand_path(IPA_GLOB, __dir__))
+    return nil if candidates.empty?
+    candidates.max_by { |p| File.mtime(p) }
+  end
+end
