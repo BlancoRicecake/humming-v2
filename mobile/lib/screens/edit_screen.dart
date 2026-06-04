@@ -563,8 +563,6 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                 // 모두 그 경로가 처리하므로 별도 override 불필요(과거 override 는 시프트 누락
                 // → 코드 모드에서 첫 노트 앞 리딩 빈공간이 되살아나는 버그가 있었음).
                 notesOverride: null,
-                // 박자 보정 결과를 타임라인에 표시(노트 위치·길이가 그리드로 이동).
-                quantizeDisplay: store.quantizeNotes,
                 durationSec: _projectDuration(store),
                 playheadSec: _playheadSec,
                 selectedNote: t.chordActive ? null : store.selectedNote,
@@ -589,6 +587,11 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                     ? null
                     : (id, {double? newLeftTimeline, double? newRightTimeline}) => store.resizeChunk(id,
                         newLeftTimeline: newLeftTimeline, newRightTimeline: newRightTimeline),
+                onNoteResize: t.chordActive
+                    ? null
+                    : (i, {double? newStartTimeline, double? newEndTimeline}) => store.resizeNote(i,
+                        newStartTimeline: newStartTimeline, newEndTimeline: newEndTimeline),
+                onEditCheckpoint: store.pushUndoCheckpoint,
                 onNoteTap: t.chordActive
                     ? null // 코드 모드에선 후보 편집 비활성 (단음 모드에서 편집)
                     : (i) => store.selectNote(i), // 선택만 — 음정 시트는 컨텍스트 액션 바의 "음정" 탭으로 열기.
@@ -640,6 +643,18 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                 ),
                 Text(store.title, style: T.title),
                 Row(children: [
+                  GestureDetector(
+                    onTap: store.canUndo ? store.undo : null,
+                    child: Icon(Symbols.undo, size: 22,
+                        color: store.canUndo ? AppColors.textPrimary : AppColors.textTertiary),
+                  ),
+                  const SizedBox(width: 14),
+                  GestureDetector(
+                    onTap: store.canRedo ? store.redo : null,
+                    child: Icon(Symbols.redo, size: 22,
+                        color: store.canRedo ? AppColors.textPrimary : AppColors.textTertiary),
+                  ),
+                  const SizedBox(width: 16),
                   GestureDetector(
                     onTap: store.active.notes.isEmpty
                         ? null
@@ -855,10 +870,18 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
     final items = <Widget>[];
 
     if (hasNote) {
-      // 노트: 음정 · (코드 — 코드 가능 악기만) · 볼륨 · 삭제
+      // 노트: 음정 · 분할 · 머지 · 복사 · (코드) · 볼륨 · 삭제 (가이드선 기준)
       items.add(item(Symbols.music_note, l.ctxActionPitch,
           enabled: true,
           onTap: () => showNoteCandidate(context, store, store.selectedNote!)));
+      items.add(item(Symbols.content_cut, l.ctxActionSplit, enabled: true, onTap: () {
+        if (!store.splitSelectedAny(_playheadSec)) {
+          comingSoon(context, l.editSplitNotPossible);
+        }
+      }));
+      items.add(item(Symbols.merge, '머지',
+          enabled: true, onTap: store.mergeSelectedNote));
+      items.add(item(Symbols.content_copy, l.ctxActionCopy, enabled: true, onTap: store.copySelectedAny));
       if (t.isChordInstrument) {
         final isChord = store.canUnchordSelected;
         items.add(item(isChord ? Symbols.heart_broken : Symbols.queue_music,

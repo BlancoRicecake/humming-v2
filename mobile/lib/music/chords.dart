@@ -89,7 +89,8 @@ List<Note> expandChords(List<Note> notes, DetectedKey? key, bool chordMode) {
       final cn = Note.fromJson(n.toJson())
         ..pitch = p
         ..pitchHz = _midiToHz(p)
-        ..velocity = idx == 0 ? n.velocity : math.max(1, (n.velocity * 0.82).round());
+        ..velocity = idx == 0 ? n.velocity : math.max(1, (n.velocity * 0.82).round())
+        ..chunkId = n.chunkId; // 청크 멤버십 유지 — 없으면 effectiveRenderNotes 가 시프트 못함
       out.add(cn);
     }
   }

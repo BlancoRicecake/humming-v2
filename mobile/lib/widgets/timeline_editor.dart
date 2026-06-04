@@ -47,6 +47,8 @@ class TimelineEditor extends StatefulWidget {
     this.onSeek,
     this.onChunkMove,
     this.onChunkResize,
+    this.onNoteResize,
+    this.onEditCheckpoint,
     this.notesOverride,
     this.quantizeDisplay,
     this.pending,
@@ -81,6 +83,10 @@ class TimelineEditor extends StatefulWidget {
   final void Function(double sec)? onSeek;
   final void Function(int chunkId, double dtSec)? onChunkMove; // 길게 눌러 이동
   final void Function(int chunkId, {double? newLeftTimeline, double? newRightTimeline})? onChunkResize;
+  /// 노트 길이조절 — 선택 노트의 좌/우 엣지 핸들 드래그. 타임라인(effective) 좌표 전달.
+  final void Function(int noteIndex, {double? newStartTimeline, double? newEndTimeline})? onNoteResize;
+  /// 드래그(리사이즈/이동) 시작 시 1회 — undo 체크포인트.
+  final VoidCallback? onEditCheckpoint;
 
   /// 활성 트랙의 표시용 노트 오버라이드 (코드 모드 시 확장된 노트 등).
   /// null 이면 트랙의 `notes` 를 그대로 사용.
@@ -116,10 +122,13 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
   double _zoom = 1.0;
   double _scrollX = 0;
   double _startZoom = 1.0;
+  double _laneZoom = 1.0; // 활성 레인 세로 확대(1~4). 노트 터치/미세조정용.
+  double _laneStartZoom = 1.0;
 
   // 청크 이동/트림 드래그 상태
   int? _moveChunk;
   double? _resizeStart, _resizeEnd;
+  double? _noteResizeStart, _noteResizeEnd; // 노트 길이조절 드래그 누적(effective 시간)
   double? _moveDxAcc; // 롱프레스 이동 — offsetFromOrigin.dx 누적값(델타 계산용)
   Timer? _autoScrollTimer;
   int _autoScrollDir = 0; // -1 / 0 / +1
@@ -426,16 +435,23 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
       for (final t in ts) {
         y += _trackNameH; // 트랙 이름 strip
         tops[t.id] = y; // 레인 상단(이름 strip 아래)
-        y += _trackH;
+        y += _laneHeightFor(t);
       }
     }
     return tops;
   }
 
+  /// 레인 높이 — 활성 트랙만 세로 줌(_laneZoom)배. 노트는 _Geo 가 자동 스케일.
+  double _laneHeightFor(TrackData t) =>
+      _trackH * (t.id == widget.activeTrackId ? _laneZoom : 1.0);
+
   double get _lanesH {
     double h = 0;
     for (final (_, ts) in _grouped()) {
-      h += _catH + (_trackNameH + _trackH) * ts.length;
+      h += _catH;
+      for (final t in ts) {
+        h += _trackNameH + _laneHeightFor(t);
+      }
     }
     return h;
   }
@@ -451,7 +467,7 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
     final top = _trackTops()[t.id];
     if (top == null) return const [];
     final laneTop = top;
-    final laneH = _trackH - _laneGap;
+    final laneH = _laneHeightFor(t) - _laneGap;
     final leftX = _anchorX + _secToPx(r[0]) - _scrollX;
     final rightX = _anchorX + _secToPx(r[1]) - _scrollX;
 
@@ -462,7 +478,10 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
           width: 12,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (_) => isLeft ? _resizeStart = r[0] : _resizeEnd = r[1],
+            onHorizontalDragStart: (_) {
+              widget.onEditCheckpoint?.call();
+              isLeft ? _resizeStart = r[0] : _resizeEnd = r[1];
+            },
             onHorizontalDragUpdate: (d) {
               final targets = _snapTargets(excludeChunkId: cid);
               if (isLeft) {
@@ -500,6 +519,64 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
     return [handle(leftX, true), handle(rightX, false)];
   }
 
+  // 선택된 노트의 양끝 길이조절 핸들(활성 트랙 레인). 청크 트림과 동일한 방식이되
+  // 대상이 단일 노트. effective 시간으로 누적해 onNoteResize 로 전달.
+  List<Widget> _noteResizeHandles() {
+    final nidx = widget.selectedNote;
+    final t = _activeTrack;
+    if (nidx == null || t == null) return const [];
+    final notes = _notesFor(t);
+    if (nidx < 0 || nidx >= notes.length) return const [];
+    final n = notes[nidx];
+    if (n.kind != 'pitched') return const []; // 드럼(percussive)은 길이조절 비대상
+    final top = _trackTops()[t.id];
+    if (top == null) return const [];
+    final laneTop = top;
+    final laneH = _laneHeightFor(t) - _laneGap;
+    final leftX = _anchorX + _secToPx(n.start) - _scrollX;
+    final rightX = _anchorX + _secToPx(n.end) - _scrollX;
+
+    Widget handle(double x, bool isLeft) => Positioned(
+          left: x - 7,
+          top: laneTop,
+          height: laneH,
+          width: 14,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (_) {
+              widget.onEditCheckpoint?.call();
+              isLeft ? _noteResizeStart = n.start : _noteResizeEnd = n.end;
+            },
+            onHorizontalDragUpdate: (d) {
+              if (isLeft) {
+                _noteResizeStart = (_noteResizeStart ?? n.start) + _pxToSec(d.delta.dx);
+                widget.onNoteResize?.call(nidx, newStartTimeline: _noteResizeStart);
+              } else {
+                _noteResizeEnd = (_noteResizeEnd ?? n.end) + _pxToSec(d.delta.dx);
+                widget.onNoteResize?.call(nidx, newEndTimeline: _noteResizeEnd);
+              }
+            },
+            onHorizontalDragEnd: (_) {
+              _noteResizeStart = null;
+              _noteResizeEnd = null;
+            },
+            onHorizontalDragCancel: () {
+              _noteResizeStart = null;
+              _noteResizeEnd = null;
+            },
+            child: Center(
+              child: Container(
+                width: 3,
+                height: laneH * 0.7,
+                decoration: BoxDecoration(
+                    color: AppColors.lime, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+          ),
+        );
+
+    return [handle(leftX, true), handle(rightX, false)];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -553,12 +630,19 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
                             behavior: HitTestBehavior.opaque,
                             onScaleStart: (_) {
                               _startZoom = _zoom;
+                              _laneStartZoom = _laneZoom;
                               _stopScrollAnim();
                               _panning = true;
                             },
                             onScaleUpdate: (d) {
                               setState(() {
-                                if (d.scale != 1.0) {
+                                // 지배 축 판정 — 세로 핀치가 더 크면 활성 레인 세로 줌,
+                                // 아니면 가로(시간) 줌. (한 핀치로 택1.)
+                                final hMag = (d.horizontalScale - 1.0).abs();
+                                final vMag = (d.verticalScale - 1.0).abs();
+                                if (vMag > hMag && d.verticalScale != 1.0) {
+                                  _laneZoom = (_laneStartZoom * d.verticalScale).clamp(1.0, 4.0);
+                                } else if (d.scale != 1.0) {
                                   _zoom = (_startZoom * d.scale).clamp(0.3, 6.0);
                                 }
                                 _scrollX -= d.focalPointDelta.dx;
@@ -582,13 +666,47 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
                                     ),
                                   ),
                                   ..._trimHandles(),
-                                  // 플레이헤드 — 항상 좌측 anchor 에 시각 고정.
-                                  // 스크롤이 컨텐츠를 흐르게 만들고, 그 위에 플레이헤드가 떠 있는 모델.
+                                  ..._noteResizeHandles(),
+                                  // 플레이헤드(흰 가이드선) — 좌측 anchor 에 시각 고정.
+                                  // 상단 그립을 끌면 그 시간으로 스크럽(= _playheadSec 갱신,
+                                  // 분할/길이 편집의 기준선). 룰러 드래그와 같은 방향(우=뒤로).
                                   Positioned(
-                                    left: _anchorX - 1,
+                                    left: _anchorX - 11,
                                     top: 0,
                                     bottom: 0,
-                                    child: IgnorePointer(child: Container(width: 2, color: Colors.white)),
+                                    width: 22, // 터치 히트존
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onHorizontalDragStart: (_) {
+                                        _stopScrollAnim();
+                                        _panning = true;
+                                      },
+                                      onHorizontalDragUpdate: (d) {
+                                        setState(() {
+                                          _scrollX += d.delta.dx;
+                                          _clampScroll();
+                                        });
+                                        widget.onSeek?.call(_pxToSec(_scrollX));
+                                      },
+                                      onHorizontalDragEnd: (_) => _panning = false,
+                                      onHorizontalDragCancel: () => _panning = false,
+                                      child: Stack(alignment: Alignment.center, children: [
+                                        Container(width: 2, color: Colors.white),
+                                        Positioned(
+                                          top: 0,
+                                          child: Container(
+                                            width: 16,
+                                            height: 16,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(8),
+                                              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
+                                            ),
+                                            child: const Icon(Icons.drag_indicator, size: 12, color: Colors.black54),
+                                          ),
+                                        ),
+                                      ]),
+                                    ),
                                   ),
                                   // 스냅 가이드라인 — 현재 드래그가 스냅된 좌표에 일시 표시.
                                   if (_snapTimeline != null) ...() {
@@ -660,7 +778,7 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
       for (final t in ts) {
         rows.add(_trackNameStrip(t));
         rows.add(SizedBox(
-          height: _trackH,
+          height: _laneHeightFor(t),
           child: Padding(
             padding: const EdgeInsets.only(bottom: _laneGap),
             child: Opacity(
@@ -1175,6 +1293,7 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
         onLongPressStart: (_) {
           if (!active) widget.onActivateTrack?.call(t.id);
           widget.onChunkTap?.call(chunkId);
+          widget.onEditCheckpoint?.call(); // undo 체크포인트(이동 시작)
           setState(() => _moveChunk = chunkId);
           HapticFeedback.mediumImpact();
           final cur = _findChunk(chunkId);

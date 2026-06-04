@@ -27,6 +27,10 @@ double _midiToHz(int m) => 440.0 * math.pow(2, (m - 69) / 12.0);
 /// 드럼 일관 볼륨 — 모든 드럼 노트 렌더 시 이 velocity 로 통일(강약 제거).
 const int kDrumFlatVelocity = 100;
 
+/// 분석 실패/빈 결과 안내 — 사용자에게 토스트로 보여줄 문구.
+const String _kNoSoundMsg = '조금 더 큰 목소리로 녹음해주세요';
+const String _kAnalyzeFailMsg = '분석에 실패했어요. 다시 한 번 시도해주세요.';
+
 /// 트랙 onset 들의 그리드 phase(포켓) 추정 — `start % cellSec` 의 원형평균.
 /// 일관된 러시/레이백을 흡수해 그리드를 연주자에 맞춘다(그루브 보존). O(n).
 double estimateGridPhase(List<Note> notes, double cellSec) {
@@ -52,8 +56,8 @@ class TrackData {
         options = AnalyzeOptions() {
     // 드럼 트랙은 백엔드 onset 기반 드럼 분석을 요청 (단일 진실원).
     options.asDrums = role == TrackRole.drum;
-    // 박자 보정 기본 on(보컬 제외). 사용자가 시트에서 끄기/그리드/세기 조절 가능.
-    if (role != TrackRole.vocal) {
+    // 박자 보정 기본 on 은 드럼만(멜로딕은 편집 안정성 위해 off — 사용자가 켤 수 있음).
+    if (role == TrackRole.drum) {
       quantizeEnabled = true;
     }
   }
@@ -72,8 +76,8 @@ class TrackData {
   // 박자 보정(quantize) — 노트 start 를 그리드(BPM 기반)에 끌어당김.
   // 비-파괴적: store.effectiveRenderNotesFor() 에서 렌더 시 적용. 원본 timing 보존.
   bool quantizeEnabled = false;
-  int quantizeGrid = 4;           // 4/8/16/32 분음 — 기본 1/4(quarter)
-  double quantizeStrength = 1.0;  // 0..1 — 기본 100%(완전 스냅)
+  int quantizeGrid = 16;          // 4/8/16/32 분음 — 기본 1/16(드럼 비트 보존)
+  double quantizeStrength = 0.85; // 0..1
   String? wavPath; // 마지막 녹음 원본 WAV (호환용 — 청크별 wav 는 Chunk.vocalWavPath)
   AnalyzeResponse? analysis; // 최근 분석 결과(가장 최근 청크 메타)
   List<Note> notes = []; // 전 청크의 모든 노트(원본 시간 보존)
@@ -88,6 +92,36 @@ class TrackData {
   bool get isVocal => role == TrackRole.vocal;
   bool get hasRecording =>
       chunks.isNotEmpty || wavPath != null || vocalWavPath != null;
+
+  /// undo/redo 스냅샷용 딥카피 — notes/chunks/options 복제, analysis 는 참조 공유
+  /// (구조 편집은 analysis 불변). 스칼라 필드는 값 복사.
+  TrackData clone() {
+    final c = TrackData(id, role, program: program)
+      ..chordMode = chordMode
+      ..bassPlacement = bassPlacement
+      ..bassOctaveShift = bassOctaveShift
+      ..enabled = enabled
+      ..looping = looping
+      ..quantizeEnabled = quantizeEnabled
+      ..quantizeGrid = quantizeGrid
+      ..quantizeStrength = quantizeStrength
+      ..wavPath = wavPath
+      ..analysis = analysis
+      ..vocalWavPath = vocalWavPath
+      ..vocalPeaks = List<double>.from(vocalPeaks)
+      ..vocalDuration = vocalDuration
+      ..notes = notes.map((n) => Note.fromJson(n.toJson())..chunkId = n.chunkId).toList()
+      ..chunks = chunks.map((ch) => Chunk.fromJson(ch.toJson())).toList();
+    c.options = AnalyzeOptions(
+      autoKey: options.autoKey,
+      pitchAssistant: options.pitchAssistant,
+      keyTonic: options.keyTonic,
+      scale: options.scale,
+      asDrums: options.asDrums,
+      assistAggressive: options.assistAggressive,
+    );
+    return c;
+  }
 
   Chunk? chunkById(int id) {
     for (final c in chunks) {
@@ -318,6 +352,19 @@ class AccountDeleteError {
       AccountDeleteError._(code: 'serverDelete', status: status, detail: detail);
   factory AccountDeleteError.raw(String raw) =>
       AccountDeleteError._(code: 'raw', raw: raw);
+}
+
+/// undo/redo 스냅샷 — 트랙(딥카피) + 프로젝트 메타.
+class _Snapshot {
+  _Snapshot(this.tracks, this.bpm, this.projectKeyTonic, this.projectKeyScale,
+      this.grooveAnchorTrackId, this.keyAnchorTrackId, this.anchorLocked,
+      this.chunkSeq, this.trackSeq, this.activeTrackId);
+  final List<TrackData> tracks;
+  final int bpm;
+  final String? projectKeyTonic, projectKeyScale;
+  final int? grooveAnchorTrackId, keyAnchorTrackId, activeTrackId;
+  final bool anchorLocked;
+  final int chunkSeq, trackSeq;
 }
 
 class ProjectStore extends ChangeNotifier {
@@ -1011,6 +1058,65 @@ class ProjectStore extends ChangeNotifier {
   String? error;
   int editEpoch = 0; // 오디오 출력에 영향 주는 편집마다 증가(재렌더 트리거)
   int _chunkSeq = 0; // 청크 ID 발급기
+
+  // ─── Undo/Redo (스냅샷 기반) ─────────────────────────────────────────────
+  final List<_Snapshot> _undoStack = [];
+  final List<_Snapshot> _redoStack = [];
+  static const int _kMaxHistory = 50;
+
+  _Snapshot _snapshot() => _Snapshot(
+        tracks.map((t) => t.clone()).toList(),
+        bpm, projectKeyTonic, projectKeyScale,
+        grooveAnchorTrackId, keyAnchorTrackId, anchorLocked,
+        _chunkSeq, _trackSeq, activeTrackId,
+      );
+
+  /// 편집 직전 호출 — 현재 상태를 undo 스택에 적재(redo 비움). 버튼 op 는 내부에서,
+  /// 드래그(리사이즈/이동)는 드래그 시작 시 1회만(pushUndoCheckpoint).
+  void _pushUndo() {
+    _undoStack.add(_snapshot());
+    if (_undoStack.length > _kMaxHistory) _undoStack.removeAt(0);
+    _redoStack.clear();
+  }
+
+  /// 드래그 시작 등 외부에서 1회 체크포인트.
+  void pushUndoCheckpoint() => _pushUndo();
+
+  bool get canUndo => _undoStack.isNotEmpty;
+  bool get canRedo => _redoStack.isNotEmpty;
+
+  void _restore(_Snapshot s) {
+    tracks
+      ..clear()
+      ..addAll(s.tracks.map((t) => t.clone())); // 스택의 스냅샷은 불변 유지 위해 재복제
+    bpm = s.bpm;
+    projectKeyTonic = s.projectKeyTonic;
+    projectKeyScale = s.projectKeyScale;
+    grooveAnchorTrackId = s.grooveAnchorTrackId;
+    keyAnchorTrackId = s.keyAnchorTrackId;
+    anchorLocked = s.anchorLocked;
+    _chunkSeq = s.chunkSeq;
+    _trackSeq = s.trackSeq;
+    activeTrackId = s.activeTrackId;
+    if (!tracks.any((t) => t.id == activeTrackId)) {
+      activeTrackId = tracks.isNotEmpty ? tracks.first.id : null;
+    }
+    selectedNote = null;
+    selectedChunk = null;
+    _audioChanged();
+  }
+
+  void undo() {
+    if (_undoStack.isEmpty) return;
+    _redoStack.add(_snapshot());
+    _restore(_undoStack.removeLast());
+  }
+
+  void redo() {
+    if (_redoStack.isEmpty) return;
+    _undoStack.add(_snapshot());
+    _restore(_redoStack.removeLast());
+  }
   // 프로젝트 단일 BPM — quantize 그리드 + 메트로놈 클릭 양쪽에서 사용.
   int bpm = 90;
   // 메트로놈 클릭 on/off — 트랜스포트/메트로놈 시트 양쪽에서 토글.
@@ -1584,8 +1690,17 @@ class ProjectStore extends ChangeNotifier {
       debugPrint('[analyze] ${t.role.label} wav=${(sz / 1024).toStringAsFixed(0)}KB '
           'dur=${res.durationSec.toStringAsFixed(1)}s notes=${res.notes.length}(pitched=$pitched) '
           'key=${res.detectedKey?.tonic}${res.detectedKey?.scale} assisted=${res.assistAppliedCount}');
+      // 인식된 소리가 없으면(작은/짧은 녹음) 빈 트랙으로 두지 말고 재녹음 안내.
+      final usable = t.role == TrackRole.drum ? t.notes.isNotEmpty : pitched > 0;
+      if (!usable) {
+        t.notes = [];
+        t.chunks.clear();
+        t.analysis = null;
+        error = _kNoSoundMsg;
+        debugPrint('[analyze] no usable notes → prompt re-record');
+      }
     } catch (e) {
-      error = '분석 실패: $e';
+      error = _kAnalyzeFailMsg;
       debugPrint('[analyze] FAILED: $e');
     } finally {
       busy = false;
@@ -1667,8 +1782,17 @@ class ProjectStore extends ChangeNotifier {
       final pitched = res.notes.where((n) => n.kind == 'pitched').length;
       debugPrint('[analyze-pending] ${t.role.label} dur=${res.durationSec.toStringAsFixed(1)}s '
           'notes=${res.notes.length}(pitched=$pitched) assisted=${res.assistAppliedCount}');
+      // 인식된 소리가 없으면(작은/짧은 녹음) 소프트 실패로 처리 → 재녹음 안내.
+      final usable = t.role == TrackRole.drum
+          ? pendingRecording!.notes.isNotEmpty
+          : pitched > 0;
+      if (!usable) {
+        error = _kNoSoundMsg;
+        pendingRecording = null;
+        debugPrint('[analyze-pending] no usable notes → prompt re-record');
+      }
     } catch (e) {
-      error = '분석 실패: $e';
+      error = _kAnalyzeFailMsg;
       debugPrint('[analyze-pending] FAILED: $e');
       pendingRecording = null;
     } finally {
@@ -1950,6 +2074,7 @@ class ProjectStore extends ChangeNotifier {
   void applyCandidate(int noteIndex, int pitch) {
     final t = active;
     if (noteIndex < 0 || noteIndex >= t.notes.length) return;
+    _pushUndo();
     final n = t.notes[noteIndex];
     n.pitch = pitch;
     n.source = (pitch == n.pitchOriginal) ? 'raw' : 'user';
@@ -1969,6 +2094,7 @@ class ProjectStore extends ChangeNotifier {
     if (noteIndex < 0 || noteIndex >= t.notes.length) return;
     final n = t.notes[noteIndex];
     if (n.kind != 'pitched') return;
+    _pushUndo();
     final dk = t.analysis?.detectedKey;
     // 원본 노트의 chunkId 그대로 사용 → 청크 분리 X.
     final chord = expandToChord(n, type, n.chunkId, tonic: dk?.tonic, scale: dk?.scale);
@@ -1990,6 +2116,7 @@ class ProjectStore extends ChangeNotifier {
     if (i == null || i < 0 || i >= t.notes.length) return;
     final sibs = _chordSiblings(t.notes[i]);
     if (sibs.length < 2) return;
+    _pushUndo();
     sibs.sort((a, b) => a.pitch.compareTo(b.pitch));
     final root = sibs.first;
     t.notes.removeWhere((n) => sibs.contains(n) && !identical(n, root));
@@ -2044,6 +2171,7 @@ class ProjectStore extends ChangeNotifier {
       targets.add(n);
     }
     if (targets.isEmpty) return;
+    _pushUndo();
     for (final n in targets) {
       final chord = expandToChord(n, type, n.chunkId, tonic: dk?.tonic, scale: dk?.scale);
       t.notes.remove(n);
@@ -2072,6 +2200,7 @@ class ProjectStore extends ChangeNotifier {
       }
     }
     if (toRemove.isEmpty) return;
+    _pushUndo();
     t.notes.removeWhere((n) => toRemove.contains(n));
     _audioChanged();
   }
@@ -2140,11 +2269,24 @@ class ProjectStore extends ChangeNotifier {
 
   // ── 통합 라우터 (하단 툴바가 호출) ──
   /// 선택 대상을 atSec 에서 분할. 분할 가능했으면 true, 아니면 false.
-  bool splitSelectedAny([double? atSec]) =>
-      selectedChunk != null ? _splitChunk(selectedChunk!, atSec) : _splitNote(atSec);
-  void copySelectedAny() => selectedChunk != null ? _copyChunk(selectedChunk!) : _copyNote();
-  void deleteSelectedAny() => selectedChunk != null ? _deleteChunk(selectedChunk!) : _deleteNote();
-  void loopSelectedAny() => selectedChunk != null ? _copyChunk(selectedChunk!) : loopActive();
+  bool splitSelectedAny([double? atSec]) {
+    _pushUndo();
+    final ok = selectedChunk != null ? _splitChunk(selectedChunk!, atSec) : _splitNote(atSec);
+    if (!ok && _undoStack.isNotEmpty) _undoStack.removeLast(); // 실패면 체크포인트 취소
+    return ok;
+  }
+  void copySelectedAny() {
+    _pushUndo();
+    selectedChunk != null ? _copyChunk(selectedChunk!) : _copyNote();
+  }
+  void deleteSelectedAny() {
+    _pushUndo();
+    selectedChunk != null ? _deleteChunk(selectedChunk!) : _deleteNote();
+  }
+  void loopSelectedAny() {
+    _pushUndo();
+    selectedChunk != null ? _copyChunk(selectedChunk!) : loopActive();
+  }
 
   /// 선택된 대상의 현재 볼륨(velocity 0~127). 트랙만 선택된 경우 active 트랙의 첫 노트.
   int? get selectedVelocity {
@@ -2159,6 +2301,7 @@ class ProjectStore extends ChangeNotifier {
 
   /// 선택된 노트/청크/트랙의 볼륨 설정. 트랙만 선택된 경우 active 의 모든 노트에 적용.
   void setSelectedVolume(int velocity) {
+    _pushUndo();
     final v = velocity.clamp(1, 127);
     if (selectedChunk != null) {
       for (final n in _chunkNotes(selectedChunk!)) {
@@ -2211,6 +2354,74 @@ class ProjectStore extends ChangeNotifier {
     t.notes.insert(i! + 1, right);
     _audioChanged();
     return true;
+  }
+
+  /// 선택 노트를 같은 청크의 **다음(앞으로 인접) 노트**와 병합 — 하나의 긴 노트로.
+  /// 코드 묶음 멤버(같은 start/end)는 건너뛰고, end 이후에 시작하는 가장 이른 노트를 합침.
+  void mergeNotes(int idx) {
+    final t = active;
+    if (idx < 0 || idx >= t.notes.length) return;
+    final n = t.notes[idx];
+    Note? next;
+    int nextIdx = -1;
+    for (int j = 0; j < t.notes.length; j++) {
+      if (j == idx) continue;
+      final m = t.notes[j];
+      if (m.chunkId != n.chunkId) continue;
+      if (m.start < n.end - 0.001) continue; // 겹침/코드 멤버 제외 — end 이후만
+      if (next == null || m.start < next.start) {
+        next = m;
+        nextIdx = j;
+      }
+    }
+    if (next == null) return;
+    _pushUndo();
+    n.end = math.max(n.end, next.end);
+    n.duration = n.end - n.start;
+    t.notes.removeAt(nextIdx);
+    selectedNote = t.notes.indexOf(n);
+    _audioChanged();
+  }
+
+  void mergeSelectedNote() {
+    if (selectedNote != null) mergeNotes(selectedNote!);
+  }
+
+  /// 노트 길이 조절 — 핸들 드래그가 준 **타임라인(effective) 좌표**를 절대 start/end 로
+  /// 변환해 적용. (B) 노트가 청크 창을 넘으면 청크 창을 자동 확장해 노트를 담는다.
+  void resizeNote(int idx, {double? newStartTimeline, double? newEndTimeline}) {
+    final t = active;
+    if (idx < 0 || idx >= t.notes.length) return;
+    final n = t.notes[idx];
+    final c = t.chunkById(n.chunkId);
+    final shift = c != null ? (c.timelineStart - c.inPoint) : 0.0; // eff = abs + shift
+    const minLen = 0.04;
+    if (newEndTimeline != null) {
+      final absEnd = newEndTimeline - shift;
+      if (absEnd - n.start < minLen) return;
+      n.end = absEnd;
+      n.duration = n.end - n.start;
+      if (c != null && n.end > c.outPoint) {
+        // (B) 우측 확장 — 청크 창(outPoint)을 노트 끝까지 늘림(신스라 원본 제약 없음).
+        c.outPoint = n.end;
+        if (c.originalLength < c.outPoint) c.originalLength = c.outPoint;
+      }
+    } else if (newStartTimeline != null) {
+      final absStart = newStartTimeline - shift;
+      if (n.end - absStart < minLen) return;
+      n.start = absStart;
+      n.duration = n.end - n.start;
+      if (c != null && n.start < c.inPoint) {
+        // (B) 좌측 확장 — inPoint 를 노트 시작까지 낮추고 timelineStart 보정(위치 유지).
+        c.inPoint = math.max(0.0, n.start);
+        n.start = c.inPoint;
+        n.duration = n.end - n.start;
+        c.timelineStart = math.max(0.0, newStartTimeline);
+      }
+    }
+    _resort();
+    selectedNote = t.notes.indexOf(n);
+    _audioChanged();
   }
 
   // ── 청크 단위 ──
