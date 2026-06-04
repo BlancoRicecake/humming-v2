@@ -51,6 +51,7 @@ class TimelineEditor extends StatefulWidget {
     this.onEditCheckpoint,
     this.notesOverride,
     this.quantizeDisplay,
+    this.loopPeriod,
     this.pending,
     this.onPendingUse,
     this.onPendingDiscard,
@@ -95,6 +96,9 @@ class TimelineEditor extends StatefulWidget {
   /// 박자 보정 표시 — 트랙의 base 노트를 그리드 스냅한 결과를 반환(없으면 그대로).
   /// 에디터가 quantize 결과(위치·길이 이동)를 보이도록 store.quantizeNotes 를 연결.
   final List<Note> Function(TrackData t, List<Note> base)? quantizeDisplay;
+
+  /// 루프 반복 주기 — 마디 정렬 주기(store.loopPeriodFor). null 이면 청크 끝 사용(폴백).
+  final double Function(TrackData t)? loopPeriod;
 
   /// 녹음 종료 직후 분석된 임시 결과 — 해당 트랙 레인 위에 사용/삭제 다이얼로그
   /// 오버레이로 표시한다(task #26). null 이면 다이얼로그 미표시.
@@ -158,17 +162,28 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
   // 청크 이동/트림 드래그 시 다른 청크 경계 + 플레이헤드 + 0초 에 자석처럼 붙는다.
   // 임계값: 화면상 10px (현재 zoom 의 _pxPerSec 기준 초로 환산).
 
-  /// 스냅 후보 — 모든 트랙의 청크 경계 + 0 + 플레이헤드(흰색 선). excludeChunkId 제외.
-  /// 플레이헤드 시간 === _pxToSec(_scrollX) (앵커에 시각 고정된 흰색 선 아래의 시간).
-  /// 단, 자동 스크롤 중에는 playhead 가 scroll 과 함께 움직여 청크가 그 근처에 영구
-  /// snap 되어 못 넘어가는 피드백이 생기므로 그때만 제외한다.
-  List<double> _snapTargets({int? excludeChunkId}) {
+  /// 스냅 후보 — 모든 트랙의 청크 경계 + 활성 트랙 노트 경계 + 0 + 플레이헤드(흰색 선).
+  /// excludeChunkId 제외. 플레이헤드 시간 === _pxToSec(_scrollX) (앵커에 시각 고정된 흰색
+  /// 선 아래의 시간). 단, 자동 스크롤 중에는 playhead 가 scroll 과 함께 움직여 청크가 그
+  /// 근처에 영구 snap 되어 못 넘어가는 피드백이 생기므로 그때만 제외한다.
+  /// 노트 경계는 청크 끝단을 노트에 붙이는 편집 편의용(_notesFor 는 이미 effective 좌표).
+  List<double> _snapTargets({int? excludeChunkId, int? excludeNoteIdx}) {
     final out = <double>[0.0];
     for (final t in widget.tracks) {
       for (final c in t.chunks) {
         if (c.id == excludeChunkId) continue;
         out.add(c.timelineStart);
         out.add(c.timelineEnd);
+      }
+    }
+    // 활성 트랙 노트 경계 — 청크/노트 리사이즈가 인접 노트에 자석처럼 붙도록.
+    final at = _activeTrack;
+    if (at != null) {
+      final notes = _notesFor(at);
+      for (var i = 0; i < notes.length; i++) {
+        if (i == excludeNoteIdx) continue;
+        out.add(notes[i].start);
+        out.add(notes[i].end);
       }
     }
     if (_autoScrollDir == 0 && _contentW > 0) {
@@ -366,8 +381,9 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
     // 박자 보정 결과를 표시(위치·길이 이동이 눈에 보이게). 루프 반복본도 스냅본 기준.
     if (widget.quantizeDisplay != null) base = widget.quantizeDisplay!(t, base);
     if (!t.looping || widget.projectEnd <= 0 || base.isEmpty || t.chunks.isEmpty) return base;
-    // 루프 주기 = 청크 timelineEnd 최대값 (노트 끝이 아니라 청크 가시 영역 끝).
-    final period = t.chunks.map((c) => c.timelineEnd).reduce(math.max);
+    // 루프 주기 = 마디 정렬 주기(loopPeriod, 재생과 동일). 없으면 청크 끝 폴백.
+    final period = widget.loopPeriod?.call(t) ??
+        t.chunks.map((c) => c.timelineEnd).reduce(math.max);
     if (period <= 0.01) return base;
     final out = List<Note>.from(base);
     double offset = period;
@@ -377,7 +393,8 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
         final clone = Note.fromJson(n.toJson())
           ..start = n.start + offset
           ..end = math.min(n.end + offset, widget.projectEnd)
-          ..chunkId = -n.chunkId - 1; // 반복본은 음수 chunkId 로 마킹.
+          ..chunkId = -n.chunkId - 1 // 반복본은 음수 chunkId 로 마킹.
+          ..renderSrcIndex = n.renderSrcIndex; // 반복본 탭/하이라이트는 원본 노트를 가리킨다.
         clone.duration = clone.end - clone.start;
         out.add(clone);
       }
@@ -522,12 +539,14 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
   // 선택된 노트의 양끝 길이조절 핸들(활성 트랙 레인). 청크 트림과 동일한 방식이되
   // 대상이 단일 노트. effective 시간으로 누적해 onNoteResize 로 전달.
   List<Widget> _noteResizeHandles() {
-    final nidx = widget.selectedNote;
+    final nidx = widget.selectedNote; // 원본 t.notes 인덱스(renderSrcIndex 기준)
     final t = _activeTrack;
     if (nidx == null || t == null) return const [];
     final notes = _notesFor(t);
-    if (nidx < 0 || nidx >= notes.length) return const [];
-    final n = notes[nidx];
+    // 원본 인덱스 → 현재 표시 노트 위치. 드롭/반복본으로 표시 인덱스가 달라도 올바른 노트.
+    final di = notes.indexWhere((n) => n.renderSrcIndex == nidx);
+    if (di < 0) return const [];
+    final n = notes[di];
     if (n.kind != 'pitched') return const []; // 드럼(percussive)은 길이조절 비대상
     final top = _trackTops()[t.id];
     if (top == null) return const [];
@@ -548,12 +567,17 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
               isLeft ? _noteResizeStart = n.start : _noteResizeEnd = n.end;
             },
             onHorizontalDragUpdate: (d) {
+              final targets = _snapTargets(excludeNoteIdx: di); // 제외는 표시 인덱스 기준
               if (isLeft) {
                 _noteResizeStart = (_noteResizeStart ?? n.start) + _pxToSec(d.delta.dx);
-                widget.onNoteResize?.call(nidx, newStartTimeline: _noteResizeStart);
+                final snap = _closestSnap(_noteResizeStart!, targets);
+                _onSnapHit(snap);
+                widget.onNoteResize?.call(nidx, newStartTimeline: snap ?? _noteResizeStart);
               } else {
                 _noteResizeEnd = (_noteResizeEnd ?? n.end) + _pxToSec(d.delta.dx);
-                widget.onNoteResize?.call(nidx, newEndTimeline: _noteResizeEnd);
+                final snap = _closestSnap(_noteResizeEnd!, targets);
+                _onSnapHit(snap);
+                widget.onNoteResize?.call(nidx, newEndTimeline: snap ?? _noteResizeEnd);
               }
             },
             onHorizontalDragEnd: (_) {
@@ -1029,7 +1053,9 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
                     _chunkHitWidget(t, active, entry.key, entry.value, _contentW, laneH),
                 if (!hasWave)
                   for (int i = 0; i < notes.length; i++)
-                    _noteHitWidget(t, active, i, geo.rectFor(notes[i])),
+                    // 표시 인덱스 i 가 아니라 원본 t.notes 인덱스(renderSrcIndex)를 넘긴다 —
+                    // 리딩 트림 드롭으로 i 와 원본이 어긋나도 올바른 노트를 선택/편집한다.
+                    _noteHitWidget(t, active, notes[i].renderSrcIndex, geo.rectFor(notes[i])),
               ]),
             ),
 

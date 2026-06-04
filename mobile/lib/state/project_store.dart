@@ -152,30 +152,43 @@ class TrackData {
   /// 노트가 트림 경계를 가로지르면 잘려나간 부분은 무음 — 남은 구간만 발음.
   /// 청크 메타가 비어있으면(레거시) renderNotes 그대로 반환.
   List<Note> get effectiveRenderNotes {
-    if (chunks.isEmpty) return renderNotes;
+    // renderNotes 는 chordMode=false 일 때 notes 와 1:1(같은 순서)이라, 그 루프 인덱스가
+    // 곧 원본 t.notes 인덱스다. 각 렌더 노트에 renderSrcIndex 를 박아 선택/편집이 표시
+    // 인덱스가 아닌 원본 인덱스로 노트를 식별하게 한다(리딩 트림 드롭으로 어긋나는 버그 방지).
+    final rn = renderNotes;
+    if (chunks.isEmpty) {
+      for (var i = 0; i < rn.length; i++) {
+        rn[i].renderSrcIndex = i;
+      }
+      return rn;
+    }
     final byId = {for (final c in chunks) c.id: c};
     final out = <Note>[];
-    for (final n in renderNotes) {
+    for (var i = 0; i < rn.length; i++) {
+      final n = rn[i];
       final c = byId[n.chunkId];
       if (c == null) {
+        n.renderSrcIndex = i;
         out.add(n);
         continue;
       }
       // 청크 가시 윈도우와 노트의 교집합.
       final clipStart = n.start < c.inPoint ? c.inPoint : n.start;
       final clipEnd = n.end > c.outPoint ? c.outPoint : n.end;
-      if (clipEnd - clipStart <= 0.001) continue; // 교집합 없음
+      if (clipEnd - clipStart <= 0.001) continue; // 교집합 없음 — 드롭(인덱스 건너뜀)
       final shift = c.timelineStart - c.inPoint;
       final newStart = clipStart + shift;
       final newEnd = clipEnd + shift;
       // 클립이 원본과 동일하면(start/end 모두 안쪽 + shift 0) clone 생략 가능.
       if (shift == 0 && clipStart == n.start && clipEnd == n.end) {
+        n.renderSrcIndex = i;
         out.add(n);
       } else {
         final clone = Note.fromJson(n.toJson())
           ..start = newStart
           ..end = newEnd
-          ..chunkId = n.chunkId;
+          ..chunkId = n.chunkId
+          ..renderSrcIndex = i;
         clone.duration = newEnd - newStart;
         out.add(clone);
       }
@@ -1223,7 +1236,8 @@ class ProjectStore extends ChangeNotifier {
       final clone = Note.fromJson(n.toJson())
         ..start = newStart
         ..end = newEnd
-        ..chunkId = n.chunkId;
+        ..chunkId = n.chunkId
+        ..renderSrcIndex = n.renderSrcIndex;
       clone.duration = origDur;
       return clone;
     }).toList();
@@ -1532,8 +1546,22 @@ class ProjectStore extends ChangeNotifier {
     return m;
   }
 
+  /// 루프 주기 — 컨텐츠 끝(청크 timelineEnd 최대값)을 **마디 단위로 올림**한 값.
+  /// 임의 길이로 반복하면 반복이 비트에 안 맞고 마지막 노트 직후 첫 노트가 바로 붙어
+  /// 어색하므로, BPM 기준 마디(4/4=4박)에 맞춰 짧은 프레이즈엔 자연 여백을 두고
+  /// 반복이 다운비트에 떨어지게 한다. 최소 1마디.
+  double loopPeriodFor(TrackData t) {
+    if (t.chunks.isEmpty) return 0.0;
+    final contentEnd = t.chunks.map((c) => c.timelineEnd).reduce(math.max);
+    if (contentEnd <= 0.01) return 0.0;
+    final barSec = (60.0 / (bpm > 0 ? bpm : 90)) * 4.0;
+    if (barSec <= 0.01) return contentEnd;
+    final bars = math.max(1, (contentEnd / barSec).ceil());
+    return bars * barSec;
+  }
+
   /// notes 를 [period] 주기로 targetEnd 까지 반복해서 펼친다.
-  /// period 는 청크 timelineEnd 의 최대값(가시 영역 끝) — 노트 끝이 아니라 청크 경계.
+  /// period 는 _loopPeriodFor (마디 정렬) — 반복이 다운비트에 떨어지도록.
   List<Note> _loopNotesUntil(List<Note> notes, double targetEnd, double period) {
     if (notes.isEmpty || targetEnd <= 0 || period <= 0.01) return notes;
     final out = <Note>[];
@@ -1763,6 +1791,7 @@ class ProjectStore extends ChangeNotifier {
         scale: t.options.scale,
         asDrums: t.role == TrackRole.drum,
         assistAggressive: t.options.assistAggressive,
+        pitchModel: t.options.pitchModel,
       );
       final sw = Stopwatch()..start();
       final res = await _api.analyze(wavPath, opt);
@@ -2011,14 +2040,23 @@ class ProjectStore extends ChangeNotifier {
     return (tonic: dk!.tonic!, scale: dk.scale!, candidates: src!.analysis!.keyCandidates);
   }
 
-  /// 사용자가 확정한 키로 프로젝트 키 잠금. 기준 트랙·기존 트랙은 **소급 보정하지
-  /// 않는다**(녹음한 그대로 = 키의 근거). 잠금 이후 (재)녹음되는 트랙만 이 키를
-  /// 상속해 적극 보정된다(_inheritAnchorIfLocked).
-  void confirmAnchorKey(String tonic, String scale) {
+  /// 사용자가 확정한 키로 프로젝트 키 잠금. **확인 시점 1회**, 기존 멜로딕 트랙
+  /// (기준 트랙 포함)도 그 키로 적극 교정한다 — 사용자가 키를 확인하면 "전부 그 키로
+  /// 정리"되는 게 기대 동작. 명시적 확인 순간에만 도므로(편집 중 무작위 X) 안전.
+  /// 이후 (재)녹음되는 트랙은 _inheritAnchorIfLocked 로 같은 키를 상속한다.
+  Future<void> confirmAnchorKey(String tonic, String scale) async {
     projectKeyTonic = tonic;
     projectKeyScale = scale;
     keyAnchorTrackId = firstTrackWithKey()?.id;
     anchorLocked = true;
+    for (final t in tracks) {
+      if (t.role == TrackRole.drum || t.isVocal || t.notes.isEmpty) continue;
+      t.options.autoKey = false;
+      t.options.keyTonic = tonic;
+      t.options.scale = scale;
+      t.options.assistAggressive = true;
+      await reassist(t); // 그 키로 적극 스냅(첫 트랙 포함)
+    }
     _audioChanged();
   }
 
@@ -2048,6 +2086,20 @@ class ProjectStore extends ChangeNotifier {
     active.options.pitchAssistant = on;
     notifyListeners(); // 노트 없어 reassist 가 early-return 하는 트랙(드럼/보컬/빈)도 토글 시각 반영.
     reassist(active);
+  }
+
+  /// 디버그 전용: 피치 트래커 백엔드(pyin|crepe) 전환 후 전체 재분석.
+  /// 피치 모델은 백엔드 분석 단계라 reassist(클라 보정)로는 안 되고 /analyze 재실행이 필요.
+  /// 원본 WAV(t.wavPath)가 있어야 재분석 가능. crepe 는 dev 백엔드에만 존재.
+  Future<void> setPitchModel(String model) async {
+    final t = active;
+    if (t.options.pitchModel == model) return;
+    t.options.pitchModel = model;
+    notifyListeners();
+    final wav = t.wavPath;
+    if (wav != null && wav.isNotEmpty) {
+      await recordAnalyzed(wav, trackId: t.id); // 전체 재분석(pyin↔crepe)
+    }
   }
 
   void setInstrument(int program) {
@@ -2565,14 +2617,25 @@ class ProjectStore extends ChangeNotifier {
     final out = <({List<Note> notes, int program, bool isDrum})>[];
     final end = _projectEnd;
     for (final t in tracks) {
-      if (!t.enabled || t.notes.isEmpty || t.isVocal) continue;
+      if (!t.enabled || t.notes.isEmpty || t.isVocal) {
+        // #5 진단: 재생에서 제외된 트랙과 사유(무음 버그 원인 후보).
+        debugPrint('[synth.diag] gate skip ${t.role.name}#${t.id}: '
+            'enabled=${t.enabled} notes=${t.notes.length} vocal=${t.isVocal}');
+        continue;
+      }
       var notes = effectiveRenderNotesFor(t);
+      if (notes.isEmpty) {
+        // 노트는 있는데 effectiveRenderNotes 클립으로 0개가 됨 → 들리지 않음(원인 후보).
+        // 진단 전용 — 동작은 유지(빈 트랙은 어차피 소리 없음).
+        debugPrint('[synth.diag] WARN ${t.role.name}#${t.id}: '
+            'raw=${t.notes.length} but effectiveRenderNotes=0 (clipped out)');
+      }
       if (t.looping && end > 0 && t.chunks.isNotEmpty) {
-        final period = t.chunks.map((c) => c.timelineEnd).reduce(math.max);
-        notes = _loopNotesUntil(notes, end, period);
+        notes = _loopNotesUntil(notes, end, loopPeriodFor(t));
       }
       out.add((notes: notes, program: t.program, isDrum: t.role == TrackRole.drum));
     }
+    debugPrint('[synth.diag] playableSynthTracks → ${out.length} tracks playable');
     return out;
   }
 
@@ -2618,8 +2681,8 @@ class ProjectStore extends ChangeNotifier {
         out.addAll(base);
         continue;
       }
-      // 청크 timelineEnd 최대값(가시 영역 끝) 단위로 반복 — 트림 후 빈 여백도 보존.
-      final period = t.chunks.map((c) => c.timelineEnd).reduce(math.max);
+      // 마디 정렬 주기로 반복 — 반복이 다운비트에 떨어지도록(_loopPeriodFor).
+      final period = loopPeriodFor(t);
       if (period <= 0.01) {
         out.addAll(base);
         continue;

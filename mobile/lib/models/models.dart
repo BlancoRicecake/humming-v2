@@ -43,6 +43,10 @@ class Note {
   bool assisted, inKey;
   List<int> candidates;
   int chunkId = 0; // 클라이언트 전용 — 같은 녹음/구간 묶음(청크 편집용). 백엔드 미전송.
+  // 클라이언트 전용(비직렬화) — 이 렌더 노트가 유래한 원본 t.notes 인덱스.
+  // effectiveRenderNotes 가 리딩 트림 노트를 드롭하면 표시 인덱스가 원본과 어긋나므로,
+  // 선택/편집은 항상 이 raw 인덱스를 기준으로 한다(표시 인덱스 직접 사용 금지).
+  int renderSrcIndex = -1;
   // 백엔드 스펙트럼 드럼 분류(drums.py) — 모든 노트에 채워짐. 드럼 트랙에서만 사용.
   int? drum;          // GM 드럼 노트 36/38/42
   String? drumName;   // Kick | Snare | HiHat
@@ -201,11 +205,13 @@ class AnalyzeOptions {
     this.scale,
     this.asDrums = false,
     this.assistAggressive = false,
+    this.pitchModel = 'pyin',
   });
   bool autoKey, pitchAssistant;
   String? keyTonic, scale;
   bool asDrums; // 드럼 트랙 → 백엔드 onset 기반 드럼 분석 요청
   bool assistAggressive; // 잠긴 키 트랙 → 스케일 밖 음을 적극 스냅(음치 안전장치)
+  String pitchModel; // 'pyin'(기본) | 'crepe'(디버그 전용, 사전학습 트래커)
 
   Map<String, dynamic> toJson() => {
         'auto_key': autoKey,
@@ -214,6 +220,7 @@ class AnalyzeOptions {
         if (scale != null) 'scale': scale,
         if (asDrums) 'as_drums': asDrums,
         if (assistAggressive) 'assist_aggressive': assistAggressive,
+        if (pitchModel != 'pyin') 'pitch_model': pitchModel,
       };
 }
 

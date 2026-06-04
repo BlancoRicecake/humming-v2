@@ -19,8 +19,11 @@ from app.envelope import (
     SUBDIVISION_MIN_CHUNK_DUR_SEC, compute_rms_envelope, compute_thresholds,
     post_process_chunks, segment_chunks_streaming, split_chunk_by_pitch, split_chunk_by_rms_dip,
 )
-from app.pitch import extract_pitch_pyin, hz_to_midi_float
+from app.pitch import extract_pitch_pyin, extract_pitch_crepe, hz_to_midi_float
 from app.analyze import analyze_audio
+
+# Pick the pitch tracker for both the standalone trace and analyze_audio below.
+PITCH_MODEL = os.environ.get("HUMMING_PITCH_MODEL", "pyin")
 
 PC = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 def nm(m):
@@ -30,7 +33,7 @@ def nm(m):
 
 
 def diag(path: Path):
-    o = AnalyzeOptions()
+    o = AnalyzeOptions(pitch_model=PITCH_MODEL)
     raw = path.read_bytes()
     y, sr = _load_audio(raw)
     dur = len(y)/sr
@@ -39,11 +42,16 @@ def diag(path: Path):
     raw_chunks = post_process_chunks(
         segment_chunks_streaming(rms, env_t, th["enter"], th["exit"], exit_hold_sec=o.exit_hold_sec),
         min_chunk_dur_sec=o.min_chunk_dur_sec, merge_gap_sec=o.merge_gap_sec)
-    p_t, p_hz, _v, _p = extract_pitch_pyin(y, sr, o.fmin_hz, o.fmax_hz, hop_length=HOP)
+    if o.pitch_model == "crepe":
+        p_t, p_hz, _v, _p = extract_pitch_crepe(
+            y, sr, o.fmin_hz, o.fmax_hz, hop_length=HOP,
+            conf_threshold=o.voiced_prob_threshold)
+    else:
+        p_t, p_hz, _v, _p = extract_pitch_pyin(y, sr, o.fmin_hz, o.fmax_hz, hop_length=HOP)
     p_m = hz_to_midi_float(p_hz)
 
     print("="*72)
-    print(f"{path.name}   dur={dur:.2f}s  sr={sr}  peakRMS={float(rms.max()):.4f}  envChunks={len(raw_chunks)}")
+    print(f"{path.name}   dur={dur:.2f}s  sr={sr}  model={o.pitch_model}  peakRMS={float(rms.max()):.4f}  envChunks={len(raw_chunks)}")
     print(f"  subdivide gate: chunk>{SUBDIVISION_MIN_CHUNK_DUR_SEC}s")
     total_after = 0
     for c in raw_chunks:

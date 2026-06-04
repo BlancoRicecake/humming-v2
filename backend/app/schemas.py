@@ -46,6 +46,12 @@ class AnalyzeOptions(BaseModel):
 
     # Stage 5 — per-chunk analysis
     voiced_prob_threshold: float = Field(0.45, ge=0.0, le=1.0)
+    # Pitch tracker backend. "pyin" (librosa, default) or "crepe" (pretrained
+    # CNN tracker, opt-in). CREPE is more octave-robust on low humming but
+    # heavier; kept opt-in so the default path stays unchanged. Both expose the
+    # same (times, hz, voiced_flag, voiced_prob) contract, so downstream is
+    # untouched. voiced_prob_threshold above doubles as the CREPE confidence gate.
+    pitch_model: Literal["pyin", "crepe"] = "pyin"
 
     # Stage 7 — key/scale (instrument lives client-side in Stage 8)
     auto_key: bool = True                 # detect key from the hummed pitches
@@ -125,11 +131,12 @@ class Chunk(BaseModel):
 
 
 class PitchTrack(BaseModel):
-    """Stage 5 raw pyin output, kept so the UI can overlay it."""
+    """Stage 5 raw pitch-tracker output, kept so the UI can overlay it."""
     times: List[float]
     hz: List[float]
     midi: List[float]
     voiced_prob: List[float]
+    model: str = "pyin"   # which tracker produced this contour ("pyin" | "crepe")
 
 
 class DetectedKey(BaseModel):

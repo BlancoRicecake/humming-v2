@@ -392,12 +392,16 @@ def _chunk_pitch(
     return float("nan"), 0.0, voiced_ratio
 
 
+FLAT_VELOCITY = 100  # 모든 변환 노트를 일정한 세기로(MIDI 기본 — 강약은 분석에서 넣지 않음)
+
+
 def _chunk_velocity(peak_rms: float, global_peak: float) -> int:
-    """Map chunk's peak RMS into MIDI velocity 20-120."""
-    if global_peak <= 1e-6:
-        return 64
-    ratio = float(np.clip(peak_rms / global_peak, 0.0, 1.0))
-    return int(max(1, min(127, round(20 + ratio * 100))))
+    """Uniform velocity for every converted note.
+
+    흥얼거림의 진폭 변동을 노트 세기에 반영하면 강약이 들쭉날쭉해진다. MIDI 처럼
+    모든 노트를 일정 세기로 둔다(시그니처는 유지 — 호출부 무변경).
+    """
+    return FLAT_VELOCITY
 
 
 # ============================================================================
@@ -434,10 +438,18 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
     )
 
     # Pitch contour (also a Stage 5 input — computed here so Stage 4 splitter
-    # can use it). One pass over the whole audio.
-    p_times, p_hz, _voiced, p_prob = extract_pitch_pyin(
-        y, sr, opts.fmin_hz, opts.fmax_hz, hop_length=HOP,
-    )
+    # can use it). One pass over the whole audio. The CREPE backend is lazily
+    # imported so its dependency weight never touches the default pYIN path.
+    if opts.pitch_model == "crepe":
+        from .pitch import extract_pitch_crepe
+        p_times, p_hz, _voiced, p_prob = extract_pitch_crepe(
+            y, sr, opts.fmin_hz, opts.fmax_hz, hop_length=HOP,
+            conf_threshold=opts.voiced_prob_threshold,
+        )
+    else:
+        p_times, p_hz, _voiced, p_prob = extract_pitch_pyin(
+            y, sr, opts.fmin_hz, opts.fmax_hz, hop_length=HOP,
+        )
     p_midi = hz_to_midi_float(p_hz)
 
     # Internal subdivision for long legato chunks (same-note repeats and
@@ -588,6 +600,7 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
             hz=_safe(p_hz),
             midi=_safe(p_midi),
             voiced_prob=[float(x) for x in p_prob.tolist()],
+            model=opts.pitch_model,
         ),
         detected_key=detected_key,
         assist_count=assist_count,
