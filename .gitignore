@@ -46,6 +46,13 @@ mobile/ios/fastlane/Preview.html
 mobile/ios/fastlane/screenshots/**/*.png
 mobile/ios/fastlane/test_output
 
+# Fastlane (mobile/)
+mobile/fastlane/report.xml
+mobile/fastlane/Preview.html
+mobile/fastlane/test_output
+mobile/fastlane/screenshots-staging/
+mobile/fastlane/**/.DS_Store
+
 # Backend secrets (verbose form)
 backend/secrets/*.p8
 backend/secrets/*.json

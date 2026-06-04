@@ -1,0 +1,10 @@
+HumTrack works fully without sign-in. Tap the "작업 시작" / "Start" button on the home screen to record a vocal, analyze it, and edit the resulting multitrack (piano, bass, drums, vocal). All core features — recording, AI analysis, multitrack editing, pitch correction, quantize, MIDI/WAV preview — are available to anonymous users without an account.
+
+Pro features (unlimited MIDI/WAV export, cloud sync) are gated behind in-app subscription. Please test purchases via Apple's Sandbox IAP testers; we have not created a custom demo account because OAuth-protected sign-in (Apple/Google) requires 2FA that would block the review flow.
+
+Sign In with Apple / Google is optional and only used for the Pro cloud sync feature. Please test the app as an anonymous user unless explicitly verifying cloud sync — in which case Sandbox IAP after sign-in is the intended path.
+
+Microphone permission is required for the recording feature; please grant it when prompted.
+
+Korean (한국어):
+HumTrack은 로그인 없이 모든 핵심 기능을 사용할 수 있습니다. 홈 화면의 "작업 시작" 버튼을 눌러 보컬 녹음, AI 분석, 멀티트랙 편집(피아노/베이스/드럼/보컬)을 테스트해 주세요. Pro 기능(MIDI/WAV 무제한 내보내기, 클라우드 동기화)은 인앱 구독으로 잠금되어 있으며, Apple Sandbox IAP 테스터로 결제 흐름을 테스트할 수 있습니다. Sign In with Apple/Google은 선택 사항이며 클라우드 동기화 검증 시에만 필요합니다 — 2FA 때문에 별도 데모 계정은 제공하지 않습니다.

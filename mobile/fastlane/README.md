@@ -13,7 +13,60 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 # Available Actions
 
+## Android
+
+### android play_internal
+
+```sh
+[bundle exec] fastlane android play_internal
+```
+
+Upload AAB + metadata + screenshots to Play Internal Testing
+
+### android play_metadata_only
+
+```sh
+[bundle exec] fastlane android play_metadata_only
+```
+
+Upload only metadata/screenshots (no AAB)
+
+### android play_promote_to_production
+
+```sh
+[bundle exec] fastlane android play_promote_to_production
+```
+
+Promote existing Internal build to Production (draft)
+
+### android play_production
+
+```sh
+[bundle exec] fastlane android play_production
+```
+
+Upload AAB + metadata + screenshots to Play Production (draft)
+
+### android build_and_play_internal
+
+```sh
+[bundle exec] fastlane android build_and_play_internal
+```
+
+Flutter build AAB + Play Internal upload
+
+----
+
+
 ## iOS
+
+### ios assets_upload
+
+```sh
+[bundle exec] fastlane ios assets_upload
+```
+
+Upload iPhone 6.9-inch screenshots + metadata (ko, en-US)
 
 ### ios screenshots_only
 
@@ -21,7 +74,7 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 [bundle exec] fastlane ios screenshots_only
 ```
 
-Upload iPhone 6.9-inch screenshots only (ko, en-US)
+
 
 ### ios beta
 

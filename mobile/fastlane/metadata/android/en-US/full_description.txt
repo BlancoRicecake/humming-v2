@@ -1,0 +1,37 @@
+Can't read sheet music? Don't know chords? Just hum — HumTrack turns the melody in your head into a full multitrack song in under a minute.
+
+HumTrack analyzes your vocal recording with AI and turns it into piano, bass, drums, and a vocal track you can edit together. Idea-to-mix without writing a single note by hand.
+
+■ Hum → Multitrack
+Hum, whistle, or sing — pitch and timing are extracted automatically. Chord expansion, bass lines, and drum patterns are added in one pass.
+
+■ Auto Key Detection + Pitch Assistant
+Even if your pitch wobbles a little, HumTrack detects the song's key (C, Am, G, etc.) and gently nudges notes to fit. Keep your phrasing — lose the bum notes.
+
+■ Quantize (Multi-Track Sync)
+If tracks drift apart in time, quantize locks them onto the same grid. Choose how strict — preserve human feel or align perfectly.
+
+■ Intuitive Timeline Editor
+Slice, trim, magnetic snap, zoom, solo/mute, track loop. Familiar gestures from video editors.
+
+■ On-Device SoundFont Playback
+SF2 instrument library bundled in the app. Preview and full mix playback work offline.
+
+■ MIDI / WAV Export (Pro)
+Export to standard MIDI and WAV — open in Logic, Ableton, GarageBand, FL Studio. Detected chords, key, and timing are preserved.
+
+■ Cloud Sync (Pro)
+Pick up the same project on another device. 5 GB safe cloud storage. Your files stay even after subscription ends.
+
+■ HumTrack Pro
+• Monthly / yearly subscription (yearly ≈ 20% off)
+• 7-day free trial
+• Unlimited MIDI/WAV export + 5 GB cloud
+• Priority analysis
+
+■ Privacy First
+Your vocal recordings are never used for ads or AI model training. Free-tier audio is processed in memory and discarded immediately — never written to disk.
+
+Support: heobusy@gmail.com
+Terms of Service: https://hum-track.com/terms
+Privacy Policy: https://hum-track.com/privacy
