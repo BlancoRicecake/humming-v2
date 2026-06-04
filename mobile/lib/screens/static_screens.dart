@@ -115,7 +115,7 @@ class ContactScreen extends StatelessWidget {
           const SizedBox(height: 4),
           Text(t.contactSub, style: T.sub),
           const SizedBox(height: 18),
-          _row(context, Symbols.mail, t.contactEmail, 'support@humming.app'),
+          _row(context, Symbols.mail, t.contactEmail, 'heobusy@gmail.com'),
           _row(context, Symbols.bug_report, t.contactBug, t.contactBugSub),
           _row(context, Symbols.lightbulb, t.contactFeature, t.contactFeatureSub),
         ],
