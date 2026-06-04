@@ -74,7 +74,7 @@
 3. App Store Connect / Play Console 제품 페이지 — **출시 시 등록**
 4. 영수증 — Apple/Google 자동 처리
 
-**위험**: paywall UI 와 약관의 가격/조건이 다르면 심사 reject. **현재 paywall 화면이 ₩5,500/₩52,800 + 7일 체험 + 자동갱신 + 해지 방법을 4 위치에 일치하게 표시하는지 출시 전 cross-check 필수**.
+**위험**: paywall UI 와 약관의 가격/조건이 다르면 심사 reject. **현재 paywall 화면이 USD 3.49/USD 33.49 (현지 통화 자동 변환) + 7일 체험 + 자동갱신 + 해지 방법을 4 위치에 일치하게 표시하는지 출시 전 cross-check 필수**.
 
 ### C2. iOS Privacy Manifest (PrivacyInfo.xcprivacy)
 **필수 (iOS 17+)**: 사용 SDK 의 reasons API + 수집 데이터 카테고리 선언. HumTrack 의 경우:

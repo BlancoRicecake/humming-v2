@@ -53,10 +53,10 @@
 
 ### 제6조 (유료 구독 및 자동 결제)
 1. HumTrack Pro 구독은 **Apple App Store 인앱결제 또는 Google Play 인앱결제(IAP)를 통해서만** 제공됩니다. 회사는 자체 결제 수단(신용카드, 계좌이체 등)을 직접 제공하지 않으며, 회원의 결제 카드 정보를 직접 보유·처리하지 않습니다.
-2. **가격 (한국 기준, 2026-06 시점)**:
-   - 월간: 월 ₩5,500 (부가세 포함)
-   - 연간: 연 ₩52,800 (부가세 포함, 월 환산 시 약 20% 할인)
-   - 다른 국가의 가격은 Apple / Google 이 환율 및 현지 정책에 따라 책정한 가격이 적용됩니다.
+2. **가격 (USD 기준)**:
+   - 월간: USD 3.49 / month
+   - 연간: USD 33.49 / year (월 환산 시 약 20% 할인)
+   - **현지 통화는 Apple App Store / Google Play 가 환율 및 스토어 정책에 따라 자동 변환하여 책정합니다** (예시 — 한국: ₩5,500/월·₩55,000/년, 일본: ¥500/월·¥5,000/년). 부가세는 스토어가 산정합니다.
 3. **7일 무료 체험 (Introductory Offer)**:
    - 신규 회원에게 1회 한정 제공됩니다 (Apple / Google 계정 기준).
    - 체험 기간 종료 24시간 전까지 해지하지 않으면 자동으로 첫 결제가 발생합니다.
@@ -157,7 +157,7 @@ We may revise these Terms in compliance with applicable law. We will provide not
 
 ### Article 6. Subscription and Auto-Renewal
 - Pro is sold **exclusively** via Apple App Store or Google Play in-app purchase. We do not collect, store, or process your payment card data; Apple and Google do.
-- **Price (KR reference, June 2026)**: ₩5,500/month or ₩52,800/year (~20% annual discount), inclusive of VAT. Other countries: store-set local prices.
+- **Price (USD baseline)**: USD 3.49 / month or USD 33.49 / year (~20% off annual). **Local currency is auto-converted by Apple App Store / Google Play** based on exchange rate and store policy (e.g., KRW 5,500/mo · KRW 55,000/yr, JPY 500/mo · JPY 5,000/yr). VAT computed by the store.
 - **7-day free trial** (Introductory Offer): one per Apple/Google account. Cancel at least 24 hours before the trial ends to avoid the first charge.
 - **Auto-renewal**: subscriptions renew automatically each period. Apple/Google bill your saved payment method within 24 hours before renewal.
 - **Annual renewal notice**: for annual subscriptions, we send a renewal reminder email or push notification at least 7 days prior, per the 2022 amendment to the Korean Electronic Commerce Act Enforcement Decree.
