@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HumTrack — 비전</title>
+<meta name="description" content="HumTrack의 비전: 음악을 사랑하는 누구나 배우지 않아도 아이디어만으로 음악을 만들 수 있는 세상.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="HumTrack — 비전">
+<meta property="og:description" content="음악을 사랑하는 누구나, 배우지 않아도 아이디어만으로 음악을 만드는 세상.">
+<meta property="og:image" content="https://hum-track.com/assets/appicon.png">
+<meta property="og:url" content="https://hum-track.com/vision.html">
+<link rel="icon" type="image/png" href="assets/appicon.png">
+<link rel="apple-touch-icon" href="assets/appicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script>document.documentElement.classList.add('anim');</script>
+<style>
+/* ─── Design Tokens (index.html과 동일) ─── */
+:root {
+  --bg: #0A0A0F;
+  --surface: #16161E;
+  --surface-alt: #1F1F27;
+  --lime: #A3E635;
+  --lime-dim: #84B82A;
+  --active-lane: #1F2A0F;
+  --border: #27272A;
+  --border-strong: #3F3F46;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #71717A;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text-primary); -webkit-font-smoothing: antialiased; line-height: 1.5; }
+a { text-decoration: none; color: inherit; }
+
+/* ─── Nav ─── */
+.nav { position: sticky; top: 0; z-index: 50; background: rgba(10,10,15,0.85); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+.nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; }
+.nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.2px; }
+.nav-brand .brand-logo { width: 24px; height: 24px; border-radius: 7px; object-fit: cover; display: block; }
+.nav-cta { display: flex; align-items: center; gap: 12px; }
+.lang-toggle { display: inline-flex; background: var(--surface); border-radius: 999px; padding: 3px; border: 1px solid var(--border); }
+.lang-toggle button { background: none; border: 0; color: var(--text-secondary); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.lang-toggle button.active { background: var(--lime); color: var(--bg); }
+.btn-pill { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px; background: var(--lime); color: var(--bg); font-weight: 700; font-size: 13px; border: 0; cursor: pointer; transition: transform 0.18s ease, box-shadow 0.18s ease; }
+.btn-pill.ghost { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+
+/* ─── Vision content ─── */
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+.v-hero { padding: clamp(72px, 12vw, 130px) 0 clamp(40px, 6vw, 64px); position: relative; overflow: hidden; }
+.v-hero::before { content: ''; position: absolute; top: -220px; left: 50%; transform: translateX(-50%); width: 720px; height: 560px; background: radial-gradient(circle, rgba(163,230,53,0.16) 0%, transparent 62%); filter: blur(34px); pointer-events: none; }
+.eyebrow { color: var(--lime); font-weight: 700; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 18px; }
+.v-hero h1 { font-size: clamp(36px, 6vw, 62px); font-weight: 900; letter-spacing: -1.8px; line-height: 1.08; margin-bottom: 26px; }
+.v-hero h1 .accent { color: var(--lime); }
+.lead { font-size: clamp(17px, 2.4vw, 21px); color: var(--text-secondary); line-height: 1.65; max-width: 680px; }
+
+.v-beliefs { padding: clamp(20px, 4vw, 40px) 0 clamp(48px, 8vw, 80px); display: flex; flex-direction: column; gap: 18px; }
+.belief { background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: clamp(26px, 4vw, 38px); position: relative; }
+.belief .idx { font-size: 12px; font-weight: 800; letter-spacing: 1.4px; color: var(--lime); margin-bottom: 12px; display: block; }
+.belief h2 { font-size: clamp(21px, 3vw, 28px); font-weight: 800; letter-spacing: -0.5px; margin-bottom: 12px; line-height: 1.2; }
+.belief p { color: var(--text-secondary); font-size: clamp(15px, 2vw, 17px); line-height: 1.7; }
+
+/* ─── Support ─── */
+.v-support { text-align: center; padding: clamp(56px, 9vw, 96px) 0 clamp(72px, 11vw, 120px); }
+.v-support .panel { background: linear-gradient(160deg, #1F2A0F 0%, #16161E 78%); border: 1px solid rgba(163,230,53,0.3); border-radius: 28px; padding: clamp(40px, 6vw, 64px) clamp(24px, 5vw, 56px); }
+.v-support h2 { font-size: clamp(26px, 4vw, 40px); font-weight: 900; letter-spacing: -1px; margin-bottom: 14px; }
+.v-support p { color: var(--text-secondary); font-size: clamp(15px, 2vw, 18px); line-height: 1.6; max-width: 520px; margin: 0 auto 30px; }
+.support-btn { display: inline-flex; align-items: center; gap: 10px; padding: 18px 40px; border-radius: 999px; background: var(--lime); color: var(--bg); font-weight: 800; font-size: 17px; cursor: pointer; transition: transform 0.18s ease, box-shadow 0.18s ease; }
+.support-btn svg { width: 20px; height: 20px; }
+.support-note { font-size: 13px; color: var(--text-tertiary); margin-top: 16px; }
+.support-contact { font-size: 15px; color: var(--text-secondary); margin-top: 20px; }
+.support-contact a { color: var(--lime); font-weight: 600; }
+/* 영어(EN)에서만 노출 — 한국어/초기 로드에선 숨김 */
+html:not([lang="en"]) .en-only { display: none; }
+/* 한국어에서만 노출 — 영어에선 숨김 */
+html[lang="en"] .ko-only { display: none; }
+
+/* ─── Footer (index.html과 동일) ─── */
+footer { border-top: 1px solid var(--border); padding: 60px 24px 40px; }
+.foot-inner { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; }
+.foot-brand .nav-brand { margin-bottom: 14px; }
+.foot-brand p { color: var(--text-tertiary); font-size: 13px; max-width: 280px; line-height: 1.6; }
+.foot-col h5 { font-size: 12px; font-weight: 800; letter-spacing: 1px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 14px; }
+.foot-col a { display: block; color: var(--text-tertiary); font-size: 13px; text-decoration: none; padding: 5px 0; }
+.foot-col a:hover { color: var(--lime); }
+.foot-bottom { max-width: 1200px; margin: 40px auto 0; padding-top: 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; color: var(--text-tertiary); font-size: 12px; }
+.socials { display: flex; gap: 10px; }
+.socials a { width: 36px; height: 36px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: grid; place-items: center; color: var(--text-secondary); text-decoration: none; }
+.socials a:hover { color: var(--lime); border-color: var(--lime); }
+
+/* ─── Animations ─── */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+  @keyframes navDrop { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
+  .anim .nav { animation: navDrop 0.6s ease both; }
+  .anim .v-hero .eyebrow,
+  .anim .v-hero h1,
+  .anim .v-hero .lead { animation: fadeUp 0.8s both cubic-bezier(0.2,0.7,0.2,1); }
+  .anim .v-hero h1 { animation-delay: 0.1s; }
+  .anim .v-hero .lead { animation-delay: 0.2s; }
+  .anim .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s cubic-bezier(0.2,0.7,0.2,1), transform 0.7s cubic-bezier(0.2,0.7,0.2,1); will-change: opacity, transform; }
+  .anim .reveal.in { opacity: 1; transform: none; }
+  .anim .btn-pill:hover, .anim .support-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(163,230,53,0.34); }
+}
+
+@media (max-width: 1024px) {
+  .foot-inner { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  .nav-brand span:last-child { font-size: 16px; }
+  .belief { border-radius: 18px; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="nav-brand" href="index.html">
+      <img class="brand-logo" src="assets/appicon.png" alt="HumTrack">
+      <span>HumTrack</span>
+    </a>
+    <div class="nav-cta">
+      <div class="lang-toggle">
+        <button class="active" onclick="setLang('ko')">KO</button>
+        <button onclick="setLang('en')">EN</button>
+      </div>
+      <a href="index.html" class="btn-pill ghost" data-ko="홈으로" data-en="Home">홈으로</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <!-- HERO -->
+  <section class="v-hero">
+    <div class="wrap">
+      <div class="eyebrow" data-ko="우리의 비전" data-en="Our Vision">우리의 비전</div>
+      <h1>
+        <span data-ko="음악을 사랑하는 " data-en="A world where everyone ">음악을 사랑하는 </span><span class="accent" data-ko="누구나," data-en="who loves music">누구나,</span><br>
+        <span data-ko="음악을 만드는 세상" data-en="can make music">음악을 만드는 세상</span>
+      </h1>
+      <p class="lead" data-ko="HumTrack이 바라는 세상은, 음악을 사랑하는 누구나 따로 배우지 않아도 아이디어만으로 음악을 만들 수 있는 세상입니다." data-en="HumTrack dreams of a world where anyone who loves music can create it from an idea alone — no training required.">HumTrack이 바라는 세상은, 음악을 사랑하는 누구나 따로 배우지 않아도 아이디어만으로 음악을 만들 수 있는 세상입니다.</p>
+    </div>
+  </section>
+
+  <!-- BELIEFS -->
+  <section class="v-beliefs">
+    <div class="wrap" style="display:flex; flex-direction:column; gap:18px;">
+      <article class="belief reveal">
+        <span class="idx">01</span>
+        <h2 data-ko="사람의 손길로 완성됩니다" data-en="Finished by human hands">사람의 손길로 완성됩니다</h2>
+        <p data-ko="우리는 음악이라는 예술이 AI가 사용되었더라도, 결국 사람의 손길이 닿아야 비로소 완성된다고 믿습니다." data-en="We believe music — even when AI is involved — is only complete once a human hand has shaped it.">우리는 음악이라는 예술이 AI가 사용되었더라도, 결국 사람의 손길이 닿아야 비로소 완성된다고 믿습니다.</p>
+      </article>
+      <article class="belief reveal">
+        <span class="idx">02</span>
+        <h2 data-ko="배우지 않아도, 아이디어만으로" data-en="From an idea, without training">배우지 않아도, 아이디어만으로</h2>
+        <p data-ko="악기를 다루거나 이론을 몰라도, 머릿속 멜로디를 흥얼거리는 것만으로 누구나 자신의 음악을 만들 수 있어야 합니다." data-en="You shouldn't need an instrument or music theory — humming the melody in your head should be enough to make your own music.">악기를 다루거나 이론을 몰라도, 머릿속 멜로디를 흥얼거리는 것만으로 누구나 자신의 음악을 만들 수 있어야 합니다.</p>
+      </article>
+      <article class="belief reveal">
+        <span class="idx">03</span>
+        <h2 data-ko="기술로, 음악을 더 즐겁게" data-en="Technology for the joy of music">기술로, 음악을 더 즐겁게</h2>
+        <p data-ko="그래서 우리는 음악을 사랑하는 사람들이 음악을 더욱 즐길 수 있는 환경을, 발전하는 기술로 계속해서 만들어가겠습니다." data-en="So we will keep building — with ever-advancing technology — an environment where people who love music can enjoy it even more.">그래서 우리는 음악을 사랑하는 사람들이 음악을 더욱 즐길 수 있는 환경을, 발전하는 기술로 계속해서 만들어가겠습니다.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- SUPPORT -->
+  <section class="v-support">
+    <div class="wrap">
+      <div class="panel reveal">
+        <h2 data-ko="이 비전에 함께해 주세요" data-en="Join us in this vision">이 비전에 함께해 주세요</h2>
+        <p data-ko="HumTrack의 여정을 응원하고 싶다면, 후원으로 힘을 보태주세요." data-en="If you'd like to support HumTrack's journey, you can back us below.">HumTrack의 여정을 응원하고 싶다면, 후원으로 힘을 보태주세요.</p>
+        <a href="https://ko-fi.com/humtrack" target="_blank" rel="noopener noreferrer" class="support-btn en-only">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>
+          <span data-ko="후원하기" data-en="Support us">후원하기</span>
+        </a>
+        <p class="support-note en-only" data-ko="Ko-fi에서 안전하게 후원할 수 있어요." data-en="Securely supported via Ko-fi.">Ko-fi에서 안전하게 후원할 수 있어요.</p>
+        <p class="support-contact ko-only">후원문의: <a href="mailto:hermosear98@gmail.com">hermosear98@gmail.com</a></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- FOOTER -->
+<footer>
+  <div class="foot-inner">
+    <div class="foot-brand">
+      <div class="nav-brand"><img class="brand-logo" src="assets/appicon.png" alt="HumTrack"><span>HumTrack</span></div>
+      <p data-ko="머릿속 멜로디를 곡으로 만드는 가장 빠른 방법. HumTrack ♪ Seoul." data-en="The fastest way to turn melodies into songs. HumTrack ♪ Seoul.">머릿속 멜로디를 곡으로 만드는 가장 빠른 방법. HumTrack ♪ Seoul.</p>
+    </div>
+    <div class="foot-col">
+      <h5 data-ko="제품" data-en="Product">제품</h5>
+      <a href="index.html#features" data-ko="기능" data-en="Features">기능</a>
+      <a href="index.html#pricing" data-ko="가격" data-en="Pricing">가격</a>
+      <a href="#" data-ko="릴리즈 노트" data-en="Release notes">릴리즈 노트</a>
+      <a href="#" data-ko="로드맵" data-en="Roadmap">로드맵</a>
+    </div>
+    <div class="foot-col">
+      <h5 data-ko="회사" data-en="Company">회사</h5>
+      <a href="#" data-ko="소개" data-en="About">소개</a>
+      <a href="mailto:hello@hum-track.com">hello@hum-track.com</a>
+      <a href="#" data-ko="채용" data-en="Careers">채용</a>
+      <a href="#" data-ko="언론 자료" data-en="Press kit">언론 자료</a>
+    </div>
+    <div class="foot-col">
+      <h5 data-ko="정책" data-en="Legal">정책</h5>
+      <a href="/terms" data-ko="이용약관" data-en="Terms of service">이용약관</a>
+      <a href="/privacy" data-ko="개인정보 처리방침" data-en="Privacy policy">개인정보 처리방침</a>
+      <a href="/refund" data-ko="환불 정책" data-en="Refund policy">환불 정책</a>
+      <a href="mailto:support@hum-track.com" data-ko="문의" data-en="Contact">문의</a>
+    </div>
+  </div>
+  <div class="foot-bottom">
+    <div data-ko="© 2026 에르모세아르 (Hermosear) · hum-track.com" data-en="© 2026 Hermosear · hum-track.com">© 2026 에르모세아르 (Hermosear) · hum-track.com</div>
+    <div class="socials">
+      <a href="#" title="X">𝕏</a>
+      <a href="#" title="Instagram">◎</a>
+      <a href="#" title="YouTube">▶</a>
+      <a href="#" title="TikTok">♪</a>
+    </div>
+  </div>
+  <div class="foot-bottom" style="display:block; padding-top:14px; color:var(--text-tertiary); font-size:11px; line-height:1.7;">
+    <span data-ko="에르모세아르 | 대표자: 김동현 | 주소: 경기도 용인시 기흥구 공세로 150-29, B01-G160호 | 통신판매업 신고번호: 2024-용인기흥-2437 | 사업자등록번호: 106-16-34319 | 유선전화번호: 010-9611-1711 | heobusy@gmail.com"
+          data-en="Hermosear | Representative: Kim Dong Hyun | Address: 150-29 Gongse-ro, Giheung-gu, Yongin-si, Gyeonggi-do (B01-G160) | E-Commerce Reg.: 2024-Yongin-Giheung-2437 | Business Reg.: 106-16-34319 | Phone: +82-10-9611-1711 | heobusy@gmail.com">에르모세아르 | 대표자: 김동현 | 주소: 경기도 용인시 기흥구 공세로 150-29, B01-G160호 | 통신판매업 신고번호: 2024-용인기흥-2437 | 사업자등록번호: 106-16-34319 | 유선전화번호: 010-9611-1711 | heobusy@gmail.com</span>
+  </div>
+</footer>
+
+<script>
+function setLang(lang) {
+  document.querySelectorAll('[data-ko]').forEach(el => {
+    el.textContent = el.getAttribute('data-' + lang);
+  });
+  document.querySelectorAll('.lang-toggle button').forEach((b,i) => {
+    b.classList.toggle('active', (lang === 'ko' && i === 0) || (lang === 'en' && i === 1));
+  });
+  document.documentElement.lang = lang;
+  try { localStorage.setItem('ht_lang', lang); } catch (e) {}
+}
+// 첫 로드 언어: 저장된 선택 > 브라우저 언어(한국어면 KO, 그 외 EN)
+(function () {
+  var saved = null;
+  try { saved = localStorage.getItem('ht_lang'); } catch (e) {}
+  var nav = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+  setLang(saved || (nav.indexOf('ko') === 0 ? 'ko' : 'en'));
+})();
+// scroll reveal
+(function () {
+  if (!document.documentElement.classList.contains('anim')) return;
+  var items = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window)) { items.forEach(function (el) { el.classList.add('in'); }); return; }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.14, rootMargin: '0px 0px -8% 0px' });
+  items.forEach(function (el) { io.observe(el); });
+})();
+</script>
+</body>
+</html>

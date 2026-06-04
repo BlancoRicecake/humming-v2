@@ -5,6 +5,7 @@
 // - KEY 카드 탭 → showKeyPicker
 // - 피치 어시스트 우측 mini-toggle → store.togglePitchAssistant(on)
 // - 각 카드의 ⓘ → showHelpSheet(title, body)
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../l10n/generated/app_localizations.dart';
@@ -25,24 +26,102 @@ class ActiveTrackCards extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = store.active;
     final dk = t.analysis?.detectedKey;
+    // 드럼은 음정/키가 없음 → KEY·ASSIST(피치 어시스턴트) 카드 미표시. 그루브가 핵심인
+    // Quantize 카드만 악기 카드와 함께 둔다.
+    final isDrum = t.role == TrackRole.drum;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         children: [
           _InstrumentCard(store: store, track: t),
           const SizedBox(height: 8),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: _KeyCard(store: store, track: t, dk: dk)),
-                const SizedBox(width: 10),
-                Expanded(child: _AssistCard(store: store, track: t)),
-              ],
+          if (!isDrum) ...[
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _KeyCard(store: store, track: t, dk: dk)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _AssistCard(store: store, track: t)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          _QuantizeCard(store: store, track: t),
+          if (kDebugMode) _PitchModelDebugCard(store: store, track: t),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── [DEBUG] 피치 트래커 토글 (kDebugMode 전용, 출시 빌드 미노출) ──────────
+// pyin↔crepe 전환 → 전체 재분석. CREPE 는 dev 백엔드에만 존재(prod 미배포).
+// 디바이스에서 같은 녹음을 두 트래커로 즉시 비교하기 위한 도구.
+class _PitchModelDebugCard extends StatelessWidget {
+  const _PitchModelDebugCard({required this.store, required this.track});
+  final ProjectStore store;
+  final TrackData track;
+
+  @override
+  Widget build(BuildContext context) {
+    final model = track.options.pitchModel;
+    final hasWav = (track.wavPath ?? '').isNotEmpty;
+    final pitched = track.analysis?.notes.where((n) => n.kind == 'pitched').length ?? 0;
+
+    Widget seg(String value, String label) {
+      final sel = model == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: hasWav ? () => store.setPitchModel(value) : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: sel ? AppColors.lime : AppColors.surface2,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: T.body.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: sel ? AppColors.bg : AppColors.textSecondary,
+              ),
             ),
           ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(_cardPad),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Symbols.bug_report, size: 14, color: AppColors.textSecondary),
+            const SizedBox(width: 4),
+            Text('PITCH TRACKER (debug)', style: _labelStyle),
+            const Spacer(),
+            if (hasWav) Text('$pitched notes', style: T.sub.copyWith(fontSize: 11)),
+          ]),
           const SizedBox(height: 8),
-          _QuantizeCard(store: store, track: t),
+          Row(children: [
+            seg('pyin', 'pYIN'),
+            const SizedBox(width: 8),
+            seg('crepe', 'CREPE'),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            hasWav
+                ? '녹음을 두 트래커로 재분석해 비교. CREPE 는 로컬 dev 백엔드 필요.'
+                : '먼저 녹음하면 활성화됩니다.',
+            style: T.sub.copyWith(fontSize: 10, color: AppColors.textTertiary),
+          ),
         ],
       ),
     );

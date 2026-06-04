@@ -1,0 +1,8 @@
+# Dev-only deps -- NOT installed in prod (Fly.io 1GB VM). Keep torch out of the
+# prod image: it risks OOM alongside librosa+ffmpeg. CREPE ships to prod as a
+# bundled crepe-tiny.onnx + onnxruntime (see requirements.txt) instead.
+-r requirements.txt
+
+# CREPE pitch tracker (pretrained) for local A/B validation against pYIN.
+# Pulls in torch (CPU). Used by app.pitch._TorchCrepe when no bundled ONNX exists.
+torchcrepe>=0.0.22

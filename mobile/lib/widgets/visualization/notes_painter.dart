@@ -122,7 +122,8 @@ class _NotesPainter extends CustomPainter {
       }
       if (isReplica) col = col.withValues(alpha: 0.55);
       canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(2)), Paint()..color = col);
-      if (i == selectedNote) {
+      // selectedNote 는 원본 t.notes 인덱스 → 표시 노트의 renderSrcIndex 와 매칭(반복본 포함).
+      if (selectedNote != null && n.renderSrcIndex == selectedNote) {
         canvas.drawRRect(
           RRect.fromRectAndRadius(r.inflate(1.5), const Radius.circular(3)),
           Paint()

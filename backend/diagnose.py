@@ -51,9 +51,12 @@ def tier_of(conf: float) -> str:
     return "low"
 
 
+PITCH_MODEL = os.environ.get("HUMMING_PITCH_MODEL", "pyin")
+
+
 def diagnose(path: Path, w) -> None:
     raw = path.read_bytes()
-    res = analyze_audio(raw, AnalyzeOptions())          # notes carry pitch_raw
+    res = analyze_audio(raw, AnalyzeOptions(pitch_model=PITCH_MODEL))  # notes carry pitch_raw
     notes = [n.model_copy() for n in res.notes]         # fresh copy for debug re-run
     dbg: list = []
     info = run_key_and_assistant(notes, True, True, None, None, debug_out=dbg)
