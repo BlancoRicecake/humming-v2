@@ -91,12 +91,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="test")
     ap.add_argument("--limit", type=int, default=60)
+    ap.add_argument("--keysfile", default=None, help="평가 키 목록 파일")
     ap.add_argument("--patch", default="{}")
     ap.add_argument("--opts", default="{}")
     ap.add_argument("--tag", default="ab")
     args = ap.parse_args()
     gtdir = os.path.join(DATA, "HumTrans-main", "midis", "gt", "GroundTruth", args.split)
-    keys = load_keys(args.split, args.limit)
+    if args.keysfile:
+        keys = [l.strip() for l in open(args.keysfile) if l.strip()]
+        if args.limit:
+            keys = keys[:args.limit]
+    else:
+        keys = load_keys(args.split, args.limit)
     opts = AnalyzeOptions(**json.loads(args.opts))
 
     apply_patch(json.loads(args.patch))

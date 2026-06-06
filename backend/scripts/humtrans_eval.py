@@ -305,6 +305,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="test", choices=["test", "valid"])
     ap.add_argument("--limit", type=int, default=100)
+    ap.add_argument("--keysfile", default=None, help="평가 키 목록 파일(있으면 split 무시)")
     ap.add_argument("--wavdir", default=os.path.join(DATA, "wav"))
     ap.add_argument("--gtdir", default=None)
     ap.add_argument("--pitch", default="final", choices=["final", "raw"])
@@ -318,7 +319,12 @@ def main():
     opts_over = json.loads(args.opts)
     opts = AnalyzeOptions(**opts_over)
 
-    keys = load_keys(args.split, args.limit)
+    if args.keysfile:
+        keys = [l.strip() for l in open(args.keysfile) if l.strip()]
+        if args.limit:
+            keys = keys[:args.limit]
+    else:
+        keys = load_keys(args.split, args.limit)
     results = []
     skipped = []
     t0 = time.time()
