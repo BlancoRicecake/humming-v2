@@ -198,7 +198,26 @@ def align_sequences(ref_on, est_on, ref_pit, est_pit, gap=0.10, lam=0.05):
     return best[2], best[1]
 
 
-def evaluate_segment(key, ref, est, ioi_tol=1.5) -> SegResult:
+def estimate_grid_base(onsets):
+    """GT onset 들의 격자 단위(초) 추정. HumTrans GT 는 양자화되어 onset 들이
+    어떤 base 의 정수배. 굵은→가는 base 를 훑어, onset 들이 격자에 잘 맞는
+    '가장 큰' base 를 채택(작은 base 는 항상 맞으므로 큰 쪽 우선). 삼잇단음 등
+    혼합으로 단일 격자가 없으면 최소 IOI 로 폴백."""
+    if len(onsets) < 2:
+        return None
+    offs = np.asarray(onsets) - onsets[0]
+    b = 0.50
+    while b >= 0.08:
+        frac = offs / b
+        resid = np.abs(frac - np.round(frac))
+        if resid.mean() < 0.06 and np.percentile(resid, 90) < 0.12:
+            return float(b)
+        b -= 0.005
+    d = np.diff(np.sort(onsets)); d = d[d > 0.03]
+    return float(np.min(d)) if d.size else None
+
+
+def evaluate_segment(key, ref, est) -> SegResult:
     ref_on, ref_off, ref_pit = ref
     est_on, est_off, est_pit = est
     n_ref = len(ref_on)
@@ -248,17 +267,27 @@ def evaluate_segment(key, ref, est, ioi_tol=1.5) -> SegResult:
                          for ri, ej in pairs])
     pitch_acc = float(pitch_ok.mean())
 
-    # --- 타이밍=리듬: 연속 정렬쌍의 IOI 비율 (템포 정규화) ---
+    # --- 타이밍=리듬: 격자 양자화 비교 ---
+    # GT 격자 base 를 구하고, 연속 정렬쌍의 IOI 를 (템포 정규화 후) 격자 스텝
+    # 정수로 반올림 → ref 의 격자 스텝과 일치하면 정답. "노트가 올바른 박자
+    # 칸에 들어갔나"를 재며 ±½격자(루바토)를 흡수.
     rio = np.array([ref_on[pairs[k + 1][0]] - ref_on[pairs[k][0]]
                     for k in range(n_pair - 1)])
     eio = np.array([est_on[pairs[k + 1][1]] - est_on[pairs[k][1]]
                     for k in range(n_pair - 1)])
     valid = (rio > 1e-3) & (eio > 1e-3)
     rhythm_ok = np.zeros(n_pair - 1, dtype=bool)
-    if valid.sum() > 0:
+    base = estimate_grid_base(ref_on)
+    if valid.sum() > 0 and base:
         scale = float(np.sum(eio[valid]) / np.sum(rio[valid]))  # 전역 템포 비
-        ratio = np.where(valid, (eio / np.maximum(scale, 1e-9)) / rio, 0.0)
-        rhythm_ok = valid & (ratio >= 1.0 / ioi_tol) & (ratio <= ioi_tol)
+        ref_steps = np.round(rio / base)
+        est_steps = np.round((eio / max(scale, 1e-9)) / base)
+        rhythm_ok = valid & (ref_steps >= 1) & (est_steps == ref_steps)
+    elif valid.sum() > 0:
+        # 격자 추정 실패 시 ±50% 비율 폴백
+        scale = float(np.sum(eio[valid]) / np.sum(rio[valid]))
+        ratio = np.where(valid, (eio / max(scale, 1e-9)) / rio, 0.0)
+        rhythm_ok = valid & (ratio >= 1 / 1.5) & (ratio <= 1.5)
     timing_acc = float(rhythm_ok.sum() / max(valid.sum(), 1))
 
     # --- onset 잔차(affine 정합 후) — 루바토/지터 진단용 ---
