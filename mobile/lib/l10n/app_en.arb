@@ -80,6 +80,7 @@
   "accountLinked": "Account linked",
   "accountSignInHint": "Sign in to unlock billing and sync",
   "accountSignIn": "Sign in",
+  "authSessionExpired": "Your session has expired. Please sign in again.",
 
   "subFreePlan": "Free plan",
   "subFreePlanSub": "Export and Cloud sync unlock with Pro",
@@ -145,6 +146,23 @@
   "subCancelConfirmTitle": "Cancel subscription?",
   "subCancelConfirmBody": "All Pro features stay on until expiry.",
   "subCancelConfirmAction": "Cancel subscription",
+
+  "subHistoryTitle": "Payment history",
+  "subHistoryLoadFailed": "Could not load history",
+  "subHistoryEmpty": "No payment history",
+  "subPlanYearly": "Yearly plan",
+  "subPlanMonthly": "Monthly plan",
+  "subBadgeActive": "Active",
+  "subBadgeTrial": "Trial",
+  "subBadgeCancelled": "Cancelled",
+  "subBadgeExpired": "Expired",
+  "subHistoryRowStarted": "Started: {date}",
+  "subHistoryRowTxId": "Transaction ID: {id}",
+  "subHistoryTxCopied": "Transaction ID copied",
+  "subReceiptButtonIos": "View receipt on App Store",
+  "subReceiptButtonAndroid": "View receipt on Google Play",
+  "subOpenStoreIos": "Manage on App Store",
+  "subOpenStoreAndroid": "Manage on Google Play",
 
   "paywallHeadlineExport": "Pro is required to export",
   "paywallHeadlineSync": "Pro to view on another device",
@@ -240,6 +258,8 @@
 
   "syncProgressUpload": "Uploading to Cloud",
   "syncProgressDownload": "Downloading",
+  "syncProgressFailed": "Something went wrong",
+  "syncProgressFailedSub": "Please try again.",
 
   "comingSoonFeature": "Feature",
   "comingSoonToast": "{label} — coming soon",
@@ -295,6 +315,8 @@
 
   "cloudDownloadTitle": "Recover from Cloud",
   "cloudDownloadBanner": "While your subscription is expired, new uploads / sync are locked. Your previous songs remain — download or delete them anytime.",
+  "cloudDownloadEmptyTitle": "File list unavailable",
+  "cloudDownloadEmptySub": "Re-subscribe and use the Cloud tab\nto download your files.",
   "cloudDownloadCta": "Download",
   "cloudDownloadActionLabel": "Download",
   "cloudRenameLabel": "Rename on Cloud",
@@ -310,6 +332,7 @@
   "editOpenSettings": "Open Settings",
   "editPlayNoActiveTrack": "No active track (tap sidebar)",
   "editPlayRecordFirst": "Record first",
+  "editActionNeedsRecording": "Record something first to use this",
   "editPlayFailed": "Playback failed: {err}",
   "editOriginalPlayFailed": "Original playback failed",
   "editSplitNotPossible": "Cannot split at this position",
@@ -415,6 +438,7 @@
   "exportAudioSub": ".wav · mix render",
   "exportShareLabel": "Share",
   "exportShareSub": "Link · Instagram · TikTok",
+  "exportExporting": "Exporting...",
   "exportFailed": "Export failed: {err}",
 
   "metronomeTitle": "Metronome",

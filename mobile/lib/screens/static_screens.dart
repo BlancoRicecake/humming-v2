@@ -1,7 +1,9 @@
 // 정적 정보 화면들 — 시안 ⑬ FAQ, ⑭ 문의하기, ⑮ 약관, ⑯ 개인정보처리방침, ⑰ 클라우드 다운로드, 환불 정책.
 // 약관/개인정보/환불은 LegalDocScreen (assets/legal/*.md, flutter_markdown) 으로 위임.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/generated/app_localizations.dart';
 import '../theme/app_theme.dart';
@@ -77,10 +79,24 @@ class FaqScreen extends StatelessWidget {
 class ContactScreen extends StatelessWidget {
   const ContactScreen({super.key});
 
+  Future<void> _openMail(BuildContext context, String subject) async {
+    const email = 'heobusy@gmail.com';
+    final uri = Uri(
+      scheme: 'mailto',
+      path: email,
+      query: 'subject=${Uri.encodeComponent(subject)}',
+    );
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && context.mounted) {
+      await Clipboard.setData(const ClipboardData(text: email));
+      if (context.mounted) infoToast(context, '$email (copied)');
+    }
+  }
+
   Widget _row(BuildContext context, IconData ic, String t, String s, {VoidCallback? onTap}) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap ?? () => comingSoon(context, t),
+      onTap: onTap ?? () => _openMail(context, t),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         margin: const EdgeInsets.only(bottom: 10),
@@ -146,15 +162,11 @@ class RefundScreen extends StatelessWidget {
 }
 
 // ─── ⑰ 클라우드 다운로드 (Expired 유저) ───────────────────────────────
+// 구독 만료 유저가 클라우드 파일을 확인하는 화면.
+// 실제 파일 목록은 backend `/cloud/projects` API 연동 전까지 빈 상태 표시.
+// 재구독 후 클라우드 탭에서 정상 다운로드 가능 — 다운로드 CTA 는 v1.1.
 class CloudDownloadScreen extends StatelessWidget {
   const CloudDownloadScreen({super.key});
-
-  // mock 목록 — 실제로는 backend `/cloud/projects` 에서 가져옴.
-  static const _items = <(String, String, String)>[
-    ('첫 데모', '3분 12초 · 2026.04.18', '14.2 MB'),
-    ('Bridge sketch', '1분 45초 · 2026.04.30', '8.1 MB'),
-    ('Verse idea v2', '2분 28초 · 2026.05.11', '11.4 MB'),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -180,45 +192,23 @@ class CloudDownloadScreen extends StatelessWidget {
               )),
             ]),
           ),
-          const SizedBox(height: 16),
-          ..._items.map((it) => Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
+          const SizedBox(height: 40),
+          // 실제 파일 목록은 backend `/cloud/projects` 연동 후 표시 (v1.1).
+          Column(children: [
+            const Icon(Symbols.cloud_off, color: AppColors.textTertiary, size: 48),
+            const SizedBox(height: 12),
+            Text(
+              t.cloudDownloadEmptyTitle,
+              style: T.body.copyWith(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
             ),
-            child: Row(children: [
-              Container(
-                width: 40, height: 40, alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.activeLane, borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Symbols.cloud_download, color: AppColors.lime, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                Text(it.$1, style: T.body.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text(it.$2, style: T.sub.copyWith(fontSize: 11)),
-              ])),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                GestureDetector(
-                  onTap: () => comingSoon(context, t.cloudDownloadActionLabel),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.lime, borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(t.cloudDownloadCta, style: T.label.copyWith(color: AppColors.bg, fontSize: 11)),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(it.$3, style: T.sub.copyWith(fontSize: 10, color: AppColors.textTertiary)),
-              ]),
-            ]),
-          )),
+            const SizedBox(height: 6),
+            Text(
+              t.cloudDownloadEmptySub,
+              style: T.sub.copyWith(height: 1.5, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ]),
         ],
       ),
     );

@@ -62,6 +62,10 @@ class AuthService {
   AuthSession _current = const AuthSession();
   AuthSession get current => _current;
 
+  /// 세션 만료(refresh token 소진)로 인한 강제 로그아웃 여부.
+  /// ProjectStore 또는 UI 레이어가 읽어 "세션이 만료됐습니다" 메시지 표시 후 false 로 리셋.
+  bool sessionExpiredByServer = false;
+
   /// signInWith 가 false 반환했을 때 진단용 에러 — 사용자 취소면 null.
   /// UI 단에서 L10n 으로 해석해 snackbar/dialog 등으로 표시.
   AuthError? lastError;
@@ -95,6 +99,13 @@ class AuthService {
   void _onChange(sb.AuthState s) {
     final session = s.session;
     if (session == null) {
+      // TOKEN_REFRESH_FAILED / 서버 측 세션 무효화 → 강제 로그아웃.
+      // 수동 signOut()은 _manualSignOut 플래그로 구분.
+      if (!_manualSignOut &&
+          (s.event == sb.AuthChangeEvent.tokenRefreshed ||
+           s.event == sb.AuthChangeEvent.signedOut)) {
+        sessionExpiredByServer = true;
+      }
       _current = const AuthSession();
     } else {
       _emitFromSession(session);
@@ -102,6 +113,8 @@ class AuthService {
     }
     _sessionCtl.add(_current);
   }
+
+  bool _manualSignOut = false;
 
   void _emitFromSession(sb.Session session) {
     final u = session.user;
@@ -286,6 +299,7 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    _manualSignOut = true;
     _lastSignInProvider = null;
     // GoogleSignIn 패키지가 native 단에서 별도 account 캐시를 들고 있어 Supabase 만
     // signOut 하면 다음 시도 시 화면 없이 즉시 재로그인 됨. 양쪽 모두 비워야 함.

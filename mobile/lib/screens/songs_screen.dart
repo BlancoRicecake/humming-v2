@@ -12,6 +12,7 @@ import '../state/local_storage.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_sheets.dart';
+import '../widgets/sheets.dart';
 import '../widgets/cloud/cloud_tab_view.dart';
 import '../widgets/common.dart';
 import '../widgets/controls/segmented_control.dart';
@@ -39,8 +40,20 @@ class _SongsScreenState extends State<SongsScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Pro 결제 직후 환영 화면 — store.pendingProWelcome 가 true 면 1회 push.
     final store = context.read<ProjectStore>();
+    // 세션 만료로 인한 강제 로그아웃 알림.
+    if (store.sessionExpiredNotification) {
+      store.sessionExpiredNotification = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(L10n.of(context).authSessionExpired),
+          backgroundColor: AppColors.danger,
+          duration: const Duration(seconds: 4),
+        ));
+      });
+    }
+    // Pro 결제 직후 환영 화면 — store.pendingProWelcome 가 true 면 1회 push.
     if (store.pendingProWelcome) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
@@ -68,6 +81,13 @@ class _SongsScreenState extends State<SongsScreen> {
     if (!ok || !mounted) return;
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditScreen()));
     _refresh();
+  }
+
+  Future<void> _exportProject(ProjectMeta meta) async {
+    final store = context.read<ProjectStore>();
+    final ok = await LocalStorage.instance.loadProject(meta.id, store);
+    if (!ok || !mounted) return;
+    showExportShare(context, store);
   }
 
   Future<void> _newProject() async {
@@ -111,7 +131,8 @@ class _SongsScreenState extends State<SongsScreen> {
                 ],
               ),
             ),
-            _bottomNav(context),
+            // 하단 탭바 — 출시 P0 에서는 Songs 만 구현 상태라 탭바 자체 비표시.
+            // STUDIO / MIXER 가 동작 가능한 v1.1 에서 _bottomNav(context) 재활성.
           ],
         ),
       ),
@@ -204,6 +225,7 @@ class _SongsScreenState extends State<SongsScreen> {
         meta,
         onChanged: _refresh,
         onOpen: () => _openProject(meta),
+        onExport: () => _exportProject(meta),
       ),
       child: Container(
         padding: const EdgeInsets.all(14),
@@ -254,6 +276,7 @@ class _SongsScreenState extends State<SongsScreen> {
             icon: const Icon(Symbols.more_horiz, color: AppColors.textSecondary, size: 22),
             onPressed: () => showProjectOptionsSheet(
               context, store, meta, onChanged: _refresh, onOpen: () => _openProject(meta),
+              onExport: () => _exportProject(meta),
             ),
           ),
         ]),
@@ -278,13 +301,11 @@ class _SongsScreenState extends State<SongsScreen> {
   }
 
   Widget _fab() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 72),
-      child: FloatingActionButton(
-        backgroundColor: AppColors.lime,
-        onPressed: _newProject,
-        child: const Icon(Symbols.add, color: AppColors.bg, size: 28),
-      ),
+    // 하단 탭바 제거(P0) — FAB 의 추가 bottom 여백 불필요. SafeArea 가 끝까지 보장.
+    return FloatingActionButton(
+      backgroundColor: AppColors.lime,
+      onPressed: _newProject,
+      child: const Icon(Symbols.add, color: AppColors.bg, size: 28),
     );
   }
 
@@ -303,6 +324,7 @@ class _SongsScreenState extends State<SongsScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _bottomNav(BuildContext context) {
     Widget tab(IconData ic, String label, bool active, {bool disabled = false}) {
       final w = Expanded(

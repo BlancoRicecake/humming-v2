@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -31,7 +32,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..deps import CurrentUser, get_current_user, require_supabase
-from ..models import IapVerifyRequest, IapVerifyResponse, SubStatus
+from ..models import IapVerifyRequest, IapVerifyResponse, IapHistoryItem, IapHistoryResponse, SubStatus
 from ..settings import get_settings
 
 logger = logging.getLogger("humming.iap")
@@ -76,7 +77,8 @@ def _upsert_subscription(sb, *, user_id: str, store: str, product_id: str,
                         trial_ends_at: Optional[datetime] = None,
                         original_purchase_at: Optional[datetime] = None,
                         last_renewed_at: Optional[datetime] = None,
-                        cancel_reason: Optional[str] = None) -> dict:
+                        cancel_reason: Optional[str] = None,
+                        transaction_id: Optional[str] = None) -> dict:
     row = {
         "user_id": user_id,
         "store": store,
@@ -87,6 +89,7 @@ def _upsert_subscription(sb, *, user_id: str, store: str, product_id: str,
         "original_purchase_at": original_purchase_at.isoformat() if original_purchase_at else None,
         "last_renewed_at": last_renewed_at.isoformat() if last_renewed_at else None,
         "cancel_reason": cancel_reason,
+        "transaction_id": transaction_id,
         "updated_at": _now_utc().isoformat(),
     }
     # Strip Nones so we don't clobber existing values on partial updates.
@@ -185,6 +188,62 @@ def _decode_apple_jws_verified(jws_str: str) -> dict:
 
 # Back-compat alias
 _decode_apple_jws = _decode_apple_jws_unsafe
+
+
+def _decode_jws_payload(token: str) -> dict:
+    """JWS payload를 서명 검증 없이 디코드 (환경 확인 전용).
+
+    JWS는 header.payload.signature 구조. 서명을 신뢰하지 않고
+    environment 필드만 읽는 용도로만 사용한다.
+    """
+    parts = token.split(".")
+    if len(parts) != 3:
+        return {}
+    segment = parts[1]
+    # base64url padding 보정
+    segment += "=" * (4 - len(segment) % 4)
+    try:
+        return json.loads(base64.urlsafe_b64decode(segment))
+    except Exception:
+        return {}
+
+
+def _is_production_env() -> bool:
+    """현재 서버가 production 환경인지 판별.
+
+    APP_ENV 환경변수(명시적)를 우선하고,
+    없으면 settings.environment 값을 참조한다.
+    fly.toml에는 ENV=production이 설정돼 있으나 APP_ENV는 없으므로
+    두 경로 모두 확인한다.
+    """
+    app_env = os.getenv("APP_ENV", "").strip().lower()
+    if app_env:
+        return app_env == "production"
+    # fallback: settings 기반 (environment 필드)
+    return get_settings().environment.strip().lower() == "production"
+
+
+def _assert_not_sandbox_jws(signed: str, context: str = "") -> None:
+    """StoreKit 2 JWS의 environment 필드가 Sandbox이면 production에서 거부.
+
+    Args:
+        signed: Apple 서명 JWS 문자열 (signedTransactionInfo 등).
+        context: 로그 식별용 컨텍스트 문자열.
+
+    Raises:
+        HTTPException(403): production 서버에서 Sandbox 영수증을 받은 경우.
+    """
+    if not _is_production_env():
+        return  # dev / staging 에서는 sandbox 허용
+    payload = _decode_jws_payload(signed)
+    env = payload.get("environment", "Production")
+    if env == "Sandbox":
+        logger.warning("apple: sandbox JWS rejected on production server%s",
+                       f" [{context}]" if context else "")
+        raise HTTPException(
+            status_code=403,
+            detail="Sandbox receipts are not accepted on production server",
+        )
 
 
 async def _apple_verify_receipt_legacy(receipt_b64: str) -> Optional[dict]:
@@ -302,12 +361,23 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
             signed = info.get("signedTransactionInfo")
             if not signed:
                 raise HTTPException(400, "apple: no signedTransactionInfo")
+            # [Security] production 서버에서 Sandbox 트랜잭션 거부
+            _assert_not_sandbox_jws(signed, context="signedTransactionInfo/verify")
             tx = _decode_apple_jws_unsafe(signed)
         else:
             # Legacy verifyReceipt path (StoreKit 1) with Shared Secret
             legacy = await _apple_verify_receipt_legacy(raw)
             if not legacy:
                 raise HTTPException(400, "apple: legacy verifyReceipt failed")
+            # [Security] StoreKit 1: production 서버에서 Sandbox 응답 거부
+            # _apple_verify_receipt_legacy 는 21007(sandbox→prod) 시 sandbox로
+            # fallback하므로, 최종 응답의 environment 를 여기서 한 번 더 확인한다.
+            if _is_production_env() and legacy.get("environment") == "Sandbox":
+                logger.warning("apple: legacy verifyReceipt returned Sandbox environment on production")
+                raise HTTPException(
+                    status_code=403,
+                    detail="Sandbox receipts are not accepted on production server",
+                )
             latest = (legacy.get("latest_receipt_info") or [{}])[-1]
             # Normalise keys → StoreKit 2 style fields we use below
             tx = {
@@ -340,11 +410,14 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
             status_v = "trial"
         else:
             status_v = "active"
+        # transactionId from decoded JWS, or fall back to client-provided value.
+        apple_txid = str(tx.get("transactionId") or "") or payload.transaction_id or None
         _upsert_subscription(
             sb, user_id=user.id, store="app_store", product_id=product_id,
             status=status_v, expires_at=expires_at,
             trial_ends_at=expires_at if is_trial else None,
             original_purchase_at=original, last_renewed_at=purchase,
+            transaction_id=apple_txid,
         )
         return IapVerifyResponse(
             status=status_v, product_id=product_id, expires_at=expires_at,
@@ -365,16 +438,82 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
     trial_end = expires_at if sub.get("paymentState") == 2 else None
     original = _ms_to_dt(int(sub.get("startTimeMillis", 0)) or None)
     renewed = _ms_to_dt(int(sub.get("userCancellationTimeMillis", 0)) or None) or original
+    # orderId is Google's transaction identifier.
+    google_txid = sub.get("orderId") or payload.transaction_id or None
     _upsert_subscription(
         sb, user_id=user.id, store="play_store", product_id=product_id,
         status=status_v, expires_at=expires_at, trial_ends_at=trial_end,
         original_purchase_at=original, last_renewed_at=renewed,
         cancel_reason=str(sub.get("cancelReason")) if sub.get("cancelReason") is not None else None,
+        transaction_id=google_txid,
     )
     return IapVerifyResponse(
         status=status_v, product_id=product_id, expires_at=expires_at,
         trial_ends_at=trial_end, store="play_store",
     )
+
+
+# --- history ----------------------------------------------------------------
+@router.get("/history", response_model=IapHistoryResponse)
+async def history(user: CurrentUser = Depends(get_current_user)):
+    """Return the subscription history for the authenticated user.
+
+    Primary source: ``subscriptions`` table (one row per user/store pair).
+    Falls back to ``iap_notifications`` for any transaction_id that isn't
+    stored on the subscription row (e.g. rows created before the column was
+    added).
+    """
+    sb = require_supabase()
+    try:
+        res = sb.table("subscriptions") \
+            .select("product_id, status, original_purchase_at, expires_at, transaction_id, store") \
+            .eq("user_id", user.id) \
+            .order("original_purchase_at", desc=True) \
+            .execute()
+        rows = res.data or []
+    except Exception as e:
+        logger.exception("history query failed: %s", e)
+        raise HTTPException(500, "history query failed")
+
+    # If a row is missing transaction_id, try to back-fill from iap_notifications.
+    # We do this lazily per row rather than a JOIN so we don't require the SQL
+    # migration to be applied first.
+    items: list[IapHistoryItem] = []
+    for row in rows:
+        txid = row.get("transaction_id")
+        if not txid:
+            try:
+                store = row.get("store", "")
+                notif_field = (
+                    "data->>transactionId" if store == "app_store"
+                    else "subscriptionNotification->>purchaseToken"
+                )
+                # Attempt a simple lookup from the latest notification for this store.
+                n_res = sb.table("iap_notifications") \
+                    .select("payload") \
+                    .eq("store", store) \
+                    .order("created_at", desc=True) \
+                    .limit(1) \
+                    .execute()
+                n_rows = n_res.data or []
+                if n_rows:
+                    payload_data = n_rows[0].get("payload") or {}
+                    if store == "app_store":
+                        txid = (payload_data.get("data") or {}).get("transactionId")
+                    else:
+                        txid = (payload_data.get("subscriptionNotification") or {}).get("purchaseToken")
+            except Exception:
+                pass  # best-effort; keep txid=None
+
+        items.append(IapHistoryItem(
+            product_id=row.get("product_id") or "",
+            status=row.get("status") or "expired",
+            started_at=row.get("original_purchase_at"),
+            expires_at=row.get("expires_at"),
+            transaction_id=txid,
+            store=row.get("store") or "app_store",
+        ))
+    return IapHistoryResponse(items=items)
 
 
 # --- webhooks ---------------------------------------------------------------
@@ -412,6 +551,8 @@ async def apple_webhook(request: Request):
     if not signed_tx:
         logger.info("apple webhook %s without signedTransactionInfo", notif_type)
         return {"ok": True}
+    # [Security] production 서버에서 Sandbox 트랜잭션 거부 (defense-in-depth)
+    _assert_not_sandbox_jws(signed_tx, context="signedTransactionInfo/webhook")
     tx = _decode_apple_jws_verified(signed_tx)
     renew = _decode_apple_jws_verified(signed_renew) if signed_renew else {}
 

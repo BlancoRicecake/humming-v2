@@ -15,6 +15,7 @@
 // 실제 in_app_purchase / supabase 패키지는 다음 배치에서 도입.
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';

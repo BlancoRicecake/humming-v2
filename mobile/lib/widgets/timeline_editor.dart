@@ -626,10 +626,13 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
           _clampScroll();
           final laneH = _lanesH;
 
+          // FAB(트랙 추가) 가 마지막 트랙 행을 가리지 않도록 하단 여백 확보.
+          // FAB 56dp + 위치 margin → 96dp 가 안전.
+          const double fabBottomPad = 96;
           return SingleChildScrollView(
             // 전체 트랙 수가 늘어나면 세로 스크롤로 모두 접근 가능.
             child: SizedBox(
-              height: math.max(c.maxHeight, _rulerH + laneH),
+              height: math.max(c.maxHeight, _rulerH + laneH + fabBottomPad),
               child: Column(
                 children: [
                         // 룰러 — 터치+드래그 시킹

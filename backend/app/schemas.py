@@ -88,7 +88,7 @@ class Note(BaseModel):
     pitch_original: int = 0                 # round(pitch_raw) before correction
     assisted: bool = False                  # assistant changed pitch from original
     candidates: List[int] = Field(default_factory=list)  # in-key options for editing
-    source: Literal["raw", "assistant", "user"] = "raw"  # provenance of `pitch`
+    source: str = "raw"                      # provenance of `pitch` — any string accepted
     in_key: bool = True                     # pitch_original is in the detected key
     correction_cents: float = 0.0           # (pitch - pitch_raw) * 100, for diagnostics
     # --- Drum timbre classification (Stage 6 add-on; see drums.py) ---
@@ -97,13 +97,13 @@ class Note(BaseModel):
     # debug visibility; the client applies `drum` only when role == "drum".
     drum: Optional[int] = None              # GM percussion note (36 Kick / 38 Snare / 42 HiHat)
     drum_name: Optional[str] = None         # "Kick" | "Snare" | "HiHat"
-    drum_centroid: float = 0.0              # spectral centroid (Hz) — debug
-    drum_low_ratio: float = 0.0             # energy fraction < 150Hz — debug (phone-stripped; not used in decision)
-    drum_high_ratio: float = 0.0            # energy fraction > 5kHz — debug
-    drum_zcr: float = 0.0                   # zero-crossing rate (0-1) — debug
-    drum_rolloff: float = 0.0               # spectral rolloff 85% (Hz) — debug (hi-hat high / kick low)
-    drum_flatness: float = 0.0              # spectral flatness 0-1 — debug (snare noisy / kick tonal: kick↔snare axis)
-    onset_strength: float = 0.0             # spectral-flux onset envelope at the hit — debug (0 for melodic notes)
+    drum_centroid: Optional[float] = 0.0    # spectral centroid (Hz) — debug
+    drum_low_ratio: Optional[float] = 0.0   # energy fraction < 150Hz — debug
+    drum_high_ratio: Optional[float] = 0.0  # energy fraction > 5kHz — debug
+    drum_zcr: Optional[float] = 0.0         # zero-crossing rate (0-1) — debug
+    drum_rolloff: Optional[float] = 0.0     # spectral rolloff 85% (Hz) — debug
+    drum_flatness: Optional[float] = 0.0    # spectral flatness 0-1 — debug
+    onset_strength: Optional[float] = 0.0   # spectral-flux onset envelope at the hit — debug
 
 
 # --- Debug surfaces (one per inspectable stage) -------------------------------

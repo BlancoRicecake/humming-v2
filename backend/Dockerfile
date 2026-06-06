@@ -25,6 +25,7 @@ RUN apt-get update \
         libgomp1 \
         ca-certificates \
         curl \
+        fluidsynth \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
@@ -61,7 +62,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # workers=1 → shared-cpu-1x@1GB. 두 워커가 numpy/librosa import + ffmpeg subprocess
 # 를 동시에 메모리에 잡으면 1GB 한계로 OOM. 동시성은 머신 2대로 확보.
 # numpy/openmp 스레드도 1로 고정(같은 이유 — 스레드별 BLAS 워크스페이스 메모리).
-ENV OMP_NUM_THREADS=1 \
+ENV HUMMING_SF2_PATH=/app/app/TimGM6mb.sf2 \
+    OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
     OPENBLAS_NUM_THREADS=1 \
     NUMEXPR_NUM_THREADS=1

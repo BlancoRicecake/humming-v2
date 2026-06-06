@@ -13,44 +13,59 @@ Future<bool> showLoginSheet(BuildContext context, ProjectStore store) async {
   return ok == true;
 }
 
-class _LoginBody extends StatelessWidget {
+class _LoginBody extends StatefulWidget {
   const _LoginBody({required this.store});
   final ProjectStore store;
 
-  Future<void> _login(BuildContext context, String provider, String email) async {
-    if (AuthService.instance.enabled) {
-      final launched = await AuthService.instance.signInWith(provider);
-      if (!context.mounted) return;
-      if (launched) {
-        Navigator.pop(context, true);
-        return;
-      }
-      // 실패 — lastError 있으면 표시. 사용자 취소면 null 이라 silent.
-      final err = AuthService.instance.lastError;
-      if (err != null) {
-        // SnackBar 는 모달 시트 아래에 깔려 안 보이므로 dialog 로 — 모달 위 보장.
-        await showDialog<void>(
-          context: context,
-          builder: (dctx) => AlertDialog(
-            backgroundColor: AppColors.surface,
-            title: Text(L10n.of(dctx).loginFailedTitle, style: const TextStyle(color: AppColors.danger)),
-            content: SelectableText(
-              _localizedAuthError(L10n.of(dctx), err),
-              style: T.body.copyWith(fontSize: 12),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dctx),
-                child: Text(L10n.of(dctx).ok),
+  @override
+  State<_LoginBody> createState() => _LoginBodyState();
+}
+
+class _LoginBodyState extends State<_LoginBody> {
+  bool _loading = false;
+
+  Future<void> _login(String provider, String email) async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      if (AuthService.instance.enabled) {
+        final launched = await AuthService.instance.signInWith(provider);
+        if (!mounted) return;
+        if (launched) {
+          Navigator.pop(context, true);
+          return;
+        }
+        // 실패 — lastError 있으면 표시. 사용자 취소면 null 이라 silent.
+        final err = AuthService.instance.lastError;
+        if (err != null) {
+          // SnackBar 는 모달 시트 아래에 깔려 안 보이므로 dialog 로 — 모달 위 보장.
+          await showDialog<void>(
+            context: context,
+            builder: (dctx) => AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: Text(L10n.of(dctx).loginFailedTitle, style: const TextStyle(color: AppColors.danger)),
+              content: SelectableText(
+                _localizedAuthError(L10n.of(dctx), err),
+                style: T.body.copyWith(fontSize: 12),
               ),
-            ],
-          ),
-        );
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dctx),
+                  child: Text(L10n.of(dctx).ok),
+                ),
+              ],
+            ),
+          );
+        }
+      } else if (kDebugMode) {
+        widget.store.mockLogin(provider: provider, email: email);
+        if (mounted) Navigator.pop(context, true);
+      } else {
+        if (mounted) errorToast(context, '인증 서비스를 사용할 수 없습니다');
       }
-      return;
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    store.mockLogin(provider: provider, email: email);
-    if (context.mounted) Navigator.pop(context, true);
   }
 
   @override
@@ -70,23 +85,39 @@ class _LoginBody extends StatelessWidget {
           Text(t.loginSub,
               style: T.sub, textAlign: TextAlign.center),
           const SizedBox(height: 20),
-          // App Store Review Guideline 5.1.5: Sign in with Apple 는 다른 소셜
-          // 로그인보다 prominence 동등 이상 — 시안 ⑤ 와 동일하게 최상단 배치.
-          AppleSignInButton(
-            label: t.appleSignInCta,
-            onPressed: () => _login(context, 'apple', 'me@privaterelay.appleid.com'),
-          ),
-          GoogleSignInButton(
-            label: t.googleSignInCta,
-            onPressed: () => _login(context, 'google', 'me@gmail.com'),
-          ),
+          // 로딩 중이면 버튼 영역 대신 인디케이터 표시.
+          if (_loading)
+            const SizedBox(
+              height: 108, // AppleButton(48+10) + GoogleButton(50) 높이와 동일.
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: AppColors.lime,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            )
+          else ...[
+            // App Store Review Guideline 5.1.5: Sign in with Apple 는 다른 소셜
+            // 로그인보다 prominence 동등 이상 — 시안 ⑤ 와 동일하게 최상단 배치.
+            AppleSignInButton(
+              label: t.appleSignInCta,
+              onPressed: () => _login('apple', 'me@privaterelay.appleid.com'),
+            ),
+            GoogleSignInButton(
+              label: t.googleSignInCta,
+              onPressed: () => _login('google', 'me@gmail.com'),
+            ),
+          ],
           const SizedBox(height: 8),
           Center(
             child: GestureDetector(
-              onTap: () => Navigator.pop(context, false),
+              onTap: _loading ? null : () => Navigator.pop(context, false),
               child: Padding(
                 padding: const EdgeInsets.all(8),
-                child: Text(t.later, style: T.sub.copyWith(fontSize: 13, color: AppColors.textSecondary)),
+                child: Text(t.later, style: T.sub.copyWith(
+                  fontSize: 13,
+                  color: _loading ? AppColors.textTertiary : AppColors.textSecondary,
+                )),
               ),
             ),
           ),

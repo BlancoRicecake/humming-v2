@@ -109,6 +109,7 @@ class IapVerifyRequest(BaseModel):
     store: Store
     receipt_data: str = Field(..., min_length=1)
     product_id: Optional[str] = None
+    transaction_id: Optional[str] = None
 
 
 class IapVerifyResponse(BaseModel):
@@ -117,3 +118,16 @@ class IapVerifyResponse(BaseModel):
     expires_at: Optional[datetime]
     trial_ends_at: Optional[datetime]
     store: Store
+
+
+class IapHistoryItem(BaseModel):
+    product_id: str
+    status: SubStatus
+    started_at: Optional[datetime]
+    expires_at: Optional[datetime]
+    transaction_id: Optional[str]
+    store: Store
+
+
+class IapHistoryResponse(BaseModel):
+    items: List[IapHistoryItem]

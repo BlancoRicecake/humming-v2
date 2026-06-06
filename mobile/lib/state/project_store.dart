@@ -412,18 +412,28 @@ class ProjectStore extends ChangeNotifier {
           email: s.email,
         );
       } else {
+        final wasSignedIn = accountEmail != null;
         accountEmail = null;
         accountProvider = null;
         subscription = SubscriptionStatus.anonymous;
         subscriptionRenewsAt = null;
         ObservabilityService.instance.clearUser();
         AnalyticsService.instance.reset();
+        // 서버에 의한 강제 로그아웃(세션 만료) — 수동 로그아웃과 구분해 알림.
+        if (wasSignedIn && AuthService.instance.sessionExpiredByServer) {
+          AuthService.instance.sessionExpiredByServer = false;
+          sessionExpiredNotification = true;
+        }
       }
       notifyListeners();
     });
     // IAP 결제 결과 → subscription 갱신.
     _iapSub = IapService.instance.onPurchaseResult.listen((r) {
       if (!r.ok) return;
+      // 로그인되지 않은 상태에서 복원 이벤트가 도달하면 구독을 설정하지 않음.
+      // (앱 재시작 시 auth 로드 전 자동 복원 이벤트 방어 — IapService 의
+      // _isExplicitRestore 가 false 면 이미 emit 되지 않지만 이중 방어.)
+      if (accountEmail == null) return;
       subscription = SubscriptionStatus.active;
       final isYearly = r.productId == kProductYearly;
       subscriptionRenewsAt = r.renewsAt ??
@@ -499,6 +509,8 @@ class ProjectStore extends ChangeNotifier {
   String? accountEmail;       // 로그인 후 표시
   String? accountProvider;    // 'apple' / 'google'
   DateTime? subscriptionRenewsAt;
+  /// true 이면 UI 에서 "세션이 만료됐습니다" 토스트 표시 후 false 로 리셋.
+  bool sessionExpiredNotification = false;
 
   void mockLogin({required String provider, required String email}) {
     accountProvider = provider;
@@ -830,16 +842,15 @@ class ProjectStore extends ChangeNotifier {
     final meta = p.meta ?? const <String, dynamic>{};
     final vocalFiles = (meta['vocal_files'] as List?) ?? const [];
 
-    // 어떤 파일도 publicUrl 이 없으면 mock fallback — 백엔드 presigned-GET 필요.
+    // 어떤 파일도 publicUrl 이 없으면 에러 — 재업로드 필요.
     final hasUrls = vocalFiles.any((e) {
       if (e is! Map) return false;
       final u = e['public_url'];
       return u is String && u.isNotEmpty;
     });
     if (vocalFiles.isNotEmpty && !hasUrls) {
-      debugPrint('[cloud] downloadProject: no public_url — backend presigned_get needed. fallback to mock.');
-      await mockDownloadFromCloud(projectId);
-      return;
+      debugPrint('[cloud] downloadProject: no public_url — download not available');
+      throw Exception('클라우드 파일에 다운로드 URL이 없습니다. 다시 업로드해 주세요.');
     }
 
     // 1) 로컬 프로젝트 디렉터리 준비 + 보컬 파일 GET.
@@ -945,67 +956,6 @@ class ProjectStore extends ChangeNotifier {
     return 'application/octet-stream';
   }
 
-  // ─── Mock 호환 wrapper (기존 호출처 보존) ────────────────────────────────
-  /// @deprecated — uploadProject() 로 라우팅. 백엔드 호출 실패 시 mock 폴백.
-  Future<void> mockUploadToCloud(String projectId, String title, {int sizeBytes = 8 * 1024 * 1024}) async {
-    if (_isCloudAuthenticated) {
-      try {
-        await uploadProject(projectId);
-        return;
-      } catch (e) {
-        debugPrint('[cloud] mockUploadToCloud: uploadProject 실패 → mock 폴백: $e');
-        rethrow;
-      }
-    }
-    // 익명 fallback (개발자 모드 / 비로그인 데모) — 기존 mock 동작.
-    await Future.delayed(const Duration(milliseconds: 600));
-    final i = cloudProjects.indexWhere((c) => c.id == projectId);
-    if (i >= 0) {
-      cloudProjects[i] = cloudProjects[i].copyWith(lastModifiedAt: DateTime.now(), onThisDevice: true);
-    } else {
-      cloudProjects.add(CloudProjectMeta(
-        id: projectId,
-        title: title,
-        uploadedAt: DateTime.now(),
-        lastModifiedAt: DateTime.now(),
-        sizeBytes: sizeBytes,
-        onThisDevice: true,
-      ));
-    }
-    notifyListeners();
-  }
-
-  /// @deprecated — downloadProject() 로 라우팅. 폴백은 onThisDevice 만 토글.
-  Future<void> mockDownloadFromCloud(String cloudId) async {
-    if (_isCloudAuthenticated) {
-      try {
-        await downloadProject(cloudId);
-        return;
-      } catch (e) {
-        debugPrint('[cloud] mockDownloadFromCloud: downloadProject 실패: $e');
-        // 폴백 — 카드만 marked
-      }
-    }
-    await Future.delayed(const Duration(milliseconds: 600));
-    final i = cloudProjects.indexWhere((c) => c.id == cloudId);
-    if (i >= 0) {
-      cloudProjects[i] = cloudProjects[i].copyWith(onThisDevice: true);
-      notifyListeners();
-    }
-  }
-
-  /// @deprecated — deleteFromCloud() 로 라우팅. 익명이면 in-memory 만 제거.
-  void mockDeleteFromCloud(String cloudId) {
-    if (_isCloudAuthenticated) {
-      // 비동기 호출이지만 UI 가 await 안 함 — fire-and-forget.
-      deleteFromCloud(cloudId).catchError((e) {
-        debugPrint('[cloud] mockDeleteFromCloud: 백엔드 삭제 실패: $e');
-      });
-      return;
-    }
-    cloudProjects.removeWhere((c) => c.id == cloudId);
-    notifyListeners();
-  }
 
   /// 데모/스타터 데이터 — 시안 ④ 의 4개 카드 (개발자 모드에서만 사용).
   void devSeedCloudMock() {
@@ -1644,8 +1594,10 @@ class ProjectStore extends ChangeNotifier {
     if (t.isVocal) {
       try {
         final v = await _api.processVocal(wavPath);
-        final dir = await Directory.systemTemp.createTemp('vocal_');
-        final f = File('${dir.path}/vocal.wav');
+        final docs = await getApplicationDocumentsDirectory();
+        final vocalsDir = Directory('${docs.path}/projects/$projectId/vocals');
+        if (!vocalsDir.existsSync()) vocalsDir.createSync(recursive: true);
+        final f = File('${vocalsDir.path}/${t.id}_${DateTime.now().millisecondsSinceEpoch}.wav');
         await f.writeAsBytes(v.wav, flush: true);
         t.vocalWavPath = f.path;
         t.vocalPeaks = v.peaks;
@@ -1763,8 +1715,10 @@ class ProjectStore extends ChangeNotifier {
     if (t.isVocal) {
       try {
         final v = await _api.processVocal(wavPath);
-        final dir = await Directory.systemTemp.createTemp('vocal_');
-        final f = File('${dir.path}/vocal.wav');
+        final docs = await getApplicationDocumentsDirectory();
+        final vocalsDir = Directory('${docs.path}/projects/$projectId/vocals');
+        if (!vocalsDir.existsSync()) vocalsDir.createSync(recursive: true);
+        final f = File('${vocalsDir.path}/${t.id}_${DateTime.now().millisecondsSinceEpoch}.wav');
         await f.writeAsBytes(v.wav, flush: true);
         pendingRecording!
           ..vocalWavPath = f.path

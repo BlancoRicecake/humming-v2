@@ -30,6 +30,10 @@ bool isTabletWidth(BuildContext context) =>
     MediaQuery.of(context).size.shortestSide >= 600;
 
 /// 미연결 기능 안내 (디자인의 40% dim 버튼 탭 시).
+///
+/// 의미상 *진짜 v1 출시 후 추가될 placeholder* 에만 사용한다.
+/// 조건부 비활성(노트 없음 / 권한 거부 / 분석 미완료) 또는 에러는
+/// [errorToast] / [infoToast] 를 사용하라.
 void comingSoon(BuildContext context, [String? label]) {
   final t = L10n.of(context);
   final lbl = label ?? t.comingSoonFeature;
@@ -37,6 +41,31 @@ void comingSoon(BuildContext context, [String? label]) {
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
       content: Text(t.comingSoonToast(lbl), style: T.body),
+      backgroundColor: AppColors.surface,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+    ));
+}
+
+/// 에러/실패 안내 — "준비중" 라벨 없이 메시지 그대로 표시.
+/// (분석 실패, 재생 실패, export 실패, 권한 거부 등.)
+void errorToast(BuildContext context, String message) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      content: Text(message, style: T.body),
+      backgroundColor: AppColors.surface,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 3),
+    ));
+}
+
+/// 안내성 토스트 — 조건부 비활성 사유 등 단순 정보.
+void infoToast(BuildContext context, String message) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      content: Text(message, style: T.body),
       backgroundColor: AppColors.surface,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 2),

@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../state/project_store.dart';
 import '../../theme/app_theme.dart';
-import '../common.dart';
 
 class CloudSettingsCard extends StatelessWidget {
   const CloudSettingsCard({super.key});
@@ -83,12 +82,8 @@ class CloudSettingsCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => comingSoon(context, t.settingsCloudUsageDetail),
-                    child: Text(t.settingsCloudUsageDetailLink,
-                        style: T.body.copyWith(
-                            fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.lime)),
-                  ),
+                  // 사용량 상세 페이지는 v1.1 — 출시 P0 에서는 링크 비표시.
+                  // 핵심 지표(사용량/% / 남은 용량)는 카드 본문에 이미 표시됨.
                 ],
               ),
               const SizedBox(height: 10),
