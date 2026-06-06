@@ -100,28 +100,29 @@ def _hz(midi: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# 매칭 (옥타브 불변)
+# 시퀀스 정렬 기반 지표 (GT가 양자화된 악보 타이밍이므로 절대-onset 매칭 대신
+# 노트열을 순서 정렬한 뒤 피치/리듬을 평가)
 # ---------------------------------------------------------------------------
 @dataclass
 class SegResult:
     key: str
     n_ref: int
     n_est: int
-    note_count_acc: float
-    pitch_acc: float          # 매칭쌍 중 정확 반음 비율 (≤0.5반음)
-    timing_acc_raw: float     # 오프셋 보정 전 매칭 / ref
-    timing_acc: float         # 세그먼트 상수 오프셋 제거 후 매칭 / ref
-    onset_mae_ms: float       # 매칭쌍 평균 절대 onset 편차(보정 후)
-    offset_ms: float          # 추정한 wav↔midi 상수 오프셋 (ref-est, +면 est가 빠름)
+    note_count_acc: float     # 1 - |est-ref|/ref
+    pitch_acc: float          # 정렬쌍 중 정확 반음(≤0.5) 비율, 옥타브 정합
+    timing_acc: float         # 연속 정렬쌍 IOI 비율(템포 정규화) 1.5배 이내 비율
+    melody_acc: float         # 피치+리듬 동시 정답 / n_ref (종합)
+    align_coverage: float     # 정렬쌍 / n_ref (recall)
+    onset_resid_mae_ms: float # affine 정합 후 onset 잔차(루바토 진단)
     best_octave: int
-    # 공식 mir_eval (오프셋 보정 전 = 데이터셋 그대로)
+    # 공식 mir_eval (참고용, 절대-onset → 항상 낮음)
     f1: float
     precision: float
     recall: float
 
 
 def _match_at(ref_int, ref_pit_hz, est_int, est_pit_hz, pitch_tol_cents):
-    """mir_eval.match_notes 래퍼 → 매칭 인덱스쌍 리스트."""
+    """mir_eval.match_notes 래퍼 → 매칭 인덱스쌍 리스트 (공식 F1 계산용)."""
     if len(ref_int) == 0 or len(est_int) == 0:
         return []
     return mir_eval.transcription.match_notes(
@@ -132,32 +133,72 @@ def _match_at(ref_int, ref_pit_hz, est_int, est_pit_hz, pitch_tol_cents):
     )
 
 
-def estimate_offset(ref_on, est_on, band=0.30, bin_w=0.01):
-    """피치-블라인드 상수 오프셋 δ 추정 (쌍별 delta 투표).
+def _nw_align(rp, ep, ref_pit, est_pit, o, gap, lam):
+    """정규화 위치(rp,ep) + 가벼운 피치항으로 순서보존(NW) 정렬. 옥타브 o 고정.
+    반환 (pairs, total_cost)."""
+    n, m = len(rp), len(ep)
+    INF = 1e9
+    D = np.full((n + 1, m + 1), INF)
+    bt = np.zeros((n + 1, m + 1), dtype=np.int8)  # 0 diag,1 up(del ref),2 left(ins est)
+    D[0, 0] = 0.0
+    for i in range(1, n + 1):
+        D[i, 0] = i * gap; bt[i, 0] = 1
+    for j in range(1, m + 1):
+        D[0, j] = j * gap; bt[0, j] = 2
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            # 위치 거리 + 피치 패널티(반음차/12, 최대 1). lam 작게 → 위치 우세,
+            # 피치는 같은 위치의 후보 중 올바른 대응을 고르는 타이브레이커.
+            pp = min(abs(ref_pit[i - 1] + 12 * o - est_pit[j - 1]), 12.0) / 12.0
+            diag = D[i - 1, j - 1] + abs(rp[i - 1] - ep[j - 1]) + lam * pp
+            up = D[i - 1, j] + gap
+            left = D[i, j - 1] + gap
+            if diag <= up and diag <= left:
+                D[i, j], bt[i, j] = diag, 0
+            elif up <= left:
+                D[i, j], bt[i, j] = up, 1
+            else:
+                D[i, j], bt[i, j] = left, 2
+    pairs = []
+    i, j = n, m
+    while i > 0 or j > 0:
+        b = bt[i, j]
+        if b == 0:
+            pairs.append((i - 1, j - 1)); i -= 1; j -= 1
+        elif b == 1:
+            i -= 1
+        else:
+            j -= 1
+    pairs.reverse()
+    return pairs, float(D[n, m])
 
-    HumTrans wav↔midi 는 녹음별 상수 레이턴시(실측 ±0.25s)를 가진다. 모든
-    (ref_i - est_j) 쌍 delta 를 |δ|≤band 범위에서 모아 10ms 빈 히스토그램의
-    최빈값을 잡으면, 누락/추가 노트가 있어도 '진짜' 상수 오프셋이 최다 득표로
-    드러난다(그리디 매칭보다 견고 — 경계 스퓨리어스에 빠지지 않음). 5ms 단위로
-    국소 가중평균 보정. 반환 δ: est_on + δ 가 ref_on 에 정렬되는 값."""
-    if len(ref_on) == 0 or len(est_on) == 0:
-        return 0.0
-    deltas = (ref_on[:, None] - est_on[None, :]).ravel()
-    deltas = deltas[np.abs(deltas) <= band]
-    if deltas.size == 0:
-        return 0.0
-    edges = np.arange(-band, band + bin_w, bin_w)
-    hist, _ = np.histogram(deltas, bins=edges)
-    # 3-탭 평활 후 최빈 빈
-    sm = np.convolve(hist, np.array([1.0, 2.0, 1.0]), mode="same")
-    k = int(np.argmax(sm))
-    center = 0.5 * (edges[k] + edges[k + 1])
-    # 최빈 빈 ±15ms 내 delta 들의 가중평균으로 미세 보정
-    near = deltas[np.abs(deltas - center) <= 0.015]
-    return float(near.mean()) if near.size else float(center)
+
+def align_sequences(ref_on, est_on, ref_pit, est_pit, gap=0.10, lam=0.05):
+    """노트열 순서 정렬 + 옥타브 합동 선택.
+
+    GT가 양자화 격자라 절대-onset 매칭은 무의미. 세그먼트 내 상대 위치(0~1)로
+    정규화한 뒤 순서를 보존하며 전역 정렬한다. 위치가 지배하고 가벼운 피치항
+    (lam)이 '어느 ref에 대응되는지'만 골라준다 → 분절/누락 오류가 피치 오류로
+    잘못 귀속되지 않게 함(대응은 음악적으로 맞추되, 대응된 쌍의 피치오류는 그대로
+    카운트). 옥타브는 정렬 총비용 최소로 선택. 반환 (pairs, best_octave)."""
+    n, m = len(ref_on), len(est_on)
+    if n == 0 or m == 0:
+        return [], 0
+
+    def norm(on):
+        span = on[-1] - on[0]
+        return (on - on[0]) / span if span > 1e-9 else np.zeros(len(on))
+
+    rp, ep = norm(ref_on), norm(est_on)
+    best = None  # (cost, o, pairs)
+    for o in range(-OCTAVE_RADIUS, OCTAVE_RADIUS + 1):
+        pairs, cost = _nw_align(rp, ep, ref_pit, est_pit, o, gap, lam)
+        if best is None or cost < best[0]:
+            best = (cost, o, pairs)
+    return best[2], best[1]
 
 
-def evaluate_segment(key, ref, est) -> SegResult:
+def evaluate_segment(key, ref, est, ioi_tol=1.5) -> SegResult:
     ref_on, ref_off, ref_pit = ref
     est_on, est_off, est_pit = est
     n_ref = len(ref_on)
@@ -176,58 +217,75 @@ def evaluate_segment(key, ref, est) -> SegResult:
 
     note_count_acc = max(0.0, 1.0 - abs(n_est - n_ref) / n_ref)
 
+    # 공식 note-F1 (참고용) — 절대 onset, 옥타브 불변
+    est_hz = _hz(est_pit)
+    ref_int = _intervals(ref_on, ref_off)
+    est_int = _intervals(est_on, est_off)
+    bestf1 = (0.0, 0.0, 0.0)
+    if n_est:
+        for o in range(-OCTAVE_RADIUS, OCTAVE_RADIUS + 1):
+            p, r, f1, _ = mir_eval.transcription.precision_recall_f1_overlap(
+                ref_int, _hz(ref_pit + 12 * o), est_int, est_hz,
+                onset_tolerance=ONSET_TOL, pitch_tolerance=1.0, offset_ratio=None,
+            )
+            if f1 > bestf1[2]:
+                bestf1 = (p, r, f1)
+
     if n_est == 0:
         return SegResult(key, n_ref, 0, note_count_acc, 0.0, 0.0, 0.0, 0.0,
-                         0.0, 0, 0.0, 0.0, 0.0)
+                         0.0, 0, bestf1[2], bestf1[0], bestf1[1])
 
-    # 세그먼트 상수 오프셋 추정(피치-블라인드) → est 시간축 보정
-    delta = estimate_offset(ref_on, est_on)
-    est_on_aln = est_on + delta
+    # --- 순서 정렬 (위치 + 가벼운 피치항, 옥타브 합동 선택) ---
+    pairs, best_o = align_sequences(ref_on, est_on, ref_pit, est_pit)
+    n_pair = len(pairs)
+    align_coverage = n_pair / n_ref
+    if n_pair == 0:
+        return SegResult(key, n_ref, n_est, note_count_acc, 0.0, 0.0, 0.0, 0.0,
+                         0.0, 0, bestf1[2], bestf1[0], bestf1[1])
 
-    ref_int = _intervals(ref_on, ref_off)
-    est_int_raw = _intervals(est_on, est_off)
-    est_int_aln = _intervals(est_on_aln, est_off + delta)
-    est_hz = _hz(est_pit)
+    # --- 피치 정확도 (정렬쌍 기준, 옥타브 정합) ---
+    pitch_ok = np.array([abs(ref_pit[ri] + 12 * best_o - est_pit[ej]) <= 0.5
+                         for ri, ej in pairs])
+    pitch_acc = float(pitch_ok.mean())
 
-    def best_octave_match(eint):
-        best = None  # (n_match, o, matching, ref_pit_shift)
-        for o in range(-OCTAVE_RADIUS, OCTAVE_RADIUS + 1):
-            ref_pit_s = ref_pit + 12 * o
-            matching = _match_at(ref_int, _hz(ref_pit_s), eint, est_hz, 100.0)
-            if best is None or len(matching) > best[0]:
-                best = (len(matching), o, matching, ref_pit_s)
-        return best
+    # --- 타이밍=리듬: 연속 정렬쌍의 IOI 비율 (템포 정규화) ---
+    rio = np.array([ref_on[pairs[k + 1][0]] - ref_on[pairs[k][0]]
+                    for k in range(n_pair - 1)])
+    eio = np.array([est_on[pairs[k + 1][1]] - est_on[pairs[k][1]]
+                    for k in range(n_pair - 1)])
+    valid = (rio > 1e-3) & (eio > 1e-3)
+    rhythm_ok = np.zeros(n_pair - 1, dtype=bool)
+    if valid.sum() > 0:
+        scale = float(np.sum(eio[valid]) / np.sum(rio[valid]))  # 전역 템포 비
+        ratio = np.where(valid, (eio / np.maximum(scale, 1e-9)) / rio, 0.0)
+        rhythm_ok = valid & (ratio >= 1.0 / ioi_tol) & (ratio <= ioi_tol)
+    timing_acc = float(rhythm_ok.sum() / max(valid.sum(), 1))
 
-    # 보정 전/후 onset recall (피치 1반음 허용 매칭)
-    raw_match = best_octave_match(est_int_raw)
-    aln_n, best_o, matching, ref_pit_s = best_octave_match(est_int_aln)
-    timing_acc_raw = raw_match[0] / n_ref
-    timing_acc = aln_n / n_ref
+    # --- onset 잔차(affine 정합 후) — 루바토/지터 진단용 ---
+    X = np.array([est_on[ej] for _, ej in pairs])
+    Y = np.array([ref_on[ri] for ri, _ in pairs])
+    if n_pair >= 2 and X.std() > 1e-6:
+        a, b = np.polyfit(X, Y, 1)
+    else:
+        a, b = 1.0, float(Y.mean() - X.mean())
+    resid = Y - (a * X + b)
+    onset_resid_mae_ms = float(np.mean(np.abs(resid)) * 1000.0)
 
-    # 피치 정확도: 보정 후 매칭쌍 중 |Δpitch| ≤ 0.5반음
-    pitch_ok = 0
-    onset_abs = []
-    for ri, ei in matching:
-        if abs(ref_pit_s[ri] - est_pit[ei]) <= 0.5:
-            pitch_ok += 1
-        onset_abs.append(abs(ref_on[ri] - est_on_aln[ei]))
-    pitch_acc = pitch_ok / aln_n if aln_n else 0.0
-    onset_mae_ms = float(np.mean(onset_abs) * 1000.0) if onset_abs else 0.0
-
-    # --- 공식 note-F1 (octave-invariant, pitch_tol=1 cent, 오프셋 보정 X) ---
-    bestf1 = (0.0, 0.0, 0.0)
-    for o in range(-OCTAVE_RADIUS, OCTAVE_RADIUS + 1):
-        ref_hz = _hz(ref_pit + 12 * o)
-        p, r, f1, _ = mir_eval.transcription.precision_recall_f1_overlap(
-            ref_int, ref_hz, est_int_raw, est_hz,
-            onset_tolerance=ONSET_TOL, pitch_tolerance=1.0, offset_ratio=None,
-        )
-        if f1 > bestf1[2]:
-            bestf1 = (p, r, f1)
+    # --- 종합: 피치 정답 AND 리듬 정답 / n_ref ---
+    # 리듬 정답을 노트 단위로 환산: k번째와 k+1번째 쌍을 잇는 IOI가 맞으면
+    # 양 끝 노트에 부분 크레딧. 간단히 '피치 맞고 IOI 양옆 중 1개 이상 맞음'.
+    rhythm_note = np.zeros(n_pair, dtype=bool)
+    for k in range(n_pair - 1):
+        if rhythm_ok[k]:
+            rhythm_note[k] = True
+            rhythm_note[k + 1] = True
+    if n_pair == 1:
+        rhythm_note[0] = True
+    melody_acc = float(np.sum(pitch_ok & rhythm_note) / n_ref)
 
     return SegResult(
-        key, n_ref, n_est, note_count_acc, pitch_acc, timing_acc_raw,
-        timing_acc, onset_mae_ms, delta * 1000.0, best_o,
+        key, n_ref, n_est, note_count_acc, pitch_acc, timing_acc, melody_acc,
+        align_coverage, onset_resid_mae_ms, best_o,
         bestf1[2], bestf1[0], bestf1[1],
     )
 
@@ -287,15 +345,6 @@ def main():
         sys.exit(1)
 
     arr = lambda f: np.array([getattr(r, f) for r in results], dtype=np.float64)
-    nc = arr("note_count_acc")
-    pa = arr("pitch_acc")
-    ta = arr("timing_acc")
-    tar = arr("timing_acc_raw")
-    mae = arr("onset_mae_ms")
-    off = arr("offset_ms")
-    f1 = arr("f1")
-    pr = arr("precision")
-    rc = arr("recall")
 
     summary = {
         "tag": args.tag,
@@ -305,21 +354,19 @@ def main():
         "n_eval": len(results),
         "n_skipped": len(skipped),
         "axis": {
-            "note_count_acc": round(float(nc.mean()), 4),
-            "pitch_acc": round(float(pa.mean()), 4),
-            "timing_acc": round(float(ta.mean()), 4),          # 오프셋 보정 후
-            "timing_acc_raw": round(float(tar.mean()), 4),     # 보정 전(데이터셋 오프셋 포함)
-            "onset_mae_ms": round(float(mae.mean()), 2),
+            "note_count_acc": round(float(arr("note_count_acc").mean()), 4),
+            "pitch_acc": round(float(arr("pitch_acc").mean()), 4),
+            "timing_acc": round(float(arr("timing_acc").mean()), 4),   # 리듬(IOI)
+            "melody_acc": round(float(arr("melody_acc").mean()), 4),   # 피치+리듬 종합
         },
-        "offset_ms": {
-            "median": round(float(np.median(off)), 1),
-            "mean_abs": round(float(np.mean(np.abs(off))), 1),
-            "p90_abs": round(float(np.percentile(np.abs(off), 90)), 1),
+        "diag": {
+            "align_coverage": round(float(arr("align_coverage").mean()), 4),
+            "onset_resid_mae_ms": round(float(arr("onset_resid_mae_ms").mean()), 2),
         },
         "official": {
-            "note_f1": round(float(f1.mean()), 4),
-            "precision": round(float(pr.mean()), 4),
-            "recall": round(float(rc.mean()), 4),
+            "note_f1": round(float(arr("f1").mean()), 4),
+            "precision": round(float(arr("precision").mean()), 4),
+            "recall": round(float(arr("recall").mean()), 4),
         },
         "note_count": {
             "ref_mean": round(float(np.mean([r.n_ref for r in results])), 1),
@@ -333,13 +380,14 @@ def main():
         with open(args.out, "w", newline="") as f:
             w = csv.writer(f)
             w.writerow(["key", "n_ref", "n_est", "note_count_acc", "pitch_acc",
-                        "timing_acc", "timing_acc_raw", "onset_mae_ms",
-                        "offset_ms", "best_octave", "f1", "precision", "recall"])
+                        "timing_acc", "melody_acc", "align_coverage",
+                        "onset_resid_mae_ms", "best_octave",
+                        "f1", "precision", "recall"])
             for r in results:
                 w.writerow([r.key, r.n_ref, r.n_est, f"{r.note_count_acc:.4f}",
                             f"{r.pitch_acc:.4f}", f"{r.timing_acc:.4f}",
-                            f"{r.timing_acc_raw:.4f}", f"{r.onset_mae_ms:.2f}",
-                            f"{r.offset_ms:.1f}", r.best_octave,
+                            f"{r.melody_acc:.4f}", f"{r.align_coverage:.4f}",
+                            f"{r.onset_resid_mae_ms:.2f}", r.best_octave,
                             f"{r.f1:.4f}", f"{r.precision:.4f}", f"{r.recall:.4f}"])
         print(f"\n세그먼트별 CSV → {args.out}", file=sys.stderr)
 

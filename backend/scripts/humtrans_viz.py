@@ -31,19 +31,8 @@ sys.path.insert(0, BACKEND)
 from app.analyze import analyze_audio  # noqa: E402
 from app.schemas import AnalyzeOptions  # noqa: E402
 from scripts.humtrans_eval import (  # noqa: E402
-    ref_notes_from_midi, est_notes_from_response, estimate_offset,
-    _intervals, _hz, _match_at, OCTAVE_RADIUS,
+    ref_notes_from_midi, est_notes_from_response, align_sequences,
 )
-
-
-def best_octave(ref_pit, ref_int, est_int, est_pit):
-    est_hz = _hz(est_pit)
-    best = (-1, 0)
-    for o in range(-OCTAVE_RADIUS, OCTAVE_RADIUS + 1):
-        m = _match_at(ref_int, _hz(ref_pit + 12 * o), est_int, est_hz, 100.0)
-        if len(m) > best[0]:
-            best = (len(m), o)
-    return best[1]
 
 
 def draw_notes(ax, on, off, pit, color, label, alpha=0.6):
@@ -71,17 +60,22 @@ def viz_segment(key, split, opts, outdir):
     ref_on, ref_off, ref_pit = ref_notes_from_midi(gt)
     est_on, est_off, est_pit = est_notes_from_response(resp, "final")
 
-    ref_int = _intervals(ref_on, ref_off)
-    delta = estimate_offset(ref_on, est_on)
-    # 옥타브는 반드시 오프셋 보정 후 인터벌로 선택 (보정 전엔 onset 불일치로
-    # 매칭이 0 → 옥타브가 의미 없는 기본값으로 떨어진다)
-    est_int_aln = _intervals(est_on + delta, est_off + delta)
-    o = best_octave(ref_pit, ref_int, est_int_aln, est_pit)
+    # 순서 정렬(위치+피치, 옥타브 합동) → affine 시간 매핑(est→ref 타임라인)
+    pairs, o = align_sequences(ref_on, est_on, ref_pit, est_pit)
     ref_pit_s = ref_pit + 12 * o          # 옥타브 정합된 GT
+    if len(pairs) >= 2:
+        X = np.array([est_on[j] for _, j in pairs])
+        Y = np.array([ref_on[i] for i, _ in pairs])
+        a, b = np.polyfit(X, Y, 1) if X.std() > 1e-6 else (1.0, Y.mean() - X.mean())
+    else:
+        a, b = 1.0, 0.0
+    est_on_map = a * est_on + b           # ref 타임라인으로 워프된 est onset
+    est_off_map = a * est_off + b
 
     fig, axes = plt.subplots(3, 1, figsize=(14, 9), sharex=True)
-    fig.suptitle(f"{key}   octave-shift={o:+d}   est_offset={delta*1000:+.0f}ms "
-                 f"(GT n={len(ref_on)}, est n={len(est_on)})", fontsize=12)
+    fig.suptitle(f"{key}   octave-shift={o:+d}   tempo×{a:.2f}  "
+                 f"({len(pairs)} aligned / GT n={len(ref_on)}, est n={len(est_on)})",
+                 fontsize=12)
 
     # (1) 파형 + onset
     ax = axes[0]
@@ -105,13 +99,17 @@ def viz_segment(key, split, opts, outdir):
     ax.set_ylabel("MIDI pitch\n(raw timing)")
     ax.legend(loc="upper right", fontsize=8)
 
-    # (3) 피아노롤 (상수 오프셋 보정 후)
+    # (3) 피아노롤 (순서정렬 + affine 템포 매핑으로 ref 타임라인에 워프)
     ax = axes[2]
     draw_notes(ax, ref_on, ref_off, ref_pit_s, "#1f77b4", "GT")
-    draw_notes(ax, est_on + delta, est_off + delta, est_pit, "#2ca02c",
-               f"est (offset {delta*1000:+.0f}ms)")
+    draw_notes(ax, est_on_map, est_off_map, est_pit, "#2ca02c",
+               f"est → ref timeline (tempo×{a:.2f})")
+    # 정렬쌍 연결선
+    for ri, ej in pairs:
+        ax.plot([ref_on[ri], est_on_map[ej]],
+                [ref_pit_s[ri], est_pit[ej]], color="#999", lw=0.4, alpha=0.5)
     ax.set_ylim(allp.min() - 2, allp.max() + 2)
-    ax.set_ylabel("MIDI pitch\n(offset-corrected)")
+    ax.set_ylabel("MIDI pitch\n(seq-aligned)")
     ax.set_xlabel("time (s)")
     ax.legend(loc="upper right", fontsize=8)
 
