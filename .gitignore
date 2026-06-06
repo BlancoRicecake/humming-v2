@@ -62,3 +62,4 @@ backend/secrets/*.plist
 # iOS Google Sign In — bundle id 만 들어있어 강한 secret 은 아니지만
 # 사용자 지시로 git out-of-tree 유지. 빌드 시 backend/secrets 에서 복사.
 mobile/ios/Runner/GoogleService-Info.plist
+backend/.eval_data/
