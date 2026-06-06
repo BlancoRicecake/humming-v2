@@ -1,3 +1,8 @@
+> ⚠️ **SUPERSEDED** — 검토 결과 DDSP는 노트 정확도를 못 올리고(음성 피치 특성
+> 보존), 재생은 이미 SoundFont로 충분함이 확인됨. 작업 방향은
+> [`hybrid-pitch-note-editing-spec.md`](./hybrid-pitch-note-editing-spec.md)로 이관.
+> 아래는 초기 검토 기록으로만 보존한다.
+
 # DDSP 통합 작업 명세서 (Humming V2)
 
 > 목적: 유저 음성 → 악기 트랙 변환의 **노트 추출 정확도**와 **재생 음색 품질**을
