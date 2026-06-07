@@ -1,0 +1,14 @@
+{
+  "files": 56,
+  "ref_events": 3237,
+  "pred_events": 2933,
+  "drum_precision": 0.6900784180020457,
+  "drum_recall": 0.6252703120173,
+  "drum_f1": 0.6560777957860616,
+  "macro_drum_f1": 0.6531757031974496,
+  "onset_f1": 0.8299152259550462,
+  "class_accuracy_on_matched_onsets": 0.7856523462277892,
+  "onset_mae_ms": 24.569210023672753,
+  "target": 0.9,
+  "target_pass": false
+}

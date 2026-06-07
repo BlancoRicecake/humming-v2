@@ -1,0 +1,21 @@
+{
+  "features": [
+    "duration",
+    "onset_strength",
+    "end_onset_strength",
+    "rms_mean",
+    "rms_peak_ratio",
+    "rms_min_ratio",
+    "rms_end_drop",
+    "pitch_stability",
+    "voiced_ratio",
+    "finite_ratio",
+    "pitch_delta_prev",
+    "pitch_delta_next",
+    "in_key",
+    "attack_sharpness",
+    "decay_evidence"
+  ],
+  "train_rows": 279855,
+  "train_pos_rate": 0.1111111119389534
+}

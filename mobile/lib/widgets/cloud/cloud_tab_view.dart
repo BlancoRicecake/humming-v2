@@ -8,10 +8,10 @@ import 'package:provider/provider.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import '../../services/iap_pricing.dart';
-import '../../state/local_storage.dart' show formatBytes;
 import '../../state/project_store.dart';
 import '../../theme/app_theme.dart';
 import '../account_sheets.dart';
+import '../common.dart';
 import 'sync_progress_sheet.dart';
 
 class CloudTabView extends StatefulWidget {
@@ -425,7 +425,10 @@ class CloudProjectCard extends StatelessWidget {
     return t.agoMonthDay(dt.month, dt.day);
   }
 
-  String _fmtMB(int bytes) => formatBytes(bytes);
+  String _fmtMB(int bytes) {
+    final mb = bytes / (1024 * 1024);
+    return '${mb.toStringAsFixed(1)} MB';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -513,14 +516,15 @@ Future<void> showCloudProjectOptionsSheet(
         direction: SyncDirection.download,
         projectTitle: meta.title,
         totalBytes: meta.sizeBytes,
-        onRun: () => store.downloadProject(meta.id),
+        onRun: () => store.mockDownloadFromCloud(meta.id),
       );
       break;
     case _CloudProjectAction.rename:
-      // P0 에서는 메뉴 자체 비표시 → 이 케이스는 도달 불가. v1.1 에서 구현.
+      if (!context.mounted) return;
+      comingSoon(context, L10n.of(context).cloudRenameLabel);
       break;
     case _CloudProjectAction.deleteFromCloud:
-      store.deleteFromCloud(meta.id);
+      store.mockDeleteFromCloud(meta.id);
       break;
   }
 }
@@ -529,8 +533,7 @@ class _CloudOptionsBody extends StatelessWidget {
   const _CloudOptionsBody({required this.meta});
   final CloudProjectMeta meta;
 
-  String _fmtMB(int bytes) => formatBytes(bytes);
-
+  String _fmtMB(int bytes) => '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
   String _fmtDate(DateTime dt) =>
       '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
@@ -606,7 +609,12 @@ class _CloudOptionsBody extends StatelessWidget {
             lime: true,
             action: _CloudProjectAction.downloadFromCloud,
           ),
-          // 클라우드 rename 은 v1.1 — 출시 P0 에서는 메뉴 항목 숨김.
+          _row(
+            context,
+            icon: Symbols.edit,
+            label: t.rename,
+            action: _CloudProjectAction.rename,
+          ),
           _row(
             context,
             icon: Symbols.delete,

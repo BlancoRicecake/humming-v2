@@ -56,16 +56,34 @@ class AnalyzeOptions(BaseModel):
     # Stage 7 — key/scale (instrument lives client-side in Stage 8)
     auto_key: bool = True                 # detect key from the hummed pitches
     pitch_assistant: bool = True          # auto-correct off-scale notes to in-key
+    learned_pitch_correction: bool = True # conservative HumTrans-trained +/-1 semitone fixer
+    learned_offset_correction: bool = False # opt-in until full-dev validation passes
     # Aggressive mode: when a key is present, snap EVERY off-scale note to the
-    # nearest in-key pitch (raises the correction cap past a semitone). This is
-    # the tone-deaf safety net the client turns on for tracks that inherit the
-    # LOCKED project key (after the user confirms it). Default False so the first
-    # auto-key analysis stays conservative — we don't aggressively correct
-    # against an unconfirmed key. False = "only fix small slips, keep intent".
-    assist_aggressive: bool = False
+    # nearest in-key pitch (raises the correction cap past a semitone). Default
+    # True because HumTrack currently favors usable MIDI over raw transcription.
+    # False = "only fix small slips, keep intent".
+    assist_aggressive: bool = True
     key_tonic: Optional[str] = None       # "C", "F#", ... (used when auto_key=False)
     scale: Optional[Scale] = None         # used when auto_key=False
-    quantize_strength: float = Field(1.0, ge=0.0, le=1.0)
+
+    # Stage 6b — timing refinement / musical quantize
+    # These shape note timing only; pitch analysis is unchanged. The client
+    # sends the project BPM and track grid so backend note starts already land
+    # close to the same grid used by playback/export.
+    timing_refine: bool = True
+    bass_cleanup: bool = False
+    tempo_bpm: float = Field(90.0, ge=20.0, le=320.0)
+    quantize_grid: int = Field(16, ge=1, le=128)
+    timing_grid_quantize: bool = False
+    quantize_strength: float = Field(0.45, ge=0.0, le=1.0)
+    # Hummed/sung notes often become pitch-stable after the audible attack.
+    # Search backward for attack evidence so MIDI notes start with the syllable,
+    # not only after pYIN has settled on a stable pitch.
+    timing_attack_lookback_sec: float = Field(0.24, ge=0.0, le=0.60)
+    timing_max_advance_sec: float = Field(0.28, ge=0.0, le=0.60)
+    timing_max_delay_sec: float = Field(0.06, ge=0.0, le=0.20)
+    timing_fill_gaps: bool = True
+    timing_fill_max_gap_sec: float = Field(0.50, ge=0.0, le=0.50)
 
 
 # --- Stage 6 output -----------------------------------------------------------
@@ -88,7 +106,7 @@ class Note(BaseModel):
     pitch_original: int = 0                 # round(pitch_raw) before correction
     assisted: bool = False                  # assistant changed pitch from original
     candidates: List[int] = Field(default_factory=list)  # in-key options for editing
-    source: str = "raw"                      # provenance of `pitch` — any string accepted
+    source: Literal["raw", "assistant", "user", "model"] = "raw"  # provenance of `pitch`
     in_key: bool = True                     # pitch_original is in the detected key
     correction_cents: float = 0.0           # (pitch - pitch_raw) * 100, for diagnostics
     # --- Drum timbre classification (Stage 6 add-on; see drums.py) ---
@@ -97,13 +115,17 @@ class Note(BaseModel):
     # debug visibility; the client applies `drum` only when role == "drum".
     drum: Optional[int] = None              # GM percussion note (36 Kick / 38 Snare / 42 HiHat)
     drum_name: Optional[str] = None         # "Kick" | "Snare" | "HiHat"
-    drum_centroid: Optional[float] = 0.0    # spectral centroid (Hz) — debug
-    drum_low_ratio: Optional[float] = 0.0   # energy fraction < 150Hz — debug
-    drum_high_ratio: Optional[float] = 0.0  # energy fraction > 5kHz — debug
-    drum_zcr: Optional[float] = 0.0         # zero-crossing rate (0-1) — debug
-    drum_rolloff: Optional[float] = 0.0     # spectral rolloff 85% (Hz) — debug
-    drum_flatness: Optional[float] = 0.0    # spectral flatness 0-1 — debug
-    onset_strength: Optional[float] = 0.0   # spectral-flux onset envelope at the hit — debug
+    drum_centroid: float = 0.0              # spectral centroid (Hz) — debug
+    drum_low_ratio: float = 0.0             # energy fraction < 150Hz — debug (phone-stripped; not used in decision)
+    drum_high_ratio: float = 0.0            # energy fraction > 5kHz — debug
+    drum_zcr: float = 0.0                   # zero-crossing rate (0-1) — debug
+    drum_rolloff: float = 0.0               # spectral rolloff 85% (Hz) — debug (hi-hat high / kick low)
+    drum_flatness: float = 0.0              # spectral flatness 0-1 — debug (snare noisy / kick tonal: kick↔snare axis)
+    drum_lowmid_ratio: float = 0.0          # energy fraction 200-2kHz — debug (kick/snare body; classifier input)
+    drum_mid_ratio: float = 0.0             # energy fraction 500-3kHz — debug (classifier input)
+    drum_vhigh_ratio: float = 0.0           # energy fraction > 8kHz — debug (hi-hat air; classifier input)
+    drum_sustain_ratio: float = 0.0         # 2nd-half/1st-half RMS over 120ms — debug (hat sustains, snare decays; classifier input)
+    onset_strength: float = 0.0             # spectral-flux onset envelope at the hit — debug (0 for melodic notes)
 
 
 # --- Debug surfaces (one per inspectable stage) -------------------------------

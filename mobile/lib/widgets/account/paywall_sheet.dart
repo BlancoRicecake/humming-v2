@@ -88,12 +88,9 @@ class _PaywallBodyState extends State<_PaywallBody> {
           onTimeout: () { sub.cancel(); return false; },
         );
       }
-    } else if (kDebugMode) {
-      // 스토어 비가용(시뮬레이터/개발) → 디버그 모드에서만 mockPurchase 허용.
-      ok = await store.mockPurchase(plan: _plan);
     } else {
-      if (mounted) errorToast(context, '스토어를 사용할 수 없습니다');
-      return;
+      // 스토어 비가용(시뮬레이터/개발) → mockPurchase 폴백.
+      ok = await store.mockPurchase(plan: _plan);
     }
     if (!mounted) return;
     setState(() => _purchasing = false);
@@ -210,61 +207,35 @@ class _PaywallBodyState extends State<_PaywallBody> {
               t.paywallPlanMonthlyHint,
             ),
             const SizedBox(height: 4),
-            if (_purchasing)
-              // 결제 처리 중 — LimeButton 대신 로딩 상태 버튼 표시.
-              Container(
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppColors.lime.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                alignment: Alignment.center,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        color: AppColors.bg,
-                        strokeWidth: 2.0,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      t.paywallCtaProcessing,
-                      style: T.title.copyWith(color: AppColors.bg, fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
-              )
-            else
-              LimeButton(
-                label: t.paywallCtaStartTrial(IapPricing.trialDays),
-                onTap: _purchase,
-              ),
+            LimeButton(
+              label: _purchasing
+                  ? t.paywallCtaProcessing
+                  : t.paywallCtaStartTrial(IapPricing.trialDays),
+              onTap: _purchasing ? null : _purchase,
+            ),
             const SizedBox(height: 10),
             Center(child: Text(t.paywallFooterTrial,
                 style: T.sub.copyWith(fontSize: 11, color: AppColors.textTertiary))),
             const SizedBox(height: 8),
-            // 구매 복원 — IAP 가 enabled 인 플랫폼/빌드에서만 노출.
-            // (시뮬레이터/디바이스 sandbox 미연결 시 placeholder 안 보이게.)
-            if (IapService.instance.enabled)
-              Center(
-                child: GestureDetector(
-                  onTap: () async {
+            Center(
+              child: GestureDetector(
+                onTap: () async {
+                  if (IapService.instance.enabled) {
                     await IapService.instance.restore();
                     if (context.mounted) {
                       await showRestoreResult(context,
                           ok: widget.store.subscription.hasProAccess);
                     }
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Text(t.paywallRestoreLink, style: T.sub.copyWith(fontSize: 12, color: AppColors.textSecondary)),
-                  ),
+                  } else {
+                    comingSoon(context, t.paywallRestoreLink);
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(t.paywallRestoreLink, style: T.sub.copyWith(fontSize: 12, color: AppColors.textSecondary)),
                 ),
               ),
+            ),
           ],
         ),
       ),

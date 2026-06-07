@@ -29,7 +29,6 @@ import '../widgets/sheets.dart';
 import '../widgets/timeline_editor.dart';
 
 part 'edit/save_indicator.dart';
-part 'edit/add_track_fab.dart';
 
 enum _PlayState { stopped, playing, paused }
 
@@ -325,7 +324,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       if (go == true) await openAppSettings();
     } else {
       // ignore: use_build_context_synchronously
-      errorToast(context, L10n.of(context).editMicPermLabel);
+      comingSoon(context, L10n.of(context).editMicPermLabel);
     }
     return false;
   }
@@ -465,19 +464,19 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
         );
       }
       await fut;
-      if (mounted && store.error != null) errorToast(context, store.error!);
+      if (mounted && store.error != null) comingSoon(context, store.error!);
       return;
     }
     if (mounted) {
       setState(() => _recState = _RecState.idle);
-      if (store.error != null) errorToast(context, store.error!);
+      if (store.error != null) comingSoon(context, store.error!);
     }
   }
 
   Future<void> _playMix(ProjectStore store) async {
     if (!store.hasPlayableMix) {
       final l = L10n.of(context);
-      infoToast(context, store.hasAnyRecording ? l.editPlayNoActiveTrack : l.editPlayRecordFirst);
+      comingSoon(context, store.hasAnyRecording ? l.editPlayNoActiveTrack : l.editPlayRecordFirst);
       return;
     }
     try {
@@ -509,7 +508,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       if (mounted) setState(() => _ps = _PlayState.playing);
     } catch (e, st) {
       debugPrint('[play] FAILED: $e\n$st');
-      if (mounted) errorToast(context, L10n.of(context).editPlayFailed('$e'));
+      if (mounted) comingSoon(context, L10n.of(context).editPlayFailed('$e'));
     }
   }
 
@@ -524,7 +523,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       final resolved = (await findExistingByExt(base))?.path ?? wav;
       await _player.playFile(resolved); // 원본(녹음 그대로 — Opus/AAC)
     } catch (e) {
-      if (mounted) errorToast(context, L10n.of(context).editOriginalPlayFailed);
+      if (mounted) comingSoon(context, L10n.of(context).editOriginalPlayFailed);
     }
   }
 
@@ -535,20 +534,10 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
     final t = store.active;
     final dk = t.analysis?.detectedKey;
 
-    // 컨텍스트 바 노출 여부 — FAB 위치를 컨텍스트 바 + 재생 바 위로 보정.
-    final hasNoteSel = store.selectedNote != null && !t.chordActive;
-    final hasChunkSel = store.selectedChunk != null && !t.chordActive;
-    final hasTrackSel = !hasNoteSel && !hasChunkSel && store.trackSelected && store.activeTrackId != null;
-    final ctxVisible = hasNoteSel || hasChunkSel || hasTrackSel;
-    // 재생 바(88) + 컨텍스트 바(62, 있을 때) 위에 약간의 여백.
-    final fabBottom = 88.0 + (ctxVisible ? 62.0 : 0.0) + 14.0;
-
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
+        child: Column(
           children: [
             _header(store),
             _controls(store, t, dk),
@@ -580,6 +569,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                   store.setActiveTrack(id);
                   _startInlineRecord(store);
                 },
+                onAddTrack: () => showAddTrackSheet(context, store),
                 onSeek: _seek,
                 onChunkTap: t.chordActive ? null : store.selectChunk,
                 onChunkMove: t.chordActive ? null : store.moveChunkBy,
@@ -610,19 +600,13 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                 recElapsedMs: _recMs,
                 recLevels: _recLevels,
                 onStopRec: () => _stopInlineRecord(store),
+                quantizeDisplay: store.quantizeNotes,
                 projectEnd: store.projectEnd,
+                loopPeriod: store.loopPeriodFor,
               ),
             ),
             _contextActionBar(store, t),
             _transport(store, t),
-          ],
-            ),
-            // #27: 트랙 추가 FAB — 우측 하단, 재생 바 + (선택 시) 컨텍스트 바 위.
-            Positioned(
-              right: 16,
-              bottom: fabBottom,
-              child: _AddTrackFab(onTap: () => showAddTrackSheet(context, store)),
-            ),
           ],
         ),
       ),
@@ -852,9 +836,9 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
 
     if (!hasNote && !hasChunk && !hasTrack) return const SizedBox.shrink();
 
-    Widget item(IconData ic, String label, {required bool enabled, required VoidCallback onTap, String? disabledHint}) {
+    Widget item(IconData ic, String label, {required bool enabled, required VoidCallback onTap}) {
       return GestureDetector(
-        onTap: enabled ? onTap : (disabledHint != null ? () => infoToast(context, disabledHint) : null),
+        onTap: enabled ? onTap : () => comingSoon(context, label),
         behavior: HitTestBehavior.opaque,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Opacity(
@@ -876,7 +860,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
           onTap: () => showNoteCandidate(context, store, store.selectedNote!)));
       items.add(item(Symbols.content_cut, l.ctxActionSplit, enabled: true, onTap: () {
         if (!store.splitSelectedAny(_playheadSec)) {
-          infoToast(context, l.editSplitNotPossible);
+          comingSoon(context, l.editSplitNotPossible);
         }
       }));
       items.add(item(Symbols.merge, '머지',
@@ -899,7 +883,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
         item(Symbols.content_cut, l.ctxActionSplit,
             enabled: true, onTap: () {
               if (!store.splitSelectedAny(_playheadSec)) {
-                infoToast(context, l.editSplitNotPossible);
+                comingSoon(context, l.editSplitNotPossible);
               }
             }),
         item(Symbols.content_copy, l.ctxActionCopy, enabled: true, onTap: store.copySelectedAny),
@@ -924,20 +908,17 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
           onTap: () => _startInlineRecord(store)));
       items.add(item(Symbols.repeat, t.looping ? l.ctxActionUnloop : l.ctxActionLoop,
           enabled: trackHasNotes,
-          disabledHint: l.editActionNeedsRecording,
           onTap: () => store.toggleTrackLooping(t.id)));
       if (t.isChordInstrument) {
         items.add(item(t.chordActive ? Symbols.heart_broken : Symbols.queue_music,
             t.chordActive ? l.ctxActionUnchord : l.ctxActionChord,
             enabled: canTrackChord && trackHasNotes,
-            disabledHint: l.editActionNeedsRecording,
             onTap: () => store.setChordMode(!t.chordMode)));
       }
       if (t.role == TrackRole.bass) {
         items.add(item(Symbols.south,
             t.bassPlacement ? l.ctxActionBassUnplace : l.ctxActionBassPlace,
             enabled: trackHasNotes,
-            disabledHint: l.editActionNeedsRecording,
             onTap: () => store.setBassPlacement(!t.bassPlacement)));
       }
       items.addAll([
@@ -947,7 +928,6 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
             onTap: () => store.toggleTrackEnabled(t.id)),
         item(Symbols.volume_up, l.ctxActionVolume,
             enabled: t.notes.isNotEmpty,
-            disabledHint: l.editActionNeedsRecording,
             onTap: () => _showVolume(store)),
         item(Symbols.delete, l.ctxActionDelete,
             enabled: true,

@@ -228,9 +228,6 @@ class L10nKo extends L10n {
   String get accountSignIn => '로그인';
 
   @override
-  String get authSessionExpired => '로그인 세션이 만료됐어요. 다시 로그인해 주세요.';
-
-  @override
   String get subFreePlan => '무료 플랜';
 
   @override
@@ -432,58 +429,6 @@ class L10nKo extends L10n {
 
   @override
   String get subCancelConfirmAction => '해지';
-
-  @override
-  String get subHistoryTitle => '결제 이력';
-
-  @override
-  String get subHistoryLoadFailed => '이력을 불러오지 못했습니다';
-
-  @override
-  String get subHistoryEmpty => '결제 이력이 없습니다';
-
-  @override
-  String get subPlanYearly => '연간 플랜';
-
-  @override
-  String get subPlanMonthly => '월간 플랜';
-
-  @override
-  String get subBadgeActive => '활성';
-
-  @override
-  String get subBadgeTrial => '체험 중';
-
-  @override
-  String get subBadgeCancelled => '취소됨';
-
-  @override
-  String get subBadgeExpired => '만료';
-
-  @override
-  String subHistoryRowStarted(String date) {
-    return '시작: $date';
-  }
-
-  @override
-  String subHistoryRowTxId(String id) {
-    return '거래 ID: $id';
-  }
-
-  @override
-  String get subHistoryTxCopied => '트랜잭션 ID가 복사되었습니다';
-
-  @override
-  String get subReceiptButtonIos => 'App Store에서 영수증 확인';
-
-  @override
-  String get subReceiptButtonAndroid => 'Google Play에서 영수증 확인';
-
-  @override
-  String get subOpenStoreIos => 'App Store에서 관리';
-
-  @override
-  String get subOpenStoreAndroid => 'Google Play에서 관리';
 
   @override
   String get paywallHeadlineExport => '내보내려면 Pro 가 필요해요';
@@ -779,12 +724,6 @@ class L10nKo extends L10n {
   String get syncProgressDownload => '내 기기로 받는 중';
 
   @override
-  String get syncProgressFailed => '오류가 발생했어요';
-
-  @override
-  String get syncProgressFailedSub => '다시 시도해 주세요.';
-
-  @override
   String get comingSoonFeature => '기능';
 
   @override
@@ -945,12 +884,6 @@ class L10nKo extends L10n {
       '구독이 만료된 동안엔 새 업로드 / 동기화는 잠금돼요. 이전 작업물은 그대로 두고 언제든 다운로드하거나 삭제할 수 있어요.';
 
   @override
-  String get cloudDownloadEmptyTitle => '파일 목록을 불러올 수 없어요';
-
-  @override
-  String get cloudDownloadEmptySub => '재구독 후 클라우드 탭에서\n파일을 다운로드할 수 있어요.';
-
-  @override
   String get cloudDownloadCta => '받기';
 
   @override
@@ -996,9 +929,6 @@ class L10nKo extends L10n {
 
   @override
   String get editPlayRecordFirst => '먼저 녹음하세요';
-
-  @override
-  String get editActionNeedsRecording => '녹음이 있어야 사용할 수 있어요';
 
   @override
   String editPlayFailed(String err) {
@@ -1308,9 +1238,6 @@ class L10nKo extends L10n {
 
   @override
   String get exportShareSub => '링크 · Instagram · TikTok';
-
-  @override
-  String get exportExporting => '내보내는 중...';
 
   @override
   String exportFailed(String err) {

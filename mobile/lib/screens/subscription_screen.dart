@@ -1,103 +1,20 @@
 // 구독 관리 — 시안 ⑧ Active, ⑨ Cancelled, ⑩ Expired 세 상태를 SubscriptionStatus 로 분기.
 // IAP 정책상 구독 변경/해지/결제수단은 스토어에서만 가능 — 앱 안에는 안내 문구만.
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:dio/dio.dart';
 
-import '../api/engine_api.dart';
 import '../l10n/generated/app_localizations.dart';
-import '../services/auth_service.dart';
 import '../services/iap_pricing.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_sheets.dart';
 import '../widgets/common.dart';
 
-// ─── 구매 이력 데이터 모델 ────────────────────────────────────────────────
-class _HistoryItem {
-  const _HistoryItem({
-    required this.productId,
-    required this.status,
-    required this.startedAt,
-    this.expiresAt,
-    this.transactionId,
-    required this.store,
-  });
-  final String productId;
-  final String status;
-  final DateTime? startedAt;
-  final DateTime? expiresAt;
-  final String? transactionId;
-  final String store;
-
-  static _HistoryItem fromJson(Map<String, dynamic> j) => _HistoryItem(
-        productId: (j['product_id'] ?? '') as String,
-        status: (j['status'] ?? 'expired') as String,
-        startedAt: _parseDt(j['started_at']),
-        expiresAt: _parseDt(j['expires_at']),
-        transactionId: j['transaction_id'] as String?,
-        store: (j['store'] ?? 'app_store') as String,
-      );
-
-  static DateTime? _parseDt(dynamic v) {
-    if (v == null) return null;
-    try { return DateTime.parse(v as String).toLocal(); } catch (_) { return null; }
-  }
-}
-
-class SubscriptionScreen extends StatefulWidget {
+class SubscriptionScreen extends StatelessWidget {
   const SubscriptionScreen({super.key});
-
-  @override
-  State<SubscriptionScreen> createState() => _SubscriptionScreenState();
-}
-
-class _SubscriptionScreenState extends State<SubscriptionScreen> {
-  List<_HistoryItem>? _history;
-  bool _historyLoading = false;
-  String? _historyError;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadHistory();
-  }
-
-  Future<void> _loadHistory() async {
-    setState(() { _historyLoading = true; _historyError = null; });
-    try {
-      final token = await AuthService.instance.currentAccessToken();
-      if (token == null) {
-        setState(() { _historyLoading = false; _history = []; });
-        return;
-      }
-      final dio = Dio(BaseOptions(
-        baseUrl: EngineConfig.baseUrl,
-        connectTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 15),
-        validateStatus: (_) => true,
-      ));
-      final res = await dio.get<Map<String, dynamic>>(
-        '/iap/history',
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
-      );
-      if (res.statusCode == 200) {
-        final items = ((res.data?['items'] ?? []) as List)
-            .map((e) => _HistoryItem.fromJson(e as Map<String, dynamic>))
-            .toList();
-        setState(() { _history = items; _historyLoading = false; });
-      } else {
-        setState(() { _historyError = 'HTTP ${res.statusCode}'; _historyLoading = false; _history = []; });
-      }
-    } catch (e) {
-      setState(() { _historyError = e.toString(); _historyLoading = false; _history = []; });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -126,10 +43,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             _featuresCard(s),
             const SizedBox(height: 18),
             _actions(context, store, s),
-            const SizedBox(height: 24),
-            _historyCard(context),
-            const SizedBox(height: 18),
-            _receiptButton(context),
           ],
         ),
       ),
@@ -272,186 +185,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     );
   }
 
-  // ─── 구매 이력 카드 ────────────────────────────────────────────────────
-  Widget _historyCard(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Expanded(
-              child: Text(L10n.of(context).subHistoryTitle,
-                  style: T.label.copyWith(fontSize: 11, color: AppColors.textSecondary)),
-            ),
-            if (_historyLoading)
-              const SizedBox(
-                width: 14, height: 14,
-                child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.textTertiary),
-              )
-            else
-              GestureDetector(
-                onTap: _loadHistory,
-                child: const Icon(Symbols.refresh, size: 16, color: AppColors.textTertiary),
-              ),
-          ]),
-          const SizedBox(height: 8),
-          if (_historyLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Center(child: SizedBox(
-                width: 20, height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textTertiary),
-              )),
-            )
-          else if (_historyError != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Center(
-                child: Text(L10n.of(context).subHistoryLoadFailed,
-                    style: T.sub.copyWith(color: AppColors.textTertiary)),
-              ),
-            )
-          else if (_history == null || _history!.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Center(
-                child: Text(L10n.of(context).subHistoryEmpty,
-                    style: T.sub.copyWith(color: AppColors.textTertiary)),
-              ),
-            )
-          else
-            ...(_history!.map((item) => _historyRow(context, item))),
-        ],
-      ),
-    );
-  }
-
-  Widget _historyRow(BuildContext context, _HistoryItem item) {
-    final t = L10n.of(context);
-    final planLabel = item.productId.contains('yearly') ? t.subPlanYearly : t.subPlanMonthly;
-    final statusLabel = _statusLabel(context, item.status);
-    final statusColor = _statusColor(item.status);
-    final startedStr = item.startedAt != null ? _fmtDate(item.startedAt!) : '-';
-    final txShort = item.transactionId != null && item.transactionId!.length >= 6
-        ? '...${item.transactionId!.substring(item.transactionId!.length - 6)}'
-        : (item.transactionId ?? '-');
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          width: 32, height: 32, alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.bg, borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(Symbols.receipt_long, size: 16, color: AppColors.textSecondary),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(child: Text(planLabel,
-                  style: T.body.copyWith(fontSize: 13, fontWeight: FontWeight.w600))),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(statusLabel,
-                    style: T.label.copyWith(fontSize: 10, color: statusColor)),
-              ),
-            ]),
-            const SizedBox(height: 3),
-            Text(t.subHistoryRowStarted(startedStr), style: T.sub.copyWith(fontSize: 11, color: AppColors.textSecondary)),
-            const SizedBox(height: 2),
-            GestureDetector(
-              onTap: item.transactionId != null ? () {
-                Clipboard.setData(ClipboardData(text: item.transactionId!));
-                if (context.mounted) {
-                  infoToast(context, t.subHistoryTxCopied);
-                }
-              } : null,
-              child: Row(children: [
-                Text(t.subHistoryRowTxId(txShort),
-                    style: T.sub.copyWith(fontSize: 11, color: AppColors.textTertiary)),
-                if (item.transactionId != null) ...[
-                  const SizedBox(width: 4),
-                  const Icon(Symbols.content_copy, size: 11, color: AppColors.textTertiary),
-                ],
-              ]),
-            ),
-          ]),
-        ),
-      ]),
-    );
-  }
-
-  String _statusLabel(BuildContext context, String status) {
-    final t = L10n.of(context);
-    switch (status) {
-      case 'active': return t.subBadgeActive;
-      case 'trial': return t.subBadgeTrial;
-      case 'cancelled': return t.subBadgeCancelled;
-      case 'expired': return t.subBadgeExpired;
-      default: return status;
-    }
-  }
-
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'active':
-      case 'trial': return AppColors.lime;
-      case 'cancelled': return AppColors.textSecondary;
-      case 'expired': return AppColors.danger;
-      default: return AppColors.textTertiary;
-    }
-  }
-
-  // ─── 영수증 확인 버튼 ─────────────────────────────────────────────────
-  Widget _receiptButton(BuildContext context) {
-    final t = L10n.of(context);
-    final label = Platform.isIOS ? t.subReceiptButtonIos : t.subReceiptButtonAndroid;
-    return GestureDetector(
-      onTap: _openReceiptPage,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(children: [
-          const Icon(Symbols.receipt, size: 18, color: AppColors.textSecondary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(label,
-                style: T.body.copyWith(fontSize: 13, fontWeight: FontWeight.w500)),
-          ),
-          const Icon(Symbols.open_in_new, size: 15, color: AppColors.textTertiary),
-        ]),
-      ),
-    );
-  }
-
-  Future<void> _openReceiptPage() async {
-    final uri = Platform.isIOS
-        ? Uri.parse('itms-apps://apps.apple.com/account/subscriptions')
-        : Uri.parse('https://play.google.com/store/account/orderhistory');
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      final fallback = Platform.isIOS
-          ? Uri.parse('https://apps.apple.com/account/subscriptions')
-          : Uri.parse('https://play.google.com/store/account/orderhistory');
-      await launchUrl(fallback);
-    }
-  }
-
   String _storeName() => Platform.isIOS ? 'App Store' : 'Google Play';
 
   Widget _storeNotice(String msg) {
@@ -486,7 +219,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Symbols.open_in_new, size: 13, color: AppColors.textPrimary),
                 const SizedBox(width: 6),
-                Text(_openStoreLabel(context),
+                Text(_openStoreLabel(),
                     style: T.label.copyWith(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
               ]),
             ),
@@ -513,10 +246,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     }
   }
 
-  String _openStoreLabel(BuildContext context) {
-    final l = L10n.of(context);
-    return Platform.isIOS ? l.subOpenStoreIos : l.subOpenStoreAndroid;
-  }
+  String _openStoreLabel() => Platform.isIOS
+      ? 'App Store 에서 관리'
+      : 'Google Play 에서 관리';
 
   // ignore: unused_element
   void _confirmCancel(BuildContext context, ProjectStore store) {
@@ -548,7 +280,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: GestureDetector(
-                  onTap: () { if (kDebugMode) store.mockCancel(); Navigator.pop(dctx); },
+                  onTap: () { store.mockCancel(); Navigator.pop(dctx); },
                   child: Container(
                     height: 46, alignment: Alignment.center,
                     decoration: BoxDecoration(color: AppColors.danger, borderRadius: BorderRadius.circular(10)),

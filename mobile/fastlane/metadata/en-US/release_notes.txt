@@ -1,5 +1,0 @@
-First release of HumTrack — turn humming into a multitrack song.
-• Vocal → Piano / Bass / Drums (auto-arranged)
-• Auto Key Detection + Pitch Assistant
-• Multi-track Quantize
-• MIDI / WAV Export + Cloud Sync (Pro)

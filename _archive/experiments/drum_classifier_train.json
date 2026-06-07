@@ -1,0 +1,18 @@
+{
+  "held_out_accuracy": 0.7353228962818004,
+  "held_out_n": 2044,
+  "train_n": 6723,
+  "features": [
+    "centroid",
+    "log_centroid",
+    "rolloff",
+    "zcr",
+    "flatness",
+    "high_ratio",
+    "lowmid_200_2k",
+    "mid_500_3k",
+    "vhigh_8k",
+    "sustain_ratio"
+  ],
+  "out": "models\\drum_classifier_v1.npz"
+}

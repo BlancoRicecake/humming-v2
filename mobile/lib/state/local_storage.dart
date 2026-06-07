@@ -68,8 +68,6 @@ class ProjectMeta {
       );
 }
 
-String formatBytes(int bytes) => _formatBytes(bytes);
-
 String _formatBytes(int bytes) {
   if (bytes <= 0) return '0 B';
   const k = 1024;
@@ -167,17 +165,11 @@ class LocalStorage {
       for (final ent in d.listSync(recursive: true, followLinks: false)) {
         if (ent is File) {
           try {
-            final len = ent.lengthSync();
-            total += len;
-          } catch (e) {
-            debugPrint('[storage] _dirSize: cannot read ${ent.path}: $e');
-          }
+            total += ent.lengthSync();
+          } catch (_) {/* skip unreadable */}
         }
       }
-    } catch (e) {
-      debugPrint('[storage] _dirSize: cannot list ${d.path}: $e');
-    }
-    debugPrint('[storage] _dirSize ${d.path}: ${_formatBytes(total)} ($total B)');
+    } catch (_) {/* skip */}
     return total;
   }
 

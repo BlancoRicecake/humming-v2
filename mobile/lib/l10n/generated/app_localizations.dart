@@ -487,12 +487,6 @@ abstract class L10n {
   /// **'로그인'**
   String get accountSignIn;
 
-  /// No description provided for @authSessionExpired.
-  ///
-  /// In ko, this message translates to:
-  /// **'로그인 세션이 만료됐어요. 다시 로그인해 주세요.'**
-  String get authSessionExpired;
-
   /// No description provided for @subFreePlan.
   ///
   /// In ko, this message translates to:
@@ -852,102 +846,6 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'해지'**
   String get subCancelConfirmAction;
-
-  /// No description provided for @subHistoryTitle.
-  ///
-  /// In ko, this message translates to:
-  /// **'결제 이력'**
-  String get subHistoryTitle;
-
-  /// No description provided for @subHistoryLoadFailed.
-  ///
-  /// In ko, this message translates to:
-  /// **'이력을 불러오지 못했습니다'**
-  String get subHistoryLoadFailed;
-
-  /// No description provided for @subHistoryEmpty.
-  ///
-  /// In ko, this message translates to:
-  /// **'결제 이력이 없습니다'**
-  String get subHistoryEmpty;
-
-  /// No description provided for @subPlanYearly.
-  ///
-  /// In ko, this message translates to:
-  /// **'연간 플랜'**
-  String get subPlanYearly;
-
-  /// No description provided for @subPlanMonthly.
-  ///
-  /// In ko, this message translates to:
-  /// **'월간 플랜'**
-  String get subPlanMonthly;
-
-  /// No description provided for @subBadgeActive.
-  ///
-  /// In ko, this message translates to:
-  /// **'활성'**
-  String get subBadgeActive;
-
-  /// No description provided for @subBadgeTrial.
-  ///
-  /// In ko, this message translates to:
-  /// **'체험 중'**
-  String get subBadgeTrial;
-
-  /// No description provided for @subBadgeCancelled.
-  ///
-  /// In ko, this message translates to:
-  /// **'취소됨'**
-  String get subBadgeCancelled;
-
-  /// No description provided for @subBadgeExpired.
-  ///
-  /// In ko, this message translates to:
-  /// **'만료'**
-  String get subBadgeExpired;
-
-  /// No description provided for @subHistoryRowStarted.
-  ///
-  /// In ko, this message translates to:
-  /// **'시작: {date}'**
-  String subHistoryRowStarted(String date);
-
-  /// No description provided for @subHistoryRowTxId.
-  ///
-  /// In ko, this message translates to:
-  /// **'거래 ID: {id}'**
-  String subHistoryRowTxId(String id);
-
-  /// No description provided for @subHistoryTxCopied.
-  ///
-  /// In ko, this message translates to:
-  /// **'트랜잭션 ID가 복사되었습니다'**
-  String get subHistoryTxCopied;
-
-  /// No description provided for @subReceiptButtonIos.
-  ///
-  /// In ko, this message translates to:
-  /// **'App Store에서 영수증 확인'**
-  String get subReceiptButtonIos;
-
-  /// No description provided for @subReceiptButtonAndroid.
-  ///
-  /// In ko, this message translates to:
-  /// **'Google Play에서 영수증 확인'**
-  String get subReceiptButtonAndroid;
-
-  /// No description provided for @subOpenStoreIos.
-  ///
-  /// In ko, this message translates to:
-  /// **'App Store에서 관리'**
-  String get subOpenStoreIos;
-
-  /// No description provided for @subOpenStoreAndroid.
-  ///
-  /// In ko, this message translates to:
-  /// **'Google Play에서 관리'**
-  String get subOpenStoreAndroid;
 
   /// No description provided for @paywallHeadlineExport.
   ///
@@ -1471,18 +1369,6 @@ abstract class L10n {
   /// **'내 기기로 받는 중'**
   String get syncProgressDownload;
 
-  /// No description provided for @syncProgressFailed.
-  ///
-  /// In ko, this message translates to:
-  /// **'오류가 발생했어요'**
-  String get syncProgressFailed;
-
-  /// No description provided for @syncProgressFailedSub.
-  ///
-  /// In ko, this message translates to:
-  /// **'다시 시도해 주세요.'**
-  String get syncProgressFailedSub;
-
   /// No description provided for @comingSoonFeature.
   ///
   /// In ko, this message translates to:
@@ -1771,18 +1657,6 @@ abstract class L10n {
   /// **'구독이 만료된 동안엔 새 업로드 / 동기화는 잠금돼요. 이전 작업물은 그대로 두고 언제든 다운로드하거나 삭제할 수 있어요.'**
   String get cloudDownloadBanner;
 
-  /// No description provided for @cloudDownloadEmptyTitle.
-  ///
-  /// In ko, this message translates to:
-  /// **'파일 목록을 불러올 수 없어요'**
-  String get cloudDownloadEmptyTitle;
-
-  /// No description provided for @cloudDownloadEmptySub.
-  ///
-  /// In ko, this message translates to:
-  /// **'재구독 후 클라우드 탭에서\n파일을 다운로드할 수 있어요.'**
-  String get cloudDownloadEmptySub;
-
   /// No description provided for @cloudDownloadCta.
   ///
   /// In ko, this message translates to:
@@ -1866,12 +1740,6 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'먼저 녹음하세요'**
   String get editPlayRecordFirst;
-
-  /// No description provided for @editActionNeedsRecording.
-  ///
-  /// In ko, this message translates to:
-  /// **'녹음이 있어야 사용할 수 있어요'**
-  String get editActionNeedsRecording;
 
   /// No description provided for @editPlayFailed.
   ///
@@ -2441,12 +2309,6 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'링크 · Instagram · TikTok'**
   String get exportShareSub;
-
-  /// No description provided for @exportExporting.
-  ///
-  /// In ko, this message translates to:
-  /// **'내보내는 중...'**
-  String get exportExporting;
 
   /// No description provided for @exportFailed.
   ///

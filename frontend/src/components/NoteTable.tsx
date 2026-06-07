@@ -33,6 +33,7 @@ export function NoteTable({ notes, highlight, selected, onHover, onSelect }: Pro
             <th>#</th><th>start</th><th>dur</th><th>pitch</th><th>orig</th><th>src</th>
             <th>cents</th><th>raw</th><th>Hz</th><th>vel</th><th>conf</th><th>voiced</th>
             <th>drum</th><th>cntr</th><th>roll</th><th>flat</th><th>zcr</th><th>onset</th><th>lo%</th><th>hi%</th>
+            <th>lm%</th><th>md%</th><th>vh%</th><th>sus</th>
           </tr>
         </thead>
         <tbody>
@@ -68,6 +69,10 @@ export function NoteTable({ notes, highlight, selected, onHover, onSelect }: Pro
                 <td>{n.onset_strength ? n.onset_strength.toFixed(2) : "—"}</td>
                 <td>{n.drum_low_ratio ? (n.drum_low_ratio * 100).toFixed(0) : "—"}</td>
                 <td>{n.drum_high_ratio ? (n.drum_high_ratio * 100).toFixed(0) : "—"}</td>
+                <td>{n.drum_lowmid_ratio ? (n.drum_lowmid_ratio * 100).toFixed(0) : "—"}</td>
+                <td>{n.drum_mid_ratio ? (n.drum_mid_ratio * 100).toFixed(0) : "—"}</td>
+                <td>{n.drum_vhigh_ratio ? (n.drum_vhigh_ratio * 100).toFixed(0) : "—"}</td>
+                <td>{n.drum_sustain_ratio ? n.drum_sustain_ratio.toFixed(2) : "—"}</td>
               </tr>
             );
           })}

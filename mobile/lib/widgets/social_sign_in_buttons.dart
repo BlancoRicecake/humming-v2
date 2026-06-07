@@ -131,7 +131,7 @@ class _AppleLogoPainter extends CustomPainter {
       ..cubicTo(16.10, 5.60, 13.45, 7.54, 12.03, 7.25)
       ..close();
     final scale = s / 24.0;
-    final matrix = Matrix4.identity()..scaleByDouble(scale, scale, 1.0, 1.0);
+    final matrix = Matrix4.identity()..scale(scale, scale, 1.0);
     path.addPath(ref, Offset.zero, matrix4: matrix.storage);
     canvas.drawPath(path, p);
   }

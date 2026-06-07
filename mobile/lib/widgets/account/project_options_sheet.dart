@@ -20,7 +20,6 @@ Future<void> showProjectOptionsSheet(
   ProjectMeta meta, {
   required VoidCallback onChanged,
   required Future<void> Function() onOpen,
-  Future<void> Function()? onExport,
 }) async {
   final action = await showModalBottomSheet<_ProjectAction>(
     context: context,
@@ -52,11 +51,10 @@ Future<void> showProjectOptionsSheet(
         await showPaywallSheet(context, store, trigger: 'export');
         break;
       }
-      if (onExport != null) {
-        await onExport();
-      } else {
-        await onOpen();
-      }
+      // Pro — 해당 프로젝트를 열어 EditScreen 진입. 사용자는 거기서 우상단 공유 아이콘
+      // 으로 MIDI/WAV 내보내기 가능. (별도 export 시트를 여기서 직접 띄우려면 onOpen
+      // 의 navigation 종료를 기다린 뒤 EditScreen context 를 받아야 해 흐름이 복잡.)
+      await onOpen();
       break;
     case _ProjectAction.delete:
       // ignore: use_build_context_synchronously
@@ -74,17 +72,15 @@ Future<void> showProjectOptionsSheet(
         await showPaywallSheet(context, store, trigger: 'sync');
         break;
       }
-      // 실제 파일 크기 사용 (meta.sizeBytes = _dirSize() 결과). 0이면 추정값 폴백.
-      final sizeBytes = meta.sizeBytes > 0
-          ? meta.sizeBytes
-          : (meta.durationSec * 22050 * 2).toInt().clamp(4096, 50 * 1024 * 1024);
+      // 시안 ⑧ — 업로드 진행 모달 → mock 업로드.
+      final sizeBytes = (meta.durationSec * 200 * 1024).toInt().clamp(1024 * 1024, 50 * 1024 * 1024);
       if (!context.mounted) break;
       final done = await showSyncProgressSheet(
         context,
         direction: SyncDirection.upload,
         projectTitle: meta.title,
         totalBytes: sizeBytes,
-        onRun: () => store.uploadProject(meta.id),
+        onRun: () => store.mockUploadToCloud(meta.id, meta.title, sizeBytes: sizeBytes),
       );
       if (done && context.mounted) {
         // 시안 ② — "{title} — 클라우드에 올렸어요" 토스트.

@@ -56,10 +56,9 @@ class TrackData {
         options = AnalyzeOptions() {
     // 드럼 트랙은 백엔드 onset 기반 드럼 분석을 요청 (단일 진실원).
     options.asDrums = role == TrackRole.drum;
-    // 박자 보정 기본 on 은 드럼만(멜로딕은 편집 안정성 위해 off — 사용자가 켤 수 있음).
-    if (role == TrackRole.drum) {
-      quantizeEnabled = true;
-    }
+    // Quantize is opt-in for every role. Pending preview plays raw analyzed
+    // timing, so auto-quantizing drums only after commit makes the accepted
+    // result sound different from the preview.
   }
 
   final int id;
@@ -77,7 +76,7 @@ class TrackData {
   // 비-파괴적: store.effectiveRenderNotesFor() 에서 렌더 시 적용. 원본 timing 보존.
   bool quantizeEnabled = false;
   int quantizeGrid = 16;          // 4/8/16/32 분음 — 기본 1/16(드럼 비트 보존)
-  double quantizeStrength = 0.85; // 0..1
+  double quantizeStrength = 0.45; // 0..1
   String? wavPath; // 마지막 녹음 원본 WAV (호환용 — 청크별 wav 는 Chunk.vocalWavPath)
   AnalyzeResponse? analysis; // 최근 분석 결과(가장 최근 청크 메타)
   List<Note> notes = []; // 전 청크의 모든 노트(원본 시간 보존)
@@ -119,6 +118,13 @@ class TrackData {
       scale: options.scale,
       asDrums: options.asDrums,
       assistAggressive: options.assistAggressive,
+      pitchModel: options.pitchModel,
+      timingRefine: options.timingRefine,
+      bassCleanup: options.bassCleanup,
+      tempoBpm: options.tempoBpm,
+      quantizeGrid: options.quantizeGrid,
+      timingGridQuantize: options.timingGridQuantize,
+      quantizeStrength: options.quantizeStrength,
     );
     return c;
   }
@@ -177,8 +183,12 @@ class TrackData {
       final clipEnd = n.end > c.outPoint ? c.outPoint : n.end;
       if (clipEnd - clipStart <= 0.001) continue; // 교집합 없음 — 드롭(인덱스 건너뜀)
       final shift = c.timelineStart - c.inPoint;
-      final newStart = clipStart + shift;
-      final newEnd = clipEnd + shift;
+      var newStart = clipStart + shift;
+      var newEnd = clipEnd + shift;
+      if (newStart < 0 && newStart > -0.010) {
+        newStart = 0;
+      }
+      if (newEnd <= newStart) continue;
       // 클립이 원본과 동일하면(start/end 모두 안쪽 + shift 0) clone 생략 가능.
       if (shift == 0 && clipStart == n.start && clipEnd == n.end) {
         n.renderSrcIndex = i;
@@ -204,6 +214,10 @@ class TrackData {
         'chord_mode': chordMode,
         'bass_placement': bassPlacement,
         'enabled': enabled,
+        'looping': looping,
+        'quantize_enabled': quantizeEnabled,
+        'quantize_grid': quantizeGrid,
+        'quantize_strength': quantizeStrength,
         'wav_path': wavPath,
         'vocal_wav_path': vocalWavPath,
         'vocal_peaks': vocalPeaks,
@@ -221,6 +235,10 @@ class TrackData {
       ..chordMode = (j['chord_mode'] ?? false) as bool
       ..bassPlacement = (j['bass_placement'] ?? true) as bool
       ..enabled = (j['enabled'] ?? true) as bool
+      ..looping = (j['looping'] ?? false) as bool
+      ..quantizeEnabled = (j['quantize_enabled'] ?? false) as bool
+      ..quantizeGrid = (j['quantize_grid'] as num?)?.toInt() ?? 16
+      ..quantizeStrength = (j['quantize_strength'] as num?)?.toDouble() ?? 0.45
       ..wavPath = j['wav_path'] as String?
       ..vocalWavPath = j['vocal_wav_path'] as String?
       ..vocalPeaks = ((j['vocal_peaks'] ?? []) as List).map((e) => (e as num).toDouble()).toList()
@@ -238,6 +256,14 @@ class TrackData {
       keyTonic: opt['key_tonic'] as String?,
       scale: opt['scale'] as String?,
       asDrums: role == TrackRole.drum,
+      assistAggressive: (opt['assist_aggressive'] ?? true) as bool,
+      pitchModel: (opt['pitch_model'] ?? 'pyin') as String,
+      timingRefine: (opt['timing_refine'] ?? true) as bool,
+      bassCleanup: (opt['bass_cleanup'] ?? false) as bool,
+      tempoBpm: (opt['tempo_bpm'] as num?)?.toInt() ?? 90,
+      quantizeGrid: (opt['quantize_grid'] as num?)?.toInt() ?? 16,
+      timingGridQuantize: (opt['timing_grid_quantize'] ?? false) as bool,
+      quantizeStrength: (opt['quantize_strength'] as num?)?.toDouble() ?? 0.45,
     );
     return t;
   }
@@ -412,28 +438,18 @@ class ProjectStore extends ChangeNotifier {
           email: s.email,
         );
       } else {
-        final wasSignedIn = accountEmail != null;
         accountEmail = null;
         accountProvider = null;
         subscription = SubscriptionStatus.anonymous;
         subscriptionRenewsAt = null;
         ObservabilityService.instance.clearUser();
         AnalyticsService.instance.reset();
-        // 서버에 의한 강제 로그아웃(세션 만료) — 수동 로그아웃과 구분해 알림.
-        if (wasSignedIn && AuthService.instance.sessionExpiredByServer) {
-          AuthService.instance.sessionExpiredByServer = false;
-          sessionExpiredNotification = true;
-        }
       }
       notifyListeners();
     });
     // IAP 결제 결과 → subscription 갱신.
     _iapSub = IapService.instance.onPurchaseResult.listen((r) {
       if (!r.ok) return;
-      // 로그인되지 않은 상태에서 복원 이벤트가 도달하면 구독을 설정하지 않음.
-      // (앱 재시작 시 auth 로드 전 자동 복원 이벤트 방어 — IapService 의
-      // _isExplicitRestore 가 false 면 이미 emit 되지 않지만 이중 방어.)
-      if (accountEmail == null) return;
       subscription = SubscriptionStatus.active;
       final isYearly = r.productId == kProductYearly;
       subscriptionRenewsAt = r.renewsAt ??
@@ -509,8 +525,6 @@ class ProjectStore extends ChangeNotifier {
   String? accountEmail;       // 로그인 후 표시
   String? accountProvider;    // 'apple' / 'google'
   DateTime? subscriptionRenewsAt;
-  /// true 이면 UI 에서 "세션이 만료됐습니다" 토스트 표시 후 false 로 리셋.
-  bool sessionExpiredNotification = false;
 
   void mockLogin({required String provider, required String email}) {
     accountProvider = provider;
@@ -842,15 +856,16 @@ class ProjectStore extends ChangeNotifier {
     final meta = p.meta ?? const <String, dynamic>{};
     final vocalFiles = (meta['vocal_files'] as List?) ?? const [];
 
-    // 어떤 파일도 publicUrl 이 없으면 에러 — 재업로드 필요.
+    // 어떤 파일도 publicUrl 이 없으면 mock fallback — 백엔드 presigned-GET 필요.
     final hasUrls = vocalFiles.any((e) {
       if (e is! Map) return false;
       final u = e['public_url'];
       return u is String && u.isNotEmpty;
     });
     if (vocalFiles.isNotEmpty && !hasUrls) {
-      debugPrint('[cloud] downloadProject: no public_url — download not available');
-      throw Exception('클라우드 파일에 다운로드 URL이 없습니다. 다시 업로드해 주세요.');
+      debugPrint('[cloud] downloadProject: no public_url — backend presigned_get needed. fallback to mock.');
+      await mockDownloadFromCloud(projectId);
+      return;
     }
 
     // 1) 로컬 프로젝트 디렉터리 준비 + 보컬 파일 GET.
@@ -956,6 +971,67 @@ class ProjectStore extends ChangeNotifier {
     return 'application/octet-stream';
   }
 
+  // ─── Mock 호환 wrapper (기존 호출처 보존) ────────────────────────────────
+  /// @deprecated — uploadProject() 로 라우팅. 백엔드 호출 실패 시 mock 폴백.
+  Future<void> mockUploadToCloud(String projectId, String title, {int sizeBytes = 8 * 1024 * 1024}) async {
+    if (_isCloudAuthenticated) {
+      try {
+        await uploadProject(projectId);
+        return;
+      } catch (e) {
+        debugPrint('[cloud] mockUploadToCloud: uploadProject 실패 → mock 폴백: $e');
+        rethrow;
+      }
+    }
+    // 익명 fallback (개발자 모드 / 비로그인 데모) — 기존 mock 동작.
+    await Future.delayed(const Duration(milliseconds: 600));
+    final i = cloudProjects.indexWhere((c) => c.id == projectId);
+    if (i >= 0) {
+      cloudProjects[i] = cloudProjects[i].copyWith(lastModifiedAt: DateTime.now(), onThisDevice: true);
+    } else {
+      cloudProjects.add(CloudProjectMeta(
+        id: projectId,
+        title: title,
+        uploadedAt: DateTime.now(),
+        lastModifiedAt: DateTime.now(),
+        sizeBytes: sizeBytes,
+        onThisDevice: true,
+      ));
+    }
+    notifyListeners();
+  }
+
+  /// @deprecated — downloadProject() 로 라우팅. 폴백은 onThisDevice 만 토글.
+  Future<void> mockDownloadFromCloud(String cloudId) async {
+    if (_isCloudAuthenticated) {
+      try {
+        await downloadProject(cloudId);
+        return;
+      } catch (e) {
+        debugPrint('[cloud] mockDownloadFromCloud: downloadProject 실패: $e');
+        // 폴백 — 카드만 marked
+      }
+    }
+    await Future.delayed(const Duration(milliseconds: 600));
+    final i = cloudProjects.indexWhere((c) => c.id == cloudId);
+    if (i >= 0) {
+      cloudProjects[i] = cloudProjects[i].copyWith(onThisDevice: true);
+      notifyListeners();
+    }
+  }
+
+  /// @deprecated — deleteFromCloud() 로 라우팅. 익명이면 in-memory 만 제거.
+  void mockDeleteFromCloud(String cloudId) {
+    if (_isCloudAuthenticated) {
+      // 비동기 호출이지만 UI 가 await 안 함 — fire-and-forget.
+      deleteFromCloud(cloudId).catchError((e) {
+        debugPrint('[cloud] mockDeleteFromCloud: 백엔드 삭제 실패: $e');
+      });
+      return;
+    }
+    cloudProjects.removeWhere((c) => c.id == cloudId);
+    notifyListeners();
+  }
 
   /// 데모/스타터 데이터 — 시안 ④ 의 4개 카드 (개발자 모드에서만 사용).
   void devSeedCloudMock() {
@@ -1163,6 +1239,16 @@ class ProjectStore extends ChangeNotifier {
     return applyGuitarStrum(quantized, program: t.program, bpm: bpm);
   }
 
+  /// 재생/export가 공통으로 쓰는 최종 렌더 노트.
+  /// `effectiveRenderNotesFor`의 역할별 변환에 더해, 필요하면 루프 반복본까지 펼친다.
+  List<Note> renderNotesForTrack(TrackData t, {bool includeLoops = true}) {
+    var notes = effectiveRenderNotesFor(t);
+    if (includeLoops && t.looping && _projectEnd > 0 && t.chunks.isNotEmpty) {
+      notes = _loopNotesUntil(notes, _projectEnd, loopPeriodFor(t));
+    }
+    return notes;
+  }
+
   /// 박자 보정 — 노트 **onset(start) 만** 그리드에 스냅하고 원본 duration 은 보존.
   /// DAW 표준 동작("Start only" quantize). 길이까지 그리드에 맞추는 옵션은 별도.
   /// strength 로 블렌드. 렌더(재생/내보내기)와 에디터 표시가 같은 결과를 보도록 단일 경로로 사용.
@@ -1179,7 +1265,10 @@ class ProjectStore extends ChangeNotifier {
     final str = t.quantizeStrength;
     return base.map((n) {
       final sStart = ((n.start - phase) / cellSec).round() * cellSec + phase;
-      final newStart = n.start + (sStart - n.start) * str;
+      var newStart = n.start + (sStart - n.start) * str;
+      if (newStart < 0 && newStart > -0.010) {
+        newStart = 0;
+      }
       final origDur = n.end - n.start;
       final newEnd = newStart + origDur;
       if ((newStart - n.start).abs() < 1e-4) return n;
@@ -1318,18 +1407,39 @@ class ProjectStore extends ChangeNotifier {
   }
 
   /// 미리듣기(pending) 재생용 노트 — 커밋 후 렌더와 동일하게 변환해 들려준다.
-  /// 베이스(배치 on)면 저음역 옥타브 이동을 적용(키 보정은 이미 p.notes 에 반영됨).
-  /// 그 외 역할은 p.notes 그대로(코드 모드는 커밋된 트랙 토글이라 미리듣기엔 미적용).
   List<Note> pendingRenderNotes(PendingRecording p) {
     final t = trackById(p.trackId);
-    if (t != null &&
-        t.role == TrackRole.bass &&
-        t.bassPlacement &&
-        p.notes.isNotEmpty) {
-      final shift = bestBassOctaveShift(p.notes, melodyLowPitch: _melodyLowPitch());
-      return applyOctaveShift(p.notes, shift);
+    if (t == null || p.notes.isEmpty) return p.notes;
+
+    final span = p.analysis?.durationSec ?? 0.0;
+    final endSpan = span > 0
+        ? span
+        : p.notes.map((n) => n.end).fold<double>(0.0, (m, e) => math.max(m, e));
+    final lead = _firstMeaningfulNoteStart(p.notes, endSpan);
+    const cid = -1;
+    final tmp = TrackData(t.id, t.role, program: t.program)
+      ..chordMode = t.chordMode
+      ..bassPlacement = t.bassPlacement
+      ..enabled = t.enabled
+      ..looping = false
+      ..quantizeEnabled = t.quantizeEnabled
+      ..quantizeGrid = t.quantizeGrid
+      ..quantizeStrength = t.quantizeStrength
+      ..analysis = p.analysis
+      ..notes = p.notes.map((n) => Note.fromJson(n.toJson())..chunkId = cid).toList()
+      ..chunks = [
+        Chunk(
+          id: cid,
+          timelineStart: 0,
+          inPoint: lead,
+          outPoint: endSpan,
+          originalLength: endSpan,
+        ),
+      ];
+    if (tmp.role == TrackRole.bass && tmp.bassPlacement && tmp.notes.isNotEmpty) {
+      tmp.bassOctaveShift = bestBassOctaveShift(tmp.notes, melodyLowPitch: _melodyLowPitch());
     }
-    return p.notes;
+    return effectiveRenderNotesFor(tmp);
   }
 
   // ─── 활성 트랙 ──────────────────────────────────────────────────────────
@@ -1369,8 +1479,9 @@ class ProjectStore extends ChangeNotifier {
   /// 새 트랙 추가 → 추가된 TrackData 반환. UI 는 아직 호출 안 함(#27 예정).
   TrackData addTrack(TrackRole role, {int? program}) {
     final t = TrackData(++_trackSeq, role, program: program);
-    // 앵커 잠금 후 추가되는 노트 트랙은 박자 보정 on(공유 그루브에 맞물림).
-    if (anchorLocked && !t.isVocal) t.quantizeEnabled = true;
+    // 앵커 잠금 후 추가되는 멜로딕 노트 트랙은 박자 보정 on(공유 그루브에 맞물림).
+    // 드럼은 녹음 미리듣기 타이밍을 그대로 보존하고, 사용자가 직접 켤 때만 quantize.
+    if (anchorLocked && !t.isVocal && t.role != TrackRole.drum) t.quantizeEnabled = true;
     tracks.add(t);
     _audioChanged();
     return t;
@@ -1578,6 +1689,24 @@ class ProjectStore extends ChangeNotifier {
 
   Future<bool> health() => _api.health();
 
+  AnalyzeOptions _analysisOptionsForTrack(TrackData t, {bool? pitchAssistant}) {
+    return AnalyzeOptions(
+      autoKey: t.options.autoKey,
+      pitchAssistant: pitchAssistant ?? t.options.pitchAssistant,
+      keyTonic: t.options.keyTonic,
+      scale: t.options.scale,
+      asDrums: t.role == TrackRole.drum,
+      assistAggressive: t.options.assistAggressive,
+      pitchModel: t.options.pitchModel,
+      timingRefine: true,
+      bassCleanup: t.role == TrackRole.bass,
+      tempoBpm: bpm,
+      quantizeGrid: t.quantizeGrid,
+      timingGridQuantize: false,
+      quantizeStrength: t.quantizeStrength,
+    );
+  }
+
   /// 녹음 WAV → 분석 → 지정 트랙(또는 카테고리의 첫 트랙, 또는 active)에 반영.
   /// 우선순위: trackId > role(의 첫 트랙) > active.
   Future<void> recordAnalyzed(String wavPath, {TrackRole? role, int? trackId}) async {
@@ -1594,10 +1723,8 @@ class ProjectStore extends ChangeNotifier {
     if (t.isVocal) {
       try {
         final v = await _api.processVocal(wavPath);
-        final docs = await getApplicationDocumentsDirectory();
-        final vocalsDir = Directory('${docs.path}/projects/$projectId/vocals');
-        if (!vocalsDir.existsSync()) vocalsDir.createSync(recursive: true);
-        final f = File('${vocalsDir.path}/${t.id}_${DateTime.now().millisecondsSinceEpoch}.wav');
+        final dir = await Directory.systemTemp.createTemp('vocal_');
+        final f = File('${dir.path}/vocal.wav');
         await f.writeAsBytes(v.wav, flush: true);
         t.vocalWavPath = f.path;
         t.vocalPeaks = v.peaks;
@@ -1631,9 +1758,11 @@ class ProjectStore extends ChangeNotifier {
 
     try {
       _inheritAnchorIfLocked(t); // 앵커 잠금 후면 프로젝트 키 + 적극 보정 상속
+      final opt = _analysisOptionsForTrack(t);
+      t.options = opt;
       final sz = await File(wavPath).length();
       final sw = Stopwatch()..start();
-      final res = await _api.analyze(wavPath, t.options);
+      final res = await _api.analyze(wavPath, opt);
       sw.stop();
       AnalyticsService.instance.analyzeCompleted(
         role: t.role.name,
@@ -1664,6 +1793,7 @@ class ProjectStore extends ChangeNotifier {
       // 사용자가 드럼 슬롯에 녹음 = 명시적 드럼 의도 → pitch 기반 휴리스틱으로
       // GM 드럼 노트(36/38/42) + kind='percussive' 재라벨.
       if (t.role == TrackRole.drum) {
+        t.quantizeEnabled = false; // keep accepted drum take identical to preview by default
         _relabelAsDrums(t.notes);
       }
       final pitched = res.notes.where((n) => n.kind == 'pitched').length;
@@ -1715,10 +1845,8 @@ class ProjectStore extends ChangeNotifier {
     if (t.isVocal) {
       try {
         final v = await _api.processVocal(wavPath);
-        final docs = await getApplicationDocumentsDirectory();
-        final vocalsDir = Directory('${docs.path}/projects/$projectId/vocals');
-        if (!vocalsDir.existsSync()) vocalsDir.createSync(recursive: true);
-        final f = File('${vocalsDir.path}/${t.id}_${DateTime.now().millisecondsSinceEpoch}.wav');
+        final dir = await Directory.systemTemp.createTemp('vocal_');
+        final f = File('${dir.path}/vocal.wav');
         await f.writeAsBytes(v.wav, flush: true);
         pendingRecording!
           ..vocalWavPath = f.path
@@ -1738,15 +1866,7 @@ class ProjectStore extends ChangeNotifier {
     try {
       _inheritAnchorIfLocked(t); // 앵커 잠금 후면 프로젝트 키 + 적극 보정 상속
       // pending 의 어시스트 옵션으로 분석(트랙 옵션과 일시 분리).
-      final opt = AnalyzeOptions(
-        autoKey: t.options.autoKey,
-        pitchAssistant: pendingRecording!.pitchAssist,
-        keyTonic: t.options.keyTonic,
-        scale: t.options.scale,
-        asDrums: t.role == TrackRole.drum,
-        assistAggressive: t.options.assistAggressive,
-        pitchModel: t.options.pitchModel,
-      );
+      final opt = _analysisOptionsForTrack(t, pitchAssistant: pendingRecording!.pitchAssist);
       final sw = Stopwatch()..start();
       final res = await _api.analyze(wavPath, opt);
       sw.stop();
@@ -1799,12 +1919,7 @@ class ProjectStore extends ChangeNotifier {
     p.reassisting = true;
     notifyListeners();
     try {
-      final opt = AnalyzeOptions(
-        autoKey: t.options.autoKey,
-        pitchAssistant: on,
-        keyTonic: t.options.keyTonic,
-        scale: t.options.scale,
-      );
+      final opt = _analysisOptionsForTrack(t, pitchAssistant: on);
       final r = await _api.assist(p.notes, opt);
       p.notes = r.notes;
       final prev = p.analysis;
@@ -1883,7 +1998,7 @@ class ProjectStore extends ChangeNotifier {
         _relabelAsDrums(t.notes);
       }
       // 어시스트 토글이 다이얼로그에서 바뀌었으면 트랙 옵션에도 동기화.
-      t.options.pitchAssistant = p.pitchAssist;
+      t.options = _analysisOptionsForTrack(t, pitchAssistant: p.pitchAssist);
     }
     pendingRecording = null;
     _audioChanged();
@@ -1991,6 +2106,7 @@ class ProjectStore extends ChangeNotifier {
     final src = firstTrackWithKey();
     final dk = src?.analysis?.detectedKey;
     if (dk?.tonic == null || dk?.scale == null) return null;
+    if (dk?.keyTier == 'low' || dk?.keyApplied == false) return null;
     return (tonic: dk!.tonic!, scale: dk.scale!, candidates: src!.analysis!.keyCandidates);
   }
 
@@ -2559,7 +2675,7 @@ class ProjectStore extends ChangeNotifier {
   @Deprecated('No live callers; use exportMixWav() for WAV bounce or SynthPlayer for playback.')
   // ignore: deprecated_member_use_from_same_package
   Future<Uint8List> renderActive() =>
-      _api.renderAudio(active.renderNotes, program: active.program);
+      _api.renderAudio(renderNotesForTrack(active), program: active.program);
 
   // ─── 온디바이스 재생용 트랙 페이로드 (백엔드 호출 없음, Task #5) ──────────
   // SynthPlayer 가 소비. 보컬(원본 WAV) 은 SF2 합성 불가 → 제외 — 호출자가
@@ -2569,7 +2685,6 @@ class ProjectStore extends ChangeNotifier {
   /// looping=true 트랙은 컨텐츠를 _projectEnd 까지 반복 펼침.
   List<({List<Note> notes, int program, bool isDrum})> playableSynthTracks() {
     final out = <({List<Note> notes, int program, bool isDrum})>[];
-    final end = _projectEnd;
     for (final t in tracks) {
       if (!t.enabled || t.notes.isEmpty || t.isVocal) {
         // #5 진단: 재생에서 제외된 트랙과 사유(무음 버그 원인 후보).
@@ -2577,15 +2692,12 @@ class ProjectStore extends ChangeNotifier {
             'enabled=${t.enabled} notes=${t.notes.length} vocal=${t.isVocal}');
         continue;
       }
-      var notes = effectiveRenderNotesFor(t);
+      final notes = renderNotesForTrack(t);
       if (notes.isEmpty) {
         // 노트는 있는데 effectiveRenderNotes 클립으로 0개가 됨 → 들리지 않음(원인 후보).
         // 진단 전용 — 동작은 유지(빈 트랙은 어차피 소리 없음).
         debugPrint('[synth.diag] WARN ${t.role.name}#${t.id}: '
             'raw=${t.notes.length} but effectiveRenderNotes=0 (clipped out)');
-      }
-      if (t.looping && end > 0 && t.chunks.isNotEmpty) {
-        notes = _loopNotesUntil(notes, end, loopPeriodFor(t));
       }
       out.add((notes: notes, program: t.program, isDrum: t.role == TrackRole.drum));
     }
@@ -2598,7 +2710,7 @@ class ProjectStore extends ChangeNotifier {
     final out = <({List<Note> notes, int program, bool isDrum})>[];
     for (final t in tracks) {
       if (t.role == exclude || t.notes.isEmpty || t.isVocal) continue;
-      out.add((notes: effectiveRenderNotesFor(t), program: t.program, isDrum: t.role == TrackRole.drum));
+      out.add((notes: renderNotesForTrack(t), program: t.program, isDrum: t.role == TrackRole.drum));
     }
     return out;
   }
@@ -2672,7 +2784,7 @@ class ProjectStore extends ChangeNotifier {
   Future<Uint8List> renderMix() {
     final trs = tracks
         .where((t) => t.enabled && t.notes.isNotEmpty)
-        .map((t) => (notes: effectiveRenderNotesFor(t), program: t.program))
+        .map((t) => (notes: renderNotesForTrack(t), program: t.program))
         .toList();
     return _api.renderMix(trs);
   }
@@ -2687,14 +2799,14 @@ class ProjectStore extends ChangeNotifier {
   Future<Uint8List?> renderAccompaniment(TrackRole exclude) async {
     final trs = tracks
         .where((t) => t.role != exclude && t.notes.isNotEmpty)
-        .map((t) => (notes: effectiveRenderNotesFor(t), program: t.program))
+        .map((t) => (notes: renderNotesForTrack(t), program: t.program))
         .toList();
     if (trs.isEmpty) return null;
     return _api.renderMix(trs);
   }
 
   Future<Uint8List> exportMidiActive() =>
-      _api.exportMidi(effectiveRenderNotesFor(active), program: active.program);
+      _api.exportMidi(renderNotesForTrack(active), program: active.program, tempoBpm: bpm.toDouble());
 
   /// 재생 ▶ 와 동일한 WAV 믹스를 파일로 export — `renderMix()` 재사용.
   /// (보컬 오디오는 SoundFont 합성 결과가 아니므로 현재 포함되지 않음 —
@@ -2717,8 +2829,8 @@ class ProjectStore extends ChangeNotifier {
         melodicCh++;
         if (melodicCh == 9) melodicCh = 10; // 드럼 채널 회피
       }
-      list.add((notes: effectiveRenderNotesFor(t), program: t.program, channel: ch));
+      list.add((notes: renderNotesForTrack(t), program: t.program, channel: ch));
     }
-    return _api.exportMidiMix(list);
+    return _api.exportMidiMix(list, tempoBpm: bpm.toDouble());
   }
 }

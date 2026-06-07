@@ -17,7 +17,62 @@ import numpy as np
 import librosa
 
 from .schemas import Note
-from .drums import classify_features
+from .drums import classify_features, classify_take, GM_NAMES
+from . import drum_classifier
+from .drum_features import extract as extract_drum_features
+
+
+def _norm_env(x: np.ndarray) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float64)
+    if x.size == 0:
+        return x
+    lo = float(np.percentile(x, 10))
+    hi = float(np.percentile(x, 98))
+    if hi <= lo + 1e-12:
+        return np.zeros_like(x, dtype=np.float64)
+    return np.clip((x - lo) / (hi - lo), 0.0, 1.0)
+
+
+def _align_len(x: np.ndarray, n: int) -> np.ndarray:
+    if x.size == n:
+        return x
+    if x.size > n:
+        return x[:n]
+    return np.pad(x, (0, n - x.size))
+
+
+def _band_flux_envelope(y: np.ndarray, sr: int, hop: int, base: np.ndarray) -> np.ndarray:
+    """Combine full-band onset strength with low/mid/high-band flux.
+
+    Beatboxed drums often have class-specific transients: kicks can be strongest
+    in the low-mid body, hats in noisy highs, and snares in broadband mids. A
+    single full-band envelope can under-rank one of those, so use band envelopes
+    as additional onset evidence while keeping librosa's full-band curve as the
+    anchor.
+    """
+    if y.size < 1024:
+        return base
+    try:
+        n_fft = 1024
+        spec = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop, center=True))
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+    except Exception:
+        return base
+
+    n = base.size
+    combined = 0.55 * _norm_env(base)
+    for lo, hi, weight in (
+        (45.0, 260.0, 0.16),
+        (260.0, 2500.0, 0.17),
+        (2500.0, min(11000.0, sr / 2.0), 0.12),
+    ):
+        mask = (freqs >= lo) & (freqs < hi)
+        if not np.any(mask):
+            continue
+        energy = np.log1p(spec[mask].sum(axis=0))
+        flux = np.maximum(0.0, np.diff(energy, prepend=energy[0]))
+        combined += weight * _align_len(_norm_env(flux), n)
+    return _norm_env(combined)
 
 
 def detect_onsets(
@@ -47,7 +102,8 @@ def detect_onsets(
     """
     if y.size < hop * 2:
         return np.array([]), np.array([])
-    oenv = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop)
+    base_oenv = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop)
+    oenv = _band_flux_envelope(y, sr, hop, base_oenv)
     frames = librosa.onset.onset_detect(
         onset_envelope=oenv, sr=sr, hop_length=hop, backtrack=False,
         pre_max=pre_max, post_max=post_max, pre_avg=pre_avg, post_avg=post_avg,
@@ -73,12 +129,13 @@ def detect_onsets(
     return times, strength
 
 
+# 드럼도 일정 세기 — 강약(velocity 변동) 없이 균일하게(사용자 요청: "다 일정").
+FLAT_VELOCITY = 100
+
+
 def _velocity(peak_rms: float, global_peak: float) -> int:
-    """Map a hit's peak RMS into MIDI velocity 20-120 (mirrors analyze._chunk_velocity)."""
-    if global_peak <= 1e-6:
-        return 64
-    ratio = float(np.clip(peak_rms / global_peak, 0.0, 1.0))
-    return int(max(1, min(127, round(20 + ratio * 100))))
+    """Uniform velocity for every drum hit (no amplitude-derived dynamics)."""
+    return FLAT_VELOCITY
 
 
 def build_drum_notes(
@@ -113,7 +170,11 @@ def build_drum_notes(
     global_peak_amp = float(np.max(np.abs(y))) if y.size else 1.0
 
     win = int(win_sec * sr)
-    notes: List[Note] = []
+    win_long = int(0.120 * sr)  # longer window for the model's sustain/decay feature
+
+    # Pass 1: per-onset features (absolute baseline). Keep only onsets that pass
+    # the amplitude gate, tracking their original index for note timing.
+    kept: List[dict] = []
     for i, t in enumerate(times):
         a = int(round(float(t) * sr))
         b = min(len(y), a + win)
@@ -122,7 +183,29 @@ def build_drum_notes(
         # that spectral flux false-triggers on is not.
         if seg.size == 0 or float(np.max(np.abs(seg))) < min_peak_ratio * global_peak_amp:
             continue
-        hit = classify_fn(seg, sr)
+        seg_long = y[a:min(len(y), a + win_long)]
+        kept.append({"i": i, "t": float(t), "seg": seg, "seg_long": seg_long,
+                     "feat": extract_drum_features(seg, seg_long, sr),
+                     "hit": classify_fn(seg, sr)})
+
+    if not kept:
+        return []
+
+    # Pass 2: label each hit. The local voice model (drum_classifier) wins when
+    # present — it's the only thing that separates voiced snare from hi-hat
+    # (~70% feature overlap). Without a model, fall back to the within-take
+    # relative heuristic. Either way the DrumHit features are kept for debug.
+    if drum_classifier.available():
+        take_notes = [
+            drum_classifier.predict_segment(k["seg"], k["seg_long"], sr) or k["hit"].gm_note
+            for k in kept
+        ]
+    else:
+        take_notes = classify_take([k["hit"] for k in kept])
+
+    notes: List[Note] = []
+    for k, gm in zip(kept, take_notes):
+        i, t, seg, hit, feat = k["i"], k["t"], k["seg"], k["hit"], k["feat"]
 
         # note end = next onset, clamped so a sparse hit isn't an over-long note
         nxt = float(times[i + 1]) if i + 1 < times.size else float(t) + max_note_sec
@@ -132,25 +215,31 @@ def build_drum_notes(
 
         peak_rms = float(np.sqrt(np.mean(seg ** 2))) if seg.size else 0.0
         strength_norm = float(strengths[i] / str_max) if str_max > 0 else 0.0
+        gm_name = GM_NAMES.get(gm, hit.name)
 
         notes.append(Note(
             start=float(t), end=float(end), duration=float(end - float(t)),
-            pitch=int(hit.gm_note),
-            pitch_raw=float(hit.gm_note),
+            pitch=int(gm),
+            pitch_raw=float(gm),
             pitch_hz=0.0,
             velocity=_velocity(peak_rms, global_peak_rms),
             confidence=strength_norm,
             voiced_ratio=0.0,
             kind="percussive",
-            pitch_original=int(hit.gm_note),
-            drum=int(hit.gm_note),
-            drum_name=hit.name,
+            pitch_original=int(gm),
+            drum=int(gm),
+            drum_name=gm_name,
             drum_centroid=hit.centroid,
             drum_low_ratio=hit.low_ratio,
             drum_high_ratio=hit.high_ratio,
             drum_zcr=hit.zcr,
             drum_rolloff=hit.rolloff,
             drum_flatness=hit.flatness,
+            # classifier-input band/sustain features (FEATURE_NAMES order: 6,7,8,9)
+            drum_lowmid_ratio=float(feat[6]),
+            drum_mid_ratio=float(feat[7]),
+            drum_vhigh_ratio=float(feat[8]),
+            drum_sustain_ratio=float(feat[9]),
             onset_strength=float(strengths[i]),
         ))
     return notes

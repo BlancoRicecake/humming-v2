@@ -20,7 +20,7 @@ import soundfile as sf
 
 from .schemas import Note
 
-DEFAULT_SF2 = str(Path(__file__).parent / "TimGM6mb.sf2")
+DEFAULT_SF2 = r"C:\Users\jlion\Downloads\GeneralUser_GS_v2.0.3--doc_r6\GeneralUser-GS\GeneralUser-GS.sf2"
 BUNDLED_FS_BIN = (
     Path(__file__).resolve().parent.parent
     / "bin" / "fluidsynth-2.5.4" / "fluidsynth-v2.5.4-win10-x64-cpp11" / "bin"
@@ -311,7 +311,7 @@ def render_tracks_to_wav(
             is_perc = bool(notes) and all(n.kind == "percussive" for n in notes)
             if is_perc:
                 ch = 9
-                synth.program_select(9, sfid, 128, 0)
+                synth.program_select(9, sfid, 128, program)
             else:
                 if melodic_ch == 9:
                     melodic_ch += 1

@@ -143,8 +143,8 @@ def split_chunk_by_pitch(
     pitch_times: np.ndarray,
     pitch_midi: np.ndarray,
     min_change_semitones: float = 1.0,
-    min_hold_sec: float = 0.12,
-    min_split_gap_sec: float = 0.10,
+    min_hold_sec: float = 0.08,
+    min_split_gap_sec: float = 0.07,
 ) -> List[Dict[str, float]]:
     """Split a long chunk where the smoothed pitch contour transitions to a new
     anchor pitch (≥``min_change_semitones`` held for ≥``min_hold_sec``)."""
@@ -212,8 +212,8 @@ def split_chunk_by_rms_dip(
     env_times: np.ndarray,
     env_rms: np.ndarray,
     dip_ratio: float = 0.40,
-    min_sub_chunk_sec: float = 0.12,
-    neighborhood_frames: int = 4,
+    min_sub_chunk_sec: float = 0.08,
+    neighborhood_frames: int = 2,
 ) -> List[Dict[str, float]]:
     """Split a long chunk on internal RMS local minima that fall to ≤
     ``dip_ratio * chunk_peak``. Targets "same note repeated softly" — pitch
@@ -263,7 +263,7 @@ def split_chunk_by_rms_dip(
 
 
 # Subdivision is only applied to chunks longer than this — protects vibrato
-# from being treated as a transition / dip. Set just below the "two short
-# notes share one envelope chunk" cases observed in sample 4 (Du): chunks of
-# ~0.35 s with a clearly deeper-than-vibrato internal dip.
-SUBDIVISION_MIN_CHUNK_DUR_SEC = 0.30
+# from being treated as a transition / dip. Fast syllables often merge into
+# 0.22-0.30 s envelopes, so keep the gate below that while the RMS dip splitter
+# remains restricted to mostly-flat pitch spans in analyze.py.
+SUBDIVISION_MIN_CHUNK_DUR_SEC = 0.22

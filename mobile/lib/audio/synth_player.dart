@@ -24,6 +24,9 @@ class SynthTrack {
 class SynthPlayer {
   SynthPlayer();
 
+  static const double _kStartClampEpsilonSec = 0.010;
+  static const double _kMinAudibleNoteSec = 0.035;
+
   // 진행 중 재생을 식별하는 토큰 — stop() 으로 무효화하면 진행 중 루프가 즉시 종료.
   int _playToken = 0;
   bool _playing = false;
@@ -62,10 +65,16 @@ class SynthPlayer {
   }) async {
     await stop();
     if (tracks.isEmpty) {
+      debugPrint('[synth.diag] play: 0 tracks → nothing to play');
       _doneCtl.add(null);
       return;
     }
+    // #5 무음 버그 진단: ensureLoaded 콜드스타트 소요 측정(미완료 레이스 가설 ①).
+    final loadSw = Stopwatch()..start();
     await SynthEngine().ensureLoaded();
+    loadSw.stop();
+    debugPrint('[synth.diag] play: ${tracks.length} tracks, '
+        'ensureLoaded=${loadSw.elapsedMilliseconds}ms, startAt=${startAt.inMilliseconds}ms');
 
     // (time, isOn, channel, pitch, velocity) 이벤트 빌드.
     final events = <_Ev>[];
@@ -81,6 +90,7 @@ class SynthPlayer {
         if (melodicCh == SynthEngine.drumChannel) melodicCh++; // 9 회피
       }
       // 트랙 첫 이벤트 직전에 악기 select(시퀀서 per-note noteOn 은 program 미전달).
+      final psSw = Stopwatch()..start();
       if (tr.isDrum) {
         // 드럼: bank128 키트(program) 1회 선택.
         await SynthEngine().ensureDrumKit(tr.program);
@@ -94,11 +104,31 @@ class SynthPlayer {
         );
         await SynthEngine().noteOff(channel: ch, pitch: 60);
       }
+      psSw.stop();
       for (final n in tr.notes) {
-        events.add(_Ev(n.start, true, ch, n.pitch, n.velocity));
-        events.add(_Ev(n.end, false, ch, n.pitch, 0));
-        if (n.end > maxEnd) maxEnd = n.end;
+        var start = n.start;
+        if (start < 0 && start > -_kStartClampEpsilonSec) {
+          start = 0.0;
+        }
+        if (start < 0) start = 0.0;
+        var end = n.end < start ? start : n.end;
+        if (end - start <= 0.001) continue;
+        if (end - start < _kMinAudibleNoteSec) {
+          end = start + _kMinAudibleNoteSec;
+        }
+        events.add(_Ev(start, true, ch, n.pitch, n.velocity));
+        events.add(_Ev(end, false, ch, n.pitch, 0));
+        if (end > maxEnd) maxEnd = end;
       }
+      // #5 진단: 트랙별 ch/program/노트수/첫3개(start,end,pitch,vel) — 무음 트랙 식별.
+      final preview = tr.notes
+          .take(3)
+          .map((n) => '(${n.start.toStringAsFixed(2)},${n.end.toStringAsFixed(2)},'
+              'p${n.pitch},v${n.velocity})')
+          .join(' ');
+      debugPrint('[synth.diag]  ch=$ch ${tr.isDrum ? "DRUM" : "mel"} '
+          'prog=${tr.program} notes=${tr.notes.length} progSel=${psSw.elapsedMilliseconds}ms '
+          '$preview');
     }
     if (events.isEmpty) {
       _doneCtl.add(null);
@@ -125,7 +155,7 @@ class SynthPlayer {
   /// 내부: 현재 _events 에서 [from] 이후만 골라 시퀀서 시작.
   Future<void> _startFrom(Duration from) async {
     final fromSec = from.inMilliseconds / 1000.0;
-    final filtered = _events.where((e) => e.time >= fromSec).toList();
+    final filtered = _events.where((e) => e.time >= fromSec - 0.005).toList();
     if (filtered.isEmpty) {
       // 재생할 게 없음 — tail 만 흘려보내고 complete.
       _playing = false;
@@ -155,25 +185,54 @@ class SynthPlayer {
 
   Future<void> _runSequencer(List<_Ev> events, double offsetSec, int token) async {
     final start = DateTime.now();
-    for (final ev in events) {
-      if (token != _playToken) return; // stop / pause / seek 됨
-      final targetMs = ((ev.time - offsetSec) * 1000).round();
+    var firedOn = 0, firedOff = 0; // #5 진단: 실제 발사된 noteOn/Off 카운트
+    var i = 0;
+    while (i < events.length) {
+      if (token != _playToken) {
+        debugPrint('[synth.diag] seq aborted (token) after on=$firedOn off=$firedOff');
+        return; // stop / pause / seek 됨
+      }
+      final targetMs = ((events[i].time - offsetSec) * 1000).round();
       final elapsed = DateTime.now().difference(start).inMilliseconds;
       final wait = targetMs - elapsed;
       if (wait > 0) {
         await Future.delayed(Duration(milliseconds: wait));
-        if (token != _playToken) return;
+        if (token != _playToken) {
+          debugPrint('[synth.diag] seq aborted (token,wait) after on=$firedOn off=$firedOff');
+          return;
+        }
       }
-      if (ev.isOn) {
-        // ignore: discarded_futures
-        SynthEngine().noteOn(
-          channel: ev.channel, pitch: ev.pitch, velocity: ev.velocity,
-        );
-      } else {
-        // ignore: discarded_futures
-        SynthEngine().noteOff(channel: ev.channel, pitch: ev.pitch);
+
+      final group = <_Ev>[];
+      while (i < events.length) {
+        final ev = events[i];
+        final evTargetMs = ((ev.time - offsetSec) * 1000).round();
+        if (evTargetMs != targetMs) break;
+        group.add(ev);
+        i++;
+      }
+
+      final offs = group.where((ev) => !ev.isOn).toList();
+      if (offs.isNotEmpty) {
+        firedOff += offs.length;
+        await Future.wait(offs.map(
+          (ev) => SynthEngine().noteOff(channel: ev.channel, pitch: ev.pitch),
+        ));
+      }
+      final ons = group.where((ev) => ev.isOn).toList();
+      if (ons.isNotEmpty) {
+        firedOn += ons.length;
+        await Future.wait(ons.map(
+          (ev) => SynthEngine().noteOn(
+            channel: ev.channel,
+            pitch: ev.pitch,
+            velocity: ev.velocity,
+          ),
+        ));
       }
     }
+    debugPrint('[synth.diag] seq done: fired on=$firedOn off=$firedOff '
+        'of ${events.length} events');
     // 마지막 noteOff release tail 위해 짧게 대기.
     final remainingMs = _lengthHint.inMilliseconds -
         (offsetSec * 1000).round() -

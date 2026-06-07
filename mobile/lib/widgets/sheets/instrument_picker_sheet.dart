@@ -4,33 +4,6 @@ part of '../sheets.dart';
 // 악기 미리듣기 — 중복 호출 시 마지막 것만 유효(시퀀스 가드).
 int _instPreviewSeq = 0;
 
-// InstrumentFamily.label (한글 캐논 ID) → 로컬라이즈된 라벨.
-// 패밀리 라벨은 addTrack* ARB 키와 동일 매핑.
-String _localizedFamilyLabel(L10n l, String label) {
-  switch (label) {
-    case '피아노':
-      return l.addTrackPiano;
-    case '어쿠스틱 기타':
-      return l.addTrackAcousticGuitar;
-    case '일렉 기타':
-      return l.addTrackElectricGuitar;
-    case '신스':
-      return l.addTrackSynth;
-    case '오르간':
-      return l.addTrackOrgan;
-    case '스트링':
-      return l.addTrackStrings;
-    case '베이스 기타':
-      return l.addTrackBassGuitar;
-    case '신스 베이스':
-      return l.addTrackSynthBass;
-    case '드럼 키트':
-      return l.addTrackDrumKit;
-    default:
-      return label;
-  }
-}
-
 // ─── 악기 선택 ─────────────────────────────────────────────────────────
 void showInstrumentPicker(BuildContext context, ProjectStore store) {
   showModalBottomSheet(
@@ -66,7 +39,7 @@ void showInstrumentPicker(BuildContext context, ProjectStore store) {
                       for (final fam in families) ...[
                         Padding(
                           padding: const EdgeInsets.only(left: 2, bottom: 8),
-                          child: Text(_localizedFamilyLabel(L10n.of(sheetCtx), fam.label),
+                          child: Text(fam.label,
                               style: T.label.copyWith(
                                   fontSize: 11, letterSpacing: 0.6, color: AppColors.textSecondary)),
                         ),

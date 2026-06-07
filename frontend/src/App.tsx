@@ -42,6 +42,7 @@ const DEFAULT_OPTIONS: AnalyzeOptions = {
   voiced_prob_threshold: 0.45,
   auto_key: true,
   pitch_assistant: true,
+  assist_aggressive: true,
   key_tonic: null,
   scale: null,
   quantize_strength: 1.0,
@@ -312,6 +313,7 @@ export default function App() {
       const r = await assistNotes(result.notes, {
         auto_key: merged.auto_key,
         pitch_assistant: merged.pitch_assistant,
+        assist_aggressive: merged.assist_aggressive,
         key_tonic: merged.key_tonic,
         scale: merged.scale,
       });

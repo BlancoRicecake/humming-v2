@@ -69,15 +69,12 @@ class _RecordingScreenState extends State<RecordingScreen> with WidgetsBindingOb
   }
 
   _MicPermState _mapStatus(PermissionStatus s, {required bool fallbackGranted}) {
-    // record 패키지가 OK 라고 하면 그대로 신뢰 — 실제 녹음에 쓰는 권한 평가가
-    // 그쪽이라 가장 정확. permission_handler 의 status 가 시뮬레이터 등에서
-    // 미스리포트하는 경우(설정에서 허용해도 .denied 반환)를 보호.
-    if (fallbackGranted) return _MicPermState.granted;
     if (s.isGranted || s.isLimited) return _MicPermState.granted;
     if (s.isPermanentlyDenied) return _MicPermState.permanentlyDenied;
     if (s.isRestricted) return _MicPermState.restricted;
     if (s.isDenied) return _MicPermState.denied;
-    return _MicPermState.denied;
+    // status 가 unknown 일 때는 record 결과로 폴백.
+    return fallbackGranted ? _MicPermState.granted : _MicPermState.denied;
   }
 
   /// "권한 요청" 버튼 — 첫 거부 상태에서 재요청.

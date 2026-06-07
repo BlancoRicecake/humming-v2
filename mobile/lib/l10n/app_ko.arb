@@ -93,7 +93,6 @@
   "accountLinked": "계정 연동됨",
   "accountSignInHint": "로그인하면 결제와 동기화가 가능해요",
   "accountSignIn": "로그인",
-  "authSessionExpired": "로그인 세션이 만료됐어요. 다시 로그인해 주세요.",
 
   "subFreePlan": "무료 플랜",
   "subFreePlanSub": "내보내기와 클라우드 동기화는 Pro 에서 잠금이 풀려요",
@@ -170,25 +169,6 @@
   "subCancelConfirmTitle": "정말 해지하시겠어요?",
   "subCancelConfirmBody": "만료일까지는 모든 Pro 기능을 그대로 사용하실 수 있어요.",
   "subCancelConfirmAction": "해지",
-
-  "subHistoryTitle": "결제 이력",
-  "subHistoryLoadFailed": "이력을 불러오지 못했습니다",
-  "subHistoryEmpty": "결제 이력이 없습니다",
-  "subPlanYearly": "연간 플랜",
-  "subPlanMonthly": "월간 플랜",
-  "subBadgeActive": "활성",
-  "subBadgeTrial": "체험 중",
-  "subBadgeCancelled": "취소됨",
-  "subBadgeExpired": "만료",
-  "subHistoryRowStarted": "시작: {date}",
-  "@subHistoryRowStarted": {"placeholders": {"date": {"type": "String"}}},
-  "subHistoryRowTxId": "거래 ID: {id}",
-  "@subHistoryRowTxId": {"placeholders": {"id": {"type": "String"}}},
-  "subHistoryTxCopied": "트랜잭션 ID가 복사되었습니다",
-  "subReceiptButtonIos": "App Store에서 영수증 확인",
-  "subReceiptButtonAndroid": "Google Play에서 영수증 확인",
-  "subOpenStoreIos": "App Store에서 관리",
-  "subOpenStoreAndroid": "Google Play에서 관리",
 
   "paywallHeadlineExport": "내보내려면 Pro 가 필요해요",
   "paywallHeadlineSync": "다른 기기에서 보려면 Pro",
@@ -298,8 +278,6 @@
 
   "syncProgressUpload": "클라우드에 올리는 중",
   "syncProgressDownload": "내 기기로 받는 중",
-  "syncProgressFailed": "오류가 발생했어요",
-  "syncProgressFailedSub": "다시 시도해 주세요.",
 
   "comingSoonFeature": "기능",
   "comingSoonToast": "{label} — 준비중입니다",
@@ -360,8 +338,6 @@
 
   "cloudDownloadTitle": "클라우드에서 가져오기",
   "cloudDownloadBanner": "구독이 만료된 동안엔 새 업로드 / 동기화는 잠금돼요. 이전 작업물은 그대로 두고 언제든 다운로드하거나 삭제할 수 있어요.",
-  "cloudDownloadEmptyTitle": "파일 목록을 불러올 수 없어요",
-  "cloudDownloadEmptySub": "재구독 후 클라우드 탭에서\n파일을 다운로드할 수 있어요.",
   "cloudDownloadCta": "받기",
   "cloudDownloadActionLabel": "다운로드",
   "cloudRenameLabel": "클라우드 이름 바꾸기",
@@ -379,7 +355,6 @@
   "editOpenSettings": "설정 열기",
   "editPlayNoActiveTrack": "활성 트랙이 없습니다(사이드바 탭)",
   "editPlayRecordFirst": "먼저 녹음하세요",
-  "editActionNeedsRecording": "녹음이 있어야 사용할 수 있어요",
   "editPlayFailed": "재생 실패: {err}",
   "@editPlayFailed": {"placeholders": {"err": {"type": "String"}}},
   "editOriginalPlayFailed": "원본 재생 실패",
@@ -496,7 +471,6 @@
   "exportAudioSub": ".wav · 믹스 렌더",
   "exportShareLabel": "공유",
   "exportShareSub": "링크 · Instagram · TikTok",
-  "exportExporting": "내보내는 중...",
   "exportFailed": "내보내기 실패: {err}",
   "@exportFailed": {"placeholders": {"err": {"type": "String"}}},
 

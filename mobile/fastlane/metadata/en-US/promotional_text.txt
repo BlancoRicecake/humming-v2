@@ -1,1 +1,0 @@
-Hum any melody and HumTrack turns it into piano, bass, and drums — with auto key detection and quantize.

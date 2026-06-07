@@ -33,6 +33,10 @@ class Note {
     this.drumZcr = 0,
     this.drumRolloff = 0,
     this.drumFlatness = 0,
+    this.drumLowmidRatio = 0,
+    this.drumMidRatio = 0,
+    this.drumVhighRatio = 0,
+    this.drumSustainRatio = 0,
     this.onsetStrength = 0,
   });
 
@@ -52,6 +56,8 @@ class Note {
   String? drumName;   // Kick | Snare | HiHat
   double drumCentroid, drumLowRatio, drumHighRatio, drumZcr; // 디버그 특징값
   double drumRolloff, drumFlatness, onsetStrength; // 디버그 — rolloff/flatness/onset 세기
+  // 분류기 입력 특징(대역 에너지 비율 + 지속). drum_features.py 와 동일.
+  double drumLowmidRatio, drumMidRatio, drumVhighRatio, drumSustainRatio;
 
   factory Note.fromJson(Map<String, dynamic> j) => Note(
         start: _d(j['start']),
@@ -78,6 +84,10 @@ class Note {
         drumZcr: _d(j['drum_zcr']),
         drumRolloff: _d(j['drum_rolloff']),
         drumFlatness: _d(j['drum_flatness']),
+        drumLowmidRatio: _d(j['drum_lowmid_ratio']),
+        drumMidRatio: _d(j['drum_mid_ratio']),
+        drumVhighRatio: _d(j['drum_vhigh_ratio']),
+        drumSustainRatio: _d(j['drum_sustain_ratio']),
         onsetStrength: _d(j['onset_strength']),
       );
 
@@ -106,6 +116,10 @@ class Note {
         'drum_zcr': drumZcr,
         'drum_rolloff': drumRolloff,
         'drum_flatness': drumFlatness,
+        'drum_lowmid_ratio': drumLowmidRatio,
+        'drum_mid_ratio': drumMidRatio,
+        'drum_vhigh_ratio': drumVhighRatio,
+        'drum_sustain_ratio': drumSustainRatio,
         'onset_strength': onsetStrength,
       };
 
@@ -204,14 +218,25 @@ class AnalyzeOptions {
     this.keyTonic,
     this.scale,
     this.asDrums = false,
-    this.assistAggressive = false,
+    this.assistAggressive = true,
     this.pitchModel = 'pyin',
+    this.timingRefine = true,
+    this.bassCleanup = false,
+    this.tempoBpm = 90,
+    this.quantizeGrid = 16,
+    this.timingGridQuantize = false,
+    this.quantizeStrength = 0.45,
   });
   bool autoKey, pitchAssistant;
   String? keyTonic, scale;
   bool asDrums; // 드럼 트랙 → 백엔드 onset 기반 드럼 분석 요청
-  bool assistAggressive; // 잠긴 키 트랙 → 스케일 밖 음을 적극 스냅(음치 안전장치)
+  bool assistAggressive; // 신뢰 가능한 키에서는 스케일 밖 음을 적극 스냅
   String pitchModel; // 'pyin'(기본) | 'crepe'(디버그 전용, 사전학습 트래커)
+  bool timingRefine; // backend onset refinement + musical quantize
+  bool bassCleanup; // bass-only semitone jitter cleanup
+  bool timingGridQuantize; // false: render layer owns grid quantize
+  int tempoBpm, quantizeGrid;
+  double quantizeStrength;
 
   Map<String, dynamic> toJson() => {
         'auto_key': autoKey,
@@ -219,8 +244,14 @@ class AnalyzeOptions {
         if (keyTonic != null) 'key_tonic': keyTonic,
         if (scale != null) 'scale': scale,
         if (asDrums) 'as_drums': asDrums,
-        if (assistAggressive) 'assist_aggressive': assistAggressive,
+        'assist_aggressive': assistAggressive,
         if (pitchModel != 'pyin') 'pitch_model': pitchModel,
+        'timing_refine': timingRefine,
+        if (bassCleanup) 'bass_cleanup': bassCleanup,
+        'tempo_bpm': tempoBpm,
+        'quantize_grid': quantizeGrid,
+        'timing_grid_quantize': timingGridQuantize,
+        'quantize_strength': quantizeStrength,
       };
 }
 

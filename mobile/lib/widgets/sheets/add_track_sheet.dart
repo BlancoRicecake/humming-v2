@@ -167,7 +167,7 @@ Future<void> maybeConfirmAnchorKey(BuildContext context, ProjectStore store) asy
         tonic: prop.tonic, scale: prop.scale, candidates: prop.candidates),
   );
   if (chosen != null && context.mounted) {
-    store.confirmAnchorKey(chosen.tonic, chosen.scale);
+    await store.confirmAnchorKey(chosen.tonic, chosen.scale);
   }
 }
 

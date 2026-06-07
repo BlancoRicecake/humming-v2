@@ -231,10 +231,6 @@ class L10nEn extends L10n {
   String get accountSignIn => 'Sign in';
 
   @override
-  String get authSessionExpired =>
-      'Your session has expired. Please sign in again.';
-
-  @override
   String get subFreePlan => 'Free plan';
 
   @override
@@ -440,58 +436,6 @@ class L10nEn extends L10n {
 
   @override
   String get subCancelConfirmAction => 'Cancel subscription';
-
-  @override
-  String get subHistoryTitle => 'Payment history';
-
-  @override
-  String get subHistoryLoadFailed => 'Could not load history';
-
-  @override
-  String get subHistoryEmpty => 'No payment history';
-
-  @override
-  String get subPlanYearly => 'Yearly plan';
-
-  @override
-  String get subPlanMonthly => 'Monthly plan';
-
-  @override
-  String get subBadgeActive => 'Active';
-
-  @override
-  String get subBadgeTrial => 'Trial';
-
-  @override
-  String get subBadgeCancelled => 'Cancelled';
-
-  @override
-  String get subBadgeExpired => 'Expired';
-
-  @override
-  String subHistoryRowStarted(String date) {
-    return 'Started: $date';
-  }
-
-  @override
-  String subHistoryRowTxId(String id) {
-    return 'Transaction ID: $id';
-  }
-
-  @override
-  String get subHistoryTxCopied => 'Transaction ID copied';
-
-  @override
-  String get subReceiptButtonIos => 'View receipt on App Store';
-
-  @override
-  String get subReceiptButtonAndroid => 'View receipt on Google Play';
-
-  @override
-  String get subOpenStoreIos => 'Manage on App Store';
-
-  @override
-  String get subOpenStoreAndroid => 'Manage on Google Play';
 
   @override
   String get paywallHeadlineExport => 'Pro is required to export';
@@ -790,12 +734,6 @@ class L10nEn extends L10n {
   String get syncProgressDownload => 'Downloading';
 
   @override
-  String get syncProgressFailed => 'Something went wrong';
-
-  @override
-  String get syncProgressFailedSub => 'Please try again.';
-
-  @override
   String get comingSoonFeature => 'Feature';
 
   @override
@@ -961,13 +899,6 @@ class L10nEn extends L10n {
       'While your subscription is expired, new uploads / sync are locked. Your previous songs remain — download or delete them anytime.';
 
   @override
-  String get cloudDownloadEmptyTitle => 'File list unavailable';
-
-  @override
-  String get cloudDownloadEmptySub =>
-      'Re-subscribe and use the Cloud tab\nto download your files.';
-
-  @override
   String get cloudDownloadCta => 'Download';
 
   @override
@@ -1013,9 +944,6 @@ class L10nEn extends L10n {
 
   @override
   String get editPlayRecordFirst => 'Record first';
-
-  @override
-  String get editActionNeedsRecording => 'Record something first to use this';
 
   @override
   String editPlayFailed(String err) {
@@ -1327,9 +1255,6 @@ class L10nEn extends L10n {
 
   @override
   String get exportShareSub => 'Link · Instagram · TikTok';
-
-  @override
-  String get exportExporting => 'Exporting...';
 
   @override
   String exportFailed(String err) {

@@ -1,0 +1,10 @@
+# lab runtime / deps — not committed
+server/.venv/
+web/node_modules/
+out/
+__pycache__/
+*.pyc
+
+# HumTrans-derived samples (regenerate via README: unzip from datasets/HumTrans)
+server/samples/*.wav
+server/samples/reference_midi/
