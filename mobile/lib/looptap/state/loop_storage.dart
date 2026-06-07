@@ -53,6 +53,23 @@ class LoopStorage {
     }
   }
 
+  /// Copy a freshly-recorded vocal file into persistent storage and return the
+  /// new path under Documents/looptap/vocals/ (named songId_sectionId.m4a).
+  static Future<String?> copyVocal(String srcPath, String songId, String sectionId) async {
+    try {
+      final dir = (await _folder()).path;
+      final vocals = Directory('$dir/vocals');
+      if (!await vocals.exists()) await vocals.create(recursive: true);
+      final ext = srcPath.contains('.') ? srcPath.substring(srcPath.lastIndexOf('.')) : '.m4a';
+      final dest = '${vocals.path}/${songId}_$sectionId$ext';
+      await File(srcPath).copy(dest);
+      return dest;
+    } catch (e) {
+      debugPrint('[looptap] copyVocal failed: $e');
+      return null;
+    }
+  }
+
   static Future<void> saveUser(Map<String, String>? user) async {
     try {
       final f = await _userFile();

@@ -43,9 +43,13 @@ class _ExportDrawer extends StatefulWidget {
 
 class _ExportDrawerState extends State<_ExportDrawer> {
   String? _status;
+  bool _statusOk = true;
 
-  void _note(String m) {
-    setState(() => _status = m);
+  void _note(String m, {bool ok = true}) {
+    setState(() {
+      _status = m;
+      _statusOk = ok;
+    });
     Future.delayed(const Duration(milliseconds: 2400), () {
       if (mounted) setState(() => _status = null);
     });
@@ -54,9 +58,9 @@ class _ExportDrawerState extends State<_ExportDrawer> {
   Future<void> _doMidi() async {
     try {
       final file = await exportMidiSong(widget.sections, widget.bpm, widget.title);
-      _note('✓ saved ${file.uri.pathSegments.last}');
+      _note('saved ${file.uri.pathSegments.last}');
     } catch (e) {
-      _note('MIDI export failed');
+      _note('MIDI export failed', ok: false);
     }
   }
 
@@ -105,8 +109,18 @@ class _ExportDrawerState extends State<_ExportDrawer> {
               SizedBox(
                 height: 18,
                 child: Center(
-                  child: Text(_status ?? '',
-                      style: LTType.inter(size: 12, weight: FontWeight.w700, color: LT.lime)),
+                  child: _status == null
+                      ? const SizedBox.shrink()
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Ms(_statusOk ? LtIcons.checkCircle : LtIcons.info, size: 14, color: _statusOk ? LT.lime : LT.danger),
+                            const SizedBox(width: 5),
+                            Text(_status!,
+                                style: LTType.inter(
+                                    size: 12, weight: FontWeight.w700, color: _statusOk ? LT.lime : LT.danger)),
+                          ],
+                        ),
                 ),
               ),
               const Spacer(),

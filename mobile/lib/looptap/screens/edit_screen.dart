@@ -11,10 +11,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/engine_api.dart';
+import '../../models/models.dart' as eng;
 import '../audio/loop_audio.dart';
 import '../models/loop_models.dart';
 import '../music/song_util.dart';
 import '../music/theory.dart';
+import '../state/loop_storage.dart';
 import '../state/loop_store.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
@@ -23,6 +26,7 @@ import '../widgets/section_bar.dart';
 import '../widgets/sheets/hum_modal.dart';
 import '../widgets/sheets/export_drawer.dart';
 import '../widgets/sheets/key_sheet.dart';
+import '../widgets/sheets/lt_modal.dart';
 import '../widgets/sheets/mixer_sheet.dart';
 import '../widgets/surfaces/drum_surface.dart';
 import '../widgets/surfaces/live_pads.dart';
@@ -62,14 +66,38 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   bool _playing = false;
   bool _recording = false;
   bool _metro = true;
-  bool _countIn = false;
+  bool _countIn = true; // count-in on by default
   int _octave = 0;
-  String _melodyInput = 'pads'; // 'pads' | 'grid'
+  // input mode per track ('pads' | 'grid') — melody/bass/drums each have one
+  String _melodyInput = 'pads';
+  String _bassInput = 'pads';
+  String _drumsInput = 'pads';
   int _countDown = 0; // count-in overlay (0 = none)
 
-  // glow: currently-sounding notes
+  bool get _hasInputToggle => _activeId == 'melody' || _activeId == 'bass' || _activeId == 'drums';
+  String get _inputMode => switch (_activeId) {
+        'bass' => _bassInput,
+        'drums' => _drumsInput,
+        _ => _melodyInput,
+      };
+  void _setInputMode(String v) => setState(() {
+        switch (_activeId) {
+          case 'bass':
+            _bassInput = v;
+          case 'drums':
+            _drumsInput = v;
+          default:
+            _melodyInput = v;
+        }
+      });
+
+  // glow: currently-sounding pitched notes (drums use press-only feedback)
   Set<int> _litMidis = {};
-  Set<String> _litDrums = {};
+
+  // notes recorded during the current loop pass — the clock skips replaying them
+  // until the loop wraps, so a freshly-tapped note isn't heard twice (live tap +
+  // scheduled playback) in the same pass.
+  final Set<String> _freshThisLoop = {};
 
   // playhead (driven every frame — kept off setState to avoid full rebuilds)
   final ValueNotifier<double> _playStep = ValueNotifier(0);
@@ -77,6 +105,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // whole-song preview (non-null while "Play song" is active)
   Section? _songSection;
   int? _songSteps;
+
+  // recorded-vocal playback state
+  bool _vocalPlaying = false;
+
+  // undo / redo — snapshots of the editable song state
+  final List<_EditSnapshot> _undo = [];
+  final List<_EditSnapshot> _redo = [];
+  int _lastUndoMs = 0;
 
   // transport clock
   Ticker? _ticker;
@@ -95,6 +131,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     return const [0, 3, 4, 5, 7].map((i) => full[i]).toList();
   }
 
+  // full 8-row in-key bass ladder (one octave down) for the bass Grid
+  List<Rung> get _bassGridLadder => buildLadder(_keyRoot, _scale, 2 + _octave, 8);
+
+  /// active pitched ladder for the Grid surface (melody high / bass low)
+  List<Rung> get _gridLadder => _activeId == 'bass' ? _bassGridLadder : _ladder;
+
   Map<String, PitchRange> get _ranges {
     final l = _ladder, b = _bassLadder;
     return {
@@ -106,7 +148,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _audio.ensure();
+    _audio.prewarm();
   }
 
   @override
@@ -130,7 +172,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final beats = sec * (_bpm / 60);
     final abs = _startStep + beats * kStepsPerBeat;
     while (abs >= _nextAbs + _swFrac(_nextAbs)) {
-      _trigger(((_nextAbs % steps) + steps) % steps);
+      final st = ((_nextAbs % steps) + steps) % steps;
+      // new loop pass — notes recorded last pass may now play normally; re-align
+      // the recorded vocal to the loop start so it stays in sync.
+      if (st == 0) {
+        _freshThisLoop.clear();
+        if (_vocalPlaying) _audio.seekVocalToStart();
+      }
+      _trigger(st);
       _nextAbs++;
     }
     _playStep.value = ((abs % steps) + steps) % steps;
@@ -144,33 +193,32 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final sps = 60 / _bpm / kStepsPerBeat;
     double dsec(int dur) => (dur * sps * 0.95).clamp(0.12, 8);
     final litM = <int>{};
-    final litD = <String>{};
     if (!(_mutes['melody'] ?? false)) {
       for (final n in T['melody']!.pitchNotes.where((n) => n.step == step)) {
+        if (_freshThisLoop.contains('melody:${n.midi}:$step')) continue;
         _audio.playPitch(n.midi, bass: false, vol: _vol['melody'] ?? 0.85, durSec: dsec(n.dur));
         litM.add(n.midi);
       }
     }
     if (!(_mutes['bass'] ?? false)) {
       for (final n in T['bass']!.pitchNotes.where((n) => n.step == step)) {
+        if (_freshThisLoop.contains('bass:${n.midi}:$step')) continue;
         _audio.playPitch(n.midi, bass: true, vol: _vol['bass'] ?? 0.85, durSec: dsec(n.dur));
         litM.add(n.midi);
       }
     }
+    // drums play but don't drive pad lighting (press-only feedback — item 2)
     if (!(_mutes['drums'] ?? false)) {
       for (final n in T['drums']!.drumNotes.where((n) => n.step == step)) {
+        if (_freshThisLoop.contains('drums:${n.kind}:$step')) continue;
         _audio.playDrum(n.kind, vol: _vol['drums'] ?? 1);
-        litD.add(n.kind);
       }
     }
     if (_metro && step % kStepsPerBeat == 0) {
       _audio.click(step % (kStepsPerBeat * kBeatsPerBar) == 0);
     }
-    if (litM.isNotEmpty || litD.isNotEmpty || _litMidis.isNotEmpty || _litDrums.isNotEmpty) {
-      setState(() {
-        _litMidis = litM;
-        _litDrums = litD;
-      });
+    if (litM.isNotEmpty || _litMidis.isNotEmpty) {
+      setState(() => _litMidis = litM);
     }
   }
 
@@ -194,8 +242,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       _playing = !_playing;
       if (_playing) {
         _startClock();
+        _startVocalIfAny();
       } else {
         _stopClock();
+        _stopVocal();
       }
     });
   }
@@ -203,12 +253,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void _stopAll() {
     _stopClock();
     _audio.stopAll();
+    _vocalPlaying = false;
     _playStep.value = 0;
     setState(() {
       _playing = false;
       _recording = false;
       _litMidis = {};
-      _litDrums = {};
       if (_songSection != null) {
         _songSection = null;
         _songSteps = null;
@@ -229,6 +279,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           _playStep.value = 0;
           _playing = true;
           _startClock();
+          _startVocalIfAny();
         }
       });
     }
@@ -274,13 +325,17 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     });
   }
 
+  String _nextSectionName() => String.fromCharCode(65 + _sections.length % 26);
+
+  // "+" → a brand-new EMPTY section (not a copy of the current one).
   void _addSection() {
+    _pushUndo();
     if (_playing) _stopAll();
-    final name = String.fromCharCode(65 + _sections.length % 26);
-    final ns = _sec.deepCopy()
-      ..id = 'sec${DateTime.now().millisecondsSinceEpoch}'
-      ..name = name
-      ..repeats = 1;
+    final ns = Section(
+      id: 'sec${DateTime.now().millisecondsSinceEpoch}',
+      name: _nextSectionName(),
+      bars: _bars,
+    );
     setState(() {
       _sections.add(ns);
       _activeIdx = _sections.length - 1;
@@ -288,8 +343,41 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     });
   }
 
+  // long-press → Duplicate: deep-copy a section in place (the old "+" behavior).
+  void _duplicateSection(int idx) {
+    _pushUndo();
+    if (_playing) _stopAll();
+    final copy = _sections[idx].deepCopy()
+      ..id = 'sec${DateTime.now().millisecondsSinceEpoch}'
+      ..name = _nextSectionName();
+    setState(() {
+      _sections.insert(idx + 1, copy);
+      _activeIdx = idx + 1;
+      _playStep.value = 0;
+    });
+  }
+
+  // long-press → Move left/right (reorder); active follows the moved chip.
+  void _moveSection(int idx, int dir) {
+    final j = idx + dir;
+    if (j < 0 || j >= _sections.length) return;
+    _pushUndo();
+    if (_playing) _stopAll();
+    setState(() {
+      final s = _sections.removeAt(idx);
+      _sections.insert(j, s);
+      if (_activeIdx == idx) {
+        _activeIdx = j;
+      } else if (_activeIdx == j) {
+        _activeIdx = idx;
+      }
+      _playStep.value = 0;
+    });
+  }
+
   void _deleteSection(int idx) {
     if (_sections.length <= 1) return;
+    _pushUndo();
     if (_playing) _stopAll();
     setState(() {
       _sections.removeAt(idx);
@@ -303,8 +391,72 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   void _renameSection(int idx, String name) => _sections[idx].name = name;
 
-  void _setRepeats(int idx, int r) =>
-      setState(() => _sections[idx].repeats = r.clamp(1, 8));
+  // long-press a section chip → Duplicate / Move left / Move right
+  Future<void> _openSectionMenu(int idx) async {
+    await showLtModal(
+      context,
+      width: 300,
+      child: StatefulBuilder(
+        builder: (context, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Section ${_sections[idx].name}',
+                style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1)),
+            const SizedBox(height: 14),
+            _menuRow(LtIcons.layers, 'Duplicate', () {
+              Navigator.of(context).pop();
+              _duplicateSection(idx);
+            }),
+            _menuRow(LtIcons.arrowBack, 'Move left', idx > 0
+                ? () {
+                    Navigator.of(context).pop();
+                    _moveSection(idx, -1);
+                  }
+                : null),
+            _menuRow(LtIcons.playArrow, 'Move right', idx < _sections.length - 1
+                ? () {
+                    Navigator.of(context).pop();
+                    _moveSection(idx, 1);
+                  }
+                : null),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _menuRow(IconData icon, String label, VoidCallback? onTap) {
+    final enabled = onTap != null;
+    return Opacity(
+      opacity: enabled ? 1 : 0.4,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 48,
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: LT.surface2,
+            borderRadius: BorderRadius.circular(LTRadius.control),
+            border: Border.all(color: LT.border),
+          ),
+          child: Row(
+            children: [
+              Ms(icon, size: 18, color: LT.t2),
+              const SizedBox(width: 12),
+              Text(label, style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t1)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _setRepeats(int idx, int r) {
+    _pushUndo(coalesce: true);
+    setState(() => _sections[idx].repeats = r.clamp(1, 8));
+  }
 
   void _playSong() {
     _audio.ensure();
@@ -332,12 +484,31 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void _hitDrum(String kind) {
     _audio.playDrum(kind, vol: _vol['drums'] ?? 1);
     if (_recording && _playing && _songSection == null) {
+      _pushUndo(coalesce: true);
       final s = _quantStep();
       final dn = _tracks['drums']!.drumNotes;
       if (!dn.any((x) => x.kind == kind && x.step == s)) {
         setState(() => dn.add(DrumNote(kind: kind, step: s)));
       }
+      // heard live now → don't let the clock replay it this loop pass
+      _freshThisLoop.add('drums:$kind:$s');
     }
+  }
+
+  // drums Grid mode: tap a cell to toggle a hit at (kind, step)
+  void _toggleDrumCell(String kind, int step) {
+    if (_songSection != null) return; // editing disabled while previewing the song
+    _pushUndo(coalesce: true);
+    final dn = _tracks['drums']!.drumNotes;
+    final i = dn.indexWhere((x) => x.kind == kind && x.step == step);
+    setState(() {
+      if (i >= 0) {
+        dn.removeAt(i);
+      } else {
+        dn.add(DrumNote(kind: kind, step: step));
+        _audio.playDrum(kind, vol: _vol['drums'] ?? 1);
+      }
+    });
   }
 
   // pending hold timing per midi (live pads): midi -> (step, pressedAtMs)
@@ -347,17 +518,22 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       (ms / 1000 * (_bpm / 60) * kStepsPerBeat).round().clamp(1, _steps);
 
   void _pitchDown(Rung n, {required bool bass}) {
-    _audio.playPitch(n.midi, bass: bass, vol: _vol[_activeId] ?? 0.85);
+    // held note: it sounds while pressed, so what you hear == what gets recorded
+    _audio.noteOnLive(n.midi, bass: bass, vol: _vol[_activeId] ?? 0.85);
     if (_recording && _playing && _songSection == null) {
       _pending[n.midi] = (step: _quantStep(), t: DateTime.now().millisecondsSinceEpoch);
     }
   }
 
   void _pitchUp(Rung n) {
+    _audio.noteOffLive(n.midi, bass: _activeId == 'bass');
     final p = _pending.remove(n.midi);
     if (p == null) return;
+    _pushUndo(coalesce: true);
     final dur = _durFromHold(DateTime.now().millisecondsSinceEpoch - p.t);
     _placePitched(_activeId, n, p.step, p.step + dur - 1);
+    // heard live now → don't let the clock replay it this loop pass
+    _freshThisLoop.add('$_activeId:${n.midi}:${p.step}');
   }
 
   /// Place a pitched note spanning [a,b], merging overlapping same-pitch notes.
@@ -386,26 +562,86 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     });
   }
 
+  // grid place/erase work on the active pitched track (melody or bass)
   void _gridPlace(Rung n, int a, int b) {
-    _audio.playPitch(n.midi, bass: false, vol: _vol['melody'] ?? 0.85);
-    _placePitched('melody', n, a, b);
+    _pushUndo(coalesce: true);
+    final bass = _activeId == 'bass';
+    // preview sound length matches the drawn note length
+    final sps = 60 / _bpm / kStepsPerBeat;
+    final durSec = (((a - b).abs() + 1) * sps * 0.95).clamp(0.12, 8.0);
+    _audio.playPitch(n.midi, bass: bass, vol: _vol[_activeId] ?? 0.85, durSec: durSec);
+    _placePitched(_activeId, n, a, b);
+    _freshThisLoop.add('$_activeId:${n.midi}:${a < b ? a : b}');
   }
 
   void _gridErase(Rung n, int step) {
+    _pushUndo(coalesce: true);
     setState(() {
-      _tracks['melody']!.pitchNotes.removeWhere(
+      _tracks[_activeId]!.pitchNotes.removeWhere(
         (x) => x.midi == n.midi && step >= x.step && step < x.step + x.dur,
       );
     });
   }
 
   void _clearTrack() {
+    _pushUndo();
     setState(() {
       final t = _tracks[_activeId]!;
       t.pitchNotes.clear();
       t.drumNotes.clear();
       t.clip = null;
+      if (_activeId == 'vocal') {
+        t.vocalPath = null;
+        _audio.stopVocal();
+        _vocalPlaying = false;
+      }
     });
+  }
+
+  // ── vocal playback (item 7) ───────────────────────────────────────
+  Future<void> _commitVocal(List<double> wf, String? path) async {
+    _pushUndo();
+    String? persisted = path;
+    if (path != null) {
+      persisted = await LoopStorage.copyVocal(path, widget.song.id, _sec.id) ?? path;
+    }
+    if (!mounted) return;
+    setState(() {
+      _tracks['vocal']!.clip = wf;
+      _tracks['vocal']!.vocalPath = persisted;
+    });
+  }
+
+  /// Start the recorded vocal with the loop (single-section play only for now).
+  void _startVocalIfAny() {
+    if (_songSection != null) return; // "Play song" multi-section vocal = follow-up
+    final path = _tracks['vocal']!.vocalPath;
+    if (path != null && !(_mutes['vocal'] ?? false)) {
+      _vocalPlaying = true;
+      _audio.playVocal(path, vol: _vol['vocal'] ?? 0.85);
+    }
+  }
+
+  void _stopVocal() {
+    _vocalPlaying = false;
+    _audio.stopVocal();
+  }
+
+  // mute/volume go through here so the live vocal player follows the mixer
+  void _toggleMute(String id) {
+    setState(() => _mutes[id] = !(_mutes[id] ?? false));
+    if (id == 'vocal') {
+      if (_mutes['vocal'] == true) {
+        _stopVocal();
+      } else if (_playing) {
+        _startVocalIfAny();
+      }
+    }
+  }
+
+  void _setVol(String id, double v) {
+    setState(() => _vol[id] = v);
+    if (id == 'vocal' && _vocalPlaying) _audio.setVocalVolume(v);
   }
 
   // ── sheets ────────────────────────────────────────────────────────
@@ -414,10 +650,13 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       context,
       root: _keyRoot,
       scale: _scale,
-      onPick: (r, s) => setState(() {
-        _keyRoot = r;
-        _scale = s;
-      }),
+      onPick: (r, s) {
+        _pushUndo(coalesce: true);
+        setState(() {
+          _keyRoot = r;
+          _scale = s;
+        });
+      },
     );
   }
 
@@ -426,8 +665,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       context,
       vol: _vol,
       mutes: _mutes,
-      onVol: (id, v) => setState(() => _vol[id] = v),
-      onToggleMute: (id) => setState(() => _mutes[id] = !(_mutes[id] ?? false)),
+      onVol: _setVol,
+      onToggleMute: _toggleMute,
     );
   }
 
@@ -441,7 +680,88 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _humConvert() {
+  // Send the hum recording to the FastAPI humming→MIDI engine, map its notes
+  // (seconds → steps) into the active track. Falls back to a generated phrase
+  // if the engine is unreachable so the button always does something.
+  // LoopTap scale name -> backend Scale literal (schemas.py). Only 'pentatonic'
+  // differs; minor/major/dorian match.
+  static const _engineScale = {'pentatonic': 'minor_pentatonic'};
+
+  Future<void> _humConvert(String audioPath) async {
+    _pushUndo();
+    final drums = _activeId == 'drums';
+    final opts = eng.AnalyzeOptions(
+      // snap to the song's chosen key/scale (LoopTap's in-key guarantee)
+      autoKey: false,
+      pitchAssistant: true,
+      assistAggressive: true,
+      keyTonic: _keyRoot,
+      scale: _engineScale[_scale] ?? _scale,
+      asDrums: drums,
+      tempoBpm: _bpm,
+      quantizeGrid: 16,
+    );
+    try {
+      final res = await EngineApi().analyze(audioPath, opts);
+      final sps = 60 / _bpm / kStepsPerBeat;
+      final steps = _steps;
+      final t = _tracks[_activeId]!;
+      var count = 0;
+      if (drums) {
+        final out = <DrumNote>[];
+        for (final n in res.notes) {
+          final step = (n.start / sps).round();
+          if (step < 0 || step >= steps) continue;
+          final kind = _drumKind(n);
+          if (kind == null) continue;
+          if (t.drumNotes.any((x) => x.kind == kind && x.step == step)) continue;
+          if (out.any((x) => x.kind == kind && x.step == step)) continue;
+          out.add(DrumNote(kind: kind, step: step));
+        }
+        if (out.isEmpty) throw StateError('no drums');
+        setState(() => t.drumNotes.addAll(out));
+        count = out.length;
+      } else {
+        final out = <PitchNote>[];
+        for (final n in res.notes) {
+          if (n.kind == 'percussive') continue;
+          final step = (n.start / sps).round();
+          if (step < 0 || step >= steps) continue;
+          final dur = math.max(1, (n.duration / sps).round()).clamp(1, steps - step);
+          out.add(PitchNote(midi: n.pitch, freq: midiToFreq(n.pitch), step: step, dur: dur));
+        }
+        if (out.isEmpty) throw StateError('no notes');
+        setState(() => t.pitchNotes.addAll(out));
+        count = out.length;
+      }
+      _toast('Added $count notes from your hum');
+    } catch (e) {
+      _humFallback();
+      _toast('Engine unavailable — used a generated phrase');
+    }
+  }
+
+  String? _drumKind(eng.Note n) {
+    final name = (n.drumName ?? '').toLowerCase();
+    if (name.contains('kick')) return 'kick';
+    if (name.contains('snare')) return 'snare';
+    if (name.contains('hat')) return 'hihat';
+    switch (n.drum ?? n.pitch) {
+      case 36:
+        return 'kick';
+      case 38:
+      case 40:
+        return 'snare';
+      case 42:
+      case 44:
+      case 46:
+        return 'hihat';
+    }
+    return null;
+  }
+
+  // generated-phrase fallback (the original behaviour) when the engine fails
+  void _humFallback() {
     setState(() {
       final t = _tracks[_activeId]!;
       if (_activeId == 'drums') {
@@ -456,8 +776,16 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     });
   }
 
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(milliseconds: 1400)),
+    );
+  }
+
   void _setBars(int b) {
     if (_songSection != null) return;
+    _pushUndo();
     setState(() => _sec.bars = b);
   }
 
@@ -514,28 +842,34 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                   onRename: _renameSection,
                   onRepeats: _setRepeats,
                   onDelete: _deleteSection,
+                  onLongPress: _openSectionMenu,
                   onPlaySong: _playSong,
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-                  child: ValueListenableBuilder<double>(
-                    valueListenable: _playStep,
-                    builder: (_, ps, __) => Arrangement(
-                      section: _songSection ?? _sec,
-                      activeId: _activeId,
-                      mutes: _mutes,
-                      onSelect: (id) => setState(() => _activeId = id),
-                      onToggleMute: (id) => setState(() => _mutes[id] = !(_mutes[id] ?? false)),
-                      playStep: ps,
-                      steps: _steps,
-                      ranges: _ranges,
+                // arrangement : surface = 1 : 2 vertical split (user choice)
+                Expanded(
+                  flex: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: _playStep,
+                      builder: (_, ps, __) => Arrangement(
+                        section: _songSection ?? _sec,
+                        activeId: _activeId,
+                        mutes: _mutes,
+                        onSelect: (id) => setState(() => _activeId = id),
+                        onToggleMute: _toggleMute,
+                        playStep: ps,
+                        steps: _steps,
+                        ranges: _ranges,
+                      ),
                     ),
                   ),
                 ),
                 _surfaceHeader(pitched),
                 Expanded(
+                  flex: 2,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(LTRadius.card),
@@ -551,7 +885,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                   decoration: const BoxDecoration(border: Border(top: BorderSide(color: LT.border))),
                   child: TransportBar(
                     playing: _playing,
@@ -570,6 +904,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                     onSwing: (v) => setState(() => _swing = v),
                     bars: _bars,
                     onBars: _setBars,
+                    showRecord: _activeId != 'vocal',
                   ),
                 ),
               ],
@@ -583,7 +918,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   Widget _topBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: LT.border))),
       child: Row(
         children: [
@@ -608,6 +943,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
+          const SizedBox(width: 10),
+          _undoRedoBtn(LtIcons.undo, 'Undo', _undo.isNotEmpty, _undoAction),
+          const SizedBox(width: 6),
+          _undoRedoBtn(LtIcons.redo, 'Redo', _redo.isNotEmpty, _redoAction),
           const Spacer(),
           IconBtn(icon: LtIcons.tune, tooltip: 'Mixer', onTap: _openMixer),
           const SizedBox(width: 8),
@@ -626,17 +965,24 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _undoRedoBtn(IconData icon, String tip, bool enabled, VoidCallback onTap) {
+    return Opacity(
+      opacity: enabled ? 1 : 0.35,
+      child: IconBtn(icon: icon, tooltip: tip, onTap: enabled ? onTap : null),
+    );
+  }
+
   Widget _surfaceHeader(bool pitched) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
       child: Row(
         children: [
           Ms(_meta.icon, size: 18, color: _meta.color),
           const SizedBox(width: 8),
           Text(_meta.label, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.t1)),
-          if (_activeId == 'melody') ...[
+          if (_hasInputToggle) ...[
             const SizedBox(width: 6),
-            _melodyToggle(),
+            _inputToggle(),
           ],
           const Spacer(),
           if (pitched) _octaveStepper(),
@@ -645,18 +991,25 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
             Pill(label: 'Hum to MIDI', icon: LtIcons.graphicEq, onTap: _openHum),
           ],
           const SizedBox(width: 8),
-          LtLabel(
-            _activeId == 'melody' && _melodyInput == 'grid'
-                ? 'tap · drag to lengthen · auto-merge'
-                : '● rec, then tap',
-            color: LT.t3,
-          ),
+          if (_inputMode == 'grid' && _activeId == 'drums')
+            const LtLabel('tap cells to toggle', color: LT.t3)
+          else if (_inputMode == 'grid' && pitched)
+            const LtLabel('tap · drag to lengthen · auto-merge', color: LT.t3)
+          else
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 7, height: 7, decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle)),
+                const SizedBox(width: 5),
+                const LtLabel('rec, then tap', color: LT.t3),
+              ],
+            ),
         ],
       ),
     );
   }
 
-  Widget _melodyToggle() {
+  Widget _inputToggle() {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
@@ -669,17 +1022,17 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         children: [
           for (final v in const ['pads', 'grid'])
             GestureDetector(
-              onTap: () => setState(() => _melodyInput = v),
+              onTap: () => _setInputMode(v),
               child: Container(
                 height: 26,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _melodyInput == v ? LT.lime : Colors.transparent,
+                  color: _inputMode == v ? LT.lime : Colors.transparent,
                   borderRadius: BorderRadius.circular(LTRadius.pill),
                 ),
                 child: Text(v == 'pads' ? 'Pads' : 'Grid',
-                    style: LTType.inter(size: 11, weight: FontWeight.w700, color: _melodyInput == v ? LT.bg : LT.t2)),
+                    style: LTType.inter(size: 11, weight: FontWeight.w700, color: _inputMode == v ? LT.bg : LT.t2)),
               ),
             ),
         ],
@@ -710,11 +1063,22 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         for (final n in dn) {
           (map[n.kind] ??= <int>{}).add(n.step);
         }
+        if (_drumsInput == 'grid') {
+          return ValueListenableBuilder<double>(
+            valueListenable: _playStep,
+            builder: (_, ps, __) => DrumGrid(
+              notes: map,
+              onToggle: _toggleDrumCell,
+              playStep: ps,
+              steps: _steps,
+              bars: _bars,
+            ),
+          );
+        }
         return ValueListenableBuilder<double>(
           valueListenable: _playStep,
           builder: (_, ps, __) => DrumSurface(
             notes: map,
-            litDrums: _litDrums,
             onHit: _hitDrum,
             playStep: ps,
             steps: _steps,
@@ -722,12 +1086,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           ),
         );
       case 'melody':
-        final notes = (_songSection ?? _sec).tracks['melody']!.pitchNotes;
-        if (_melodyInput == 'grid') {
+      case 'bass':
+        final bass = _activeId == 'bass';
+        final notes = (_songSection ?? _sec).tracks[_activeId]!.pitchNotes;
+        if (_inputMode == 'grid') {
           return ValueListenableBuilder<double>(
             valueListenable: _playStep,
             builder: (_, ps, __) => StepGrid(
-              ladder: _ladder,
+              ladder: _gridLadder,
               notes: notes,
               onPlace: _gridPlace,
               onErase: _gridErase,
@@ -738,6 +1104,15 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
             ),
           );
         }
+        if (bass) {
+          return BassPads(
+            bassLadder: _bassLadder,
+            litMidis: _litMidis,
+            accent: _meta.color,
+            onDown: (n) => _pitchDown(n, bass: true),
+            onUp: _pitchUp,
+          );
+        }
         return NotePads(
           ladder: _ladder,
           litMidis: _litMidis,
@@ -745,19 +1120,19 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           onDown: (n) => _pitchDown(n, bass: false),
           onUp: _pitchUp,
         );
-      case 'bass':
-        return BassPads(
-          bassLadder: _bassLadder,
-          litMidis: _litMidis,
-          accent: _meta.color,
-          onDown: (n) => _pitchDown(n, bass: true),
-          onUp: _pitchUp,
-        );
       case 'vocal':
         return VocalSurface(
           clip: _tracks['vocal']!.clip,
-          onCommit: (wf) => setState(() => _tracks['vocal']!.clip = wf),
-          onClear: () => setState(() => _tracks['vocal']!.clip = null),
+          onCommit: _commitVocal,
+          onClear: () {
+            _pushUndo();
+            _audio.stopVocal();
+            _vocalPlaying = false;
+            setState(() {
+              _tracks['vocal']!.clip = null;
+              _tracks['vocal']!.vocalPath = null;
+            });
+          },
         );
       default:
         return _surfacePlaceholder();
@@ -788,4 +1163,86 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ── undo / redo ───────────────────────────────────────────────────
+  _EditSnapshot _capture() => _EditSnapshot(
+        sections: _sections.map((s) => s.deepCopy()).toList(),
+        activeIdx: _activeIdx,
+        keyRoot: _keyRoot,
+        scale: _scale,
+        bpm: _bpm,
+        swing: _swing,
+        vol: Map.of(_vol),
+        mutes: Map.of(_mutes),
+        title: _title,
+      );
+
+  /// Snapshot current state before a mutation. [coalesce] merges rapid bursts
+  /// (drag-erase, live recording taps) into a single undo step.
+  void _pushUndo({bool coalesce = false}) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (coalesce && now - _lastUndoMs < 500) {
+      _lastUndoMs = now;
+      return;
+    }
+    _lastUndoMs = now;
+    _undo.add(_capture());
+    if (_undo.length > 60) _undo.removeAt(0);
+    _redo.clear();
+  }
+
+  void _restore(_EditSnapshot s) {
+    if (_playing || _songSection != null) _stopAll();
+    setState(() {
+      _sections
+        ..clear()
+        ..addAll(s.sections.map((x) => x.deepCopy()));
+      _activeIdx = s.activeIdx.clamp(0, _sections.length - 1);
+      _keyRoot = s.keyRoot;
+      _scale = s.scale;
+      _bpm = s.bpm;
+      _swing = s.swing;
+      _vol
+        ..clear()
+        ..addAll(s.vol);
+      _mutes
+        ..clear()
+        ..addAll(s.mutes);
+      _title = s.title;
+      _playStep.value = 0;
+    });
+  }
+
+  void _undoAction() {
+    if (_undo.isEmpty) return;
+    _redo.add(_capture());
+    _restore(_undo.removeLast());
+  }
+
+  void _redoAction() {
+    if (_redo.isEmpty) return;
+    _undo.add(_capture());
+    _restore(_redo.removeLast());
+  }
+}
+
+/// Immutable snapshot of the editable song state for undo/redo.
+class _EditSnapshot {
+  _EditSnapshot({
+    required this.sections,
+    required this.activeIdx,
+    required this.keyRoot,
+    required this.scale,
+    required this.bpm,
+    required this.swing,
+    required this.vol,
+    required this.mutes,
+    required this.title,
+  });
+  final List<Section> sections;
+  final int activeIdx;
+  final String keyRoot, scale, title;
+  final int bpm;
+  final double swing;
+  final Map<String, double> vol;
+  final Map<String, bool> mutes;
 }

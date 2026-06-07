@@ -25,7 +25,6 @@ class DrumSurface extends StatelessWidget {
   const DrumSurface({
     super.key,
     required this.notes, // list of (kind, step)
-    required this.litDrums,
     required this.onHit,
     required this.playStep,
     required this.steps,
@@ -34,47 +33,43 @@ class DrumSurface extends StatelessWidget {
 
   /// kind -> set of active steps.
   final Map<String, Set<int>> notes;
-  final Set<String> litDrums;
   final ValueChanged<String> onHit;
   final double playStep;
   final int steps;
   final int bars;
 
-  Widget _column() {
-    return SizedBox(
-      width: 200,
-      child: Column(
-        children: [
-          for (var i = 0; i < kDrums.length; i++) ...[
-            if (i > 0) const SizedBox(height: 10),
-            Expanded(child: _DrumPad(spec: kDrums[i], lit: litDrums.contains(kDrums[i].kind), onHit: onHit)),
-          ],
+  Widget _column(String side) {
+    return Column(
+      children: [
+        for (var i = 0; i < kDrums.length; i++) ...[
+          if (i > 0) const SizedBox(height: 6),
+          // Press-only feedback: each pad lights only when YOU tap it (PadFx),
+          // never its mirror twin — so two-thumb play stays unambiguous and in sync.
+          Expanded(child: _DrumPad(key: ValueKey('$side${kDrums[i].kind}'), spec: kDrums[i], onHit: onHit)),
         ],
-      ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Two-thumb symmetric pads kept; pad-column : beat-grid : pad-column = 1:2:1.
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _column(),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _BeatGrid(notes: notes, playStep: playStep, steps: steps, bars: bars),
-        ),
-        const SizedBox(width: 12),
-        _column(),
+        Expanded(flex: 1, child: _column('L')),
+        const SizedBox(width: 8),
+        Expanded(flex: 2, child: _BeatGrid(notes: notes, playStep: playStep, steps: steps, bars: bars)),
+        const SizedBox(width: 8),
+        Expanded(flex: 1, child: _column('R')),
       ],
     );
   }
 }
 
 class _DrumPad extends StatelessWidget {
-  const _DrumPad({required this.spec, required this.lit, required this.onHit});
+  const _DrumPad({super.key, required this.spec, required this.onHit});
   final DrumSpec spec;
-  final bool lit;
   final ValueChanged<String> onHit;
 
   @override
@@ -83,35 +78,35 @@ class _DrumPad extends StatelessWidget {
       accent: spec.color,
       borderRadius: LTRadius.card,
       idle: LT.surface2,
-      lit: lit,
       onDown: () => onHit(spec.kind),
       builder: (active) => Center(
-        child: SizedBox(
-          width: 150,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              SizedBox(
-                width: 42,
-                child: Text(
+        // FittedBox keeps the label inside short pads instead of overflowing
+        // into neighbours; the pad itself clips (PadFx clipBehavior).
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
                   spec.short,
-                  textAlign: TextAlign.right,
-                  style: LTType.inter(size: 30, weight: FontWeight.w900, color: active ? LT.bg : LT.t1, letterSpacing: 0.5),
+                  style: LTType.inter(size: 26, weight: FontWeight.w900, color: active ? LT.bg : LT.t1, letterSpacing: 0.5),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                spec.label,
-                style: LTType.inter(
-                  size: 11,
-                  weight: FontWeight.w800,
-                  color: active ? LT.bg.withValues(alpha: 0.67) : spec.color,
-                  letterSpacing: 1.2,
+                const SizedBox(width: 10),
+                Text(
+                  spec.label,
+                  style: LTType.inter(
+                    size: 11,
+                    weight: FontWeight.w800,
+                    color: active ? LT.bg.withValues(alpha: 0.67) : spec.color,
+                    letterSpacing: 1.2,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -202,6 +197,90 @@ class _Cell extends StatelessWidget {
           width: current ? 1.5 : 1,
         ),
         boxShadow: on ? [BoxShadow(color: color.withValues(alpha: 0.67), blurRadius: 8)] : null,
+      ),
+    );
+  }
+}
+
+/// Drums Grid mode (README §5 variant): the beat grid ONLY, full-area and
+/// editable — tap a cell to toggle a hit at (kind, step).
+class DrumGrid extends StatelessWidget {
+  const DrumGrid({
+    super.key,
+    required this.notes,
+    required this.onToggle,
+    required this.playStep,
+    required this.steps,
+    required this.bars,
+  });
+
+  final Map<String, Set<int>> notes;
+  final void Function(String kind, int step) onToggle;
+  final double playStep;
+  final int steps;
+  final int bars;
+
+  @override
+  Widget build(BuildContext context) {
+    final cur = playStep.floor() % steps;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: LT.bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: LT.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const LtLabel('Beat grid'),
+              LtLabel('$bars bars · 4/4 · tap to edit', color: LT.t3),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final d in kDrums)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 52,
+                      child: Row(
+                        children: [
+                          Text(d.short, style: LTType.inter(size: 18, weight: FontWeight.w900, color: d.color)),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          for (var s = 0; s < steps; s++)
+                            Expanded(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => onToggle(d.kind, s),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                                  child: _Cell(
+                                    on: notes[d.kind]?.contains(s) ?? false,
+                                    beat: s % 4 == 0,
+                                    current: s == cur,
+                                    color: d.color,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

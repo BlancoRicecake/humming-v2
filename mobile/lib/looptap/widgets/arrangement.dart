@@ -14,10 +14,9 @@ class PitchRange {
   final int max;
 }
 
-const double _labelW = 96;
+const double _labelW = 88;
 const double _gap = 8;
-const double _laneH = 26;
-const double _rowGap = 4;
+const double _rowGap = 3;
 
 class Arrangement extends StatelessWidget {
   const Arrangement({
@@ -45,19 +44,23 @@ class Arrangement extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
+        // lanes fill the height the parent gives us (the 1:2 split) so the
+        // strip scales with its allotted space instead of a fixed mini-map.
         Column(
           children: [
             for (var i = 0; i < kTracks.length; i++) ...[
               if (i > 0) const SizedBox(height: _rowGap),
-              _Row(
-                meta: kTracks[i],
-                data: section.tracks[kTracks[i].id]!,
-                selected: kTracks[i].id == activeId,
-                muted: mutes[kTracks[i].id] ?? false,
-                onSelect: () => onSelect(kTracks[i].id),
-                onToggleMute: () => onToggleMute(kTracks[i].id),
-                steps: steps,
-                range: ranges[kTracks[i].id],
+              Expanded(
+                child: _Row(
+                  meta: kTracks[i],
+                  data: section.tracks[kTracks[i].id]!,
+                  selected: kTracks[i].id == activeId,
+                  muted: mutes[kTracks[i].id] ?? false,
+                  onSelect: () => onSelect(kTracks[i].id),
+                  onToggleMute: () => onToggleMute(kTracks[i].id),
+                  steps: steps,
+                  range: ranges[kTracks[i].id],
+                ),
               ),
             ],
           ],
@@ -124,12 +127,12 @@ class _Row extends StatelessWidget {
       onTap: onSelect,
       behavior: HitTestBehavior.opaque,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // label chip
+          // label chip (fills the row height)
           Container(
             width: _labelW,
-            height: _laneH,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
               color: selected ? meta.color.withValues(alpha: 0.12) : LT.surface,
               borderRadius: BorderRadius.circular(LTRadius.chip),
@@ -137,28 +140,27 @@ class _Row extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Ms(meta.icon, size: 14, color: selected ? meta.color : LT.t2),
-                const SizedBox(width: 7),
+                Ms(meta.icon, size: 11, color: selected ? meta.color : LT.t2),
+                const SizedBox(width: 5),
                 Expanded(
                   child: Text(meta.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: LTType.inter(size: 11, weight: FontWeight.w700, color: selected ? LT.t1 : LT.t2)),
+                      style: LTType.inter(size: 10, weight: FontWeight.w700, color: selected ? LT.t1 : LT.t2)),
                 ),
                 GestureDetector(
                   onTap: onToggleMute,
                   behavior: HitTestBehavior.opaque,
                   child: Ms(muted ? LtIcons.volumeOff : LtIcons.volumeUp,
-                      size: 13, color: muted ? LT.t3 : LT.t2),
+                      size: 11, color: muted ? LT.t3 : LT.t2),
                 ),
               ],
             ),
           ),
           const SizedBox(width: _gap),
-          // lane
+          // lane (fills the row height)
           Expanded(
             child: Container(
-              height: _laneH,
               decoration: BoxDecoration(
                 color: LT.bg,
                 borderRadius: BorderRadius.circular(LTRadius.chip),

@@ -43,7 +43,7 @@ class DrumNote {
 
 /// One track's content. Pitched/bass/drums use [notes]; vocal uses [clip].
 class TrackData {
-  TrackData({List<PitchNote>? notes, List<DrumNote>? drums, this.clip})
+  TrackData({List<PitchNote>? notes, List<DrumNote>? drums, this.clip, this.vocalPath})
       : pitchNotes = notes ?? [],
         drumNotes = drums ?? [];
 
@@ -51,17 +51,21 @@ class TrackData {
   final List<DrumNote> drumNotes;
   /// Vocal waveform amplitudes (audio only — no MIDI), or null when empty.
   List<double>? clip;
+  /// Path to the recorded vocal audio file (m4a) for playback, or null.
+  String? vocalPath;
 
   TrackData deepCopy() => TrackData(
         notes: pitchNotes.map((n) => n.copyWith()).toList(),
         drums: drumNotes.map((n) => n.copyWith()).toList(),
         clip: clip == null ? null : List<double>.from(clip!),
+        vocalPath: vocalPath,
       );
 
   Map<String, dynamic> toJson() => {
         if (pitchNotes.isNotEmpty) 'notes': pitchNotes.map((n) => n.toJson()).toList(),
         if (drumNotes.isNotEmpty) 'drums': drumNotes.map((n) => n.toJson()).toList(),
         if (clip != null) 'clip': clip,
+        if (vocalPath != null) 'vocalPath': vocalPath,
       };
 
   static TrackData fromJson(Map<String, dynamic>? j) {
@@ -70,6 +74,7 @@ class TrackData {
       notes: (j['notes'] as List?)?.map((e) => PitchNote.fromJson(e as Map<String, dynamic>)).toList(),
       drums: (j['drums'] as List?)?.map((e) => DrumNote.fromJson(e as Map<String, dynamic>)).toList(),
       clip: (j['clip'] as List?)?.map((e) => (e as num).toDouble()).toList(),
+      vocalPath: j['vocalPath'] as String?,
     );
   }
 }

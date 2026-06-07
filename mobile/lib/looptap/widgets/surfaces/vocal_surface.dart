@@ -14,7 +14,8 @@ class VocalSurface extends StatefulWidget {
   const VocalSurface({super.key, required this.clip, required this.onCommit, required this.onClear});
 
   final List<double>? clip;
-  final ValueChanged<List<double>> onCommit;
+  /// (waveform amplitudes, recorded audio file path) — path may be null.
+  final void Function(List<double> wf, String? path) onCommit;
   final VoidCallback onClear;
 
   @override
@@ -96,14 +97,15 @@ class _VocalSurfaceState extends State<VocalSurface> {
   Future<void> _stop() async {
     _ampSub?.cancel();
     _msTimer?.cancel();
+    String? path;
     try {
-      await _rec.stop();
+      path = await _rec.stop(); // record returns the saved file path
     } catch (_) {}
     setState(() => _recording = false);
     final wf = _captured.isNotEmpty
         ? List<double>.from(_captured)
         : List<double>.generate(48, (i) => 0.2 + (i % 7) / 10);
-    widget.onCommit(wf);
+    widget.onCommit(wf, path);
   }
 
   @override

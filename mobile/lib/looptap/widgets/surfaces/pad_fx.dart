@@ -45,10 +45,11 @@ class _PadFxState extends State<PadFx> with SingleTickerProviderStateMixin {
   }
 
   void _down() {
+    // Fire the sound FIRST so audio isn't queued behind the rebuild/animation.
+    widget.onDown?.call();
+    HapticFeedback.lightImpact();
     setState(() => _pressed = true);
     _c.forward(from: 0);
-    HapticFeedback.lightImpact();
-    widget.onDown?.call();
   }
 
   void _up() {
@@ -82,8 +83,10 @@ class _PadFxState extends State<PadFx> with SingleTickerProviderStateMixin {
             scale: scale,
             child: Stack(
               children: [
-                AnimatedContainer(
-                  duration: LTMotion.fast,
+                // Instant (non-animated) decoration — the lit state must snap on,
+                // not ease in, or taps read as laggy.
+                Container(
+                  clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     color: active ? widget.accent : widget.idle,
                     borderRadius: BorderRadius.circular(widget.borderRadius),

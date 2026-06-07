@@ -4,20 +4,25 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'tokens.dart';
 
-/// Material Symbols Rounded glyph (prototype's Ms).
+/// Material Symbols glyph (prototype's Ms).
+///
+/// IMPORTANT: we deliberately do NOT pass the variable-font axes (fill/weight/
+/// opticalSize) to [Icon]. In release builds the icon-font tree-shaker + those
+/// axes leave glyphs unrendered on-device. The legacy app proves that the plain
+/// `Icon(Symbols.x, size:, color:)` form renders reliably. The [fill] param is
+/// kept for source-compat but intentionally ignored.
 class Ms extends StatelessWidget {
-  const Ms(this.icon, {super.key, this.size = 20, this.color = LT.t2, this.fill = 0, this.weight = 500});
+  const Ms(this.icon, {super.key, this.size = 20, this.color = LT.t2, this.fill = 0});
 
   final IconData icon;
   final double size;
   final Color color;
-  /// 0 = outline, 1 = filled.
+  /// Kept for call-site compat; not forwarded (see class doc).
   final double fill;
-  final double weight;
 
   @override
   Widget build(BuildContext context) {
-    return Icon(icon, size: size, color: color, fill: fill, weight: weight, opticalSize: 24);
+    return Icon(icon, size: size, color: color);
   }
 }
 
@@ -184,4 +189,6 @@ class LtIcons {
   static const edit = Symbols.edit;
   static const checkCircle = Symbols.check_circle;
   static const delete = Symbols.delete;
+  static const undo = Symbols.undo;
+  static const redo = Symbols.redo;
 }

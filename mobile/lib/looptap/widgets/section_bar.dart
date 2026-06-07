@@ -19,6 +19,7 @@ class SectionBar extends StatelessWidget {
     required this.onRename,
     required this.onRepeats,
     required this.onDelete,
+    required this.onLongPress,
     required this.onPlaySong,
   });
 
@@ -30,19 +31,20 @@ class SectionBar extends StatelessWidget {
   final void Function(int idx, String name) onRename;
   final void Function(int idx, int repeats) onRepeats;
   final ValueChanged<int> onDelete;
+  final ValueChanged<int> onLongPress;
   final VoidCallback onPlaySong;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
       child: Row(
         children: [
           const LtLabel('Song'),
           const SizedBox(width: 10),
           Expanded(
             child: SizedBox(
-              height: 34,
+              height: 30,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: sections.length + 1,
@@ -59,6 +61,7 @@ class SectionBar extends StatelessWidget {
                     onRename: (name) => onRename(i, name),
                     onRepeats: (r) => onRepeats(i, r),
                     onDelete: () => onDelete(i),
+                    onLongPress: () => onLongPress(i),
                   );
                 },
               ),
@@ -81,6 +84,7 @@ class _Chip extends StatefulWidget {
     required this.onRename,
     required this.onRepeats,
     required this.onDelete,
+    required this.onLongPress,
   });
 
   final Section section;
@@ -90,6 +94,7 @@ class _Chip extends StatefulWidget {
   final ValueChanged<String> onRename;
   final ValueChanged<int> onRepeats;
   final VoidCallback onDelete;
+  final VoidCallback onLongPress;
 
   @override
   State<_Chip> createState() => _ChipState();
@@ -118,6 +123,7 @@ class _ChipState extends State<_Chip> {
     final s = widget.section;
     return GestureDetector(
       onTap: a ? null : widget.onTap,
+      onLongPress: widget.onLongPress,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(

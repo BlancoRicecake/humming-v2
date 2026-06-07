@@ -26,6 +26,7 @@ class TransportBar extends StatelessWidget {
     required this.onSwing,
     required this.bars,
     required this.onBars,
+    this.showRecord = true,
   });
 
   final bool playing;
@@ -44,6 +45,7 @@ class TransportBar extends StatelessWidget {
   final ValueChanged<double> onSwing;
   final int bars; // 2 | 4
   final ValueChanged<int> onBars;
+  final bool showRecord; // hidden on the vocal track (it has its own record ring)
 
   @override
   Widget build(BuildContext context) {
@@ -83,28 +85,30 @@ class TransportBar extends StatelessWidget {
                 child: Center(child: Ms(playing ? LtIcons.pause : LtIcons.playArrow, size: 30, color: LT.bg, fill: 1)),
               ),
             ),
-            const SizedBox(width: 14),
-            // record
-            GestureDetector(
-              onTap: onRec,
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: recording ? LT.danger : LT.surface2,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: LT.danger, width: 2),
-                  boxShadow: recording ? [BoxShadow(color: LT.danger.withValues(alpha: 0.53), blurRadius: 24)] : null,
-                ),
-                child: Center(
-                  child: Container(
-                    width: 18,
-                    height: 18,
-                    decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle),
+            if (showRecord) ...[
+              const SizedBox(width: 14),
+              // record
+              GestureDetector(
+                onTap: onRec,
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: recording ? LT.danger : LT.surface2,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: LT.danger, width: 2),
+                    boxShadow: recording ? [BoxShadow(color: LT.danger.withValues(alpha: 0.53), blurRadius: 24)] : null,
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
         // ── right: swing + bars + clear ──
