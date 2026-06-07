@@ -22,7 +22,11 @@ class AnalyzeOptions(BaseModel):
     fmax_hz: float = 1000.0
 
     # Stage 3 — voice region detection
-    enter_ratio: float = Field(0.20, ge=0.0, le=1.0)
+    # 0.20 → 0.15: HumTrans 대표 193세그먼트에서 여린 노트 onset 을 더 잡아 노트
+    # 수 정확도 0.892→0.906(90% 돌파)·타이밍 +1.1pt, 피치 무해. 큐레이션 샘플
+    # 1~5 회귀 무변(5번 비트박스 1노트만 1반음 이동, 개수 동일). 자세히는
+    # docs/experiments/humtrans_round4.md.
+    enter_ratio: float = Field(0.15, ge=0.0, le=1.0)
     exit_ratio: float = Field(0.12, ge=0.0, le=1.0)
     exit_hold_sec: float = Field(0.025, gt=0.0)
 
