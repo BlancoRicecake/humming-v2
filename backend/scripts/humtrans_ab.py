@@ -41,6 +41,7 @@ from scripts.humtrans_eval import (  # noqa: E402
 _ORIG_PITCH = A.split_chunk_by_pitch
 _ORIG_DIP = A.split_chunk_by_rms_dip
 _ORIG_SUBDIV = A.SUBDIVISION_MIN_CHUNK_DUR_SEC
+_ORIG_CHUNKPITCH = A._chunk_pitch
 
 
 def apply_patch(p: dict):
@@ -54,6 +55,10 @@ def apply_patch(p: dict):
     if "dip_ratio" in p:   dk["dip_ratio"] = p["dip_ratio"]
     if "dip_min_sub" in p: dk["min_sub_chunk_sec"] = p["dip_min_sub"]
     A.split_chunk_by_rms_dip = partial(_ORIG_DIP, **dk) if dk else _ORIG_DIP
+    ck = {}
+    if "trim_head" in p: ck["trim_head"] = p["trim_head"]
+    if "trim_tail" in p: ck["trim_tail"] = p["trim_tail"]
+    A._chunk_pitch = partial(_ORIG_CHUNKPITCH, **ck) if ck else _ORIG_CHUNKPITCH
 
 
 def run(keys, opts, gtdir):
