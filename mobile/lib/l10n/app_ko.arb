@@ -411,7 +411,7 @@
   "ctxActionBassUnplace": "배치 해제",
 
   "timelineLoop": "루프",
-  "timelineRerecord": "재녹음",
+  "timelineRerecord": "추가",
   "timelineRecordStart": "녹음 시작",
   "timelinePitchAssist": "피치 어시스트",
   "timelineRecCompleteVocal": "녹음 완료 — 보컬을 사용할까요?",
@@ -567,5 +567,35 @@
 
   "accountErrNoSession": "로그인 세션이 없어요. 다시 시도해 주세요.",
   "accountErrServerDelete": "서버 삭제 실패 ({status}){detail}",
-  "@accountErrServerDelete": {"placeholders": {"status": {"type": "int"}, "detail": {"type": "String"}}}
+  "@accountErrServerDelete": {"placeholders": {"status": {"type": "int"}, "detail": {"type": "String"}}},
+
+  "recordLibraryTitle": "녹음 라이브러리",
+  "recordLibraryEmpty": "저장된 녹음이 없어요",
+  "recordLibraryEmptySub": "녹음 후 다이얼로그에서 '라이브러리에 저장'을 켜면\n여기에 영구 보관돼요.",
+  "recordLibrarySaveToggle": "라이브러리에 저장",
+  "recordLibrarySaveToggleSub": "나중에 다른 악기에도 쓸 수 있어요",
+  "recordLibraryUseAs": "사용",
+  "recordLibraryDelete": "삭제",
+  "recordLibraryRename": "이름 변경",
+  "recordLibraryRenameTitle": "라벨 입력",
+  "recordLibraryRenameHint": "예: 후렴 멜로디",
+  "recordLibraryAccessLabel": "녹음 라이브러리",
+  "recordInfoTitle": "새 인풋은 기존 녹음에 누적돼요",
+  "recordInfoBody": "직접 녹음하거나, 라이브러리에서 기존 녹음을 가져오거나,\n내 기기의 오디오 파일을 추가할 수 있어요.\n\n새 인풋은 자동으로 누적되고,\n라이브러리에 저장하면 다른 악기에도 재사용 가능해요.",
+  "settingsRecordingTtl": "임시 녹음 자동 삭제",
+  "settingsRecordingTtlDesc": "저장하지 않은 녹음은 선택 기간 후 자동으로 삭제돼요.",
+  "settingsTtl3Days": "3일",
+  "settingsTtl7Days": "7일",
+  "settingsTtl30Days": "30일",
+  "settingsTtlForever": "보관",
+
+  "trackInputSourceTitle": "어떻게 시작할까요?",
+  "trackInputSourceRecord": "직접 녹음",
+  "trackInputSourceRecordSub": "지금 마이크로 흥얼거리기",
+  "trackInputSourceLibrary": "라이브러리에서 선택",
+  "trackInputSourceLibrarySub": "저장된 녹음 다시 사용하기",
+  "trackInputSourceUpload": "파일에서 가져오기",
+  "trackInputSourceUploadSub": "내 기기의 오디오 파일 사용 (30초 이하)",
+  "trackInputFileTooLong": "30초 이하 오디오 파일만 가져올 수 있어요",
+  "trackInputFileError": "파일을 가져오지 못했어요"
 }

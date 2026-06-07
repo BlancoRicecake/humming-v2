@@ -20,6 +20,7 @@ import '../services/auth_service.dart';
 import '../services/cloud_api.dart';
 import '../services/iap_service.dart';
 import '../services/observability_service.dart';
+import '../services/recording_library.dart';
 import 'local_storage.dart';
 
 double _midiToHz(int m) => 440.0 * math.pow(2, (m - 69) / 12.0);
@@ -273,6 +274,14 @@ class PendingRecording {
   double vocalDuration;
   bool pitchAssist; // 다이얼로그 어시스트 토글의 현재 값
   bool reassisting = false; // /assist 재호출 중 (다이얼로그 mini 로딩용)
+
+  // ─── 녹음 라이브러리 연동 (task: feat/recording-library) ────────────────
+  /// analyzeForPending 직후 RecordingLibrary 에 temp 로 보관된 엔트리 id.
+  /// commitPendingRecording 시 트랙에 승계되고, "라이브러리 저장" 토글이 켜져 있으면
+  /// `saveToLibrary` 가 호출된다. discardPendingRecording 시 temp 만 삭제.
+  String? libraryEntryId;
+  /// 사용자가 시트에서 "라이브러리에 저장" 토글을 켰는지. 기본 off.
+  bool saveToLibraryOnUse = false;
 }
 
 /// 결제/구독 상태 — 시안 ⑥/⑦/⑧/⑨/⑩ 분기.
@@ -1381,6 +1390,7 @@ class ProjectStore extends ChangeNotifier {
     final i = tracks.indexWhere((t) => t.id == trackId);
     if (i < 0) return;
     final removed = tracks.removeAt(i);
+    // 트랙↔엔트리 연결 제거: temp 정리는 TTL 이 담당한다.
     if (activeTrackId == trackId) {
       final fallback = firstByRole(removed.role) ?? (tracks.isNotEmpty ? tracks.first : null);
       activeTrackId = fallback?.id;
@@ -1782,6 +1792,25 @@ class ProjectStore extends ChangeNotifier {
       busy = false;
       notifyListeners();
     }
+    // 분석 성공/실패와 무관하게 라이브러리 temp 등록 시도 — 실패해도 메인 흐름엔 영향 없음.
+    final p = pendingRecording;
+    if (p != null) {
+      try {
+        final dur = p.analysis?.durationSec ?? p.vocalDuration;
+        final peaks = p.role == TrackRole.vocal
+            ? p.vocalPeaks
+            : (p.analysis?.peaks ?? const <double>[]);
+        final entry = await RecordingLibrary.instance.saveTemp(
+          wavPath,
+          dur,
+          peaks,
+          lastProgram: t.program,
+        );
+        p.libraryEntryId = entry.id;
+      } catch (e) {
+        debugPrint('[reclib] pending saveTemp FAILED: $e');
+      }
+    }
   }
 
   /// 다이얼로그의 어시스트 토글 변경 → 같은 notes 로 /assist 재계산.
@@ -1825,6 +1854,14 @@ class ProjectStore extends ChangeNotifier {
     }
   }
 
+  /// "라이브러리에 저장" 토글 변경 — UI 만 영향, commit 시점에 반영된다.
+  void setPendingSaveToLibrary(bool on) {
+    final p = pendingRecording;
+    if (p == null) return;
+    p.saveToLibraryOnUse = on;
+    notifyListeners();
+  }
+
   /// 사용자가 "사용" 탭 → pending 을 트랙에 실제 반영. 다이얼로그 닫힘.
   void commitPendingRecording() {
     final p = pendingRecording;
@@ -1834,6 +1871,11 @@ class ProjectStore extends ChangeNotifier {
       pendingRecording = null;
       notifyListeners();
       return;
+    }
+    // 트랙↔엔트리 연결 제거: 이전 temp 정리는 TTL 이 담당한다.
+    // 사용자가 토글을 켰으면 라이브러리로 승격.
+    if (p.saveToLibraryOnUse && p.libraryEntryId != null) {
+      RecordingLibrary.instance.saveToLibrary(p.libraryEntryId!);
     }
     t.wavPath = p.wavPath;
     if (t.isVocal) {
@@ -1890,10 +1932,15 @@ class ProjectStore extends ChangeNotifier {
   }
 
   /// 사용자가 "삭제" 탭 → pending 폐기 + WAV 파일 정리. 트랙은 변동 없음.
+  /// 새 pending 의 temp 엔트리는 명시적으로 버려진 것이므로 TTL 대기 없이 즉시 정리.
   void discardPendingRecording() {
     final p = pendingRecording;
     if (p == null) return;
     _deletePendingWav(p);
+    // 새 pending 의 temp 엔트리만 정리. 트랙의 oldEntryId 는 보존.
+    if (p.libraryEntryId != null) {
+      RecordingLibrary.instance.deleteTemp(p.libraryEntryId!);
+    }
     pendingRecording = null;
     notifyListeners();
   }
@@ -1909,6 +1956,16 @@ class ProjectStore extends ChangeNotifier {
         if (f.existsSync()) f.deleteSync();
       } catch (_) {}
     }
+  }
+
+  /// 라이브러리에 저장된 녹음(entry)을 [trackId] 또는 active 트랙에 적용.
+  /// 그 트랙의 현재 악기로 /analyze 재실행 → 새 노트 생성. wavPath 는 라이브러리 본을
+  /// 가리키게 된다(원본 보존 — recordAnalyzed 가 다시 복사하지 않음).
+  Future<void> applyLibraryEntry(RecordingEntry entry, {int? trackId}) async {
+    final t = trackId != null ? (trackById(trackId) ?? active) : active;
+    // 마지막 사용 악기 갱신(라이브러리 시트에서 표시).
+    await RecordingLibrary.instance.updateLastProgram(entry.id, t.program);
+    await recordAnalyzed(entry.path, trackId: t.id);
   }
 
   /// 키/어시스턴트 변경 → /assist 로 빠르게 재계산 (무음).

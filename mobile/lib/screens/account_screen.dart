@@ -14,6 +14,7 @@ import '../state/project_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_sheets.dart';
 import '../widgets/cloud/cloud_settings_card.dart';
+import '../widgets/recording_settings_card.dart';
 import 'account_detail_screen.dart';
 import 'language_screen.dart';
 import 'static_screens.dart';
@@ -52,6 +53,8 @@ class AccountScreen extends StatelessWidget {
               const CloudSettingsCard(),
               const SizedBox(height: 18),
             ],
+            const RecordingSettingsCard(),
+            const SizedBox(height: 18),
             _menu(context, store, loggedIn),
             if (kDebugMode) ...[
               const SizedBox(height: 28),

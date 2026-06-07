@@ -19,6 +19,8 @@ import 'services/auth_service.dart';
 import 'services/iap_service.dart';
 import 'services/locale_service.dart';
 import 'services/observability_service.dart';
+import 'services/recording_library.dart';
+import 'state/local_storage.dart';
 import 'state/project_store.dart';
 import 'theme/app_theme.dart';
 import 'models/models.dart';
@@ -35,7 +37,15 @@ Future<void> main() async {
       AnalyticsService.instance.init(),
       IapService.instance.init(),
       LocaleService.instance.bootstrap(),
+      RecordingLibrary.instance.init(),
     ]);
+    // 부트 시 만료된 임시 녹음 정리 — app_prefs.temp_recording_ttl_days (기본 7).
+    // 999 = "보관" = 정리 안 함. 라이브러리 항목은 절대 건드리지 않음.
+    try {
+      final prefs = await LocalStorage.instance.readAppPrefs();
+      final ttl = (prefs['temp_recording_ttl_days'] as num?)?.toInt() ?? 7;
+      await RecordingLibrary.instance.cleanupExpiredTemp(ttl);
+    } catch (_) {}
     runApp(const HummingApp());
   });
 }

@@ -570,15 +570,17 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                 onActivateTrack: store.setActiveTrack,
                 onToggleEnabled: store.toggleTrackEnabled,
                 onRecordAgain: (id) {
-                  // 사이드바 "재녹음" chip — 그 트랙을 active 로 만든 뒤 인라인 녹음 시작.
-                  // (전용 store 메서드 없음 → 활성화 + 기존 _startInlineRecord 재사용)
+                  // 트랙 우상단 "+ 추가" — 빈 트랙과 동일한 입력 소스 시트 호출.
+                  // 누적되는 동작이므로 라벨도 "재녹음" 이 아닌 "추가" 로 통일.
                   store.setActiveTrack(id);
-                  _startInlineRecord(store);
+                  showTrackInputSourceSheet(context, store,
+                      onRecord: () => _startInlineRecord(store));
                 },
                 onRecordEmpty: (id) {
-                  // 빈 트랙 레인 안 "● 녹음 시작" pill → 그 트랙 활성화 + 인라인 녹음 시작.
+                  // 빈 트랙 레인 안 "● 녹음 시작" pill → 그 트랙 활성화 + 입력 진입점 시트.
                   store.setActiveTrack(id);
-                  _startInlineRecord(store);
+                  showTrackInputSourceSheet(context, store,
+                      onRecord: () => _startInlineRecord(store));
                 },
                 onSeek: _seek,
                 onChunkTap: t.chordActive ? null : store.selectChunk,
@@ -819,7 +821,11 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
     final roleLabel = t.role.label.toUpperCase();
     final label = t.hasRecording ? l.editRecLabelReRecord(roleLabel) : l.editRecLabelRecord(roleLabel);
     return GestureDetector(
-      onTap: () => _startInlineRecord(store),
+      // 빈 트랙(첫 입력) → 입력 진입점 시트(직접 녹음 / 라이브러리 / 파일). 재녹음은 바로.
+      onTap: () => t.hasRecording
+          ? _startInlineRecord(store)
+          : showTrackInputSourceSheet(context, store,
+              onRecord: () => _startInlineRecord(store)),
       child: Container(
         height: boxH,
         padding: const EdgeInsets.symmetric(horizontal: 14),

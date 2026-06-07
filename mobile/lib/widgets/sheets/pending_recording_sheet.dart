@@ -166,6 +166,8 @@ class _PendingSheetBodyState extends State<_PendingSheetBody> {
           ),
           const SizedBox(height: 12),
           _previewButton(canPreview),
+          const SizedBox(height: 12),
+          _saveToLibraryRow(),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(
@@ -196,6 +198,48 @@ class _PendingSheetBodyState extends State<_PendingSheetBody> {
           ]),
         ],
       ),
+    );
+  }
+
+  Widget _saveToLibraryRow() {
+    final l = L10n.of(context);
+    final p = widget.p;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(children: [
+        const Icon(Symbols.bookmark, size: 18, color: AppColors.lime),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(l.recordLibrarySaveToggle,
+                  style: T.body.copyWith(fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(l.recordLibrarySaveToggleSub,
+                  style: T.sub.copyWith(fontSize: 11, color: AppColors.textTertiary)),
+            ],
+          ),
+        ),
+        Transform.scale(
+          scale: 0.85,
+          child: Switch(
+            value: p.saveToLibraryOnUse,
+            activeTrackColor: AppColors.lime,
+            thumbColor: const WidgetStatePropertyAll(Colors.white),
+            inactiveTrackColor: AppColors.surface,
+            inactiveThumbColor: Colors.white,
+            trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+            onChanged: (v) => widget.store.setPendingSaveToLibrary(v),
+          ),
+        ),
+      ]),
     );
   }
 

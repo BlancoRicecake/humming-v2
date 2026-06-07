@@ -16,6 +16,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:audioplayers/audioplayers.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:material_symbols_icons/symbols.dart';
@@ -28,6 +30,7 @@ import '../l10n/generated/app_localizations.dart';
 import '../models/models.dart';
 import '../music/chord_expand.dart';
 import '../services/analytics_service.dart';
+import '../services/recording_library.dart';
 import '../music/instrument_icons.dart';
 import '../music/strum.dart';
 import '../state/project_store.dart';
@@ -44,6 +47,8 @@ part 'sheets/chord_picker_sheet.dart';
 part 'sheets/export_sheet.dart';
 part 'sheets/metronome_sheet.dart';
 part 'sheets/quantize_sheet.dart';
+part 'sheets/recording_library_sheet.dart';
+part 'sheets/track_input_source_sheet.dart';
 
 // ─── 공통 헬퍼 ─────────────────────────────────────────────────────────
 BoxDecoration _sheetDeco() => const BoxDecoration(

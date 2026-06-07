@@ -130,6 +130,7 @@ class SynthPlayer {
       // 재생할 게 없음 — tail 만 흘려보내고 complete.
       _playing = false;
       _paused = false;
+      _pausedAt = Duration.zero;
       _startedAt = null;
       _posTimer?.cancel();
       _posTimer = null;
@@ -141,6 +142,30 @@ class SynthPlayer {
     _playing = true;
     _paused = false;
     _startedAt = DateTime.now();
+
+    // ── resume/seek 시 끊긴 음 재발사 ──
+    // events 는 (noteOn, noteOff) 쌍이라 fromSec 으로 단순 필터링하면
+    // "noteOn 이 이미 지나가 발사 안 됐고 noteOff 만 남은" 진행 중 노트가 무음이 된다.
+    // 그래서 fromSec 시점에 켜져 있어야 할 노트(noteOn.time < fromSec && 대응 noteOff.time > fromSec)
+    // 의 noteOn 을 한 번 더 발사한다. 자연 완료/처음 재생(fromSec=0) 케이스에서는
+    // noteOn.time < 0 인 이벤트가 없어 자동으로 비어 — 부수효과 없음.
+    for (final on in _events) {
+      if (!on.isOn || on.time >= fromSec) continue;
+      // 같은 (channel, pitch) 의 noteOff 중 on.time 이후 + fromSec 이후 가장 가까운 것.
+      _Ev? matchOff;
+      for (final off in _events) {
+        if (off.isOn || off.channel != on.channel || off.pitch != on.pitch) continue;
+        if (off.time <= on.time) continue;
+        if (matchOff == null || off.time < matchOff.time) matchOff = off;
+        if (off.time > on.time) break; // events 는 시간순 정렬 — 첫 매치가 답.
+      }
+      if (matchOff != null && matchOff.time > fromSec) {
+        // ignore: discarded_futures
+        SynthEngine().noteOn(
+          channel: on.channel, pitch: on.pitch, velocity: on.velocity,
+        );
+      }
+    }
 
     // 50ms 주기 위치 통지.
     _posTimer?.cancel();

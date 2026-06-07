@@ -256,6 +256,30 @@ class LocalStorage {
     await f.writeAsString(jsonEncode(cur), flush: true);
   }
 
+  // ─── App prefs (app_prefs.json) ────────────────────────────────────────
+  // 클라우드와 무관한 로컬 UX 설정(임시 녹음 TTL 등). 같은 패턴.
+  Future<File> _appPrefsFile() async {
+    final docs = await getApplicationDocumentsDirectory();
+    return File('${docs.path}/app_prefs.json');
+  }
+
+  Future<Map<String, dynamic>> readAppPrefs() async {
+    final f = await _appPrefsFile();
+    if (!f.existsSync()) return const {};
+    try {
+      final j = jsonDecode(await f.readAsString());
+      if (j is Map<String, dynamic>) return j;
+    } catch (_) {}
+    return const {};
+  }
+
+  Future<void> writeAppPrefs(Map<String, dynamic> patch) async {
+    final cur = Map<String, dynamic>.from(await readAppPrefs());
+    cur.addAll(patch);
+    final f = await _appPrefsFile();
+    await f.writeAsString(jsonEncode(cur), flush: true);
+  }
+
   // ─── Cloud download — 다운로드 받은 보컬/메타 영속화 ────────────────────
   /// 클라우드에서 받은 보컬 파일 바이트를 `vocals/<file_name>` 으로 저장.
   /// 디렉터리가 없으면 자동 생성. 반환값은 저장된 절대 경로.

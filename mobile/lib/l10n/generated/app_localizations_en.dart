@@ -1102,7 +1102,7 @@ class L10nEn extends L10n {
   String get timelineLoop => 'LOOP';
 
   @override
-  String get timelineRerecord => 'Re-record';
+  String get timelineRerecord => 'Add';
 
   @override
   String get timelineRecordStart => 'Record';
@@ -1523,4 +1523,93 @@ class L10nEn extends L10n {
   String accountErrServerDelete(int status, String detail) {
     return 'Server delete failed ($status)$detail';
   }
+
+  @override
+  String get recordLibraryTitle => 'Recording library';
+
+  @override
+  String get recordLibraryEmpty => 'No saved recordings yet';
+
+  @override
+  String get recordLibraryEmptySub =>
+      'Turn on \"Save to library\" in the recording dialog\nto keep them here permanently.';
+
+  @override
+  String get recordLibrarySaveToggle => 'Save to library';
+
+  @override
+  String get recordLibrarySaveToggleSub => 'Reuse on other instruments later';
+
+  @override
+  String get recordLibraryUseAs => 'Use';
+
+  @override
+  String get recordLibraryDelete => 'Delete';
+
+  @override
+  String get recordLibraryRename => 'Rename';
+
+  @override
+  String get recordLibraryRenameTitle => 'Enter label';
+
+  @override
+  String get recordLibraryRenameHint => 'e.g. Chorus melody';
+
+  @override
+  String get recordLibraryAccessLabel => 'Recording library';
+
+  @override
+  String get recordInfoTitle => 'New input adds to your track';
+
+  @override
+  String get recordInfoBody =>
+      'Record directly, pick a saved recording from your library,\nor import an audio file from your device.\n\nNew inputs stack on top of your existing recordings,\nand saving to library lets you reuse them on other instruments.';
+
+  @override
+  String get settingsRecordingTtl => 'Auto-delete temporary recordings';
+
+  @override
+  String get settingsRecordingTtlDesc =>
+      'Recordings you haven\'t saved will be removed after the selected period.';
+
+  @override
+  String get settingsTtl3Days => '3 days';
+
+  @override
+  String get settingsTtl7Days => '7 days';
+
+  @override
+  String get settingsTtl30Days => '30 days';
+
+  @override
+  String get settingsTtlForever => 'Keep';
+
+  @override
+  String get trackInputSourceTitle => 'How would you like to start?';
+
+  @override
+  String get trackInputSourceRecord => 'Record now';
+
+  @override
+  String get trackInputSourceRecordSub => 'Hum into the microphone';
+
+  @override
+  String get trackInputSourceLibrary => 'Pick from library';
+
+  @override
+  String get trackInputSourceLibrarySub => 'Reuse a saved recording';
+
+  @override
+  String get trackInputSourceUpload => 'Import from file';
+
+  @override
+  String get trackInputSourceUploadSub =>
+      'Use an audio file from your device (up to 30s)';
+
+  @override
+  String get trackInputFileTooLong =>
+      'Only audio files 30 seconds or shorter can be imported';
+
+  @override
+  String get trackInputFileError => 'Couldn\'t import the file';
 }

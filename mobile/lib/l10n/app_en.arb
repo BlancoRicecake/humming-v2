@@ -361,7 +361,7 @@
   "ctxActionBassUnplace": "Unplace bass",
 
   "timelineLoop": "LOOP",
-  "timelineRerecord": "Re-record",
+  "timelineRerecord": "Add",
   "timelineRecordStart": "Record",
   "timelinePitchAssist": "Pitch assist",
   "timelineRecCompleteVocal": "Recording done — use vocal?",
@@ -498,5 +498,35 @@
   "authProviderNaver": "Naver",
 
   "accountErrNoSession": "No active session. Please try again.",
-  "accountErrServerDelete": "Server delete failed ({status}){detail}"
+  "accountErrServerDelete": "Server delete failed ({status}){detail}",
+
+  "recordLibraryTitle": "Recording library",
+  "recordLibraryEmpty": "No saved recordings yet",
+  "recordLibraryEmptySub": "Turn on \"Save to library\" in the recording dialog\nto keep them here permanently.",
+  "recordLibrarySaveToggle": "Save to library",
+  "recordLibrarySaveToggleSub": "Reuse on other instruments later",
+  "recordLibraryUseAs": "Use",
+  "recordLibraryDelete": "Delete",
+  "recordLibraryRename": "Rename",
+  "recordLibraryRenameTitle": "Enter label",
+  "recordLibraryRenameHint": "e.g. Chorus melody",
+  "recordLibraryAccessLabel": "Recording library",
+  "recordInfoTitle": "New input adds to your track",
+  "recordInfoBody": "Record directly, pick a saved recording from your library,\nor import an audio file from your device.\n\nNew inputs stack on top of your existing recordings,\nand saving to library lets you reuse them on other instruments.",
+  "settingsRecordingTtl": "Auto-delete temporary recordings",
+  "settingsRecordingTtlDesc": "Recordings you haven't saved will be removed after the selected period.",
+  "settingsTtl3Days": "3 days",
+  "settingsTtl7Days": "7 days",
+  "settingsTtl30Days": "30 days",
+  "settingsTtlForever": "Keep",
+
+  "trackInputSourceTitle": "How would you like to start?",
+  "trackInputSourceRecord": "Record now",
+  "trackInputSourceRecordSub": "Hum into the microphone",
+  "trackInputSourceLibrary": "Pick from library",
+  "trackInputSourceLibrarySub": "Reuse a saved recording",
+  "trackInputSourceUpload": "Import from file",
+  "trackInputSourceUploadSub": "Use an audio file from your device (up to 30s)",
+  "trackInputFileTooLong": "Only audio files 30 seconds or shorter can be imported",
+  "trackInputFileError": "Couldn't import the file"
 }

@@ -11,6 +11,7 @@ import '../models/models.dart';
 import '../music/instrument_icons.dart';
 import '../state/project_store.dart';
 import '../theme/app_theme.dart';
+import 'sheets.dart';
 
 part 'visualization/waveform_painter.dart';
 part 'visualization/notes_painter.dart';
@@ -26,7 +27,7 @@ const double _basePx = 90;
 enum InlineRecPhase { idle, countingDown, recording }
 const double _anchorX = 86; // 좌측 고정 영역 — 플레이헤드 기준선이 위치하는 x.
 const double _catH = 26; // 카테고리 헤더 행 높이
-const double _trackNameH = 20; // 레인 위쪽 트랙 이름 행 높이
+const double _trackNameH = 26; // 레인 위쪽 트랙 이름 행 높이 — 헤더와 레인 사이 여유 포함
 const double _trackH = 56; // 레인 자체 높이 (이름 행 제외)
 
 class TimelineEditor extends StatefulWidget {
@@ -891,14 +892,12 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Container(
-                      width: 6, height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFF4D4D),
-                        shape: BoxShape.circle,
-                      ),
+                    const Icon(
+                      Icons.add,
+                      size: 12,
+                      color: AppColors.lime,
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 3),
                     Text(
                       L10n.of(context).timelineRerecord,
                       style: T.label.copyWith(
@@ -909,6 +908,24 @@ class _TimelineEditorState extends State<TimelineEditor> with TickerProviderStat
                       ),
                     ),
                   ]),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // ⓘ — 재녹음 시 기존 녹음이 사라지지 않는다는 안내.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => showHelpSheet(
+                  context,
+                  L10n.of(context).recordInfoTitle,
+                  L10n.of(context).recordInfoBody,
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
             ],

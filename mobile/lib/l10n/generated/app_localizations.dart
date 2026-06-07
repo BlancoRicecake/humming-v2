@@ -2032,7 +2032,7 @@ abstract class L10n {
   /// No description provided for @timelineRerecord.
   ///
   /// In ko, this message translates to:
-  /// **'재녹음'**
+  /// **'추가'**
   String get timelineRerecord;
 
   /// No description provided for @timelineRecordStart.
@@ -2771,6 +2771,174 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'서버 삭제 실패 ({status}){detail}'**
   String accountErrServerDelete(int status, String detail);
+
+  /// No description provided for @recordLibraryTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 라이브러리'**
+  String get recordLibraryTitle;
+
+  /// No description provided for @recordLibraryEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장된 녹음이 없어요'**
+  String get recordLibraryEmpty;
+
+  /// No description provided for @recordLibraryEmptySub.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 후 다이얼로그에서 \'라이브러리에 저장\'을 켜면\n여기에 영구 보관돼요.'**
+  String get recordLibraryEmptySub;
+
+  /// No description provided for @recordLibrarySaveToggle.
+  ///
+  /// In ko, this message translates to:
+  /// **'라이브러리에 저장'**
+  String get recordLibrarySaveToggle;
+
+  /// No description provided for @recordLibrarySaveToggleSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'나중에 다른 악기에도 쓸 수 있어요'**
+  String get recordLibrarySaveToggleSub;
+
+  /// No description provided for @recordLibraryUseAs.
+  ///
+  /// In ko, this message translates to:
+  /// **'사용'**
+  String get recordLibraryUseAs;
+
+  /// No description provided for @recordLibraryDelete.
+  ///
+  /// In ko, this message translates to:
+  /// **'삭제'**
+  String get recordLibraryDelete;
+
+  /// No description provided for @recordLibraryRename.
+  ///
+  /// In ko, this message translates to:
+  /// **'이름 변경'**
+  String get recordLibraryRename;
+
+  /// No description provided for @recordLibraryRenameTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'라벨 입력'**
+  String get recordLibraryRenameTitle;
+
+  /// No description provided for @recordLibraryRenameHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'예: 후렴 멜로디'**
+  String get recordLibraryRenameHint;
+
+  /// No description provided for @recordLibraryAccessLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 라이브러리'**
+  String get recordLibraryAccessLabel;
+
+  /// No description provided for @recordInfoTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 인풋은 기존 녹음에 누적돼요'**
+  String get recordInfoTitle;
+
+  /// No description provided for @recordInfoBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'직접 녹음하거나, 라이브러리에서 기존 녹음을 가져오거나,\n내 기기의 오디오 파일을 추가할 수 있어요.\n\n새 인풋은 자동으로 누적되고,\n라이브러리에 저장하면 다른 악기에도 재사용 가능해요.'**
+  String get recordInfoBody;
+
+  /// No description provided for @settingsRecordingTtl.
+  ///
+  /// In ko, this message translates to:
+  /// **'임시 녹음 자동 삭제'**
+  String get settingsRecordingTtl;
+
+  /// No description provided for @settingsRecordingTtlDesc.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장하지 않은 녹음은 선택 기간 후 자동으로 삭제돼요.'**
+  String get settingsRecordingTtlDesc;
+
+  /// No description provided for @settingsTtl3Days.
+  ///
+  /// In ko, this message translates to:
+  /// **'3일'**
+  String get settingsTtl3Days;
+
+  /// No description provided for @settingsTtl7Days.
+  ///
+  /// In ko, this message translates to:
+  /// **'7일'**
+  String get settingsTtl7Days;
+
+  /// No description provided for @settingsTtl30Days.
+  ///
+  /// In ko, this message translates to:
+  /// **'30일'**
+  String get settingsTtl30Days;
+
+  /// No description provided for @settingsTtlForever.
+  ///
+  /// In ko, this message translates to:
+  /// **'보관'**
+  String get settingsTtlForever;
+
+  /// No description provided for @trackInputSourceTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'어떻게 시작할까요?'**
+  String get trackInputSourceTitle;
+
+  /// No description provided for @trackInputSourceRecord.
+  ///
+  /// In ko, this message translates to:
+  /// **'직접 녹음'**
+  String get trackInputSourceRecord;
+
+  /// No description provided for @trackInputSourceRecordSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'지금 마이크로 흥얼거리기'**
+  String get trackInputSourceRecordSub;
+
+  /// No description provided for @trackInputSourceLibrary.
+  ///
+  /// In ko, this message translates to:
+  /// **'라이브러리에서 선택'**
+  String get trackInputSourceLibrary;
+
+  /// No description provided for @trackInputSourceLibrarySub.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장된 녹음 다시 사용하기'**
+  String get trackInputSourceLibrarySub;
+
+  /// No description provided for @trackInputSourceUpload.
+  ///
+  /// In ko, this message translates to:
+  /// **'파일에서 가져오기'**
+  String get trackInputSourceUpload;
+
+  /// No description provided for @trackInputSourceUploadSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 기기의 오디오 파일 사용 (30초 이하)'**
+  String get trackInputSourceUploadSub;
+
+  /// No description provided for @trackInputFileTooLong.
+  ///
+  /// In ko, this message translates to:
+  /// **'30초 이하 오디오 파일만 가져올 수 있어요'**
+  String get trackInputFileTooLong;
+
+  /// No description provided for @trackInputFileError.
+  ///
+  /// In ko, this message translates to:
+  /// **'파일을 가져오지 못했어요'**
+  String get trackInputFileError;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

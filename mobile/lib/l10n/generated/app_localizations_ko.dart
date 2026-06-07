@@ -1085,7 +1085,7 @@ class L10nKo extends L10n {
   String get timelineLoop => '루프';
 
   @override
-  String get timelineRerecord => '재녹음';
+  String get timelineRerecord => '추가';
 
   @override
   String get timelineRecordStart => '녹음 시작';
@@ -1503,4 +1503,90 @@ class L10nKo extends L10n {
   String accountErrServerDelete(int status, String detail) {
     return '서버 삭제 실패 ($status)$detail';
   }
+
+  @override
+  String get recordLibraryTitle => '녹음 라이브러리';
+
+  @override
+  String get recordLibraryEmpty => '저장된 녹음이 없어요';
+
+  @override
+  String get recordLibraryEmptySub =>
+      '녹음 후 다이얼로그에서 \'라이브러리에 저장\'을 켜면\n여기에 영구 보관돼요.';
+
+  @override
+  String get recordLibrarySaveToggle => '라이브러리에 저장';
+
+  @override
+  String get recordLibrarySaveToggleSub => '나중에 다른 악기에도 쓸 수 있어요';
+
+  @override
+  String get recordLibraryUseAs => '사용';
+
+  @override
+  String get recordLibraryDelete => '삭제';
+
+  @override
+  String get recordLibraryRename => '이름 변경';
+
+  @override
+  String get recordLibraryRenameTitle => '라벨 입력';
+
+  @override
+  String get recordLibraryRenameHint => '예: 후렴 멜로디';
+
+  @override
+  String get recordLibraryAccessLabel => '녹음 라이브러리';
+
+  @override
+  String get recordInfoTitle => '새 인풋은 기존 녹음에 누적돼요';
+
+  @override
+  String get recordInfoBody =>
+      '직접 녹음하거나, 라이브러리에서 기존 녹음을 가져오거나,\n내 기기의 오디오 파일을 추가할 수 있어요.\n\n새 인풋은 자동으로 누적되고,\n라이브러리에 저장하면 다른 악기에도 재사용 가능해요.';
+
+  @override
+  String get settingsRecordingTtl => '임시 녹음 자동 삭제';
+
+  @override
+  String get settingsRecordingTtlDesc => '저장하지 않은 녹음은 선택 기간 후 자동으로 삭제돼요.';
+
+  @override
+  String get settingsTtl3Days => '3일';
+
+  @override
+  String get settingsTtl7Days => '7일';
+
+  @override
+  String get settingsTtl30Days => '30일';
+
+  @override
+  String get settingsTtlForever => '보관';
+
+  @override
+  String get trackInputSourceTitle => '어떻게 시작할까요?';
+
+  @override
+  String get trackInputSourceRecord => '직접 녹음';
+
+  @override
+  String get trackInputSourceRecordSub => '지금 마이크로 흥얼거리기';
+
+  @override
+  String get trackInputSourceLibrary => '라이브러리에서 선택';
+
+  @override
+  String get trackInputSourceLibrarySub => '저장된 녹음 다시 사용하기';
+
+  @override
+  String get trackInputSourceUpload => '파일에서 가져오기';
+
+  @override
+  String get trackInputSourceUploadSub => '내 기기의 오디오 파일 사용 (30초 이하)';
+
+  @override
+  String get trackInputFileTooLong => '30초 이하 오디오 파일만 가져올 수 있어요';
+
+  @override
+  String get trackInputFileError => '파일을 가져오지 못했어요';
 }
