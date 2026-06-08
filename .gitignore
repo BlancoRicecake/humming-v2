@@ -61,3 +61,20 @@ backend/secrets/*.plist
 # iOS Google Sign In — bundle id 만 들어있어 강한 secret 은 아니지만
 # 사용자 지시로 git out-of-tree 유지. 빌드 시 backend/secrets 에서 복사.
 mobile/ios/Runner/GoogleService-Info.plist
+
+# Claude Code 에이전트 worktree 자동 생성 디렉터리 — 세션마다 일회성
+.claude/worktrees/
+
+# Flutter 가 flutter pub get / flutter run 시 자동 재생성하는 plugin registrant —
+# 머신/플랫폼 별로 달라져 매번 diff 가 생긴다.
+mobile/linux/flutter/generated_plugin_registrant.cc
+mobile/linux/flutter/generated_plugin_registrant.h
+mobile/linux/flutter/generated_plugins.cmake
+mobile/windows/flutter/generated_plugin_registrant.cc
+mobile/windows/flutter/generated_plugin_registrant.h
+mobile/windows/flutter/generated_plugins.cmake
+mobile/macos/Flutter/GeneratedPluginRegistrant.swift
+
+# CocoaPods lockfile 은 iOS 빌드 환경/머신 별로 자주 갱신되어 diff 가 끼므로
+# 의도적으로 untracked (이미 main 에 한 번 커밋되어 있더라도 향후 변경은 무시).
+mobile/ios/Podfile.lock
