@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
+import '../../state/loop_prefs.dart';
 import '../../theme/tokens.dart';
 
 /// Wraps [child] with a press animation (pop scale + white flash) and an
@@ -47,7 +48,7 @@ class _PadFxState extends State<PadFx> with SingleTickerProviderStateMixin {
   void _down() {
     // Fire the sound FIRST so audio isn't queued behind the rebuild/animation.
     widget.onDown?.call();
-    HapticFeedback.lightImpact();
+    if (LoopPrefs.instance.haptics.value) HapticFeedback.lightImpact();
     setState(() => _pressed = true);
     _c.forward(from: 0);
   }

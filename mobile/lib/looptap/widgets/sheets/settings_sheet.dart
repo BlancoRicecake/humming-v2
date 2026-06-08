@@ -1,10 +1,22 @@
-// LoopTap — Settings sheet (README §3). Metronome / Haptics toggles, Language
-// segmented, Theme (Neon dark), About. Local UI state for v1 (mirrors prototype).
+// LoopTap — Settings sheet (README §3). Metronome / Haptics toggles (persisted
+// via LoopPrefs), Language segmented (ko/en via the shared LocaleService),
+// Legal & Policies (privacy / terms / refund + open-source + contact), About.
+//
+// Only the Settings detail text + legal docs are localized (per product call);
+// the rest of the LoopTap DAW UI stays English.
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
+import '../../../screens/legal_doc_screen.dart';
+import '../../../services/locale_service.dart';
+import '../../state/loop_prefs.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import 'lt_modal.dart';
+
+/// Support contact — same address published in the legal docs.
+const String _kSupportEmail = 'heobusy@gmail.com';
 
 Future<void> showSettingsSheet(BuildContext context) {
   return showLtModal(context, width: 400, child: const _SettingsSheet());
@@ -18,12 +30,39 @@ class _SettingsSheet extends StatefulWidget {
 }
 
 class _SettingsSheetState extends State<_SettingsSheet> {
-  bool _metro = true;
-  bool _haptics = true;
-  int _lang = 0;
+  late bool _metro = LoopPrefs.instance.metro.value;
+  late bool _haptics = LoopPrefs.instance.haptics.value;
+
+  void _setMetro(bool v) {
+    setState(() => _metro = v);
+    LoopPrefs.instance.setMetro(v);
+  }
+
+  void _setHaptics(bool v) {
+    setState(() => _haptics = v);
+    LoopPrefs.instance.setHaptics(v);
+  }
+
+  void _setLang(int i) {
+    LocaleService.instance.setLocale(Locale(i == 0 ? 'ko' : 'en'));
+  }
+
+  Future<void> _contact() async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: _kSupportEmail,
+      query: 'subject=HumTrack',
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
+    // null (system default) falls back to the Korean segment.
+    final langIdx = LocaleService.instance.selected.value?.languageCode == 'en' ? 1 : 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -31,54 +70,92 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Settings', style: LTType.inter(size: 17, weight: FontWeight.w800, color: LT.t1)),
+            Text(l.ltSettingsTitle, style: LTType.inter(size: 17, weight: FontWeight.w800, color: LT.t1)),
             IconBtn(icon: LtIcons.close, tooltip: 'Close', onTap: () => Navigator.of(context).pop()),
           ],
         ),
         const SizedBox(height: 16),
         _Row(
           icon: LtIcons.straighten,
-          title: 'Metronome click',
-          sub: 'Play a click while recording',
-          right: _MiniSwitch(on: _metro, onChanged: (v) => setState(() => _metro = v)),
+          title: l.ltSettingsMetronome,
+          sub: l.ltSettingsMetronomeSub,
+          right: _MiniSwitch(on: _metro, onChanged: _setMetro),
         ),
         _Row(
           icon: LtIcons.vibration,
-          title: 'Haptics',
-          sub: 'Buzz on pad hits',
-          right: _MiniSwitch(on: _haptics, onChanged: (v) => setState(() => _haptics = v)),
+          title: l.ltSettingsHaptics,
+          sub: l.ltSettingsHapticsSub,
+          right: _MiniSwitch(on: _haptics, onChanged: _setHaptics),
         ),
         _Row(
           icon: LtIcons.translate,
-          title: 'Language',
+          title: l.menuLanguage,
           right: _Segmented(
             options: const ['한국어', 'EN'],
-            index: _lang,
-            onChanged: (i) => setState(() => _lang = i),
+            index: langIdx,
+            onChanged: _setLang,
           ),
         ),
+        const SizedBox(height: 6),
+        _SectionLabel(l.ltSettingsLegalSection),
         _Row(
-          icon: LtIcons.palette,
-          title: 'Theme',
-          sub: 'Neon dark',
-          right: Text('Default', style: LTType.mono(size: 11, color: LT.t3)),
+          icon: LtIcons.privacyTip,
+          title: l.privacyTitle,
+          onTap: () => LegalDocScreen.open(context, LegalDoc.privacy),
         ),
-        const _Row(icon: LtIcons.info, title: 'About', sub: 'LoopTap · v0.4'),
+        _Row(
+          icon: LtIcons.description,
+          title: l.termsTitle,
+          onTap: () => LegalDocScreen.open(context, LegalDoc.terms),
+        ),
+        _Row(
+          icon: LtIcons.receiptLong,
+          title: l.refundScreenTitle,
+          onTap: () => LegalDocScreen.open(context, LegalDoc.refund),
+        ),
+        _Row(
+          icon: LtIcons.code,
+          title: l.ltSettingsOpenSource,
+          onTap: () => showLicensePage(context: context, applicationName: 'HumTrack'),
+        ),
+        _Row(
+          icon: LtIcons.mail,
+          title: l.ltSettingsContact,
+          sub: _kSupportEmail,
+          onTap: _contact,
+        ),
+        const SizedBox(height: 6),
+        _Row(icon: LtIcons.info, title: l.ltSettingsAbout, sub: l.ltSettingsAboutSub),
       ],
     );
   }
 }
 
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, bottom: 8),
+      child: Text(text.toUpperCase(),
+          style: LTType.mono(size: 10, weight: FontWeight.w700, color: LT.t3)),
+    );
+  }
+}
+
 class _Row extends StatelessWidget {
-  const _Row({required this.icon, required this.title, this.sub, this.right});
+  const _Row({required this.icon, required this.title, this.sub, this.right, this.onTap});
   final IconData icon;
   final String title;
   final String? sub;
   final Widget? right;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final row = Container(
       constraints: const BoxConstraints(minHeight: 52),
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -102,9 +179,12 @@ class _Row extends StatelessWidget {
             ),
           ),
           if (right != null) right!,
+          if (onTap != null && right == null) const Ms(LtIcons.arrowBack, size: 16, color: LT.t3),
         ],
       ),
     );
+    if (onTap == null) return row;
+    return GestureDetector(onTap: onTap, behavior: HitTestBehavior.opaque, child: row);
   }
 }
 

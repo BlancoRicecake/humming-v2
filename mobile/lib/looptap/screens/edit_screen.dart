@@ -15,8 +15,10 @@ import '../../api/engine_api.dart';
 import '../../models/models.dart' as eng;
 import '../audio/loop_audio.dart';
 import '../models/loop_models.dart';
+import '../music/hum_map.dart';
 import '../music/song_util.dart';
 import '../music/theory.dart';
+import '../state/loop_prefs.dart';
 import '../state/loop_storage.dart';
 import '../state/loop_store.dart';
 import '../theme/atoms.dart';
@@ -65,7 +67,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   String _activeId = 'drums';
   bool _playing = false;
   bool _recording = false;
-  bool _metro = true;
+  bool _metro = LoopPrefs.instance.metro.value; // shared with Settings sheet
   bool _countIn = true; // count-in on by default
   int _octave = 0;
   // input mode per track ('pads' | 'grid') — melody/bass/drums each have one
@@ -672,12 +674,42 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   void _openHum() {
     _audio.ensure();
+    if (_playing) _stopAll();
     showHumModal(
       context,
       trackLabel: _meta.label,
       accent: _meta.color,
       onConvert: _humConvert,
+      bpm: _bpm,
+      bars: _bars,
+      swing: _swing,
+      onClick: (accent) => _audio.click(accent),
+      startBacking: _startHumBacking,
+      stopBacking: _stopHumBacking,
     );
+  }
+
+  // Play the loop (clock + clicks) from the downbeat so the user hums in time.
+  // Starts at step 0 so the recording's t=0 aligns with the grid.
+  void _startHumBacking() {
+    _audio.ensure();
+    _stopClock();
+    _playStep.value = 0;
+    _freshThisLoop.clear();
+    setState(() => _playing = true);
+    _startClock();
+  }
+
+  void _stopHumBacking() {
+    _stopClock();
+    _audio.stopAll();
+    _playStep.value = 0;
+    if (mounted) {
+      setState(() {
+        _playing = false;
+        _litMidis = {};
+      });
+    }
   }
 
   // Send the hum recording to the FastAPI humming→MIDI engine, map its notes
@@ -700,6 +732,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       asDrums: drums,
       tempoBpm: _bpm,
       quantizeGrid: 16,
+      // loop-grid mode: backend hard-snaps to the fixed grid and returns integer
+      // step/dur_steps (de-swung, deduped, loop-bounded) — no client re-rounding.
+      loopQuantize: true,
+      loopBars: _bars,
+      stepsPerBar: kStepsPerBeat * kBeatsPerBar,
+      swing: _swing,
     );
     try {
       final res = await EngineApi().analyze(audioPath, opts);
@@ -710,7 +748,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       if (drums) {
         final out = <DrumNote>[];
         for (final n in res.notes) {
-          final step = (n.start / sps).round();
+          // backend loop mode stamps integer step; fall back to seconds→step.
+          final step = n.step ?? (n.start / sps).round();
           if (step < 0 || step >= steps) continue;
           final kind = _drumKind(n);
           if (kind == null) continue;
@@ -722,13 +761,22 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         setState(() => t.drumNotes.addAll(out));
         count = out.length;
       } else {
+        // snap each note onto the active grid's in-key rows so it always lands
+        // on a visible row (and stays in-key)
+        final ladder = _gridLadder;
+        final pitched = res.notes.where((n) => n.kind != 'percussive').toList();
+        // shift the whole phrase into the grid's octave first (keeps contour,
+        // avoids octave wrap when the hum is sung above/below the grid range)
+        final shift = _phraseOctaveShift(pitched.map((n) => n.pitch), ladder);
         final out = <PitchNote>[];
-        for (final n in res.notes) {
-          if (n.kind == 'percussive') continue;
-          final step = (n.start / sps).round();
+        for (final n in pitched) {
+          // backend loop mode stamps integer step/dur_steps; fall back to seconds.
+          final step = n.step ?? (n.start / sps).round();
           if (step < 0 || step >= steps) continue;
-          final dur = math.max(1, (n.duration / sps).round()).clamp(1, steps - step);
-          out.add(PitchNote(midi: n.pitch, freq: midiToFreq(n.pitch), step: step, dur: dur));
+          final dur = (n.durSteps ?? math.max(1, (n.duration / sps).round()))
+              .clamp(1, steps - step);
+          final r = _snapToLadder(n.pitch + shift, ladder);
+          out.add(PitchNote(midi: r.midi, freq: r.freq, step: step, dur: dur));
         }
         if (out.isEmpty) throw StateError('no notes');
         setState(() => t.pitchNotes.addAll(out));
@@ -741,24 +789,20 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     }
   }
 
-  String? _drumKind(eng.Note n) {
-    final name = (n.drumName ?? '').toLowerCase();
-    if (name.contains('kick')) return 'kick';
-    if (name.contains('snare')) return 'snare';
-    if (name.contains('hat')) return 'hihat';
-    switch (n.drum ?? n.pitch) {
-      case 36:
-        return 'kick';
-      case 38:
-      case 40:
-        return 'snare';
-      case 42:
-      case 44:
-      case 46:
-        return 'hihat';
-    }
-    return null;
-  }
+  // Fit an engine MIDI note onto the grid's in-key rows. The grid spans ~1
+  // octave, so a hum sung higher/lower than the grid would otherwise clamp to
+  // the top/bottom row. Instead we FOLD the note by whole octaves into the
+  // grid's range first (preserving the melodic shape — a phrase sung an octave
+  // up shifts down as a unit), then snap to the nearest in-key rung.
+  // whole-octave shift to center the hummed phrase on the grid's range
+  // Pure mapping helpers live in music/hum_map.dart (shared with the Python eval
+  // mirror). These thin wrappers keep the call sites unchanged.
+  int _phraseOctaveShift(Iterable<int> midis, List<Rung> ladder) =>
+      phraseOctaveShift(midis, ladder);
+
+  Rung _snapToLadder(int midi, List<Rung> ladder) => snapToLadder(midi, ladder);
+
+  String? _drumKind(eng.Note n) => drumKind(n.drum, n.drumName, n.pitch);
 
   // generated-phrase fallback (the original behaviour) when the engine fails
   void _humFallback() {
@@ -896,7 +940,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                     bpm: _bpm,
                     onBpm: (v) => setState(() => _bpm = v),
                     metro: _metro,
-                    onMetro: (v) => setState(() => _metro = v),
+                    onMetro: (v) {
+                      setState(() => _metro = v);
+                      LoopPrefs.instance.setMetro(v); // keep Settings in sync + persist
+                    },
                     countIn: _countIn,
                     onCountIn: (v) => setState(() => _countIn = v),
                     onClear: _clearTrack,

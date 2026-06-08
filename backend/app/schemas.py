@@ -76,6 +76,16 @@ class AnalyzeOptions(BaseModel):
     quantize_grid: int = Field(16, ge=1, le=128)
     timing_grid_quantize: bool = False
     quantize_strength: float = Field(0.45, ge=0.0, le=1.0)
+
+    # Stage 6c — loop-grid mode (LoopTap). When enabled, notes are HARD-snapped to
+    # a fixed bar×step grid (not the soft partial-quantize HumTrack uses), de-swung
+    # before snapping, deduped per step, constrained to the loop length, and each
+    # note carries integer ``step`` / ``dur_steps`` so the client never re-rounds.
+    # Off by default so the portrait HumTrack timeline path is unaffected.
+    loop_quantize: bool = False
+    loop_bars: Optional[int] = Field(None, ge=1, le=16)  # total bars in the loop (2 or 4)
+    steps_per_bar: int = Field(16, ge=1, le=64)          # LoopTap kBeatsPerBar*kStepsPerBeat
+    swing: float = Field(0.0, ge=0.0, le=0.75)           # song swing; odd 16ths shifted by swing*0.5
     # Hummed/sung notes often become pitch-stable after the audible attack.
     # Search backward for attack evidence so MIDI notes start with the syllable,
     # not only after pYIN has settled on a stable pitch.
@@ -109,6 +119,12 @@ class Note(BaseModel):
     source: Literal["raw", "assistant", "user", "model"] = "raw"  # provenance of `pitch`
     in_key: bool = True                     # pitch_original is in the detected key
     correction_cents: float = 0.0           # (pitch - pitch_raw) * 100, for diagnostics
+    # --- Loop-grid placement (Stage 6c; only populated when loop_quantize=True) ---
+    # Integer grid coordinates so the LoopTap client places notes directly instead
+    # of re-rounding seconds (which discarded the engine's grid phase). null in the
+    # HumTrack timeline path.
+    step: Optional[int] = None              # 0-based 16th-step index in the loop
+    dur_steps: Optional[int] = None         # duration in grid steps (>=1)
     # --- Drum timbre classification (Stage 6 add-on; see drums.py) ---
     # Computed for EVERY note from its onset segment's spectrum so a drum-role
     # track maps to a real GM kit by SOUND, not pitch. Always populated for

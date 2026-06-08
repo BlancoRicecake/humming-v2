@@ -191,4 +191,9 @@ class LtIcons {
   static const delete = Symbols.delete;
   static const undo = Symbols.undo;
   static const redo = Symbols.redo;
+  static const privacyTip = Symbols.privacy_tip; // privacy policy
+  static const description = Symbols.description; // terms of service
+  static const receiptLong = Symbols.receipt_long; // refund policy
+  static const code = Symbols.code; // open-source licenses
+  static const mail = Symbols.mail; // contact
 }

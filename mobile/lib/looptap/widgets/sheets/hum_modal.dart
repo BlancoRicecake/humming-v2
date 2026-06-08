@@ -1,9 +1,10 @@
-// LoopTap — Hum-to-MIDI modal (README §9). Records real mic audio while
-// "listening"; on Convert it passes the recorded file to [onConvert] (which
-// sends it to the humming→MIDI engine and inserts the result), then shows a
-// check. Falls back gracefully if recording/engine fails.
+// LoopTap — Hum-to-MIDI modal (README §9). Records the user's hum IN TIME with
+// the loop: a count-in, then recording starts on the downbeat while the loop
+// plays back, for exactly one loop length. Because capture starts at the
+// downbeat, audio t=0 ≈ loop step 0, so the engine's grid snap lands cleanly.
+// On Convert it passes the recorded file to [onConvert] (which sends it to the
+// humming→MIDI engine and inserts the result). Falls back gracefully on failure.
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -18,20 +19,53 @@ Future<void> showHumModal(
   required String trackLabel,
   required Color accent,
   required Future<void> Function(String audioPath) onConvert,
+  required int bpm,
+  required int bars,
+  double swing = 0,
+  int countInBeats = 4,
+  void Function(bool accent)? onClick,
+  VoidCallback? startBacking,
+  VoidCallback? stopBacking,
 }) {
   return showLtModal(
     context,
     width: 440,
     dismissible: false,
-    child: _HumModal(trackLabel: trackLabel, accent: accent, onConvert: onConvert),
+    child: _HumModal(
+      trackLabel: trackLabel,
+      accent: accent,
+      onConvert: onConvert,
+      bpm: bpm,
+      bars: bars,
+      countInBeats: countInBeats,
+      onClick: onClick,
+      startBacking: startBacking,
+      stopBacking: stopBacking,
+    ),
   );
 }
 
 class _HumModal extends StatefulWidget {
-  const _HumModal({required this.trackLabel, required this.accent, required this.onConvert});
+  const _HumModal({
+    required this.trackLabel,
+    required this.accent,
+    required this.onConvert,
+    required this.bpm,
+    required this.bars,
+    this.countInBeats = 4,
+    this.onClick,
+    this.startBacking,
+    this.stopBacking,
+  });
   final String trackLabel;
   final Color accent;
   final Future<void> Function(String audioPath) onConvert;
+  final int bpm;
+  final int bars;
+  final int countInBeats;
+  final void Function(bool accent)? onClick;
+  final VoidCallback? startBacking;
+  final VoidCallback? stopBacking;
 
   @override
   State<_HumModal> createState() => _HumModalState();
@@ -39,43 +73,69 @@ class _HumModal extends StatefulWidget {
 
 class _HumModalState extends State<_HumModal> {
   final AudioRecorder _rec = AudioRecorder();
-  String _phase = 'listen'; // listen | converting | done | error
+  String _phase = 'countin'; // countin | listen | converting | done | error
   String _errorMsg = '';
   int _ms = 0;
-  final math.Random _rng = math.Random();
-  List<double> _levels = List.filled(40, 0.1);
+  int _count = 0; // count-in beats remaining (overlay)
+  bool _backingOn = false;
+  // waveform driven by REAL mic amplitude — bars only move when you actually
+  // make sound (silence stays flat), so it reflects the input.
+  List<double> _levels = List.filled(40, 0.04);
   Timer? _msTimer;
-  Timer? _ampTimer;
+  Timer? _autoStop;
+  StreamSubscription<Amplitude>? _ampSub;
+
+  // One loop pass length (LoopTap is 4/4 → bars * 4 beats).
+  int get _loopMs => (widget.bars * 4 * 60000 / widget.bpm).round();
+  int get _beatMs => (60000 / widget.bpm).round();
 
   @override
   void initState() {
     super.initState();
-    _startRecording();
-    _msTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      if (_phase == 'listen') setState(() => _ms += 100);
-    });
-    _ampTimer = Timer.periodic(const Duration(milliseconds: 80), (_) {
-      if (_phase == 'listen') {
-        setState(() => _levels = [..._levels.sublist(1), 0.2 + _rng.nextDouble() * 0.8]);
-      }
-    });
+    _startCountIn();
   }
 
   @override
   void dispose() {
     _msTimer?.cancel();
-    _ampTimer?.cancel();
+    _autoStop?.cancel();
+    _ampSub?.cancel();
     _rec.dispose();
+    widget.stopBacking?.call();
     super.dispose();
   }
 
-  Future<void> _startRecording() async {
+  // dBFS (negative) → 0..1; below ~ -48 dB reads as silence (flat bars).
+  double _norm(double dbfs) => ((dbfs + 48) / 48).clamp(0.04, 1.0);
+
+  // Count the user in (accented downbeat, then plain clicks), then capture.
+  void _startCountIn() {
+    setState(() {
+      _phase = 'countin';
+      _count = widget.countInBeats;
+    });
+    widget.onClick?.call(true);
+    void tick() {
+      _autoStop = Timer(Duration(milliseconds: _beatMs), () {
+        if (!mounted) return;
+        _count -= 1;
+        if (_count <= 0) {
+          _beginCapture();
+        } else {
+          setState(() {});
+          widget.onClick?.call(false);
+          tick();
+        }
+      });
+    }
+
+    tick();
+  }
+
+  Future<void> _beginCapture() async {
     try {
       if (!await _rec.hasPermission()) {
-        setState(() {
-          _phase = 'error';
-          _errorMsg = 'Microphone permission needed';
-        });
+        _fail('Microphone permission needed');
         return;
       }
       final dir = await getTemporaryDirectory();
@@ -84,27 +144,61 @@ class _HumModalState extends State<_HumModal> {
         const RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 16000, numChannels: 1),
         path: path,
       );
-    } catch (e) {
+      // Start the loop backing on the downbeat, right after recording opens, so
+      // audio t≈0 lines up with loop step 0 (the engine absorbs the small
+      // constant latency via its grid-phase estimate).
+      widget.startBacking?.call();
+      _backingOn = true;
+      if (!mounted) return;
       setState(() {
-        _phase = 'error';
-        _errorMsg = 'Recording unavailable';
+        _phase = 'listen';
+        _ms = 0;
       });
+      _msTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+        if (_phase == 'listen' && mounted) setState(() => _ms += 100);
+      });
+      _ampSub = _rec.onAmplitudeChanged(const Duration(milliseconds: 70)).listen((a) {
+        if (_phase == 'listen' && mounted) {
+          setState(() => _levels = [..._levels.sublist(1), _norm(a.current)]);
+        }
+      });
+      // Capture exactly one loop pass, then convert automatically.
+      _autoStop = Timer(Duration(milliseconds: _loopMs), _finish);
+    } catch (e) {
+      _fail('Recording unavailable');
     }
   }
 
+  void _stopBacking() {
+    if (_backingOn) {
+      widget.stopBacking?.call();
+      _backingOn = false;
+    }
+  }
+
+  void _fail(String msg) {
+    _stopBacking();
+    if (!mounted) return;
+    setState(() {
+      _phase = 'error';
+      _errorMsg = msg;
+    });
+  }
+
   Future<void> _finish() async {
+    _autoStop?.cancel();
+    _msTimer?.cancel();
+    _ampSub?.cancel();
+    _stopBacking();
     String? path;
     try {
       path = await _rec.stop();
     } catch (_) {}
     if (path == null) {
-      setState(() {
-        _phase = 'error';
-        _errorMsg = 'No audio captured';
-      });
+      _fail('No audio captured');
       return;
     }
-    setState(() => _phase = 'converting');
+    if (mounted) setState(() => _phase = 'converting');
     try {
       await widget.onConvert(path);
     } catch (_) {/* host shows its own error toast + fallback */}
@@ -116,6 +210,10 @@ class _HumModalState extends State<_HumModal> {
   }
 
   Future<void> _cancel() async {
+    _autoStop?.cancel();
+    _msTimer?.cancel();
+    _ampSub?.cancel();
+    _stopBacking();
     try {
       await _rec.stop();
     } catch (_) {}
@@ -126,7 +224,8 @@ class _HumModalState extends State<_HumModal> {
   Widget build(BuildContext context) {
     final time = '0:${(_ms ~/ 1000).toString().padLeft(2, '0')}';
     final subtitle = switch (_phase) {
-      'listen' => "Hum your idea — we'll snap it in-key.",
+      'countin' => 'Get ready — hum on the beat.',
+      'listen' => "Hum your idea — we'll snap it in-key, in time.",
       'converting' => 'Converting to notes…',
       'error' => _errorMsg,
       _ => 'Done! Notes added.',
@@ -155,21 +254,24 @@ class _HumModalState extends State<_HumModal> {
                 ? Ms(LtIcons.checkCircle, size: 48, color: widget.accent, fill: 1)
                 : _phase == 'error'
                     ? Ms(LtIcons.info, size: 44, color: LT.danger)
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          for (final l in _levels)
-                            Container(
-                              width: 5,
-                              height: (l * (_phase == 'listen' ? 64 : 24)).clamp(6, 64),
-                              margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                              decoration: BoxDecoration(
-                                color: _phase == 'listen' ? widget.accent : LT.t3,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                        ],
-                      ),
+                    : _phase == 'countin'
+                        ? Text('$_count',
+                            style: LTType.mono(size: 48, weight: FontWeight.w800, color: widget.accent))
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              for (final l in _levels)
+                                Container(
+                                  width: 5,
+                                  height: (l * (_phase == 'listen' ? 64 : 24)).clamp(6, 64),
+                                  margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: _phase == 'listen' ? widget.accent : LT.t3,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                ),
+                            ],
+                          ),
           ),
         ),
         const SizedBox(height: 22),
@@ -195,6 +297,8 @@ class _HumModalState extends State<_HumModal> {
               _ghostBtn('Cancel', _cancel),
             ],
           )
+        else if (_phase == 'countin')
+          _ghostBtn('Cancel', _cancel)
         else if (_phase == 'error')
           _ghostBtn('Close', _cancel),
       ],

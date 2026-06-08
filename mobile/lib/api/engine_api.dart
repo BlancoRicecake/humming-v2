@@ -7,7 +7,8 @@ import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 
 class EngineConfig {
-  // 운영 도메인 기본값 (api.hum-track.com). 로컬 dev 빌드는 LAN IP 로 override:
+  // 운영 도메인 기본값 (api.hum-track.com, 배포 라이브). 릴리스 빌드는 override 없이
+  // 이 기본값을 그대로 사용. 로컬 dev 빌드만 LAN IP 로 override:
   //   flutter run --dart-define=ENGINE_URL=http://192.168.0.x:8000
   static const baseUrl = String.fromEnvironment(
     'ENGINE_URL',

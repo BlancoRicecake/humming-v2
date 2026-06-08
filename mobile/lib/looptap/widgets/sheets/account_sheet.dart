@@ -21,11 +21,10 @@ class _Provider {
   final String mark;
 }
 
+// Apple + Google only — the backing AuthService supports just these two.
 const _providers = [
   _Provider('apple', 'Apple', Color(0xFF000000), Color(0xFFFFFFFF), Color(0xFF3A3A3A), 'A'),
   _Provider('google', 'Google', Color(0xFFFFFFFF), Color(0xFF1F1F1F), Color(0xFFE3E3E3), 'G'),
-  _Provider('kakao', 'Kakao', Color(0xFFFEE500), Color(0xFF191600), Color(0xFFFEE500), 'K'),
-  _Provider('naver', 'Naver', Color(0xFF03C75A), Color(0xFFFFFFFF), Color(0xFF03C75A), 'N'),
 ];
 
 Future<void> showAccountSheet(BuildContext context) {
@@ -132,7 +131,7 @@ class _AccountSheet extends StatelessWidget {
             child: const Center(child: Ms(LtIcons.person, size: 30, color: LT.t2)),
           ),
           const SizedBox(height: 10),
-          Text('Sign in to LoopTap', style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
+          Text('Sign in to HumTrack', style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
           const SizedBox(height: 4),
           Text('Back up your loops and sync across devices.',
               textAlign: TextAlign.center, style: LTType.inter(size: 12, color: LT.t2)),

@@ -1,0 +1,43 @@
+{
+  "summary": {
+    "samples": 30,
+    "layer1_engine": {
+      "note_f1": 0.0373,
+      "onset_f1": 0.4729,
+      "onset_pitch_acc": 0.1552,
+      "pitch_mae_st": 2.1133
+    },
+    "layer2_app": {
+      "app_step_f1": 0.4804,
+      "app_note_f1": 0.4056,
+      "app_pitch_acc": 0.8443,
+      "app_pc_acc": 0.8589
+    },
+    "ceiling": {
+      "survival": 0.9989,
+      "inkey": 0.9657
+    }
+  },
+  "config": {
+    "root": "C:\\Users\\jlion\\Documents\\Humtrack\\datasets\\HumTrans",
+    "wav_dir": null,
+    "midi_dir": null,
+    "wav_zip": null,
+    "midi_zip": null,
+    "split": "dev",
+    "train_ratio": 0.8,
+    "dev_ratio": 0.1,
+    "seed": 42,
+    "limit": 30,
+    "offset": 0,
+    "min_notes": 3,
+    "bpm": null,
+    "pitch_model": "pyin",
+    "normalize_key": true,
+    "onset_tol": 0.12,
+    "offset_tol": 0.18,
+    "pitch_tol": 0,
+    "csv": "looptap_eval_dev.csv",
+    "summary_json": "looptap_summary_dev.json"
+  }
+}
