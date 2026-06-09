@@ -12,6 +12,8 @@ Future<void> showExportDrawer(
   required String title,
   required List<Section> sections,
   required int bpm,
+  int melodyProgram = 0,
+  int bassProgram = 33,
 }) {
   return showGeneralDialog(
     context: context,
@@ -21,7 +23,13 @@ Future<void> showExportDrawer(
     transitionDuration: const Duration(milliseconds: 180),
     pageBuilder: (_, __, ___) => Align(
       alignment: Alignment.centerRight,
-      child: _ExportDrawer(title: title, sections: sections, bpm: bpm),
+      child: _ExportDrawer(
+        title: title,
+        sections: sections,
+        bpm: bpm,
+        melodyProgram: melodyProgram,
+        bassProgram: bassProgram,
+      ),
     ),
     transitionBuilder: (_, anim, __, child) => SlideTransition(
       position: Tween(begin: const Offset(1, 0), end: Offset.zero)
@@ -32,10 +40,18 @@ Future<void> showExportDrawer(
 }
 
 class _ExportDrawer extends StatefulWidget {
-  const _ExportDrawer({required this.title, required this.sections, required this.bpm});
+  const _ExportDrawer({
+    required this.title,
+    required this.sections,
+    required this.bpm,
+    required this.melodyProgram,
+    required this.bassProgram,
+  });
   final String title;
   final List<Section> sections;
   final int bpm;
+  final int melodyProgram;
+  final int bassProgram;
 
   @override
   State<_ExportDrawer> createState() => _ExportDrawerState();
@@ -57,7 +73,13 @@ class _ExportDrawerState extends State<_ExportDrawer> {
 
   Future<void> _doMidi() async {
     try {
-      final file = await exportMidiSong(widget.sections, widget.bpm, widget.title);
+      final file = await exportMidiSong(
+        widget.sections,
+        widget.bpm,
+        widget.title,
+        melodyProgram: widget.melodyProgram,
+        bassProgram: widget.bassProgram,
+      );
       _note('saved ${file.uri.pathSegments.last}');
     } catch (e) {
       _note('MIDI export failed', ok: false);

@@ -143,11 +143,13 @@ class Song {
     this.bars = 2,
     Map<String, double>? vol,
     Map<String, bool>? mutes,
+    Map<String, int>? instruments,
     List<Section>? sections,
     this.updatedAt,
     List<double>? wave,
   })  : vol = vol ?? {'melody': 0.85, 'bass': 0.85, 'drums': 1, 'vocal': 0.85},
         mutes = mutes ?? {},
+        instruments = instruments ?? {'melody': 0, 'bass': 33},
         sections = sections ?? [Section(id: 'A', name: 'A')],
         wave = wave ?? List<double>.filled(30, 0.12);
 
@@ -160,6 +162,8 @@ class Song {
   int bars; // 2 | 4
   final Map<String, double> vol;
   final Map<String, bool> mutes;
+  /// Per-track GM program (melody/bass). Drives live playback + MIDI export.
+  final Map<String, int> instruments;
   final List<Section> sections;
   DateTime? updatedAt;
   /// 30-bar waveform thumbnail for the songs grid.
@@ -175,6 +179,7 @@ class Song {
         'bars': bars,
         'vol': vol,
         'mutes': mutes,
+        'instruments': instruments,
         'sections': sections.map((s) => s.toJson()).toList(),
         'updatedAt': updatedAt?.millisecondsSinceEpoch,
         'wave': wave,
@@ -190,6 +195,7 @@ class Song {
         bars: (j['bars'] as num?)?.toInt() ?? 2,
         vol: (j['vol'] as Map?)?.map((k, v) => MapEntry(k as String, (v as num).toDouble())),
         mutes: (j['mutes'] as Map?)?.map((k, v) => MapEntry(k as String, v as bool)),
+        instruments: (j['instruments'] as Map?)?.map((k, v) => MapEntry(k as String, (v as num).toInt())),
         sections: (j['sections'] as List?)
             ?.map((e) => Section.fromJson(e as Map<String, dynamic>))
             .toList(),

@@ -2,22 +2,22 @@
   "summary": {
     "samples": 30,
     "layer1_engine": {
-      "note_f1": 0.0373,
-      "onset_f1": 0.4729,
-      "onset_pitch_acc": 0.1552,
-      "pitch_mae_st": 2.1133
+      "note_f1": 0.0433,
+      "onset_f1": 0.4459,
+      "onset_pitch_acc": 0.1343,
+      "pitch_mae_st": 2.3371
     },
     "layer2_app": {
-      "app_step_f1": 0.5266,
-      "app_note_f1": 0.4542,
-      "app_pitch_acc": 0.8625,
-      "app_pc_acc": 0.8758,
-      "app_step_f1_t1": 0.9586,
-      "app_note_f1_t1": 0.864
+      "app_step_f1": 0.7034,
+      "app_note_f1": 0.6278,
+      "app_pitch_acc": 0.8925,
+      "app_pc_acc": 0.9035,
+      "app_step_f1_t1": 0.9673,
+      "app_note_f1_t1": 0.87
     },
     "ceiling": {
-      "survival": 0.9989,
-      "inkey": 0.9657
+      "survival": 0.9962,
+      "inkey": 0.9723
     }
   },
   "config": {
@@ -26,7 +26,7 @@
     "midi_dir": null,
     "wav_zip": null,
     "midi_zip": null,
-    "split": "dev",
+    "split": "test",
     "train_ratio": 0.8,
     "dev_ratio": 0.1,
     "seed": 42,
@@ -39,7 +39,7 @@
     "onset_tol": 0.12,
     "offset_tol": 0.18,
     "pitch_tol": 0,
-    "csv": "looptap_eval_dev_v2.csv",
-    "summary_json": "looptap_summary_dev_v2.json"
+    "csv": "looptap_eval_test.csv",
+    "summary_json": "looptap_summary_test.json"
   }
 }

@@ -30,6 +30,8 @@ import math
 import statistics
 from pathlib import Path
 
+import numpy as np
+
 import eval_humtrans as eh
 from app.analyze import analyze_audio
 from app.schemas import AnalyzeOptions
@@ -42,23 +44,36 @@ GRID = 16
 
 
 # ── per-sample context derivation ──────────────────────────────────────────
-def derive_bpm(ref: list[eh.MidiNote], override: float | None) -> float:
-    """Pick a tempo so the 16th grid matches the hum's natural rhythm.
+def derive_bpm(ref: list[eh.MidiNote], override: float | None,
+               min_bpm: float = 60.0, max_bpm: float = 180.0) -> float:
+    """Estimate the beat (quarter-note) tempo from the ground-truth onsets.
 
-    The app gets tempo from the song + count-in; HumTrans has none, so we infer
-    it from the ground-truth onset spacing (median IOI ≈ one 8th → quarter =
-    2·IOI). Clamped to a sane vocal range. Both prediction and oracle share this
-    grid, so the choice only affects the representation ceiling, not fairness.
+    The app gets tempo from the song + count-in; HumTrans has none, so we fit the
+    grid to the performance. An onset-impulse autocorrelation finds the dominant
+    periodicity in the quarter-note range (its peak survives at the true beat and
+    its multiples), which fits a 16th grid far better than the previous median-IOI
+    heuristic — a bad tempo guess was tipping correct onsets across step lines.
+    Both prediction and oracle share this grid, so it only sets the grid, not the
+    pred/oracle comparison.
     """
     if override:
         return float(override)
-    onsets = sorted(n.start for n in ref)
-    iois = [b - a for a, b in zip(onsets, onsets[1:]) if b - a > 0.05]
-    if not iois:
+    onsets = np.array(sorted(n.start for n in ref), dtype=float)
+    if len(onsets) < 3 or onsets[-1] <= onsets[0]:
         return 100.0
-    typical = statistics.median(iois)
-    bpm = 30.0 / typical  # quarter = 2*typical → bpm = 60/(2*typical)
-    return float(min(200.0, max(60.0, round(bpm))))
+    fs = 200  # 5 ms onset grid
+    n = int((onsets[-1] - onsets[0]) * fs) + 1
+    env = np.zeros(n)
+    env[np.clip(((onsets - onsets[0]) * fs).astype(int), 0, n - 1)] = 1.0
+    ac = np.correlate(env, env, mode="full")[n - 1:]
+    lags = np.arange(len(ac)) / fs
+    lo, hi = 60.0 / max_bpm, 60.0 / min_bpm  # quarter-note period window
+    mask = (lags >= lo) & (lags <= hi)
+    if not mask.any() or ac[mask].max() <= 0:
+        iois = [b - a for a, b in zip(onsets, onsets[1:]) if b - a > 0.05]
+        return float(min(max_bpm, max(min_bpm, round(30.0 / statistics.median(iois))))) if iois else 100.0
+    best_lag = lags[mask][int(np.argmax(ac[mask]))]
+    return float(min(max_bpm, max(min_bpm, round(60.0 / best_lag))))
 
 
 def derive_key(ref: list[eh.MidiNote]) -> tuple[str, str]:
@@ -176,24 +191,27 @@ def eval_pair(pair: eh.Pair, args) -> dict | None:
         auto_key=False, key_tonic=tonic, scale=mode,
         pitch_assistant=True, assist_aggressive=True, pitch_model=args.pitch_model,
     )
-    res_raw = analyze_audio(wav_bytes, AnalyzeOptions(loop_quantize=False, **common))
     res_loop = analyze_audio(
         wav_bytes, AnalyzeOptions(loop_quantize=True, loop_bars=None, **common))
-    audio_dur = float(res_raw.waveform.duration)
+    audio_dur = float(res_loop.waveform.duration)
     total_steps = total_steps_for(audio_dur, cell)
 
     # ---- Layer 1: RAW engine pitched notes vs raw ground truth ----
-    pred_mid = [
-        eh.MidiNote(float(n.start), float(n.end), int(n.pitch), int(n.velocity))
-        for n in res_raw.notes if n.kind == "pitched" and n.end > n.start
-    ]
-    pitch_shift = eh.best_global_pitch_shift(ref, pred_mid) if args.normalize_key else 0
-    note_m, note_missed, note_extra = eh.match_notes(
-        ref, pred_mid, args.onset_tol, args.offset_tol, args.pitch_tol, pitch_shift)
-    onset_m, onset_missed, onset_extra = eh.match_onsets(
-        ref, pred_mid, args.onset_tol, pitch_shift)
-    onset_pitch_ok = sum(1 for r, p in onset_m if abs(p.pitch - r.pitch) <= args.pitch_tol)
-    pitch_abs = [abs(p.pitch - r.pitch) for r, p in onset_m]
+    # Skipped under --layers app (Layer 2 only) to run the pitch A/B ~2x faster.
+    if args.layers == "both":
+        res_raw = analyze_audio(wav_bytes, AnalyzeOptions(loop_quantize=False, **common))
+        pred_mid = [
+            eh.MidiNote(float(n.start), float(n.end), int(n.pitch), int(n.velocity))
+            for n in res_raw.notes if n.kind == "pitched" and n.end > n.start
+        ]
+        pitch_shift = eh.best_global_pitch_shift(ref, pred_mid) if args.normalize_key else 0
+        note_m, _, _ = eh.match_notes(
+            ref, pred_mid, args.onset_tol, args.offset_tol, args.pitch_tol, pitch_shift)
+        onset_m, _, _ = eh.match_onsets(ref, pred_mid, args.onset_tol, pitch_shift)
+        onset_pitch_ok = sum(1 for r, p in onset_m if abs(p.pitch - r.pitch) <= args.pitch_tol)
+        pitch_abs = [abs(p.pitch - r.pitch) for r, p in onset_m]
+    else:
+        pred_mid, note_m, onset_m, onset_pitch_ok, pitch_abs = [], [], [], 0, []
 
     # ---- Layer 2: app mapping vs oracle ----
     ladder = lm.build_ladder(tonic, mode, 4, 8)
@@ -204,6 +222,10 @@ def eval_pair(pair: eh.Pair, args) -> dict | None:
     app_pitch_ok = sum(1 for o, p in app_m if o["midi"] == p["midi"])
     app_pc_ok = sum(1 for o, p in app_m if o["midi"] % 12 == p["midi"] % 12)
     app_note_ok = app_pitch_ok  # step-matched AND exact ladder midi
+    # ±1-step tolerant variant: isolates sub-step drift (off-by-one) from genuine
+    # onset misses. If t1 ≫ t0, the bottleneck is grid alignment, not detection.
+    app_m1, _, _ = match_steps(oracle_app, pred_app, shift, tol=1)
+    app_pitch_ok1 = sum(1 for o, p in app_m1 if o["midi"] == p["midi"])
 
     # ---- Ceiling: how much the grid+ladder representation loses vs truth ----
     scale_pcs = set(scale_pitch_classes(tonic, mode))
@@ -213,6 +235,7 @@ def eval_pair(pair: eh.Pair, args) -> dict | None:
     _, _, onset_f1 = prf(len(onset_m), len(ref), len(pred_mid))
     _, _, app_step_f1 = prf(len(app_m), len(oracle_app), len(pred_app))
     _, _, app_note_f1 = prf(app_note_ok, len(oracle_app), len(pred_app))
+    _, _, app_step_f1_t1 = prf(len(app_m1), len(oracle_app), len(pred_app))
 
     return {
         "key": pair.key,
@@ -228,6 +251,7 @@ def eval_pair(pair: eh.Pair, args) -> dict | None:
         # layer 2
         "app_step_matches": len(app_m), "app_pitch_ok": app_pitch_ok, "app_pc_ok": app_pc_ok,
         "app_step_f1": round(app_step_f1, 4), "app_note_f1": round(app_note_f1, 4),
+        "app_step_f1_t1": round(app_step_f1_t1, 4),
         # ceiling
         "ceiling_survival": round(len(oracle_app) / max(1, len(ref)), 4),
         "ceiling_inkey": round(inkey / max(1, len(ref)), 4),
@@ -238,6 +262,7 @@ def eval_pair(pair: eh.Pair, args) -> dict | None:
             "note_m": len(note_m), "onset_m": len(onset_m),
             "onset_pitch_ok": onset_pitch_ok, "pitch_abs": pitch_abs,
             "app_m": len(app_m), "app_pitch_ok": app_pitch_ok, "app_pc_ok": app_pc_ok,
+            "app_m1": len(app_m1), "app_pitch_ok1": app_pitch_ok1,
             "inkey": inkey,
         },
     }
@@ -245,7 +270,8 @@ def eval_pair(pair: eh.Pair, args) -> dict | None:
 
 def summarize(rows: list[dict]) -> dict:
     a = {k: 0 for k in ("ref", "pred", "oracle", "pred_app", "note_m", "onset_m",
-                        "onset_pitch_ok", "app_m", "app_pitch_ok", "app_pc_ok", "inkey")}
+                        "onset_pitch_ok", "app_m", "app_pitch_ok", "app_pc_ok",
+                        "app_m1", "app_pitch_ok1", "inkey")}
     pitch_abs: list[float] = []
     for r in rows:
         acc = r["_acc"]
@@ -256,6 +282,8 @@ def summarize(rows: list[dict]) -> dict:
     _, _, onset_f1 = prf(a["onset_m"], a["ref"], a["pred"])
     _, _, app_step_f1 = prf(a["app_m"], a["oracle"], a["pred_app"])
     _, _, app_note_f1 = prf(a["app_pitch_ok"], a["oracle"], a["pred_app"])
+    _, _, app_step_f1_t1 = prf(a["app_m1"], a["oracle"], a["pred_app"])
+    _, _, app_note_f1_t1 = prf(a["app_pitch_ok1"], a["oracle"], a["pred_app"])
     return {
         "samples": len(rows),
         "layer1_engine": {
@@ -269,6 +297,8 @@ def summarize(rows: list[dict]) -> dict:
             "app_note_f1": round(app_note_f1, 4),
             "app_pitch_acc": round(a["app_pitch_ok"] / max(1, a["app_m"]), 4),
             "app_pc_acc": round(a["app_pc_ok"] / max(1, a["app_m"]), 4),
+            "app_step_f1_t1": round(app_step_f1_t1, 4),   # ±1 step tolerant
+            "app_note_f1_t1": round(app_note_f1_t1, 4),
         },
         "ceiling": {
             "survival": round(a["oracle"] / max(1, a["ref"]), 4),
@@ -281,7 +311,7 @@ CSV_FIELDS = [
     "key", "bpm", "bars", "steps", "tonic", "mode", "step_shift",
     "ref_notes", "pred_notes", "oracle_notes", "pred_app_notes",
     "note_f1", "onset_f1", "onset_pitch_ok", "pitch_mae_st",
-    "app_step_f1", "app_note_f1", "app_step_matches", "app_pitch_ok", "app_pc_ok",
+    "app_step_f1", "app_step_f1_t1", "app_note_f1", "app_step_matches", "app_pitch_ok", "app_pc_ok",
     "ceiling_survival", "ceiling_inkey",
 ]
 
@@ -302,6 +332,8 @@ def main() -> None:
     ap.add_argument("--min-notes", type=int, default=3)
     ap.add_argument("--bpm", type=float, default=None, help="override derived tempo")
     ap.add_argument("--pitch-model", default="pyin", choices=["pyin", "crepe"])
+    ap.add_argument("--layers", default="both", choices=["both", "app"],
+                    help="'app' skips the raw Layer-1 pass (~2x faster for Layer-2 A/B)")
     ap.add_argument("--normalize-key", action="store_true", default=True)
     ap.add_argument("--no-normalize-key", dest="normalize_key", action="store_false")
     ap.add_argument("--onset-tol", type=float, default=0.12)

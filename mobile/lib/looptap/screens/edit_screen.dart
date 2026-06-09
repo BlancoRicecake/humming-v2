@@ -16,6 +16,7 @@ import '../../models/models.dart' as eng;
 import '../audio/loop_audio.dart';
 import '../models/loop_models.dart';
 import '../music/hum_map.dart';
+import '../music/instruments.dart';
 import '../music/song_util.dart';
 import '../music/theory.dart';
 import '../state/loop_prefs.dart';
@@ -27,6 +28,7 @@ import '../widgets/arrangement.dart';
 import '../widgets/section_bar.dart';
 import '../widgets/sheets/hum_modal.dart';
 import '../widgets/sheets/export_drawer.dart';
+import '../widgets/sheets/instrument_sheet.dart';
 import '../widgets/sheets/key_sheet.dart';
 import '../widgets/sheets/lt_modal.dart';
 import '../widgets/sheets/mixer_sheet.dart';
@@ -74,6 +76,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   String _melodyInput = 'pads';
   String _bassInput = 'pads';
   String _drumsInput = 'pads';
+  // melody chord mode: a pad tap places a key-based diatonic triad, not one note
+  bool _melodyChord = false;
+  // per-track GM instrument (program number) — drives live sound + MIDI export
+  late final Map<String, int> _instruments = Map.of(widget.song.instruments);
   int _countDown = 0; // count-in overlay (0 = none)
 
   bool get _hasInputToggle => _activeId == 'melody' || _activeId == 'bass' || _activeId == 'drums';
@@ -150,6 +156,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    // apply this song's chosen instruments, then warm the synth
+    _audio.setPrograms(melody: _instruments['melody'], bass: _instruments['bass']);
     _audio.prewarm();
   }
 
@@ -519,23 +527,48 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   int _durFromHold(int ms) =>
       (ms / 1000 * (_bpm / 60) * kStepsPerBeat).round().clamp(1, _steps);
 
+  /// The midis a pad press produces: a diatonic triad in melody chord mode,
+  /// otherwise just the pressed note.
+  List<int> _chordMidis(int rootMidi) => (_activeId == 'melody' && _melodyChord)
+      ? diatonicTriad(rootMidi, _keyRoot, _scale)
+      : [rootMidi];
+
+  /// A Rung for an arbitrary chord-member midi (the root reuses the real Rung).
+  Rung _rungFor(int midi, Rung root) => midi == root.midi
+      ? root
+      : Rung(
+          midi: midi,
+          name: kNoteNames[((midi % 12) + 12) % 12],
+          degree: root.degree,
+          freq: midiToFreq(midi),
+          index: root.index,
+        );
+
   void _pitchDown(Rung n, {required bool bass}) {
-    // held note: it sounds while pressed, so what you hear == what gets recorded
-    _audio.noteOnLive(n.midi, bass: bass, vol: _vol[_activeId] ?? 0.85);
+    // held note(s): they sound while pressed, so what you hear == what's recorded
+    for (final m in _chordMidis(n.midi)) {
+      _audio.noteOnLive(m, bass: bass, vol: _vol[_activeId] ?? 0.85);
+    }
     if (_recording && _playing && _songSection == null) {
       _pending[n.midi] = (step: _quantStep(), t: DateTime.now().millisecondsSinceEpoch);
     }
   }
 
   void _pitchUp(Rung n) {
-    _audio.noteOffLive(n.midi, bass: _activeId == 'bass');
+    final bass = _activeId == 'bass';
+    final midis = _chordMidis(n.midi);
+    for (final m in midis) {
+      _audio.noteOffLive(m, bass: bass);
+    }
     final p = _pending.remove(n.midi);
     if (p == null) return;
     _pushUndo(coalesce: true);
     final dur = _durFromHold(DateTime.now().millisecondsSinceEpoch - p.t);
-    _placePitched(_activeId, n, p.step, p.step + dur - 1);
-    // heard live now → don't let the clock replay it this loop pass
-    _freshThisLoop.add('$_activeId:${n.midi}:${p.step}');
+    for (final m in midis) {
+      _placePitched(_activeId, _rungFor(m, n), p.step, p.step + dur - 1);
+      // heard live now → don't let the clock replay it this loop pass
+      _freshThisLoop.add('$_activeId:$m:${p.step}');
+    }
   }
 
   /// Place a pitched note spanning [a,b], merging overlapping same-pitch notes.
@@ -658,6 +691,30 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           _keyRoot = r;
           _scale = s;
         });
+      },
+    );
+  }
+
+  void _openInstrument() {
+    final id = _activeId; // 'melody' | 'bass'
+    showInstrumentSheet(
+      context,
+      trackId: id,
+      trackLabel: trackById(id).label,
+      currentProgram: _instruments[id] ?? (id == 'bass' ? 33 : 0),
+      onPick: (program) {
+        _pushUndo(coalesce: true);
+        setState(() => _instruments[id] = program);
+        _audio.setPrograms(
+          melody: id == 'melody' ? program : null,
+          bass: id == 'bass' ? program : null,
+        );
+        // preview the new timbre on an in-key note in that track's own register
+        // (bass uses the low bass ladder root; melody an in-key mid note).
+        final isBass = id == 'bass';
+        final ladder = isBass ? _bassLadder : _ladder;
+        final preview = ladder.isNotEmpty ? ladder[isBass ? 0 : 2].midi : 60;
+        _audio.playPitch(preview, bass: isBass, vol: _vol[id] ?? 0.85, durSec: 0.5);
       },
     );
   }
@@ -846,6 +903,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       bars: _bars,
       vol: Map.of(_vol),
       mutes: Map.of(_mutes),
+      instruments: Map.of(_instruments),
       sections: _sections.map((s) => s.deepCopy()).toList(),
       updatedAt: DateTime.now(),
       wave: buildWave(flat),
@@ -1005,7 +1063,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
             label: 'Export',
             icon: LtIcons.iosShare,
             tone: PillTone.lime,
-            onTap: () => showExportDrawer(context, title: _title, sections: _sections, bpm: _bpm),
+            onTap: () => showExportDrawer(
+              context,
+              title: _title,
+              sections: _sections,
+              bpm: _bpm,
+              melodyProgram: _instruments['melody'] ?? 0,
+              bassProgram: _instruments['bass'] ?? 33,
+            ),
           ),
         ],
       ),
@@ -1030,6 +1095,20 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           if (_hasInputToggle) ...[
             const SizedBox(width: 6),
             _inputToggle(),
+          ],
+          // chord mode (melody pads only): a pad tap = a key-based triad
+          if (_activeId == 'melody' && _inputMode == 'pads') ...[
+            const SizedBox(width: 6),
+            _chordToggle(),
+          ],
+          // per-track instrument picker (melody/bass)
+          if (_activeId == 'melody' || _activeId == 'bass') ...[
+            const SizedBox(width: 6),
+            Pill(
+              label: instrumentLabel(_activeId, _instruments[_activeId] ?? (_activeId == 'bass' ? 33 : 0)),
+              icon: LtIcons.piano,
+              onTap: _openInstrument,
+            ),
           ],
           const Spacer(),
           if (pitched) _octaveStepper(),
@@ -1083,6 +1162,26 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  // Melody chord-mode toggle (pads only): pad tap places a diatonic triad.
+  Widget _chordToggle() {
+    final on = _melodyChord;
+    return GestureDetector(
+      onTap: () => setState(() => _melodyChord = !on),
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: on ? LT.lime : LT.surface2,
+          borderRadius: BorderRadius.circular(LTRadius.pill),
+          border: Border.all(color: on ? LT.lime : LT.border),
+        ),
+        child: Text('Chord',
+            style: LTType.inter(size: 11, weight: FontWeight.w700, color: on ? LT.bg : LT.t2)),
       ),
     );
   }

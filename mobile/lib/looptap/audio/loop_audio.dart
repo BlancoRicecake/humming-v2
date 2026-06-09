@@ -16,8 +16,6 @@ const Map<String, int> kDrumNote = {'kick': 36, 'snare': 38, 'hihat': 42};
 
 const int _melodyCh = 0;
 const int _bassCh = 1;
-const int _melodyProg = 0; // acoustic grand
-const int _bassProg = 33; // fingered bass
 
 class LoopAudio {
   LoopAudio._();
@@ -25,6 +23,28 @@ class LoopAudio {
 
   final SynthEngine _engine = SynthEngine();
   bool _ready = false;
+
+  // Current GM programs for the pitched voices — set per-song via [setPrograms].
+  int _melodyProg = 0; // default: acoustic grand
+  int _bassProg = 33; // default: fingered bass
+
+  /// Switch the melody/bass instrument (GM program). Pre-selects the new program
+  /// with a silent note so the next audible note doesn't stall on the swap.
+  Future<void> setPrograms({int? melody, int? bass}) async {
+    if (melody != null) _melodyProg = melody;
+    if (bass != null) _bassProg = bass;
+    if (!_ready) return;
+    try {
+      if (melody != null) {
+        await _engine.noteOn(channel: _melodyCh, pitch: 60, velocity: 1, program: _melodyProg);
+        await _engine.noteOff(channel: _melodyCh, pitch: 60);
+      }
+      if (bass != null) {
+        await _engine.noteOn(channel: _bassCh, pitch: 60, velocity: 1, program: _bassProg);
+        await _engine.noteOff(channel: _bassCh, pitch: 60);
+      }
+    } catch (_) {/* graceful */}
+  }
 
   /// Load the SoundFont once (lazy — safe to call on first user gesture).
   Future<void> ensure() async {
