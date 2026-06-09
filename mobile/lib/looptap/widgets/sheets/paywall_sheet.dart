@@ -146,7 +146,7 @@ class _PaywallSheetState extends State<_PaywallSheet> {
                   child: const Center(child: Ms(LtIcons.workspacePremium, size: 18, color: LT.bg)),
                 ),
                 const SizedBox(width: 10),
-                Text('LoopTap Pro', style: LTType.inter(size: 17, weight: FontWeight.w800, color: LT.t1)),
+                Text('HumTrack Pro', style: LTType.inter(size: 17, weight: FontWeight.w800, color: LT.t1)),
               ],
             ),
             IconBtn(icon: LtIcons.close, tooltip: 'Close', onTap: () => Navigator.of(context).maybePop()),

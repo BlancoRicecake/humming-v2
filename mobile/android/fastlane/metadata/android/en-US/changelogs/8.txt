@@ -1,4 +1,4 @@
-Introducing LoopTap 🎧
+Introducing HumTrack 🎧
 
 A tap-first mobile DAW for making beats and loops on the go.
 

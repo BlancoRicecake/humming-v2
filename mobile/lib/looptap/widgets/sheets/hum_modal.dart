@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+import '../../../audio/container.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import 'lt_modal.dart';
@@ -139,9 +140,12 @@ class _HumModalState extends State<_HumModal> {
         return;
       }
       final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/looptap_hum_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      // Opus + 플랫폼별 컨테이너(.caf/.ogg) — AAC .m4a 는 stop() 직후 moov atom
+      // finalize 가 안 끝나 partial file 로 업로드되던 회귀 fix.
+      final path =
+          '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${opusContainerExt()}';
       await _rec.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 16000, numChannels: 1),
+        const RecordConfig(encoder: AudioEncoder.opus, sampleRate: 16000, numChannels: 1),
         path: path,
       );
       // Start the loop backing on the downbeat, right after recording opens, so

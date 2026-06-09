@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+import '../../../audio/container.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 
@@ -67,9 +68,12 @@ class _VocalSurfaceState extends State<VocalSurface> {
     }
     try {
       final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/looptap_vocal_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      // Opus + 플랫폼별 컨테이너(.caf/.ogg) — AAC .m4a 의 finalize race 회피.
+      // (자세한 사유: lib/audio/container.dart)
+      final path =
+          '${dir.path}/humtrack_vocal_${DateTime.now().millisecondsSinceEpoch}${opusContainerExt()}';
       await _rec.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 44100, numChannels: 1),
+        const RecordConfig(encoder: AudioEncoder.opus, sampleRate: 44100, numChannels: 1),
         path: path,
       );
     } catch (e) {
