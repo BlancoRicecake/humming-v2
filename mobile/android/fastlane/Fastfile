@@ -41,7 +41,7 @@ end
 platform :android do
   desc "Build release .aab with LoopTap entry + dart-defines"
   lane :build do |options|
-    entry = options[:entry] || "lib/looptap/main_looptap.dart"
+    entry = options[:entry] || "lib/main.dart"
     defines = collect_dart_defines
     UI.message "dart-defines: #{defines.keys.join(", ")}"
     args = defines.map { |k, v| "--dart-define=#{k}=#{v}" }
@@ -66,7 +66,7 @@ platform :android do
 
   desc "Build LoopTap-entry release + upload to Internal Testing"
   lane :internal do |options|
-    build(entry: options[:entry] || "lib/looptap/main_looptap.dart")
+    build(entry: options[:entry] || "lib/main.dart")
     upload_internal
   end
 
