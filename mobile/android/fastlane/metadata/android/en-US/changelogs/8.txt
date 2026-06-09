@@ -1,8 +1,9 @@
-What's new in 1.0.1
+Introducing LoopTap 🎧
 
-- New tap-to-make-beats screen — start a loop with one tap
-- Chord input + extra instruments for richer arrangements
-- Sign in with Apple or Google
-- Smoother Pro purchase and restore flow
-- Refreshed settings (haptics, language, legal documents)
-- Stability improvements and bug fixes
+A tap-first mobile DAW for making beats and loops on the go.
+
+- Four-track workflow: melody / bass / drums / vocal
+- Two input modes — Pads for two-thumb play, Grid for precision
+- Chord mode — one pad, one key-based triad
+- 7-day free trial, then go Pro for unlimited songs + MIDI / audio export
+- Sign in with Apple, Google, or email
