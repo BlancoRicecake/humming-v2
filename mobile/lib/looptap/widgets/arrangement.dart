@@ -17,10 +17,6 @@ class PitchRange {
 const double _labelW = 88;
 const double _gap = 8;
 const double _rowGap = 3;
-// 한 트랙 행 최소 높이 — 라벨 칩의 11dp 아이콘 + 10pt 텍스트 + 칩 테두리가
-// 잘리지 않는 한계. 작은 폰(부모 영역 < minTotal)에선 Expanded 균등 분배 대신
-// 이 높이를 고정으로 쓰고 strip 전체를 세로 스크롤로 전환.
-const double _minRowH = 32;
 
 class Arrangement extends StatelessWidget {
   const Arrangement({
@@ -46,83 +42,60 @@ class Arrangement extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        // 부모가 4 × _minRowH + gap 보다 작으면 Expanded 균등 분배는 텍스트가
-        // 잘리는 수준이 되므로 → 고정 높이 + 세로 스크롤로 graceful fallback.
-        final totalGap = _rowGap * (kTracks.length - 1);
-        final minTotal = kTracks.length * _minRowH + totalGap;
-        final needScroll = c.maxHeight < minTotal;
-
-        final rows = <Widget>[];
-        for (var i = 0; i < kTracks.length; i++) {
-          if (i > 0) rows.add(const SizedBox(height: _rowGap));
-          final row = _Row(
-            meta: kTracks[i],
-            data: section.tracks[kTracks[i].id]!,
-            selected: kTracks[i].id == activeId,
-            muted: mutes[kTracks[i].id] ?? false,
-            onSelect: () => onSelect(kTracks[i].id),
-            onToggleMute: () => onToggleMute(kTracks[i].id),
-            steps: steps,
-            range: ranges[kTracks[i].id],
-          );
-          rows.add(needScroll
-              ? SizedBox(height: _minRowH, child: row)
-              : Expanded(child: row));
-        }
-
-        final lanes = needScroll
-            ? SingleChildScrollView(
-                child: SizedBox(
-                  height: minTotal,
-                  child: Column(children: rows),
-                ),
-              )
-            : Column(children: rows);
-
-        return Stack(
+    return Stack(
+      children: [
+        // lanes fill the height the parent gives us (the 1:2 split) so the
+        // strip scales with its allotted space instead of a fixed mini-map.
+        Column(
           children: [
-            // lanes fill the height the parent gives us (the 1:2 split) so the
-            // strip scales with its allotted space instead of a fixed mini-map.
-            // 작은 폰에선 스크롤로 떨어지지만 라벨/노트는 항상 가독 가능한 높이로.
-            lanes,
-            // playhead — viewport 기준으로 그려 lanes 스크롤과 무관하게 시간축
-            // 표시 유지. (시간상 위치는 항상 같으므로 스크롤 따라가지 않아도 됨.)
-            Positioned(
-              left: _labelW + _gap,
-              right: 0,
-              top: 0,
-              bottom: 0,
-              child: IgnorePointer(
-                child: LayoutBuilder(
-                  builder: (context, c2) {
-                    final x = (playStep / steps) * c2.maxWidth;
-                    return Stack(
-                      children: [
-                        Positioned(
-                          left: x,
-                          top: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 2,
-                            decoration: BoxDecoration(
-                              color: LT.t1.withValues(alpha: 0.9),
-                              boxShadow: [
-                                BoxShadow(color: LT.t1, blurRadius: 6),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
+            for (var i = 0; i < kTracks.length; i++) ...[
+              if (i > 0) const SizedBox(height: _rowGap),
+              Expanded(
+                child: _Row(
+                  meta: kTracks[i],
+                  data: section.tracks[kTracks[i].id]!,
+                  selected: kTracks[i].id == activeId,
+                  muted: mutes[kTracks[i].id] ?? false,
+                  onSelect: () => onSelect(kTracks[i].id),
+                  onToggleMute: () => onToggleMute(kTracks[i].id),
+                  steps: steps,
+                  range: ranges[kTracks[i].id],
                 ),
               ),
-            ),
+            ],
           ],
-        );
-      },
+        ),
+        // playhead spanning the lane area
+        Positioned(
+          left: _labelW + _gap,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          child: IgnorePointer(
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final x = (playStep / steps) * c.maxWidth;
+                return Stack(
+                  children: [
+                    Positioned(
+                      left: x,
+                      top: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 2,
+                        decoration: BoxDecoration(
+                          color: LT.t1.withValues(alpha: 0.9),
+                          boxShadow: [BoxShadow(color: LT.t1, blurRadius: 6)],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
