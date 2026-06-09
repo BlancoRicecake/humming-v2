@@ -42,6 +42,15 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>HumTrack</string>
+	<!--
+	  ITSAppUsesNonExemptEncryption = false → App Store Connect 의 수출 규정
+	  준수 (Export Compliance) 질문을 매 업로드마다 건너뛴다. 본 앱은 HTTPS
+	  (NSURLSession / Apple 표준 TLS) 외 별도 암호화 사용 없음 → 5D002.b.1
+	  exempt 에 해당하므로 false 가 정합. (앱에 커스텀 crypto 추가 시 재평가
+	  필요.)
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
