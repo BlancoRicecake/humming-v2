@@ -475,5 +475,16 @@
   "authProviderNaver": "Naver",
 
   "accountErrNoSession": "No active session. Please try again.",
-  "accountErrServerDelete": "Server delete failed ({status}){detail}"
+  "accountErrServerDelete": "Server delete failed ({status}){detail}",
+
+  "ltSettingsTitle": "Settings",
+  "ltSettingsMetronome": "Metronome click",
+  "ltSettingsMetronomeSub": "Play a click while recording",
+  "ltSettingsHaptics": "Haptics",
+  "ltSettingsHapticsSub": "Buzz on pad hits",
+  "ltSettingsAbout": "About",
+  "ltSettingsAboutSub": "HumTrack · v0.4",
+  "ltSettingsLegalSection": "Legal & Policies",
+  "ltSettingsOpenSource": "Open-source licenses",
+  "ltSettingsContact": "Contact support"
 }

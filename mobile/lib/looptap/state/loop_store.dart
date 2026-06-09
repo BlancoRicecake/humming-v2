@@ -90,6 +90,7 @@ class LoopStore extends ChangeNotifier {
     switch (p) {
       case 'apple': return 'Apple';
       case 'google': return 'Google';
+      case 'email': return 'Email';
       default: return p ?? '';
     }
   }
@@ -98,6 +99,11 @@ class LoopStore extends ChangeNotifier {
   /// 반환값은 호출 자체가 시작/완료됐는지 — 실패 시 [lastAuthError] 확인.
   Future<bool> signInWith(String provider) {
     return AuthService.instance.signInWith(provider);
+  }
+
+  /// Email + password 로그인 — review-only.
+  Future<bool> signInWithEmail(String email, String password) {
+    return AuthService.instance.signInWithEmail(email, password);
   }
 
   Future<void> signOut() async {

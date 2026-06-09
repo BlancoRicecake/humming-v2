@@ -1,17 +1,18 @@
-// LoopTap — My Page / Sign-in sheet (README §2). Logged out: Apple + Google
-// native OAuth (Supabase). Logged in: avatar, provider chip, Pro / restore rows,
-// sign out.
+// LoopTap — My Page / Sign-in sheet. Logged out: Apple + Google native OAuth
+// (Supabase) plus a discreet "Sign in with email" path (review accounts only).
+// Logged in: avatar, provider chip, Pro/Restore rows, sign out.
 //
 // 글로벌 Apple+Google 만 지원 (legacy auth_service.dart 와 동일). Kakao/Naver 는
-// 백엔드 미연동.
+// 백엔드 미연동. Email/password 는 스토어 리뷰용 사전 생성 계정 전용 — 백엔드
+// 가 public sign-up 을 차단한 상태에서만 안전하게 노출.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../services/auth_service.dart';
-import '../../../widgets/social_sign_in_buttons.dart';
 import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
+import '../social_sign_in_buttons.dart';
 import 'lt_modal.dart';
 import 'paywall_sheet.dart';
 
@@ -71,7 +72,7 @@ class _AccountSheet extends StatefulWidget {
 }
 
 class _AccountSheetState extends State<_AccountSheet> {
-  String? _busyProvider; // 'apple' / 'google' — 진행 중 표시.
+  String? _busyProvider; // 'apple' / 'google' / 'email' — 진행 중 표시.
 
   Future<void> _signIn(LoopStore store, String providerId) async {
     if (_busyProvider != null) return;
@@ -85,6 +86,19 @@ class _AccountSheetState extends State<_AccountSheet> {
       if (err == null && store.authEnabled) return;
       await showAuthErrorDialog(context, err, authEnabled: store.authEnabled);
     }
+  }
+
+  /// Email sign-in 진입 — _EmailLoginForm 이 직접 호출.
+  Future<bool> _signInEmail(LoopStore store, String email, String pw) async {
+    if (_busyProvider != null) return false;
+    setState(() => _busyProvider = 'email');
+    final ok = await store.signInWithEmail(email, pw);
+    if (!mounted) return ok;
+    setState(() => _busyProvider = null);
+    if (!ok) {
+      await showAuthErrorDialog(context, store.lastAuthError, authEnabled: store.authEnabled);
+    }
+    return ok;
   }
 
   @override
@@ -103,7 +117,14 @@ class _AccountSheetState extends State<_AccountSheet> {
           ],
         ),
         const SizedBox(height: 18),
-        if (user != null) ..._signedIn(context, store, user) else ..._signedOut(context, store),
+        if (user != null)
+          ..._signedIn(context, store, user)
+        else
+          _SignedOutView(
+            busyProvider: _busyProvider,
+            onSocial: (providerId) => _signIn(store, providerId),
+            onEmail: (email, pw) => _signInEmail(store, email, pw),
+          ),
       ],
     );
   }
@@ -167,7 +188,7 @@ class _AccountSheetState extends State<_AccountSheet> {
       if (store.proActive)
         const _AccRow(
           icon: LtIcons.workspacePremium,
-          title: 'LoopTap Pro · active',
+          title: 'HumTrack Pro · active',
           sub: 'Stems · unlimited cloud',
           accent: true,
         )
@@ -199,62 +220,208 @@ class _AccountSheetState extends State<_AccountSheet> {
       ),
     ];
   }
+}
 
-  List<Widget> _signedOut(BuildContext context, LoopStore store) {
-    return [
-      Column(
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: LT.surface2,
-              shape: BoxShape.circle,
-              border: Border.all(color: LT.border),
+/// Logged-out view: 공식 Apple/Google 브랜드 버튼 + 보일 듯 말 듯한 email login
+/// 진입 ("Sign in with email"). public sign-up 은 백엔드에서 차단되어 있으므로
+/// 사전 생성된 review 계정만 이 path 로 로그인 가능 — 사인업 버튼은 의도적
+/// 으로 없음.
+class _SignedOutView extends StatefulWidget {
+  const _SignedOutView({
+    required this.busyProvider,
+    required this.onSocial,
+    required this.onEmail,
+  });
+  final String? busyProvider;
+  final void Function(String providerId) onSocial;
+  final Future<bool> Function(String email, String password) onEmail;
+
+  @override
+  State<_SignedOutView> createState() => _SignedOutViewState();
+}
+
+class _SignedOutViewState extends State<_SignedOutView> {
+  bool _emailOpen = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final busy = widget.busyProvider;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: LT.surface2,
+                shape: BoxShape.circle,
+                border: Border.all(color: LT.border),
+              ),
+              child: const Center(child: Ms(LtIcons.person, size: 30, color: LT.t2)),
             ),
-            child: const Center(child: Ms(LtIcons.person, size: 30, color: LT.t2)),
+            const SizedBox(height: 10),
+            Text('Sign in to HumTrack', style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
+            const SizedBox(height: 4),
+            Text('Back up your loops and sync across devices.',
+                textAlign: TextAlign.center, style: LTType.inter(size: 12, color: LT.t2)),
+          ],
+        ),
+        const SizedBox(height: 18),
+        // 공식 브랜드 가이드라인 준수 버튼 (legacy widgets/social_sign_in_buttons.dart 재사용).
+        _SocialButtonWrapper(
+          busy: busy == 'apple',
+          disabled: busy != null && busy != 'apple',
+          child: AppleSignInButton(
+            label: 'Continue with Apple',
+            onPressed: () => widget.onSocial('apple'),
           ),
-          const SizedBox(height: 10),
-          Text('Sign in to LoopTap', style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
-          const SizedBox(height: 4),
-          Text('Back up your loops and sync across devices.',
-              textAlign: TextAlign.center, style: LTType.inter(size: 12, color: LT.t2)),
+        ),
+        _SocialButtonWrapper(
+          busy: busy == 'google',
+          disabled: busy != null && busy != 'google',
+          child: GoogleSignInButton(
+            label: 'Continue with Google',
+            onPressed: () => widget.onSocial('google'),
+          ),
+        ),
+        const SizedBox(height: 3),
+        // Discreet email login (review-only). 탭 시 email/password 폼이 열림.
+        if (!_emailOpen)
+          GestureDetector(
+            onTap: busy != null ? null : () => setState(() => _emailOpen = true),
+            child: Container(
+              height: 36,
+              alignment: Alignment.center,
+              child: Text('Sign in with email',
+                  style: LTType.inter(size: 12, weight: FontWeight.w700, color: LT.t2)),
+            ),
+          )
+        else
+          _EmailLoginForm(
+            busy: busy == 'email',
+            onSubmit: widget.onEmail,
+          ),
+      ],
+    );
+  }
+}
+
+/// Email/password sign-in — login only, NO sign-up. Supabase
+/// signInWithPassword 로 실제 인증. public sign-up 은 backend에서 비활성
+/// 이므로 사전 생성된 review 계정만 통과.
+class _EmailLoginForm extends StatefulWidget {
+  const _EmailLoginForm({required this.busy, required this.onSubmit});
+  final bool busy;
+  final Future<bool> Function(String email, String password) onSubmit;
+
+  @override
+  State<_EmailLoginForm> createState() => _EmailLoginFormState();
+}
+
+class _EmailLoginFormState extends State<_EmailLoginForm> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final email = _email.text.trim();
+    final pw = _password.text;
+    if (email.isEmpty || pw.isEmpty) {
+      setState(() => _error = 'Enter your email and password.');
+      return;
+    }
+    setState(() => _error = null);
+    await widget.onSubmit(email, pw);
+    // 성공 시 LoopStore._user 가 채워져 부모 sheet 가 signed-in 뷰로 재빌드.
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 4),
+        _Field(controller: _email, hint: 'Email', keyboardType: TextInputType.emailAddress),
+        const SizedBox(height: 8),
+        _Field(controller: _password, hint: 'Password', obscure: true),
+        if (_error != null) ...[
+          const SizedBox(height: 6),
+          Text(_error!, style: LTType.inter(size: 11, weight: FontWeight.w600, color: LT.danger)),
         ],
-      ),
-      const SizedBox(height: 18),
-      // 공식 브랜드 가이드라인 준수 버튼 (legacy widgets/social_sign_in_buttons.dart 재사용).
-      // Apple HIG: white background variant, Google Identity: dark variant +4색 G 로고.
-      _SocialButtonWrapper(
-        busy: _busyProvider == 'apple',
-        disabled: _busyProvider != null && _busyProvider != 'apple',
-        child: AppleSignInButton(
-          label: 'Continue with Apple',
-          onPressed: () => _signIn(store, 'apple'),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: widget.busy ? null : _submit,
+          child: Container(
+            height: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: LT.lime,
+              borderRadius: BorderRadius.circular(LTRadius.control),
+            ),
+            child: Text(widget.busy ? 'Signing in…' : 'Sign in',
+                style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg)),
+          ),
+        ),
+        // Intentionally NO sign-up button — accounts are social-only / invite-only.
+      ],
+    );
+  }
+}
+
+class _Field extends StatelessWidget {
+  const _Field({
+    required this.controller,
+    required this.hint,
+    this.obscure = false,
+    this.keyboardType,
+  });
+  final TextEditingController controller;
+  final String hint;
+  final bool obscure;
+  final TextInputType? keyboardType;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      autocorrect: false,
+      enableSuggestions: false,
+      style: LTType.inter(size: 14, weight: FontWeight.w600, color: LT.t1),
+      cursorColor: LT.lime,
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        hintStyle: LTType.inter(size: 14, color: LT.t3),
+        filled: true,
+        fillColor: LT.surface2,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(LTRadius.control),
+          borderSide: const BorderSide(color: LT.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(LTRadius.control),
+          borderSide: const BorderSide(color: LT.lime),
         ),
       ),
-      _SocialButtonWrapper(
-        busy: _busyProvider == 'google',
-        disabled: _busyProvider != null && _busyProvider != 'google',
-        child: GoogleSignInButton(
-          label: 'Continue with Google',
-          onPressed: () => _signIn(store, 'google'),
-        ),
-      ),
-      const SizedBox(height: 3),
-      GestureDetector(
-        onTap: _busyProvider == null ? () => Navigator.of(context).pop() : null,
-        child: Container(
-          height: 42,
-          alignment: Alignment.center,
-          child: Text('Continue as guest', style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t3)),
-        ),
-      ),
-    ];
+    );
   }
 }
 
 /// busy / disabled 상태를 공식 브랜드 버튼 위에 입히는 얇은 wrapper.
-/// (legacy 버튼은 자체적인 로딩/비활성 상태가 없어서 IgnorePointer + opacity 로 처리.)
 class _SocialButtonWrapper extends StatelessWidget {
   const _SocialButtonWrapper({
     required this.child,

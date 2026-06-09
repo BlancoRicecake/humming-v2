@@ -107,8 +107,6 @@ flutter:
   assets:
     - assets/icon/
     - assets/sounds/TimGM6mb.sf2
-    - assets/icons/instruments/
-    - assets/icons/metronome.svg
     - assets/legal/
 
   # An image asset can refer to one or more resolution-specific "variants", see

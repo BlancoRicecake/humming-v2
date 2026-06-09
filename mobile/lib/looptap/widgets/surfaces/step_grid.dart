@@ -7,6 +7,7 @@ import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../../models/loop_models.dart';
 import '../../music/theory.dart';
+import '../../state/loop_prefs.dart';
 import '../../theme/tokens.dart';
 
 class _Draft {
@@ -43,10 +44,20 @@ class StepGrid extends StatefulWidget {
   State<StepGrid> createState() => _StepGridState();
 }
 
-class _StepGridState extends State<StepGrid> {
+class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin {
   final GlobalKey _laneKey = GlobalKey();
   _Draft? _draft;
   String? _mode; // 'paint' | 'erase'
+
+  // gentle pulse for the active hold-drag preview ("release to place")
+  late final AnimationController _pulse =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 700))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
 
   List<Rung> get _rows => widget.ladder.reversed.toList();
 
@@ -82,7 +93,7 @@ class _StepGridState extends State<StepGrid> {
     if (h == null) return;
     final rung = _rows[h.row];
     final existing = _noteAt(rung.midi, h.step);
-    HapticFeedback.selectionClick();
+    if (LoopPrefs.instance.haptics.value) HapticFeedback.selectionClick();
     if (existing != null) {
       _mode = 'erase';
       widget.onErase(rung, h.step);
@@ -148,17 +159,21 @@ class _StepGridState extends State<StepGrid> {
                   onPointerMove: _move,
                   onPointerUp: _up,
                   behavior: HitTestBehavior.opaque,
-                  child: CustomPaint(
-                    key: _laneKey,
-                    size: Size.infinite,
-                    painter: _GridPainter(
-                      rows: _rows,
-                      notes: widget.notes,
-                      draft: _draft,
-                      playStep: widget.playStep,
-                      steps: widget.steps,
-                      beats: beats,
-                      accent: widget.accent,
+                  child: AnimatedBuilder(
+                    animation: _pulse,
+                    builder: (_, __) => CustomPaint(
+                      key: _laneKey,
+                      size: Size.infinite,
+                      painter: _GridPainter(
+                        rows: _rows,
+                        notes: widget.notes,
+                        draft: _draft,
+                        playStep: widget.playStep,
+                        steps: widget.steps,
+                        beats: beats,
+                        accent: widget.accent,
+                        pulse: _draft != null ? _pulse.value : 0,
+                      ),
                     ),
                   ),
                 ),
@@ -192,6 +207,7 @@ class _GridPainter extends CustomPainter {
     required this.steps,
     required this.beats,
     required this.accent,
+    required this.pulse,
   });
 
   final List<Rung> rows;
@@ -201,6 +217,7 @@ class _GridPainter extends CustomPainter {
   final int steps;
   final int beats;
   final Color accent;
+  final double pulse; // 0..1 while a hold-drag is active
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -256,26 +273,86 @@ class _GridPainter extends CustomPainter {
       }
     }
 
-    // draft preview
+    // draft preview (active hold-drag) — make the "lengthening" obvious:
+    // highlighted row, glowing growing bar, a bright grip at the moving edge,
+    // and a length readout. Release places it.
     if (draft != null) {
-      final lo = draft!.a < draft!.b ? draft!.a : draft!.b;
-      final len = (draft!.a - draft!.b).abs() + 1;
+      final d = draft!;
+      final lo = d.a < d.b ? d.a : d.b;
+      final hi = d.a < d.b ? d.b : d.a;
+      final len = hi - lo + 1;
+      final top = d.row * rowH + gap;
+      final bh = rowH - gap * 2;
+      final p = 0.5 + 0.5 * pulse; // 0.5..1 breathing
+
+      // row highlight band
+      canvas.drawRect(
+        Rect.fromLTWH(0, d.row * rowH, w, rowH),
+        Paint()..color = accent.withValues(alpha: 0.10),
+      );
+
       final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(lo * stepW, draft!.row * rowH + gap, len * stepW - 2, rowH - gap * 2),
+        Rect.fromLTWH(lo * stepW, top, len * stepW - 2, bh),
         const Radius.circular(4),
       );
-      canvas.drawRRect(rect, Paint()..color = accent.withValues(alpha: 0.8));
+      // glow + fill
       canvas.drawRRect(
         rect,
         Paint()
-          ..color = Colors.white.withValues(alpha: 0.53)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
+          ..color = accent.withValues(alpha: 0.5 * p)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
       );
+      canvas.drawRRect(rect, Paint()..color = accent.withValues(alpha: 0.9));
+      canvas.drawRRect(
+        rect,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.4 + 0.5 * pulse)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+
+      // grip at the moving edge (where the finger controls the length)
+      final movingRight = d.b >= d.a;
+      final gripX = movingRight ? (hi + 1) * stepW : lo * stepW;
+      final cy = top + bh / 2;
+      canvas.drawRect(
+        Rect.fromLTWH(gripX - 1.5, top - 2, 3, bh + 4),
+        Paint()..color = Colors.white,
+      );
+      canvas.drawCircle(Offset(gripX, cy), 7 + 1.5 * pulse, Paint()..color = Colors.white);
+      canvas.drawCircle(Offset(gripX, cy), 3.5, Paint()..color = accent);
+
+      // length readout near the grip
+      final tp = TextPainter(
+        text: TextSpan(
+          text: '$len',
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: LT.bg,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final labelX = (movingRight ? gripX + 6 : gripX - 6 - tp.width).clamp(0.0, w - tp.width);
+      final labelY = (top - tp.height - 2).clamp(0.0, h - tp.height);
+      // label chip
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(labelX - 3, labelY - 1, tp.width + 6, tp.height + 2),
+          const Radius.circular(4),
+        ),
+        Paint()..color = accent,
+      );
+      tp.paint(canvas, Offset(labelX, labelY));
     }
   }
 
   @override
   bool shouldRepaint(covariant _GridPainter old) =>
-      old.notes != notes || old.draft != draft || old.playStep != playStep || old.steps != steps;
+      old.notes != notes ||
+      old.draft != draft ||
+      old.playStep != playStep ||
+      old.steps != steps ||
+      old.pulse != pulse;
 }

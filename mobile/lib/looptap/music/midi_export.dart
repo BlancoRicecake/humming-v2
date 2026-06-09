@@ -28,14 +28,14 @@ List<int> _vlq(int n) {
   return b;
 }
 
-Uint8List buildMidi(FlatSong flat, int bpm) {
+Uint8List buildMidi(FlatSong flat, int bpm, {int melodyProgram = 0, int bassProgram = 33}) {
   const tpq = 96;
   final tps = tpq / kStepsPerBeat;
   final evs = <_Ev>[];
   final mpq = (60000000 / bpm).round();
   evs.add(_Ev(0, [0xFF, 0x51, 0x03, (mpq >> 16) & 0xff, (mpq >> 8) & 0xff, mpq & 0xff]));
-  evs.add(_Ev(0, [0xC0, 0])); // ch0 acoustic grand
-  evs.add(_Ev(0, [0xC1, 33])); // ch1 fingered bass
+  evs.add(_Ev(0, [0xC0, melodyProgram & 0x7f])); // ch0 melody instrument
+  evs.add(_Ev(0, [0xC1, bassProgram & 0x7f])); // ch1 bass instrument
 
   void addPitched(List<PitchNote> notes, int ch) {
     for (final n in notes) {
@@ -82,9 +82,15 @@ Uint8List buildMidi(FlatSong flat, int bpm) {
 /// Write the song's MIDI to Documents/looptap/exports/[title].mid and return
 /// the file. (Share-sheet integration is a follow-up once share_plus resolves —
 /// it's a project dep but absent from this checkout's package_config.)
-Future<File> exportMidiSong(List<Section> sections, int bpm, String title) async {
+Future<File> exportMidiSong(
+  List<Section> sections,
+  int bpm,
+  String title, {
+  int melodyProgram = 0,
+  int bassProgram = 33,
+}) async {
   final flat = flattenSong(sections);
-  final bytes = buildMidi(flat, bpm);
+  final bytes = buildMidi(flat, bpm, melodyProgram: melodyProgram, bassProgram: bassProgram);
   final dir = await getApplicationDocumentsDirectory();
   final folder = Directory('${dir.path}/looptap/exports');
   if (!await folder.exists()) await folder.create(recursive: true);

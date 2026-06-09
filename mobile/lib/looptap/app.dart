@@ -1,12 +1,16 @@
 // LoopTap app root — landscape DAW. Wraps the song store + theme and routes
-// Songs (home) -> Edit. Kept self-contained so the legacy app stays untouched
-// until switchover.
+// Songs (home) -> Edit. Bootstraps L10n + LocaleService + a global
+// ScaffoldMessenger so modal sheets (paywall, account) can route snackbars to
+// the root, and surfaces session-expiry events from AuthService as user-facing
+// snackbars.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/generated/app_localizations.dart';
 import '../services/auth_service.dart';
+import '../services/locale_service.dart';
 import 'screens/songs_screen.dart';
 import 'state/loop_store.dart';
 import 'theme/tokens.dart';
@@ -23,12 +27,20 @@ class LoopTapApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => LoopStore()..bootstrap(),
-      child: MaterialApp(
-        title: 'LoopTap',
-        debugShowCheckedModeBanner: false,
-        theme: loopTapTheme(),
-        scaffoldMessengerKey: rootMessengerKey,
-        home: const _AuthEventListener(child: SongsScreen()),
+      // Rebuild on language change so the Settings detail text + legal-doc
+      // titles switch ko/en. null locale = follow the system language.
+      child: ValueListenableBuilder<Locale?>(
+        valueListenable: LocaleService.instance.selected,
+        builder: (_, locale, __) => MaterialApp(
+          title: 'HumTrack',
+          debugShowCheckedModeBanner: false,
+          theme: loopTapTheme(),
+          locale: locale,
+          localizationsDelegates: L10n.localizationsDelegates,
+          supportedLocales: L10n.supportedLocales,
+          scaffoldMessengerKey: rootMessengerKey,
+          home: const _AuthEventListener(child: SongsScreen()),
+        ),
       ),
     );
   }

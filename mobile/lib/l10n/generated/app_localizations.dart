@@ -18,7 +18,7 @@ import 'app_localizations_ko.dart';
 /// `supportedLocales` list. For example:
 ///
 /// ```dart
-/// import 'generated/app_localizations.dart';
+/// import 'gen_l10n/app_localizations.dart';
 ///
 /// return MaterialApp(
 ///   localizationsDelegates: L10n.localizationsDelegates,
@@ -62,8 +62,7 @@ import 'app_localizations_ko.dart';
 /// be consistent with the languages listed in the L10n.supportedLocales
 /// property.
 abstract class L10n {
-  L10n(String locale)
-    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  L10n(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -83,18 +82,17 @@ abstract class L10n {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
-      <LocalizationsDelegate<dynamic>>[
-        delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ];
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
+    delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+  ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
-    Locale('ko'),
+    Locale('ko')
   ];
 
   /// 앱 이름 — 영어 표기 유지 (브랜드)
@@ -2213,12 +2211,7 @@ abstract class L10n {
   ///
   /// In ko, this message translates to:
   /// **'{scope}: {root}{keyPart}{chordPart}'**
-  String chordPickerSummary(
-    String scope,
-    String root,
-    String keyPart,
-    String chordPart,
-  );
+  String chordPickerSummary(String scope, String root, String keyPart, String chordPart);
 
   /// No description provided for @chordPickerKeyPart.
   ///
@@ -2633,6 +2626,66 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'서버 삭제 실패 ({status}){detail}'**
   String accountErrServerDelete(int status, String detail);
+
+  /// No description provided for @ltSettingsTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'설정'**
+  String get ltSettingsTitle;
+
+  /// No description provided for @ltSettingsMetronome.
+  ///
+  /// In ko, this message translates to:
+  /// **'메트로놈 클릭'**
+  String get ltSettingsMetronome;
+
+  /// No description provided for @ltSettingsMetronomeSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 중 클릭음 재생'**
+  String get ltSettingsMetronomeSub;
+
+  /// No description provided for @ltSettingsHaptics.
+  ///
+  /// In ko, this message translates to:
+  /// **'햅틱'**
+  String get ltSettingsHaptics;
+
+  /// No description provided for @ltSettingsHapticsSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'패드 탭 시 진동'**
+  String get ltSettingsHapticsSub;
+
+  /// No description provided for @ltSettingsAbout.
+  ///
+  /// In ko, this message translates to:
+  /// **'정보'**
+  String get ltSettingsAbout;
+
+  /// No description provided for @ltSettingsAboutSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'HumTrack · v0.4'**
+  String get ltSettingsAboutSub;
+
+  /// No description provided for @ltSettingsLegalSection.
+  ///
+  /// In ko, this message translates to:
+  /// **'약관 및 정책'**
+  String get ltSettingsLegalSection;
+
+  /// No description provided for @ltSettingsOpenSource.
+  ///
+  /// In ko, this message translates to:
+  /// **'오픈소스 라이선스'**
+  String get ltSettingsOpenSource;
+
+  /// No description provided for @ltSettingsContact.
+  ///
+  /// In ko, this message translates to:
+  /// **'문의하기'**
+  String get ltSettingsContact;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {
@@ -2644,26 +2697,25 @@ class _L10nDelegate extends LocalizationsDelegate<L10n> {
   }
 
   @override
-  bool isSupported(Locale locale) =>
-      <String>['en', 'ko'].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>['en', 'ko'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_L10nDelegate old) => false;
 }
 
 L10n lookupL10n(Locale locale) {
+
+
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
-    case 'en':
-      return L10nEn();
-    case 'ko':
-      return L10nKo();
+    case 'en': return L10nEn();
+    case 'ko': return L10nKo();
   }
 
   throw FlutterError(
     'L10n.delegate failed to load unsupported locale "$locale". This is likely '
     'an issue with the localizations generation tool. Please file an issue '
     'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.',
+    'that was used.'
   );
 }

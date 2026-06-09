@@ -67,6 +67,29 @@ List<Rung> buildLadder(String name, String mode, int oct, int count) {
   return out;
 }
 
+/// Root + in-key 3rd + 5th (a diatonic triad) for chord-mode pad input.
+/// Ported from the legacy lib/music/chords.dart: builds the song's scale as a
+/// pitch-class set, walks a local ladder around [rootMidi], and takes scale
+/// degrees i, i+2, i+4. Falls back to a major triad if the key/scale is unknown.
+List<int> diatonicTriad(int rootMidi, String tonic, String scale) {
+  final rootPc = kNoteNames.indexOf(tonic);
+  final steps = kScales[scale]?.steps;
+  if (rootPc < 0 || steps == null) {
+    return [rootMidi, rootMidi + 4, rootMidi + 7];
+  }
+  final pcSet = steps.map((iv) => (rootPc + iv) % 12).toSet();
+  final ladder = <int>[];
+  for (var m = rootMidi - 12; m <= rootMidi + 24; m++) {
+    if (pcSet.contains(((m % 12) + 12) % 12)) ladder.add(m);
+  }
+  final i = ladder.indexWhere((m) => m >= rootMidi);
+  if (i < 0) return [rootMidi, rootMidi + 4, rootMidi + 7];
+  final root = ladder[i];
+  final third = (i + 2 < ladder.length) ? ladder[i + 2] : root + 4;
+  final fifth = (i + 4 < ladder.length) ? ladder[i + 4] : root + 7;
+  return [root, third, fifth];
+}
+
 // ── Transport constants (16th grid) ─────────────────────────────────
 const int kBeatsPerBar = 4;
 const int kStepsPerBeat = 4;

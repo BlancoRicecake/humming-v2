@@ -62,12 +62,16 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // logo
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(color: LT.lime, borderRadius: BorderRadius.circular(9)),
-          child: const Center(child: Ms(LtIcons.graphicEq, size: 20, color: LT.bg, fill: 1)),
+        // logo — HumTrack app icon (lime hummingbird), rounded to match the badge
+        ClipRRect(
+          borderRadius: BorderRadius.circular(9),
+          child: Image.asset(
+            'assets/icon/app_icon.png',
+            width: 34,
+            height: 34,
+            fit: BoxFit.cover,
+            cacheWidth: 96,
+          ),
         ),
         const SizedBox(width: 12),
         Column(
@@ -78,8 +82,8 @@ class _Header extends StatelessWidget {
               TextSpan(
                 style: LTType.inter(size: 20, weight: FontWeight.w800, color: LT.t1, letterSpacing: -0.4),
                 children: [
-                  const TextSpan(text: 'Loop'),
-                  TextSpan(text: 'Tap', style: const TextStyle(color: LT.lime)),
+                  const TextSpan(text: 'Hum'),
+                  TextSpan(text: 'Track', style: const TextStyle(color: LT.lime)),
                 ],
               ),
             ),

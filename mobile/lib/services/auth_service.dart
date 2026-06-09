@@ -140,6 +140,31 @@ class AuthService {
     _sessionCtl.add(_current);
   }
 
+  /// Email + password 로그인 — 스토어 리뷰용 사전 생성 계정 전용.
+  /// public sign-up 은 백엔드에서 비활성. 사용자 취소가 따로 없으므로 실패
+  /// 시 [lastError] 가 채워진다.
+  Future<bool> signInWithEmail(String email, String password) async {
+    lastError = null;
+    _lastSignInProvider = 'email';
+    if (!_enabled) {
+      lastError = AuthError.disabled();
+      return false;
+    }
+    try {
+      final r = await sb.Supabase.instance.client.auth
+          .signInWithPassword(email: email, password: password);
+      return r.session != null;
+    } on sb.AuthException catch (e) {
+      debugPrint('[supabase] email signIn failed: ${e.message} (status=${e.statusCode})');
+      lastError = AuthError.generic('Email', e.message);
+      return false;
+    } catch (e) {
+      debugPrint('[supabase] email signIn error: $e');
+      lastError = AuthError.generic('Email', '$e');
+      return false;
+    }
+  }
+
   /// provider: 'apple' | 'google'.
   /// iOS 에서는 native AuthenticationServices(Apple) / GoogleSignIn(SDK) 으로
   /// idToken 을 받아 supabase.signInWithIdToken 호출 — Safari deep-link 라운드트립

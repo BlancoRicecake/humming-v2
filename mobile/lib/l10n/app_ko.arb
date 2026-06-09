@@ -541,5 +541,16 @@
 
   "accountErrNoSession": "로그인 세션이 없어요. 다시 시도해 주세요.",
   "accountErrServerDelete": "서버 삭제 실패 ({status}){detail}",
-  "@accountErrServerDelete": {"placeholders": {"status": {"type": "int"}, "detail": {"type": "String"}}}
+  "@accountErrServerDelete": {"placeholders": {"status": {"type": "int"}, "detail": {"type": "String"}}},
+
+  "ltSettingsTitle": "설정",
+  "ltSettingsMetronome": "메트로놈 클릭",
+  "ltSettingsMetronomeSub": "녹음 중 클릭음 재생",
+  "ltSettingsHaptics": "햅틱",
+  "ltSettingsHapticsSub": "패드 탭 시 진동",
+  "ltSettingsAbout": "정보",
+  "ltSettingsAboutSub": "HumTrack · v0.4",
+  "ltSettingsLegalSection": "약관 및 정책",
+  "ltSettingsOpenSource": "오픈소스 라이선스",
+  "ltSettingsContact": "문의하기"
 }

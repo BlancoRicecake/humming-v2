@@ -612,6 +612,112 @@ def _quantize_note_starts(notes: List[Note], opts: AnalyzeOptions, duration: flo
         proposed_starts.append(n.start)
 
 
+def _swung_step_time(k: int, cell_sec: float, phase: float, swing: float) -> float:
+    """Playback time of grid step ``k``. LoopTap delays odd 16ths by swing*0.5
+    of a cell ([edit_screen.dart] _swFrac); we mirror that so a hum recorded
+    against a swung backing snaps back to the correct *linear* step."""
+    t = phase + k * cell_sec
+    if swing > 0 and (k % 2 == 1):
+        t += swing * 0.5 * cell_sec
+    return t
+
+
+def _drum_bucket(n: Note) -> str:
+    """Coarse kit piece, matching the client's _drumKind mapping, for per-step
+    dedup so a single hit does not produce two stacked drum notes on one step."""
+    d = n.drum if n.drum is not None else n.pitch
+    if d == 36:
+        return "kick"
+    if d in (37, 38, 39, 40):
+        return "snare"
+    if d in (42, 44, 46):
+        return "hihat"
+    return str(d)
+
+
+def _apply_loop_grid(notes: List[Note], opts: AnalyzeOptions, duration: float) -> List[Note]:
+    """Stage 6c — hard-snap notes onto LoopTap's fixed bar×step grid.
+
+    Unlike the soft HumTrack quantize, every note lands on an integer step:
+    playback swing is inverted first, durations become whole steps, collisions
+    are deduped, out-of-loop notes are dropped, and each note is stamped with
+    integer ``step`` / ``dur_steps`` so the client places it directly (no
+    seconds→step re-rounding, which previously discarded the grid phase).
+    """
+    if not notes:
+        return notes
+    bpm = float(opts.tempo_bpm)
+    steps_per_bar = int(opts.steps_per_bar)
+    grid = int(opts.quantize_grid)
+    if bpm <= 0 or steps_per_bar <= 0 or grid <= 0:
+        return notes
+    cell_sec = (60.0 / bpm) * 4.0 / grid
+    if cell_sec <= 0:
+        return notes
+    if opts.loop_bars:
+        bars = int(opts.loop_bars)
+    else:
+        bars = max(1, int(math.ceil(duration / (cell_sec * steps_per_bar) - 1e-6)))
+    total_steps = bars * steps_per_bar
+    swing = float(opts.swing)
+
+    # Phase anchored at 0 (count-in puts the downbeat at t=0), with a small
+    # circular-mean residual to absorb capture latency. Fold to (-cell/2, cell/2].
+    phase = _estimate_grid_phase(notes, cell_sec)
+    if phase > cell_sec / 2.0:
+        phase -= cell_sec
+
+    def snap_step(t: float) -> int:
+        best_k, best_d = 0, None
+        for k in range(total_steps):
+            d = abs(t - _swung_step_time(k, cell_sec, phase, swing))
+            if best_d is None or d < best_d:
+                best_d, best_k = d, k
+        return best_k
+
+    # Drop onsets outside the loop window (one half-cell of slack each side) so a
+    # late tail past the loop end is not clamped onto the last step.
+    lo = phase - cell_sec / 2.0
+    hi = phase + (total_steps - 0.5) * cell_sec
+    notes = [n for n in notes if lo <= float(n.start) < hi]
+    if not notes:
+        return notes
+
+    for n in notes:
+        step = snap_step(float(n.start))
+        dur_steps = max(1, int(round(float(n.duration) / cell_sec)))
+        dur_steps = min(dur_steps, max(1, total_steps - step))
+        n.step = int(step)
+        n.dur_steps = int(dur_steps)
+        # Storage is 0-anchored linear (the phase residual only informs the step
+        # choice; the client plays step k at k*cell and re-applies swing).
+        n.start = float(step * cell_sec)
+        n.end = float(n.start + dur_steps * cell_sec)
+        n.duration = float(n.end - n.start)
+
+    kept = [n for n in notes if n.step is not None and 0 <= int(n.step) < total_steps]
+
+    # Per-step dedup: drums collapse same kit piece on a step; pitched keep the
+    # most confident (then longest) note, removing double-trigger artifacts.
+    drums_mode = opts.as_drums or any(n.kind == "percussive" for n in kept)
+    best_by_key: Dict[object, Note] = {}
+    for n in kept:
+        key = (_drum_bucket(n), n.step) if drums_mode else n.step
+        cur = best_by_key.get(key)
+        if cur is None:
+            best_by_key[key] = n
+            continue
+        if drums_mode:
+            better = float(n.onset_strength) > float(cur.onset_strength)
+        else:
+            better = (float(n.confidence), int(n.dur_steps or 0)) > (
+                float(cur.confidence), int(cur.dur_steps or 0)
+            )
+        if better:
+            best_by_key[key] = n
+    return sorted(best_by_key.values(), key=lambda n: (int(n.step), -int(n.dur_steps or 0)))
+
+
 def _cleanup_note_timing(
     notes: List[Note],
     duration: float,
@@ -1101,6 +1207,10 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
     )
     key_candidates = [KeyCandidate(**c) for c in res["top3"]]
 
+    # Stage 6c — LoopTap loop-grid placement (hard snap + integer step/dur_steps).
+    if opts.loop_quantize:
+        notes = _apply_loop_grid(notes, opts, duration)
+
     return _pack_response(
         notes=notes,
         chunks=[Chunk(**c) for c in chunks_final],
@@ -1132,6 +1242,8 @@ def _analyze_drums(y: np.ndarray, sr: int, duration: float, opts: AnalyzeOptions
     th = compute_thresholds(rms, enter_ratio=opts.enter_ratio, exit_ratio=opts.exit_ratio)
     global_peak_rms = float(np.max(rms)) if rms.size else 1.0
     notes = build_drum_notes(y, sr, classify_features, hop=HOP, global_peak_rms=global_peak_rms)
+    if opts.loop_quantize:
+        notes = _apply_loop_grid(notes, opts, duration)
     return _pack_response(
         notes=notes,
         chunks=[],

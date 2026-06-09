@@ -38,6 +38,8 @@ class Note {
     this.drumVhighRatio = 0,
     this.drumSustainRatio = 0,
     this.onsetStrength = 0,
+    this.step,
+    this.durSteps,
   });
 
   double start, end, duration, pitchRaw, pitchHz, confidence, voicedRatio, correctionCents;
@@ -58,6 +60,10 @@ class Note {
   double drumRolloff, drumFlatness, onsetStrength; // 디버그 — rolloff/flatness/onset 세기
   // 분류기 입력 특징(대역 에너지 비율 + 지속). drum_features.py 와 동일.
   double drumLowmidRatio, drumMidRatio, drumVhighRatio, drumSustainRatio;
+  // 루프-그리드 배치(analyze.py Stage 6c) — loop_quantize 모드에서만 채워짐.
+  // LoopTap 클라이언트는 초 단위 재반올림 대신 이 정수 step/dur 을 직접 사용.
+  int? step;       // 루프 내 0-based 16분음 스텝 인덱스
+  int? durSteps;   // 길이(스텝 단위, >=1)
 
   factory Note.fromJson(Map<String, dynamic> j) => Note(
         start: _d(j['start']),
@@ -89,6 +95,8 @@ class Note {
         drumVhighRatio: _d(j['drum_vhigh_ratio']),
         drumSustainRatio: _d(j['drum_sustain_ratio']),
         onsetStrength: _d(j['onset_strength']),
+        step: (j['step'] as num?)?.toInt(),
+        durSteps: (j['dur_steps'] as num?)?.toInt(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -121,6 +129,8 @@ class Note {
         'drum_vhigh_ratio': drumVhighRatio,
         'drum_sustain_ratio': drumSustainRatio,
         'onset_strength': onsetStrength,
+        if (step != null) 'step': step,
+        if (durSteps != null) 'dur_steps': durSteps,
       };
 
   Note copyWith({int? pitch, String? source}) => Note.fromJson(toJson())
@@ -226,6 +236,10 @@ class AnalyzeOptions {
     this.quantizeGrid = 16,
     this.timingGridQuantize = false,
     this.quantizeStrength = 0.45,
+    this.loopQuantize = false,
+    this.loopBars,
+    this.stepsPerBar = 16,
+    this.swing = 0,
   });
   bool autoKey, pitchAssistant;
   String? keyTonic, scale;
@@ -237,6 +251,12 @@ class AnalyzeOptions {
   bool timingGridQuantize; // false: render layer owns grid quantize
   int tempoBpm, quantizeGrid;
   double quantizeStrength;
+  // LoopTap 루프-그리드 모드: 백엔드가 정수 step/dur 로 하드 스냅(스윙 역보정·
+  // 스텝당 dedup·루프 길이 제한). HumTrack 타임라인 경로는 false 로 영향 없음.
+  bool loopQuantize;
+  int? loopBars;   // 루프 총 마디 수(2/4)
+  int stepsPerBar; // LoopTap kBeatsPerBar*kStepsPerBeat
+  double swing;    // 곡 스윙(0~0.6) — 홀수 16분음 swing*0.5 지연
 
   Map<String, dynamic> toJson() => {
         'auto_key': autoKey,
@@ -252,6 +272,10 @@ class AnalyzeOptions {
         'quantize_grid': quantizeGrid,
         'timing_grid_quantize': timingGridQuantize,
         'quantize_strength': quantizeStrength,
+        if (loopQuantize) 'loop_quantize': loopQuantize,
+        if (loopBars != null) 'loop_bars': loopBars,
+        if (loopQuantize) 'steps_per_bar': stepsPerBar,
+        if (loopQuantize && swing > 0) 'swing': swing,
       };
 }
 
