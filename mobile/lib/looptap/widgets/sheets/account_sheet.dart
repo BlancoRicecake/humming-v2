@@ -50,7 +50,7 @@ class _AccountSheet extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 18),
-        if (user != null) ..._signedIn(context, user) else ..._signedOut(context, store),
+        if (user != null) ..._signedIn(context, user) else _SignedOutView(store: store),
       ],
     );
   }
@@ -116,42 +116,191 @@ class _AccountSheet extends StatelessWidget {
     ];
   }
 
-  List<Widget> _signedOut(BuildContext context, LoopStore store) {
-    return [
-      Column(
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: LT.surface2,
-              shape: BoxShape.circle,
-              border: Border.all(color: LT.border),
+}
+
+/// Logged-out view: social buttons for real users + a discreet "Sign in with
+/// email" path (login only, NO sign-up button) for App Store / Play review.
+/// Public email sign-up stays disabled on the backend; a reviewer account is
+/// pre-created server-side and logs in here. See [_EmailLoginForm].
+class _SignedOutView extends StatefulWidget {
+  const _SignedOutView({required this.store});
+  final LoopStore store;
+
+  @override
+  State<_SignedOutView> createState() => _SignedOutViewState();
+}
+
+class _SignedOutViewState extends State<_SignedOutView> {
+  bool _emailOpen = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = widget.store;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: LT.surface2,
+                shape: BoxShape.circle,
+                border: Border.all(color: LT.border),
+              ),
+              child: const Center(child: Ms(LtIcons.person, size: 30, color: LT.t2)),
             ),
-            child: const Center(child: Ms(LtIcons.person, size: 30, color: LT.t2)),
-          ),
-          const SizedBox(height: 10),
-          Text('Sign in to HumTrack', style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
-          const SizedBox(height: 4),
-          Text('Back up your loops and sync across devices.',
-              textAlign: TextAlign.center, style: LTType.inter(size: 12, color: LT.t2)),
+            const SizedBox(height: 10),
+            Text('Sign in to HumTrack', style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
+            const SizedBox(height: 4),
+            Text('Back up your loops and sync across devices.',
+                textAlign: TextAlign.center, style: LTType.inter(size: 12, color: LT.t2)),
+          ],
+        ),
+        const SizedBox(height: 18),
+        for (final p in _providers) ...[
+          _SocialButton(provider: p, onTap: () => store.signIn(p.label)),
+          const SizedBox(height: 9),
         ],
-      ),
-      const SizedBox(height: 18),
-      for (final p in _providers) ...[
-        _SocialButton(provider: p, onTap: () => store.signIn(p.label)),
-        const SizedBox(height: 9),
+        // Discreet email login (review-only). Tapping reveals an email/password
+        // form with no sign-up button.
+        if (!_emailOpen)
+          GestureDetector(
+            onTap: () => setState(() => _emailOpen = true),
+            child: Container(
+              height: 36,
+              alignment: Alignment.center,
+              child: Text('Sign in with email',
+                  style: LTType.inter(size: 12, weight: FontWeight.w700, color: LT.t2)),
+            ),
+          )
+        else
+          _EmailLoginForm(store: store),
       ],
-      const SizedBox(height: 3),
-      GestureDetector(
-        onTap: () => Navigator.of(context).pop(),
-        child: Container(
-          height: 42,
-          alignment: Alignment.center,
-          child: Text('Continue as guest', style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t3)),
+    );
+  }
+}
+
+/// Email/password sign-in — login only, NO sign-up. The submit handler is a
+/// stub today (mirrors the social buttons' local fake login); the colleague
+/// wiring auth replaces [_submit]'s body with a real backend call, e.g.
+/// `Supabase.instance.client.auth.signInWithPassword(email:.., password:..)`
+/// (public email sign-up stays disabled server-side; only pre-created accounts
+/// — like the reviewer account — can log in).
+class _EmailLoginForm extends StatefulWidget {
+  const _EmailLoginForm({required this.store});
+  final LoopStore store;
+
+  @override
+  State<_EmailLoginForm> createState() => _EmailLoginFormState();
+}
+
+class _EmailLoginFormState extends State<_EmailLoginForm> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final email = _email.text.trim();
+    final pw = _password.text;
+    if (email.isEmpty || pw.isEmpty) {
+      setState(() => _error = 'Enter your email and password.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    // TODO(auth): replace with real email/password sign-in against the backend
+    // (Supabase auth.signInWithPassword). Public sign-up stays disabled — this
+    // path only logs in pre-created accounts (e.g. the store-review account).
+    await widget.store.signIn('Email');
+    // (signIn flips LoopStore.user → the sheet rebuilds into the signed-in view)
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 4),
+        _Field(controller: _email, hint: 'Email', keyboardType: TextInputType.emailAddress),
+        const SizedBox(height: 8),
+        _Field(controller: _password, hint: 'Password', obscure: true),
+        if (_error != null) ...[
+          const SizedBox(height: 6),
+          Text(_error!, style: LTType.inter(size: 11, weight: FontWeight.w600, color: LT.danger)),
+        ],
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: _busy ? null : _submit,
+          child: Container(
+            height: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: LT.lime,
+              borderRadius: BorderRadius.circular(LTRadius.control),
+            ),
+            child: Text(_busy ? 'Signing in…' : 'Sign in',
+                style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg)),
+          ),
+        ),
+        // Intentionally NO sign-up button — accounts are social-only / invite-only.
+      ],
+    );
+  }
+}
+
+class _Field extends StatelessWidget {
+  const _Field({
+    required this.controller,
+    required this.hint,
+    this.obscure = false,
+    this.keyboardType,
+  });
+  final TextEditingController controller;
+  final String hint;
+  final bool obscure;
+  final TextInputType? keyboardType;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      autocorrect: false,
+      enableSuggestions: false,
+      style: LTType.inter(size: 14, weight: FontWeight.w600, color: LT.t1),
+      cursorColor: LT.lime,
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        hintStyle: LTType.inter(size: 14, color: LT.t3),
+        filled: true,
+        fillColor: LT.surface2,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(LTRadius.control),
+          borderSide: const BorderSide(color: LT.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(LTRadius.control),
+          borderSide: const BorderSide(color: LT.lime),
         ),
       ),
-    ];
+    );
   }
 }
 
