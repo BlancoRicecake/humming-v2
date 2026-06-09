@@ -168,6 +168,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   bool _savedFlash = false;
   Timer? _flashTimer;
 
+  // 헤더(topBar) 접힘 상태. 4-lane arrangement 에 세로 공간 더 주려고 사용자가
+  // 접을 수 있게 함. 접히면 상단에 가는 pull-tab 만 남고, 탭하면 다시 펼쳐짐.
+  bool _topBarVisible = true;
+
   @override
   void initState() {
     super.initState();
@@ -1008,7 +1012,18 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           children: [
             Column(
               children: [
-                _topBar(),
+                // 접힘/펼침 — AnimatedCrossFade 가 두 child 사이 fade + 높이를
+                // 부드럽게 보간. 접혔을 땐 가는 pull-tab 만 남아 ~16dp 절약 → 그
+                // 만큼 아래 arrangement 영역이 늘어남.
+                AnimatedCrossFade(
+                  duration: const Duration(milliseconds: 220),
+                  sizeCurve: Curves.easeOutCubic,
+                  crossFadeState: _topBarVisible
+                      ? CrossFadeState.showFirst
+                      : CrossFadeState.showSecond,
+                  firstChild: _topBar(),
+                  secondChild: _topBarHandle(),
+                ),
                 SectionBar(
                   sections: _sections,
                   activeIdx: _activeIdx,
@@ -1021,9 +1036,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                   onLongPress: _openSectionMenu,
                   onPlaySong: _playSong,
                 ),
-                // arrangement : surface = 1 : 2 vertical split (user choice)
+                // arrangement : surface = 2 : 3 vertical split. lane 영역이
+                // 화면 커질 때 조금 더 자라도록 1:2 → 2:3 으로 조정 (40% / 60%).
                 Expanded(
-                  flex: 1,
+                  flex: 2,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
                     child: ValueListenableBuilder<double>(
@@ -1043,7 +1059,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                 ),
                 _surfaceHeader(pitched),
                 Expanded(
-                  flex: 2,
+                  flex: 3,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
                     child: DecoratedBox(
@@ -1185,6 +1201,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           tooltip: 'Export',
           onTap: _exportOrPaywall,
         ),
+        const SizedBox(width: 6),
+        // 헤더 접기 — 4-lane arrangement 공간 확보용.
+        IconBtn(
+          icon: LtIcons.expandLess,
+          size: btnSize - 4,
+          tooltip: 'Hide header',
+          onTap: () => setState(() => _topBarVisible = false),
+        ),
       ],
     );
 
@@ -1221,57 +1245,153 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// 접힌 topBar 자리에 노출되는 가는 pull-tab. 탭 시 펼침.
+  Widget _topBarHandle() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _topBarVisible = true),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: LT.border))),
+        child: Center(
+          child: Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: LT.border,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _surfaceHeader(bool pitched) {
     final hasInstrument = _activeId == 'melody' || _activeId == 'bass';
+
+    final leftGroup = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 트랙 식별 — melody/bass 는 instrument picker pill 이 라벨 역할까지
+        // 겸함 (아이콘은 트랙 컬러로 칠해 식별성 유지). 그 외 트랙은 기존
+        // 아이콘 + 라벨.
+        if (hasInstrument)
+          Pill(
+            label: instrumentLabel(_activeId, _instruments[_activeId] ?? (_activeId == 'bass' ? 33 : 0)),
+            icon: _meta.icon,
+            iconColor: _meta.color,
+            onTap: _openInstrument,
+          )
+        else ...[
+          Ms(_meta.icon, size: 18, color: _meta.color),
+          const SizedBox(width: 8),
+          Text(_meta.label, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.t1)),
+        ],
+        if (_hasInputToggle) ...[
+          const SizedBox(width: 6),
+          _inputToggle(),
+        ],
+        // chord mode (melody pads only): a pad tap = a key-based triad
+        if (_activeId == 'melody' && _inputMode == 'pads') ...[
+          const SizedBox(width: 6),
+          _chordToggle(),
+        ],
+      ],
+    );
+
+    // hint 라벨 — 최대 폭 110dp 슬롯에서:
+    //  1. 기본 9pt 로 시도, 2줄 안에 들어가면 그대로
+    //  2. 안 들어가면 폰트를 0.5pt 씩 줄여 가며 다시 측정 (하한 6pt)
+    //  3. 하한 6pt + 2줄로도 안 들어가면 가로 스크롤로 fallback
+    Widget hintSlot(String text) {
+      final upper = text.toUpperCase();
+      final baseStyle = LTType.microLabel(LT.t3);
+      const slotW = 110.0;
+      const maxFont = 9.0;
+      const minFont = 6.0;
+
+      return SizedBox(
+        width: slotW,
+        child: LayoutBuilder(
+          builder: (context, c) {
+            for (double fs = maxFont; fs >= minFont; fs -= 0.5) {
+              final style = baseStyle.copyWith(fontSize: fs);
+              final tp = TextPainter(
+                text: TextSpan(text: upper, style: style),
+                textDirection: TextDirection.ltr,
+                maxLines: 2,
+              )..layout(maxWidth: slotW);
+              if (!tp.didExceedMaxLines) {
+                return Text(
+                  upper,
+                  maxLines: 2,
+                  softWrap: true,
+                  textAlign: TextAlign.right,
+                  style: style,
+                );
+              }
+            }
+            // 6pt + 2줄로도 안 들어감 → 가로 스크롤로 마저 볼 수 있게.
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              child: Text(upper, maxLines: 1, style: baseStyle.copyWith(fontSize: minFont)),
+            );
+          },
+        ),
+      );
+    }
+
+    final rightGroup = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (pitched) _octaveStepper(),
+        if (_activeId != 'vocal') ...[
+          const SizedBox(width: 8),
+          Pill(label: 'Hum to MIDI', icon: LtIcons.graphicEq, onTap: _openHum),
+        ],
+        const SizedBox(width: 8),
+        if (_inputMode == 'grid' && _activeId == 'drums')
+          hintSlot('tap cells to toggle')
+        else if (_inputMode == 'grid' && pitched)
+          hintSlot('tap · drag to lengthen · auto-merge')
+        else
+          // Pads 모드의 짧은 hint — 자연 너비 그대로. 빨간 점과 텍스트 간격이
+          // hintSlot 의 110dp 고정폭 안에 갇히면 멀어지므로 원래 LtLabel 사용.
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 7, height: 7, decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle)),
+              const SizedBox(width: 5),
+              const LtLabel('rec, then tap', color: LT.t3),
+            ],
+          ),
+      ],
+    );
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
-      child: Row(
-        children: [
-          // 트랙 식별 — melody/bass 는 instrument picker pill 이 라벨 역할까지
-          // 겸함 (아이콘은 트랙 컬러로 칠해 식별성 유지). 그 외 트랙은 기존
-          // 아이콘 + 라벨.
-          if (hasInstrument)
-            Pill(
-              label: instrumentLabel(_activeId, _instruments[_activeId] ?? (_activeId == 'bass' ? 33 : 0)),
-              icon: _meta.icon,
-              iconColor: _meta.color,
-              onTap: _openInstrument,
-            )
-          else ...[
-            Ms(_meta.icon, size: 18, color: _meta.color),
-            const SizedBox(width: 8),
-            Text(_meta.label, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.t1)),
-          ],
-          if (_hasInputToggle) ...[
-            const SizedBox(width: 6),
-            _inputToggle(),
-          ],
-          // chord mode (melody pads only): a pad tap = a key-based triad
-          if (_activeId == 'melody' && _inputMode == 'pads') ...[
-            const SizedBox(width: 6),
-            _chordToggle(),
-          ],
-          const Spacer(),
-          if (pitched) _octaveStepper(),
-          if (_activeId != 'vocal') ...[
-            const SizedBox(width: 8),
-            Pill(label: 'Hum to MIDI', icon: LtIcons.graphicEq, onTap: _openHum),
-          ],
-          const SizedBox(width: 8),
-          if (_inputMode == 'grid' && _activeId == 'drums')
-            const LtLabel('tap cells to toggle', color: LT.t3)
-          else if (_inputMode == 'grid' && pitched)
-            const LtLabel('tap · drag to lengthen · auto-merge', color: LT.t3)
-          else
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(width: 7, height: 7, decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle)),
-                const SizedBox(width: 5),
-                const LtLabel('rec, then tap', color: LT.t3),
-              ],
+      // Vocal 트랙은 instrument pill/toggle/octave/Hum to MIDI 가 전부 빠져서
+      // Row 자연 높이가 줄어 → 트랙 전환 시 화면이 흔들림. SizedBox(height: 32)
+      // 로 트랙 종류와 무관하게 일정 높이 보장.
+      child: SizedBox(
+        height: 32,
+        child: Row(
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: leftGroup,
+                ),
+              ),
             ),
-        ],
+            rightGroup,
+          ],
+        ),
       ),
     );
   }

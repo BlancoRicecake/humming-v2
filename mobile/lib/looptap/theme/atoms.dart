@@ -200,4 +200,6 @@ class LtIcons {
   static const receiptLong = Symbols.receipt_long; // refund policy
   static const code = Symbols.code; // open-source licenses
   static const mail = Symbols.mail; // contact
+  static const expandLess = Symbols.expand_less; // collapse header
+  static const expandMore = Symbols.expand_more; // expand header
 }

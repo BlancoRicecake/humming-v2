@@ -73,46 +73,48 @@ class TransportBar extends StatelessWidget {
             ),
           ),
         ),
+        // 좌측 BPM stepper 와 center Stop 버튼 사이 여백 — 우측 SizedBox(12) 와 대칭.
+        const SizedBox(width: 12),
         // ── center: transport ──
-        // 사이즈 위계: Play(52) > Record(44) > Stop(38). 줄어든 만큼 bar 전체
-        // 높이도 줄어듦 (Row 높이 = 가장 큰 자식 = Play).
+        // 사이즈 위계: Play(46) > Record(40) > Stop(34). 약간 더 컴팩트화해서
+        // 하단 bar 전체 높이를 더 줄임 (Row 높이 = 가장 큰 자식 = Play).
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconBtn(icon: LtIcons.stop, size: 38, tooltip: 'Stop', onTap: onStop),
-            const SizedBox(width: 14),
+            IconBtn(icon: LtIcons.stop, size: 34, tooltip: 'Stop', onTap: onStop),
+            const SizedBox(width: 12),
             // play
             GestureDetector(
               onTap: onPlay,
               child: Container(
-                width: 52,
-                height: 52,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
                   color: LT.lime,
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: LT.lime.withValues(alpha: 0.4), blurRadius: 24)],
+                  boxShadow: [BoxShadow(color: LT.lime.withValues(alpha: 0.4), blurRadius: 20)],
                 ),
-                child: Center(child: Ms(playing ? LtIcons.pause : LtIcons.playArrow, size: 26, color: LT.bg, fill: 1)),
+                child: Center(child: Ms(playing ? LtIcons.pause : LtIcons.playArrow, size: 23, color: LT.bg, fill: 1)),
               ),
             ),
             if (showRecord) ...[
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               // record
               GestureDetector(
                 onTap: onRec,
                 child: Container(
-                  width: 44,
-                  height: 44,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: recording ? LT.danger : LT.surface2,
                     shape: BoxShape.circle,
                     border: Border.all(color: LT.danger, width: 2),
-                    boxShadow: recording ? [BoxShadow(color: LT.danger.withValues(alpha: 0.53), blurRadius: 24)] : null,
+                    boxShadow: recording ? [BoxShadow(color: LT.danger.withValues(alpha: 0.53), blurRadius: 20)] : null,
                   ),
                   child: Center(
                     child: Container(
-                      width: 15,
-                      height: 15,
+                      width: 13,
+                      height: 13,
                       decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle),
                     ),
                   ),
@@ -134,29 +136,43 @@ class TransportBar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                LtLabel('Swing', color: swing > 0 ? LT.lime : LT.t3),
-                SizedBox(
-                  width: 84,
-                  child: SliderTheme(
-                    data: SliderThemeData(
-                      trackHeight: 3,
-                      activeTrackColor: LT.lime,
-                      inactiveTrackColor: LT.surface3,
-                      thumbColor: LT.lime,
-                      overlayShape: SliderComponentShape.noOverlay,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                // Swing 컨트롤 — 라벨이 슬라이더 좌상단에 붙는 2-line 레이아웃.
+                // 1줄 인라인보다 세로 공간을 더 쓰지만 라벨이 슬라이더 컨텍스트로
+                // 즉시 묶여 보임.
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        LtLabel('Swing', color: swing > 0 ? LT.lime : LT.t3),
+                        const SizedBox(width: 6),
+                        Text('${(swing * 100).round()}%',
+                            style: LTType.mono(size: 10, color: LT.t3)),
+                      ],
                     ),
-                    child: Slider(
-                      min: 0,
-                      max: 60,
-                      value: (swing * 100).clamp(0, 60),
-                      onChanged: (v) => onSwing(v / 100),
+                    SizedBox(
+                      width: 110,
+                      height: 18,
+                      child: SliderTheme(
+                        data: SliderThemeData(
+                          trackHeight: 3,
+                          activeTrackColor: LT.lime,
+                          inactiveTrackColor: LT.surface3,
+                          thumbColor: LT.lime,
+                          overlayShape: SliderComponentShape.noOverlay,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                        ),
+                        child: Slider(
+                          min: 0,
+                          max: 60,
+                          value: (swing * 100).clamp(0, 60),
+                          onChanged: (v) => onSwing(v / 100),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                SizedBox(
-                  width: 30,
-                  child: Text('${(swing * 100).round()}%', style: LTType.mono(size: 11, color: LT.t2)),
+                  ],
                 ),
                 const SizedBox(width: 10),
                 _BarsToggle(bars: bars, onBars: onBars),
