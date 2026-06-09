@@ -1,0 +1,7 @@
+1.0.1 update (revision)
+
+- Fixed cropped track header and transport bar on small screens
+- Fixed Pro subscription price showing as "Free" on Android
+- Pro paywall now shows which feature triggered it
+- Collapsible top header for a wider 4-lane workspace
+- Compact transport controls to free up edit space
