@@ -5,6 +5,7 @@
 //
 // M1: shell + clock + sections + transport wired. Track surfaces land in M2–M4
 // (a placeholder fills the surface area for now).
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -27,6 +28,7 @@ import '../theme/tokens.dart';
 import '../widgets/arrangement.dart';
 import '../widgets/section_bar.dart';
 import '../widgets/sheets/hum_modal.dart';
+import '../widgets/sheets/paywall_sheet.dart';
 import '../widgets/sheets/export_drawer.dart';
 import '../widgets/sheets/instrument_sheet.dart';
 import '../widgets/sheets/key_sheet.dart';
@@ -153,20 +155,54 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     };
   }
 
+  // ── auto-save 상태 ────────────────────────────────────────────────
+  // 12초마다 silent autosave (LoopStore.upsert 가 idempotent — dirty 추적 정밀도
+  // 가 낮은 데이터플로우 회피용 always-save 패턴).
+  // _savedAt: 가장 최근 저장 시각 (UI 표시용).
+  // _savedFlash: 명시적 Save 버튼 누른 직후 lime 강조 (2초간) 플래그.
+  // _dirty: 명시적 Save / autosave 이후 추가 입력 여부 — 현재는 항상 false 로
+  // 시작해서 첫 autosave 가 'Saved · 13:42' 로 표시되도록.
+  Timer? _autosaveTimer;
+  bool _dirty = false;
+  DateTime? _savedAt;
+  bool _savedFlash = false;
+  Timer? _flashTimer;
+
   @override
   void initState() {
     super.initState();
     // apply this song's chosen instruments, then warm the synth
     _audio.setPrograms(melody: _instruments['melody'], bass: _instruments['bass']);
     _audio.prewarm();
+    // 12초마다 dirty 면 silent autosave — 사용자 명시적 Save 와 충돌 없음.
+    _autosaveTimer = Timer.periodic(const Duration(seconds: 12), (_) => _autoSaveTick());
   }
 
   @override
   void dispose() {
+    _autosaveTimer?.cancel();
+    _flashTimer?.cancel();
     _ticker?.dispose();
     _playStep.dispose();
     _audio.stopAll();
     super.dispose();
+  }
+
+  /// 12초마다 호출. 변경 사항이 없어 보여도 일단 저장 — upsert 는 idempotent
+  /// 하고, 자잘한 미반영 mutation 도 모두 잡힌다 (dirty 추적 정밀도가 낮은
+  /// 데이터플로우 회피). UI 갱신은 setState 로 saved indicator 만.
+  Future<void> _autoSaveTick() async {
+    if (!mounted) return;
+    try {
+      await context.read<LoopStore>().upsert(_snapshot());
+      if (!mounted) return;
+      setState(() {
+        _dirty = false;
+        _savedAt = DateTime.now();
+      });
+    } catch (_) {
+      // 실패 시 다음 주기에 재시도.
+    }
   }
 
   // ── transport clock ───────────────────────────────────────────────
@@ -913,14 +949,52 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   Future<void> _saveNow() async {
     await context.read<LoopStore>().upsert(_snapshot());
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Saved'), duration: Duration(milliseconds: 1200)),
-    );
+    setState(() {
+      _dirty = false;
+      _savedAt = DateTime.now();
+      _savedFlash = true;
+    });
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _savedFlash = false);
+    });
   }
 
   Future<void> _backWithSave() async {
     await context.read<LoopStore>().upsert(_snapshot());
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Pro 활성이면 export drawer, 아니면 paywall 먼저. paywall 닫힌 시점에
+  /// Pro 가 됐으면 자동으로 export drawer 진입.
+  Future<void> _exportOrPaywall() async {
+    final store = context.read<LoopStore>();
+    debugPrint('[export] tap proActive=${store.proActive}');
+    if (!store.proActive) {
+      await showPaywallSheet(context);
+      if (!mounted) return;
+      if (!context.read<LoopStore>().proActive) return; // 결제 안 한 채 닫힘.
+    }
+    if (!mounted) return;
+    debugPrint('[export] opening drawer');
+    await showExportDrawer(
+      context,
+      title: _title,
+      sections: _sections,
+      bpm: _bpm,
+      melodyProgram: _instruments['melody'] ?? 0,
+      bassProgram: _instruments['bass'] ?? 33,
+    );
+  }
+
+  /// Save indicator 텍스트 — "Saved" (방금) / "Saved · 13:42" (시간 표시) /
+  /// "Unsaved" (dirty).
+  String _saveLabel() {
+    if (_savedAt == null) return _dirty ? 'Unsaved' : '';
+    final t = _savedAt!;
+    final hh = t.hour.toString().padLeft(2, '0');
+    final mm = t.minute.toString().padLeft(2, '0');
+    return _savedFlash ? 'Saved' : 'Saved · $hh:$mm';
   }
 
   // ── build ─────────────────────────────────────────────────────────
@@ -1057,20 +1131,30 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           const SizedBox(width: 8),
           Pill(label: '$_keyRoot ${kScales[_scale]!.label}', icon: LtIcons.musicNote, onTap: _openKey),
           const SizedBox(width: 8),
+          // Saved indicator — Save pill 왼쪽에 두어 Export 와 시각적 간섭 방지.
+          if (_saveLabel().isNotEmpty) ...[
+            AnimatedSwitcher(
+              duration: LTMotion.state,
+              child: Text(
+                _saveLabel(),
+                key: ValueKey(_saveLabel()),
+                style: LTType.mono(
+                  size: 11,
+                  weight: FontWeight.w600,
+                  color: _savedFlash ? LT.lime : LT.t3,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           Pill(label: 'Save', icon: LtIcons.save, onTap: _saveNow),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
+          // Pro 게이트 — 비-Pro 면 paywall 우선 표시, 통과 후 export drawer 진입.
           Pill(
             label: 'Export',
             icon: LtIcons.iosShare,
             tone: PillTone.lime,
-            onTap: () => showExportDrawer(
-              context,
-              title: _title,
-              sections: _sections,
-              bpm: _bpm,
-              melodyProgram: _instruments['melody'] ?? 0,
-              bassProgram: _instruments['bass'] ?? 33,
-            ),
+            onTap: _exportOrPaywall,
           ),
         ],
       ),

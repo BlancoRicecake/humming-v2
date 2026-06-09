@@ -3,14 +3,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../l10n/generated/app_localizations.dart';
 import '../models/loop_models.dart';
 import '../music/theory.dart';
 import '../state/loop_store.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
 import '../widgets/sheets/account_sheet.dart';
+import '../widgets/sheets/paywall_sheet.dart';
 import '../widgets/sheets/settings_sheet.dart';
 import 'edit_screen.dart';
+
+/// 비-Pro 사용자가 만들 수 있는 작업물 최대 개수.
+const int kFreeSongQuota = 4;
 
 class SongsScreen extends StatelessWidget {
   const SongsScreen({super.key});
@@ -19,8 +24,16 @@ class SongsScreen extends StatelessWidget {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => EditScreen(song: song)));
   }
 
-  void _new(BuildContext context) {
+  /// 새 작업물 생성. 비-Pro 가 quota (4개) 에 도달하면 paywall 우선 표시.
+  Future<void> _new(BuildContext context) async {
     final store = context.read<LoopStore>();
+    if (!store.proActive && store.songs.length >= kFreeSongQuota) {
+      await showPaywallSheet(context);
+      if (!context.mounted) return;
+      // paywall 닫혔는데도 여전히 비-Pro 라면 그대로 종료.
+      if (!context.read<LoopStore>().proActive) return;
+    }
+    if (!context.mounted) return;
     _open(context, store.createNew());
   }
 
@@ -184,32 +197,130 @@ class _Grid extends StatelessWidget {
       itemCount: songs.length + 1,
       itemBuilder: (context, i) {
         if (i == songs.length) return _NewCard(onTap: onNew);
-        return _SongCard(song: songs[i], onTap: () => onOpen(songs[i]));
+        return _SongCard(
+          song: songs[i],
+          onTap: () => onOpen(songs[i]),
+          onRename: () => _renameSong(context, songs[i]),
+          onDuplicate: () => _duplicateSong(context, songs[i]),
+          onDelete: () => _deleteSong(context, songs[i]),
+        );
       },
     );
+  }
+
+  Future<void> _renameSong(BuildContext context, Song song) async {
+    final store = context.read<LoopStore>();
+    final l = L10n.of(context);
+    final controller = TextEditingController(text: song.title);
+    final newTitle = await showDialog<String>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: LT.surface,
+        title: Text(l.projectOptionRename, style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: LTType.inter(size: 14, weight: FontWeight.w600, color: LT.t1),
+          cursorColor: LT.lime,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (v) => Navigator.of(dctx).pop(v),
+          decoration: InputDecoration(
+            isDense: true,
+            filled: true,
+            fillColor: LT.surface2,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(LTRadius.control),
+              borderSide: const BorderSide(color: LT.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(LTRadius.control),
+              borderSide: const BorderSide(color: LT.lime),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(),
+            child: Text(l.cancel, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t3)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(controller.text),
+            child: Text(l.save, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.lime)),
+          ),
+        ],
+      ),
+    );
+    if (newTitle != null && newTitle.trim().isNotEmpty && newTitle != song.title) {
+      await store.rename(song.id, newTitle);
+    }
+  }
+
+  Future<void> _duplicateSong(BuildContext context, Song song) {
+    return context.read<LoopStore>().duplicate(song);
+  }
+
+  Future<void> _deleteSong(BuildContext context, Song song) async {
+    final store = context.read<LoopStore>();
+    final l = L10n.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: LT.surface,
+        title: Text(
+          l.projectDeleteTitle(song.title),
+          style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.danger),
+        ),
+        content: Text(l.projectDeleteBody, style: LTType.inter(size: 13, color: LT.t1)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(false),
+            child: Text(l.cancel, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t3)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(true),
+            child: Text(l.delete, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.danger)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await store.delete(song.id);
+    }
   }
 }
 
 class _SongCard extends StatelessWidget {
-  const _SongCard({required this.song, required this.onTap});
+  const _SongCard({
+    required this.song,
+    required this.onTap,
+    required this.onRename,
+    required this.onDuplicate,
+    required this.onDelete,
+  });
   final Song song;
   final VoidCallback onTap;
+  final VoidCallback onRename;
+  final VoidCallback onDuplicate;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final scaleLabel = kScales[song.scale]?.label ?? song.scale;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: LT.surface,
-          borderRadius: BorderRadius.circular(LTRadius.card),
-          border: Border.all(color: LT.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return Stack(
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: LT.surface,
+              borderRadius: BorderRadius.circular(LTRadius.card),
+              border: Border.all(color: LT.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             // waveform thumbnail (30 bars; every 5th lime)
             Container(
               height: 64,
@@ -241,14 +352,94 @@ class _SongCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t1)),
-            const SizedBox(height: 6),
-            Text('${song.key} $scaleLabel · ${song.bpm} BPM · ${song.bars} bars',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: LTType.mono(size: 10, color: LT.t3)),
-          ],
+                const SizedBox(height: 6),
+                Text('${song.key} $scaleLabel · ${song.bpm} BPM · ${song.bars} bars',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LTType.mono(size: 10, color: LT.t3)),
+              ],
+            ),
+          ),
         ),
+        // 3-dot 메뉴 — 카드 우하단 overlay. PopupMenuButton 으로 rename/duplicate/delete.
+        Positioned(
+          bottom: 6,
+          right: 6,
+          child: _CardMenu(
+            onRename: onRename,
+            onDuplicate: onDuplicate,
+            onDelete: onDelete,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CardMenu extends StatelessWidget {
+  const _CardMenu({
+    required this.onRename,
+    required this.onDuplicate,
+    required this.onDelete,
+  });
+  final VoidCallback onRename;
+  final VoidCallback onDuplicate;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L10n.of(context);
+    return PopupMenuButton<String>(
+      tooltip: l.ltCardMore,
+      color: LT.surface2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(LTRadius.control),
+        side: const BorderSide(color: LT.border),
       ),
+      padding: EdgeInsets.zero,
+      icon: Container(
+        width: 28,
+        height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: LT.surface2.withValues(alpha: 0.85),
+          shape: BoxShape.circle,
+        ),
+        child: const Ms(LtIcons.moreHoriz, size: 16, color: LT.t2),
+      ),
+      onSelected: (v) {
+        switch (v) {
+          case 'rename': onRename(); break;
+          case 'duplicate': onDuplicate(); break;
+          case 'delete': onDelete(); break;
+        }
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'rename',
+          child: Row(children: [
+            const Ms(LtIcons.edit, size: 16, color: LT.t1),
+            const SizedBox(width: 10),
+            Text(l.projectOptionRename, style: LTType.inter(size: 13, weight: FontWeight.w600, color: LT.t1)),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'duplicate',
+          child: Row(children: [
+            const Ms(LtIcons.layers, size: 16, color: LT.t1),
+            const SizedBox(width: 10),
+            Text(l.projectOptionDuplicate, style: LTType.inter(size: 13, weight: FontWeight.w600, color: LT.t1)),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: Row(children: [
+            const Ms(LtIcons.delete, size: 16, color: LT.danger),
+            const SizedBox(width: 10),
+            Text(l.projectOptionDelete, style: LTType.inter(size: 13, weight: FontWeight.w600, color: LT.danger)),
+          ]),
+        ),
+      ],
     );
   }
 }

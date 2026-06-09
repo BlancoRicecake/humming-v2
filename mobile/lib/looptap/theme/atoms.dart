@@ -191,6 +191,7 @@ class LtIcons {
   static const delete = Symbols.delete;
   static const undo = Symbols.undo;
   static const redo = Symbols.redo;
+  static const moreHoriz = Symbols.more_horiz;
   static const privacyTip = Symbols.privacy_tip; // privacy policy
   static const description = Symbols.description; // terms of service
   static const receiptLong = Symbols.receipt_long; // refund policy

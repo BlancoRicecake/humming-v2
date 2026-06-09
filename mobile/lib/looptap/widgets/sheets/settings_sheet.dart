@@ -5,12 +5,17 @@
 // Only the Settings detail text + legal docs are localized (per product call);
 // the rest of the LoopTap DAW UI stays English.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'package:provider/provider.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../screens/legal_doc_screen.dart';
 import '../../../services/locale_service.dart';
+import '../../app.dart' show rootMessengerKey;
 import '../../state/loop_prefs.dart';
+import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import 'lt_modal.dart';
@@ -53,9 +58,26 @@ class _SettingsSheetState extends State<_SettingsSheet> {
       path: _kSupportEmail,
       query: 'subject=HumTrack',
     );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    // canLaunchUrl 은 Info.plist 의 LSApplicationQueriesSchemes 와 디바이스의
+    // 기본 mail handler 에 의존. 시뮬레이터/Mail 미설정 디바이스 등에서
+    // false 가 떨어지므로 *시도* 한 뒤 실패하면 클립보드 복사 + 안내로 fallback.
+    var launched = false;
+    try {
+      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      launched = false;
     }
+    if (launched || !mounted) return;
+    await Clipboard.setData(const ClipboardData(text: _kSupportEmail));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: LT.surface2,
+      content: Text(
+        'Email copied: $_kSupportEmail',
+        style: LTType.inter(size: 13, color: LT.t1),
+      ),
+      duration: const Duration(seconds: 4),
+    ));
   }
 
   @override
@@ -126,8 +148,78 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         ),
         const SizedBox(height: 6),
         _Row(icon: LtIcons.info, title: l.ltSettingsAbout, sub: l.ltSettingsAboutSub),
+        // 회원 탈퇴 — 로그인된 사용자에게만, 작게 + 차분하게 맨 아래.
+        if (context.watch<LoopStore>().isSignedIn) ...[
+          const SizedBox(height: 12),
+          Center(
+            child: TextButton(
+              onPressed: () => _confirmDelete(context),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 32),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              ),
+              child: Text(
+                l.ltSettingsDeleteAccount,
+                style: LTType.inter(
+                  size: 11,
+                  weight: FontWeight.w600,
+                  color: LT.t3,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final l = L10n.of(context);
+    final store = context.read<LoopStore>();
+    final ok = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: LT.surface,
+        title: Text(
+          l.ltSettingsDeleteAccountConfirmTitle,
+          style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.danger),
+        ),
+        content: Text(
+          l.ltSettingsDeleteAccountConfirmBody,
+          style: LTType.inter(size: 13, color: LT.t1),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(false),
+            child: Text(l.cancel, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t3)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(true),
+            child: Text(l.delete, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.danger)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final err = await store.deleteAccount();
+    if (!mounted) return;
+    final msg = err == null
+        ? l.ltSettingsDeleteAccountDone
+        : l.ltSettingsDeleteAccountFailed(err);
+    if (err == null) {
+      Navigator.of(this.context).pop(); // settings sheet 닫기
+    }
+    rootMessengerKey.currentState
+      ?..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        backgroundColor: LT.surface2,
+        content: Text(msg, style: LTType.inter(size: 13, color: LT.t1)),
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+      ));
   }
 }
 

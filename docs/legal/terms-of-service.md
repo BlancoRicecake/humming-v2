@@ -2,10 +2,6 @@
 
 **시행일**: 2026-06-04
 **최종개정**: 2026-06-03
-**상태**: 1.2-draft — 사업자 정보 + 정책 사실관계 확정. 변호사 검토 권장 5건 (청약철회 정의, EU Rep 시점, arbitration, CCPA, 책임제한) 은 출시 후 진행 가능.
-
-> Disclaimer: 본 문서는 출시 전 외부 변호사 검토를 전제로 한 작업본입니다. 법률 자문을 대체하지 않으며, 최종 효력은 한국, 미국, 유럽연합 각 관할에서 자격 있는 변호사 검토 후 확정됩니다.
-
 본 약관은 한국어 본문과 영문 본문(English below)을 함께 제공하며, 두 언어 본문은 동등하게 유효합니다. 해석상 차이가 발생하는 경우, 대한민국 거주 회원에 대해서는 한국어본이, 그 외 회원에 대해서는 영문본이 우선합니다.
 
 ---
@@ -53,22 +49,20 @@
 
 ### 제6조 (유료 구독 및 자동 결제)
 1. HumTrack Pro 구독은 **Apple App Store 인앱결제 또는 Google Play 인앱결제(IAP)를 통해서만** 제공됩니다. 회사는 자체 결제 수단(신용카드, 계좌이체 등)을 직접 제공하지 않으며, 회원의 결제 카드 정보를 직접 보유·처리하지 않습니다.
-2. **가격 (USD 기준)**:
-   - 월간: USD 3.49 / month
-   - 연간: USD 33.49 / year (월 환산 시 약 20% 할인)
-   - **현지 통화는 Apple App Store / Google Play 가 환율 및 스토어 정책에 따라 자동 변환하여 책정합니다** (예시 — 한국: ₩5,500/월·₩55,000/년, 일본: ¥500/월·¥5,000/년). 부가세는 스토어가 산정합니다.
-3. **7일 무료 체험 (Introductory Offer)**:
+2. **가격 (참고 예시)**: 시점 2026-06 기준 한국 스토어 등록 가격은 월 ₩5,500 / 연 ₩55,000 (모두 부가세 포함, 연 구독은 월 환산 시 약 20% 할인). 미국 스토어는 USD 3.49 / USD 33.49. 그 외 국가의 가격은 Apple App Store / Google Play 가 환율 및 현지 정책에 따라 자동 책정합니다.
+3. **실제 청구 가격 확인**: 정기 구독 상품의 가격은 사용자의 국가 또는 지역, Apple App Store / Google Play 계정 설정, 세금 및 각 스토어의 가격 정책에 따라 달라질 수 있습니다. 사용자는 구매 전 **Apple App Store / Google Play 결제 화면**에서 실제 청구 금액, 통화, 결제 주기 및 무료 체험 여부를 반드시 확인할 수 있으며, **실제 청구 및 결제는 결제 화면에 표시된 금액과 통화를 기준으로 처리됩니다.**
+4. **7일 무료 체험 (Introductory Offer)**:
    - 신규 회원에게 1회 한정 제공됩니다 (Apple / Google 계정 기준).
    - 체험 기간 종료 24시간 전까지 해지하지 않으면 자동으로 첫 결제가 발생합니다.
-4. **자동 갱신**:
+5. **자동 갱신**:
    - 월간 구독은 매월, 연간 구독은 매년 자동으로 갱신됩니다.
    - 갱신 결제는 만료 시점 24시간 이내에 Apple / Google 이 등록된 결제수단으로 자동 청구합니다.
    - **연간 자동 갱신의 경우 회사는 「전자상거래법 시행령」 (2022 개정)에 따라 갱신 결제 발생 7일 전까지 회원의 등록 이메일 또는 앱 푸시로 갱신 예정 통지를 발송합니다.**
-5. **해지 방법**:
+6. **해지 방법**:
    - iOS: 설정 → [사용자 이름] → 구독 → HumTrack
    - Android: Play 스토어 → 프로필 → 결제 및 정기결제 → 정기결제
    - 갱신을 원치 않는 회원은 **만료 24시간 전까지** 위 경로에서 직접 해지해야 합니다. 해지 후에도 이미 결제한 기간 말까지는 Pro 기능을 계속 사용할 수 있습니다.
-6. **환불**: 별도 [환불정책](./refund-policy.md) 및 각 스토어 환불 정책을 따릅니다. 회사는 자체 환불 처리 권한을 보유하지 않으며, 모든 결제 환불은 Apple / Google 이 1차로 처리합니다.
+7. **환불**: 별도 [환불정책](./refund-policy.md) 및 각 스토어 환불 정책을 따릅니다. 회사는 자체 환불 처리 권한을 보유하지 않으며, 모든 결제 환불은 Apple / Google 이 1차로 처리합니다.
 
 ### 제7조 (콘텐츠 및 권리)
 1. **회원이 서비스를 통해 생성한 음악·MIDI·분석 결과의 저작권 및 모든 권리는 100% 회원 본인에게 귀속됩니다.**
@@ -157,7 +151,8 @@ We may revise these Terms in compliance with applicable law. We will provide not
 
 ### Article 6. Subscription and Auto-Renewal
 - Pro is sold **exclusively** via Apple App Store or Google Play in-app purchase. We do not collect, store, or process your payment card data; Apple and Google do.
-- **Price (USD baseline)**: USD 3.49 / month or USD 33.49 / year (~20% off annual). **Local currency is auto-converted by Apple App Store / Google Play** based on exchange rate and store policy (e.g., KRW 5,500/mo · KRW 55,000/yr, JPY 500/mo · JPY 5,000/yr). VAT computed by the store.
+- **Price (reference)**: as of June 2026, the Korean store price is ₩5,500/month or ₩55,000/year (~20% annual discount), inclusive of VAT. The U.S. store price is USD 3.49 / USD 33.49. Prices in other countries are set automatically by Apple App Store / Google Play based on exchange rate and local policy.
+- **Actual charge**: the subscription price may vary by country/region, Apple App Store / Google Play account settings, tax, and each store's pricing policy. Before purchase, you can review the actual charge amount, currency, billing cycle, and free trial eligibility on the **Apple App Store / Google Play checkout screen**, and **the amount and currency shown on that checkout screen will govern the actual charge**.
 - **7-day free trial** (Introductory Offer): one per Apple/Google account. Cancel at least 24 hours before the trial ends to avoid the first charge.
 - **Auto-renewal**: subscriptions renew automatically each period. Apple/Google bill your saved payment method within 24 hours before renewal.
 - **Annual renewal notice**: for annual subscriptions, we send a renewal reminder email or push notification at least 7 days prior, per the 2022 amendment to the Korean Electronic Commerce Act Enforcement Decree.

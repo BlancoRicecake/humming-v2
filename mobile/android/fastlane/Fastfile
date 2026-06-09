@@ -69,4 +69,18 @@ platform :android do
     build(entry: options[:entry] || "lib/looptap/main_looptap.dart")
     upload_internal
   end
+
+  desc "Push Play Store listing (title, descriptions, screenshots) — no binary"
+  lane :sync_metadata do
+    upload_to_play_store(
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      skip_upload_metadata: false,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: false,
+      validate_only: false,
+      changes_not_sent_for_review: true,
+    )
+  end
 end

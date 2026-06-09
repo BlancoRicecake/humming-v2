@@ -18,7 +18,7 @@ import 'app_localizations_ko.dart';
 /// `supportedLocales` list. For example:
 ///
 /// ```dart
-/// import 'gen_l10n/app_localizations.dart';
+/// import 'generated/app_localizations.dart';
 ///
 /// return MaterialApp(
 ///   localizationsDelegates: L10n.localizationsDelegates,
@@ -62,7 +62,8 @@ import 'app_localizations_ko.dart';
 /// be consistent with the languages listed in the L10n.supportedLocales
 /// property.
 abstract class L10n {
-  L10n(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  L10n(String locale)
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -82,17 +83,18 @@ abstract class L10n {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
-    Locale('ko')
+    Locale('ko'),
   ];
 
   /// 앱 이름 — 영어 표기 유지 (브랜드)
@@ -2211,7 +2213,12 @@ abstract class L10n {
   ///
   /// In ko, this message translates to:
   /// **'{scope}: {root}{keyPart}{chordPart}'**
-  String chordPickerSummary(String scope, String root, String keyPart, String chordPart);
+  String chordPickerSummary(
+    String scope,
+    String root,
+    String keyPart,
+    String chordPart,
+  );
 
   /// No description provided for @chordPickerKeyPart.
   ///
@@ -2627,6 +2634,120 @@ abstract class L10n {
   /// **'서버 삭제 실패 ({status}){detail}'**
   String accountErrServerDelete(int status, String detail);
 
+  /// No description provided for @ltCardMore.
+  ///
+  /// In ko, this message translates to:
+  /// **'더 보기'**
+  String get ltCardMore;
+
+  /// No description provided for @ltSettingsDeleteAccount.
+  ///
+  /// In ko, this message translates to:
+  /// **'회원 탈퇴'**
+  String get ltSettingsDeleteAccount;
+
+  /// No description provided for @ltSettingsDeleteAccountConfirmTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'회원 탈퇴할까요?'**
+  String get ltSettingsDeleteAccountConfirmTitle;
+
+  /// No description provided for @ltSettingsDeleteAccountConfirmBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'계정과 모든 데이터가 영구적으로 삭제돼요. 되돌릴 수 없어요.'**
+  String get ltSettingsDeleteAccountConfirmBody;
+
+  /// No description provided for @ltSettingsDeleteAccountFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'탈퇴 실패: {err}'**
+  String ltSettingsDeleteAccountFailed(String err);
+
+  /// No description provided for @ltSettingsDeleteAccountDone.
+  ///
+  /// In ko, this message translates to:
+  /// **'회원 탈퇴가 완료됐어요.'**
+  String get ltSettingsDeleteAccountDone;
+
+  /// No description provided for @ltExportTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'\"{title}\" 내보내기'**
+  String ltExportTitle(String title);
+
+  /// No description provided for @ltExportMeta.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 {count}개 · {bars}마디 · {bpm} BPM'**
+  String ltExportMeta(int count, int bars, int bpm);
+
+  /// No description provided for @ltExportMidiTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI 파일'**
+  String get ltExportMidiTitle;
+
+  /// No description provided for @ltExportMidiSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'전체 곡 · 피아노 · 베이스 · 드럼 (ch10)'**
+  String get ltExportMidiSub;
+
+  /// No description provided for @ltExportWavTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'오디오 (WAV)'**
+  String get ltExportWavTitle;
+
+  /// No description provided for @ltExportWavSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'믹스된 전체 곡'**
+  String get ltExportWavSub;
+
+  /// No description provided for @ltExportStemsTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'스템'**
+  String get ltExportStemsTitle;
+
+  /// No description provided for @ltExportStemsSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙별 WAV 분리'**
+  String get ltExportStemsSub;
+
+  /// No description provided for @ltExportShareTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'공유'**
+  String get ltExportShareTitle;
+
+  /// No description provided for @ltExportShareSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'다른 앱으로 보내기'**
+  String get ltExportShareSub;
+
+  /// No description provided for @ltExportSaved.
+  ///
+  /// In ko, this message translates to:
+  /// **'{filename} 저장됨'**
+  String ltExportSaved(String filename);
+
+  /// No description provided for @ltExportFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI 내보내기 실패'**
+  String get ltExportFailed;
+
+  /// No description provided for @ltExportFooter.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션은 순서대로(반복 포함) 렌더링됩니다. MIDI는 모든 DAW 에서 열립니다. WAV / 스템은 곧 제공 예정.'**
+  String get ltExportFooter;
+
   /// No description provided for @ltSettingsTitle.
   ///
   /// In ko, this message translates to:
@@ -2697,25 +2818,26 @@ class _L10nDelegate extends LocalizationsDelegate<L10n> {
   }
 
   @override
-  bool isSupported(Locale locale) => <String>['en', 'ko'].contains(locale.languageCode);
+  bool isSupported(Locale locale) =>
+      <String>['en', 'ko'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_L10nDelegate old) => false;
 }
 
 L10n lookupL10n(Locale locale) {
-
-
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
-    case 'en': return L10nEn();
-    case 'ko': return L10nKo();
+    case 'en':
+      return L10nEn();
+    case 'ko':
+      return L10nKo();
   }
 
   throw FlutterError(
     'L10n.delegate failed to load unsupported locale "$locale". This is likely '
     'an issue with the localizations generation tool. Please file an issue '
     'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.'
+    'that was used.',
   );
 }

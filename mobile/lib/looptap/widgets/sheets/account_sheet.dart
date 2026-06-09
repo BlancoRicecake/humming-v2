@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../services/auth_service.dart';
+import '../../app.dart' show rootMessengerKey;
 import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
@@ -184,7 +185,8 @@ class _AccountSheetState extends State<_AccountSheet> {
         ],
       ),
       const SizedBox(height: 18),
-      const _AccRow(icon: LtIcons.cloudDone, title: 'Cloud backup', sub: 'Loops synced across devices'),
+      // TODO: Cloud backup 기능 미구현 — 백엔드 sync 연결 후 노출.
+      // const _AccRow(icon: LtIcons.cloudDone, title: 'Cloud backup', sub: 'Loops synced across devices'),
       if (store.proActive)
         const _AccRow(
           icon: LtIcons.workspacePremium,
@@ -203,7 +205,7 @@ class _AccountSheetState extends State<_AccountSheet> {
         icon: LtIcons.restore,
         title: 'Restore purchases',
         sub: store.iapEnabled ? '' : 'Store unavailable',
-        onTap: store.iapEnabled ? () => store.restorePurchases() : null,
+        onTap: store.iapEnabled ? () => _handleRestore(context, store) : null,
       ),
       const SizedBox(height: 10),
       GestureDetector(
@@ -220,6 +222,34 @@ class _AccountSheetState extends State<_AccountSheet> {
       ),
     ];
   }
+}
+
+/// Restore purchases 처리 — 시각 피드백 제공. proActive 변화 전/후를 비교해
+/// 새로 복원된 경우와 이미 활성인 경우, 활성 구독 없음을 구분해서 안내.
+///
+/// rootMessenger 사용 — account sheet (showGeneralDialog) 위에서도 보이도록.
+Future<void> _handleRestore(BuildContext context, LoopStore store) async {
+  final wasActive = store.proActive;
+  await store.restorePurchases();
+  if (!context.mounted) return;
+  final isActive = store.proActive;
+  final String msg;
+  if (isActive && !wasActive) {
+    msg = 'Pro restored. Welcome back!';
+  } else if (isActive) {
+    msg = 'You are already Pro.';
+  } else {
+    msg = 'No active subscription found.';
+  }
+  rootMessengerKey.currentState
+    ?..clearSnackBars()
+    ..showSnackBar(SnackBar(
+      backgroundColor: LT.surface2,
+      content: Text(msg, style: LTType.inter(size: 13, color: LT.t1)),
+      duration: const Duration(seconds: 3),
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.all(16),
+    ));
 }
 
 /// Logged-out view: 공식 Apple/Google 브랜드 버튼 + 보일 듯 말 듯한 email login

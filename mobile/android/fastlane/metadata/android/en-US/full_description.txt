@@ -1,0 +1,33 @@
+HumTrack is the easiest mobile DAW for songwriting. Hum a melody — get MIDI, chords, and a full multi-track session in seconds. No music theory required.
+
+Whether you're a beginner exploring music production for the first time, a songwriter sketching ideas on the go, or a beat maker who needs a fast mobile studio — HumTrack turns the melody in your head into a real song.
+
+【 What you can do 】
+• Hum, sing, or play any instrument → automatic pitch, rhythm, and chord detection
+• Multi-track editor: vocal + piano + bass + drums + synth
+• Metronome and beat quantize for tight timing
+• Auto key detection so chords always sound right
+• Export to MIDI and WAV — open in any DAW or share directly
+• Local save — start instantly, no login required
+
+【 Why HumTrack 】
+• Designed as a mobile DAW for absolute beginners, but powerful enough for serious songwriting
+• Humming-to-MIDI is the fastest way to capture musical ideas before they vanish
+• Works as a portable music studio, beat maker, and songwriting sketchpad in one app
+
+【 HumTrack Pro ($3.49/mo or $33.49/yr · 7-day free trial) 】
+• Unlimited export (MIDI · WAV · stems)
+• 5GB Cloud sync across all your devices
+• Permanent vocal backup
+• Priority analysis
+
+【 Privacy 】
+• No ads
+• No user tracking, no advertising identifiers
+• Vocal recordings are never used to train AI
+• Account deletion removes all your data
+
+Contact: heobusy@gmail.com
+Terms: https://hum-track.com/terms
+Privacy Policy: https://hum-track.com/privacy
+Refund Policy: https://hum-track.com/refund

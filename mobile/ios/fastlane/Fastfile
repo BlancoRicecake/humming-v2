@@ -69,7 +69,8 @@ platform :ios do
       submit_for_review: true,
       automatic_release: false,
       force: true,
-      skip_screenshots: true,
+      skip_screenshots: false,
+      overwrite_screenshots: true,
       precheck_include_in_app_purchases: false,
     )
   end
@@ -80,7 +81,8 @@ platform :ios do
     deliver(
       api_key: api_key,
       skip_binary_upload: true,
-      skip_screenshots: true,
+      skip_screenshots: false,
+      overwrite_screenshots: true,
       skip_metadata: false,
       force: true,
     )

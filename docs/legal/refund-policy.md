@@ -4,8 +4,6 @@
 **최종개정**: 2026-06-03
 **상태**: 1.2-draft — 사업자 정보 + 정책 사실관계 확정. 변호사 자문은 출시 후 진행 가능.
 
-> Disclaimer: 본 문서는 출시 전 외부 변호사 검토를 전제로 한 작업본입니다. 한국 「전자상거래법」, EU 소비자권리지침(2011/83/EU), 미국 주별 자동갱신법(California ARL 등)의 적용은 자격 있는 변호사의 최종 검토 후 확정됩니다.
-
 본 문서는 한국어 본문과 영문 본문(English below)을 함께 제공하며, 두 언어 본문은 동등하게 유효합니다.
 
 ---
@@ -24,6 +22,8 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
   - 안내: https://support.google.com/googleplay/answer/2479637
 
 스토어 환불 결정은 각 스토어의 정책에 따르며, 회사가 이를 번복할 권한은 없습니다.
+
+**Apple App Store / Google Play 를 통해 구매한 정기 구독 상품의 해지 및 환불은 각 스토어의 정책과 절차에 따릅니다.** 환불이 승인되는 경우 해당 스토어를 통해 원 결제수단으로 환불됩니다. 회사는 관련 법령 또는 각 스토어 정책상 허용되는 범위 내에서 환불 처리에 협조합니다.
 
 ### 2. 구독 취소와 사용 기간
 
@@ -109,6 +109,8 @@ HumTrack Pro is sold exclusively via Apple App Store or Google Play in-app purch
 Direct refund requests to:
 - **Apple**: https://reportaproblem.apple.com (see https://support.apple.com/HT204084)
 - **Google**: https://play.google.com/store/account/orderhistory (see https://support.google.com/googleplay/answer/2479637)
+
+**Cancellation and refunds of any auto-renewing subscription purchased through Apple App Store or Google Play are governed by the policies and procedures of each store.** If a refund is approved, it will be returned via the original payment method through that store. We will cooperate with refund handling to the extent permitted by applicable law and each store's policy.
 
 ### 2. Cancellation vs. Refund
 Canceling your subscription stops the **next** renewal; it does **not** trigger a prorated refund. You retain Pro until the paid period ends, then switch to Free.

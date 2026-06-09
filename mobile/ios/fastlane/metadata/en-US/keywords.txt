@@ -1,1 +1,1 @@
-humming,melody,songwriting,pitch,rhythm,metronome,chords,MIDI,music memo,songwriter,vocal,demo
+DAW,music,maker,beat,song,songwriting,production,studio,humming,MIDI,chord,melody,loop,vocal,record

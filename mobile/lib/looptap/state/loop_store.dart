@@ -4,8 +4,11 @@
 // 비활성(enabled=false) 되므로 여기서는 그대로 흘려보낸다.
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+import '../../main.dart' show engineApi;
 import '../../services/auth_service.dart';
 import '../../services/iap_service.dart';
 import '../models/loop_models.dart';
@@ -77,6 +80,9 @@ class LoopStore extends ChangeNotifier {
         _restoredOnSignIn = true;
         IapService.instance.restore();
       }
+      // 백엔드의 subscriptions row 도 즉시 조회 — 리뷰 계정처럼 IAP 영수증 없이
+      // 직접 부여된 Pro 권한 케이스를 잡기 위해.
+      refreshSubscription();
     } else {
       _user = null;
       _pro = ProStatus.inactive;
@@ -118,6 +124,30 @@ class LoopStore extends ChangeNotifier {
     }
   }
 
+  /// 회원 탈퇴 — backend DELETE /account → Supabase user + 관련 row 삭제 → 로컬
+  /// signOut. 실패 시 메시지 반환.
+  Future<String?> deleteAccount() async {
+    if (!AuthService.instance.enabled || _user == null) {
+      return 'Not signed in.';
+    }
+    try {
+      // 전역 engineApi 의 dio 에 Bearer 인터셉터가 자동 부착됨.
+      final dio = engineApi.dio;
+      final res = await dio.delete<dynamic>(
+        '/account',
+        options: Options(validateStatus: (_) => true),
+      );
+      final code = res.statusCode ?? 0;
+      if (code != 200 && code != 204) {
+        return 'Delete failed ($code)';
+      }
+      await signOut();
+      return null;
+    } catch (e) {
+      return 'Network error: $e';
+    }
+  }
+
   // ── IAP ─────────────────────────────────────────────────────────────
   void _onPurchase(IapResult r) {
     if (!r.ok) {
@@ -134,7 +164,51 @@ class LoopStore extends ChangeNotifier {
   Future<void> loadProducts() => IapService.instance.loadProducts();
   Future<bool> buyMonthly() => IapService.instance.buy(kProductMonthly);
   Future<bool> buyYearly() => IapService.instance.buy(kProductYearly);
-  Future<void> restorePurchases() => IapService.instance.restore();
+
+  /// IAP restorePurchases + 즉시 backend 의 subscriptions row 조회로 UI 갱신.
+  /// IAP restore 는 StoreKit 영수증 재전달이 비동기라 결과가 늦게 도착해서,
+  /// 그 사이에도 사용자에게 빠른 시각 피드백을 주기 위해 즉시 refresh 도 함께.
+  Future<void> restorePurchases() async {
+    await IapService.instance.restore();
+    await refreshSubscription();
+  }
+
+  /// public.subscriptions 에서 현재 사용자의 row 를 직접 조회 (RLS owner-read).
+  /// 리뷰용 email 계정처럼 IAP 영수증 없이 백엔드에서 직접 부여된 Pro 권한도
+  /// 이 경로로 잡힌다.
+  Future<void> refreshSubscription() async {
+    if (!AuthService.instance.enabled) return;
+    final session = sb.Supabase.instance.client.auth.currentSession;
+    if (session == null) return;
+    try {
+      final row = await sb.Supabase.instance.client
+          .from('subscriptions')
+          .select('status, product_id, expires_at')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+      if (row == null) {
+        if (_pro != ProStatus.inactive) {
+          _pro = ProStatus.inactive;
+          _renewsAt = null;
+          notifyListeners();
+        }
+        return;
+      }
+      final status = (row['status'] as String?)?.toLowerCase();
+      final isActive = status == 'active' || status == 'trial';
+      final renews = row['expires_at'] != null
+          ? DateTime.tryParse(row['expires_at'] as String)
+          : null;
+      final newStatus = isActive ? ProStatus.active : ProStatus.inactive;
+      if (_pro != newStatus || _renewsAt != renews) {
+        _pro = newStatus;
+        _renewsAt = renews;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[loopstore] refreshSubscription failed: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -172,6 +246,35 @@ class LoopStore extends ChangeNotifier {
     _songs.removeWhere((s) => s.id == id);
     await _persist();
     notifyListeners();
+  }
+
+  /// 새 ID 로 deep-copy + " (copy)" suffix. 새 노래는 grid 맨 앞으로.
+  Future<Song> duplicate(Song src) async {
+    final dup = Song(
+      id: 'lt${DateTime.now().millisecondsSinceEpoch}',
+      title: '${src.title} (copy)',
+      key: src.key,
+      scale: src.scale,
+      bpm: src.bpm,
+      swing: src.swing,
+      bars: src.bars,
+      vol: Map.of(src.vol),
+      mutes: Map.of(src.mutes),
+      instruments: Map.of(src.instruments),
+      sections: src.sections.map((s) => s.deepCopy()).toList(),
+      wave: List<double>.of(src.wave),
+      updatedAt: DateTime.now(),
+    );
+    await upsert(dup);
+    return dup;
+  }
+
+  /// 제목만 변경. id 는 보존.
+  Future<void> rename(String id, String newTitle) async {
+    final i = _songs.indexWhere((s) => s.id == id);
+    if (i < 0) return;
+    _songs[i].title = newTitle.trim().isEmpty ? 'Untitled loop' : newTitle.trim();
+    await upsert(_songs[i]);
   }
 
   // ── 3 demo songs (parallels index.html seeds) ─────────────────────

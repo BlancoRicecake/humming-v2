@@ -1,4 +1,6 @@
-HumTrack turns hummed or sung melodies into sheet music, chords, and beat-aligned takes — your musical sketchpad.
+HumTrack is the easiest way to turn your humming into a real song. Sing or hum a melody — get MIDI, chords, and a full multi-track session in seconds. No music theory, no learning curve.
+
+A mobile DAW and music production app built for beginners, songwriters, beat makers, and anyone who can hum a tune.
 
 [ Features ]
 - Hum, sing, or play → auto pitch, rhythm, and chord detection

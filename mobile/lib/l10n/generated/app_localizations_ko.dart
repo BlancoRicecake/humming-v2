@@ -323,7 +323,8 @@ class L10nKo extends L10n {
   String get labelAccountId => '계정 ID';
 
   @override
-  String get withdrawHint => '회원 탈퇴 시 모든 로컬 프로젝트와 클라우드 데이터가 삭제됩니다.\n구독 중인 경우 App Store / Google Play 에서 별도로 해지해 주세요.';
+  String get withdrawHint =>
+      '회원 탈퇴 시 모든 로컬 프로젝트와 클라우드 데이터가 삭제됩니다.\n구독 중인 경우 App Store / Google Play 에서 별도로 해지해 주세요.';
 
   @override
   String get withdrawCta => '회원 탈퇴';
@@ -549,7 +550,8 @@ class L10nKo extends L10n {
   String get logoutConfirmTitle => '로그아웃 하시겠어요?';
 
   @override
-  String get logoutConfirmBody => '이 기기의 로컬 프로젝트는 그대로 남아있어요. 다시 로그인하면 클라우드 작업물도 복원됩니다.';
+  String get logoutConfirmBody =>
+      '이 기기의 로컬 프로젝트는 그대로 남아있어요. 다시 로그인하면 클라우드 작업물도 복원됩니다.';
 
   @override
   String get logoutCta => '로그아웃';
@@ -617,7 +619,8 @@ class L10nKo extends L10n {
   String get cloudFreeImageHeadline => '아직 클라우드가 없어요';
 
   @override
-  String get cloudFreeImageSub => 'Pro 로 전환하면 5GB 클라우드를 받아\n모든 기기에서 작업물을 이어 만들 수 있어요.';
+  String get cloudFreeImageSub =>
+      'Pro 로 전환하면 5GB 클라우드를 받아\n모든 기기에서 작업물을 이어 만들 수 있어요.';
 
   @override
   String get cloudValueBackupTitle => '영구 보관';
@@ -646,7 +649,8 @@ class L10nKo extends L10n {
   String get cloudProEmptyTitle => '클라우드가 비어있어요';
 
   @override
-  String get cloudProEmptySub => '내 작업물 탭에서 작업물의 ⋯ 메뉴를 열고\n\"클라우드에 올리기\"를 눌러 보세요.';
+  String get cloudProEmptySub =>
+      '내 작업물 탭에서 작업물의 ⋯ 메뉴를 열고\n\"클라우드에 올리기\"를 눌러 보세요.';
 
   @override
   String get cloudGoToLocalTab => '내 작업물 탭으로 가기';
@@ -655,7 +659,8 @@ class L10nKo extends L10n {
   String get cloudGraceTitle => 'Pro 가 만료됐어요';
 
   @override
-  String get cloudGraceBody => '데이터는 그대로 보관돼 있어요. 다운로드는 언제든 가능하고, 재구독하면 동기화가 다시 켜져요.';
+  String get cloudGraceBody =>
+      '데이터는 그대로 보관돼 있어요. 다운로드는 언제든 가능하고, 재구독하면 동기화가 다시 켜져요.';
 
   @override
   String get cloudGraceEmpty => '클라우드 보관함이 비어있어요';
@@ -797,31 +802,36 @@ class L10nKo extends L10n {
   String get faq1Q => '무료로 어디까지 쓸 수 있나요?';
 
   @override
-  String get faq1A => '녹음 → 분석 → 편집까지 모든 기능을 자유롭게 써 보실 수 있어요. 내보내기 · 클라우드 동기화 · 보컬 영구 보관은 Pro 구독에서 잠금이 풀려요.';
+  String get faq1A =>
+      '녹음 → 분석 → 편집까지 모든 기능을 자유롭게 써 보실 수 있어요. 내보내기 · 클라우드 동기화 · 보컬 영구 보관은 Pro 구독에서 잠금이 풀려요.';
 
   @override
   String get faq2Q => '어떤 악기로 변환되나요?';
 
   @override
-  String get faq2A => '피아노 · 신스 · 어쿠스틱 기타 · 일렉 기타 · 베이스 · 드럼 그리고 보컬 원본까지 — 카드 탭으로 즉시 전환할 수 있어요.';
+  String get faq2A =>
+      '피아노 · 신스 · 어쿠스틱 기타 · 일렉 기타 · 베이스 · 드럼 그리고 보컬 원본까지 — 카드 탭으로 즉시 전환할 수 있어요.';
 
   @override
   String get faq3Q => '내 목소리는 누가 들을 수 있나요?';
 
   @override
-  String get faq3A => '기본은 기기 안에서만 처리됩니다. Pro 사용자에 한해 본인 계정의 암호화된 클라우드 보관함에 보컬을 동기화해요.';
+  String get faq3A =>
+      '기본은 기기 안에서만 처리됩니다. Pro 사용자에 한해 본인 계정의 암호화된 클라우드 보관함에 보컬을 동기화해요.';
 
   @override
   String get faq4Q => '구독을 해지하면 만든 곡은 어떻게 되나요?';
 
   @override
-  String get faq4A => '로컬 프로젝트는 그대로 남아 편집할 수 있어요. 클라우드 동기화 · 새로운 내보내기는 일시 정지되고, 다시 구독하면 즉시 복원됩니다.';
+  String get faq4A =>
+      '로컬 프로젝트는 그대로 남아 편집할 수 있어요. 클라우드 동기화 · 새로운 내보내기는 일시 정지되고, 다시 구독하면 즉시 복원됩니다.';
 
   @override
   String get faq5Q => '환불은 가능한가요?';
 
   @override
-  String get faq5A => '결제는 App Store · Google Play 정책을 따릅니다. 결제 페이지에서 직접 요청해 주세요.';
+  String get faq5A =>
+      '결제는 App Store · Google Play 정책을 따릅니다. 결제 페이지에서 직접 요청해 주세요.';
 
   @override
   String get contactTitle => '문의하기';
@@ -870,7 +880,8 @@ class L10nKo extends L10n {
   String get cloudDownloadTitle => '클라우드에서 가져오기';
 
   @override
-  String get cloudDownloadBanner => '구독이 만료된 동안엔 새 업로드 / 동기화는 잠금돼요. 이전 작업물은 그대로 두고 언제든 다운로드하거나 삭제할 수 있어요.';
+  String get cloudDownloadBanner =>
+      '구독이 만료된 동안엔 새 업로드 / 동기화는 잠금돼요. 이전 작업물은 그대로 두고 언제든 다운로드하거나 삭제할 수 있어요.';
 
   @override
   String get cloudDownloadCta => '받기';
@@ -904,7 +915,8 @@ class L10nKo extends L10n {
   String get editMicPermNeededTitle => '마이크 권한이 필요해요';
 
   @override
-  String get editMicPermNeededBody => 'iPad 설정 → 개인정보 보호 → 마이크에서 HumTrack 을 허용해 주세요.';
+  String get editMicPermNeededBody =>
+      'iPad 설정 → 개인정보 보호 → 마이크에서 HumTrack 을 허용해 주세요.';
 
   @override
   String get editMicPermLabel => '마이크 권한이 필요합니다';
@@ -1169,7 +1181,12 @@ class L10nKo extends L10n {
   String get chordPickerScopeRoot => '루트';
 
   @override
-  String chordPickerSummary(String scope, String root, String keyPart, String chordPart) {
+  String chordPickerSummary(
+    String scope,
+    String root,
+    String keyPart,
+    String chordPart,
+  ) {
     return '$scope: $root$keyPart$chordPart';
   }
 
@@ -1237,7 +1254,8 @@ class L10nKo extends L10n {
   String get metronomeOff => '메트로놈 끄기';
 
   @override
-  String get metronomeNote => 'BPM 은 프로젝트 전체에 적용돼요. 박자 보정 카드의 그리드도 이 BPM 을 기준으로 정렬합니다.';
+  String get metronomeNote =>
+      'BPM 은 프로젝트 전체에 적용돼요. 박자 보정 카드의 그리드도 이 BPM 을 기준으로 정렬합니다.';
 
   @override
   String metronomeBeatSec(String sec) {
@@ -1286,7 +1304,8 @@ class L10nKo extends L10n {
   String get quantizeStrengthMax => '100%: 완벽 정렬';
 
   @override
-  String get quantizeFooter => '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요.';
+  String get quantizeFooter =>
+      '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요.';
 
   @override
   String get quantizeOff => 'off';
@@ -1303,13 +1322,15 @@ class L10nKo extends L10n {
   String get cardInstrumentFallback => '악기';
 
   @override
-  String get helpInstrumentBody => '이 트랙을 어떤 악기 소리로 재생할지 선택해요. 분석된 음정에 SoundFont 악기 음색을 입혀 들려줘요.';
+  String get helpInstrumentBody =>
+      '이 트랙을 어떤 악기 소리로 재생할지 선택해요. 분석된 음정에 SoundFont 악기 음색을 입혀 들려줘요.';
 
   @override
   String get cardKeyLabel => 'KEY';
 
   @override
-  String get helpKeyBody => '곡의 으뜸음(C, D…)과 모드(메이저/마이너)예요. AUTO = 분석이 자동 추정한 키. 카드를 탭하면 수동으로 바꿀 수 있어요. 신뢰도 = 추정이 얼마나 확실한지 (0~1).';
+  String get helpKeyBody =>
+      '곡의 으뜸음(C, D…)과 모드(메이저/마이너)예요. AUTO = 분석이 자동 추정한 키. 카드를 탭하면 수동으로 바꿀 수 있어요. 신뢰도 = 추정이 얼마나 확실한지 (0~1).';
 
   @override
   String get keyAnalysisPending => '녹음 후 분석';
@@ -1323,7 +1344,8 @@ class L10nKo extends L10n {
   String get cardAssistLabel => '피치 어시스트';
 
   @override
-  String get helpAssistBody => '키 밖으로 살짝 빗나간 음을 가장 가까운 in-key 음으로 자동 보정해 줘요. \"보정됨\" 숫자 = 실제로 끌어당겨진 노트 개수.';
+  String get helpAssistBody =>
+      '키 밖으로 살짝 빗나간 음을 가장 가까운 in-key 음으로 자동 보정해 줘요. \"보정됨\" 숫자 = 실제로 끌어당겨진 노트 개수.';
 
   @override
   String get assistCorrected => '보정됨';
@@ -1335,7 +1357,8 @@ class L10nKo extends L10n {
   String get cardQuantizeLabel => '박자 보정';
 
   @override
-  String get helpQuantizeBody => '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요. 원본 timing 은 그대로 보존돼, 토글을 꺼면 원래대로 돌아옵니다.';
+  String get helpQuantizeBody =>
+      '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요. 원본 timing 은 그대로 보존돼, 토글을 꺼면 원래대로 돌아옵니다.';
 
   @override
   String get conflictTitle => '양쪽 모두 변경됐어요';
@@ -1372,7 +1395,8 @@ class L10nKo extends L10n {
   String get authErrDisabled => 'Auth 비활성 (Supabase 키 미설정)';
 
   @override
-  String get authErrIdentityBlockedGeneric => '이미 다른 방법으로 가입된 이메일이에요.\n처음 가입했던 방법으로 로그인해 주세요.';
+  String get authErrIdentityBlockedGeneric =>
+      '이미 다른 방법으로 가입된 이메일이에요.\n처음 가입했던 방법으로 로그인해 주세요.';
 
   @override
   String authErrIdentityBlockedSpecific(String providers) {
@@ -1380,7 +1404,8 @@ class L10nKo extends L10n {
   }
 
   @override
-  String get authErrGoogleNoIdToken => 'Google: idToken 누락 (serverClientId/iOS client 미스매치 가능)';
+  String get authErrGoogleNoIdToken =>
+      'Google: idToken 누락 (serverClientId/iOS client 미스매치 가능)';
 
   @override
   String authErrAppleCode(String code, String message) {
@@ -1405,6 +1430,73 @@ class L10nKo extends L10n {
   String accountErrServerDelete(int status, String detail) {
     return '서버 삭제 실패 ($status)$detail';
   }
+
+  @override
+  String get ltCardMore => '더 보기';
+
+  @override
+  String get ltSettingsDeleteAccount => '회원 탈퇴';
+
+  @override
+  String get ltSettingsDeleteAccountConfirmTitle => '회원 탈퇴할까요?';
+
+  @override
+  String get ltSettingsDeleteAccountConfirmBody =>
+      '계정과 모든 데이터가 영구적으로 삭제돼요. 되돌릴 수 없어요.';
+
+  @override
+  String ltSettingsDeleteAccountFailed(String err) {
+    return '탈퇴 실패: $err';
+  }
+
+  @override
+  String get ltSettingsDeleteAccountDone => '회원 탈퇴가 완료됐어요.';
+
+  @override
+  String ltExportTitle(String title) {
+    return '\"$title\" 내보내기';
+  }
+
+  @override
+  String ltExportMeta(int count, int bars, int bpm) {
+    return '섹션 $count개 · $bars마디 · $bpm BPM';
+  }
+
+  @override
+  String get ltExportMidiTitle => 'MIDI 파일';
+
+  @override
+  String get ltExportMidiSub => '전체 곡 · 피아노 · 베이스 · 드럼 (ch10)';
+
+  @override
+  String get ltExportWavTitle => '오디오 (WAV)';
+
+  @override
+  String get ltExportWavSub => '믹스된 전체 곡';
+
+  @override
+  String get ltExportStemsTitle => '스템';
+
+  @override
+  String get ltExportStemsSub => '트랙별 WAV 분리';
+
+  @override
+  String get ltExportShareTitle => '공유';
+
+  @override
+  String get ltExportShareSub => '다른 앱으로 보내기';
+
+  @override
+  String ltExportSaved(String filename) {
+    return '$filename 저장됨';
+  }
+
+  @override
+  String get ltExportFailed => 'MIDI 내보내기 실패';
+
+  @override
+  String get ltExportFooter =>
+      '섹션은 순서대로(반복 포함) 렌더링됩니다. MIDI는 모든 DAW 에서 열립니다. WAV / 스템은 곧 제공 예정.';
 
   @override
   String get ltSettingsTitle => '설정';
