@@ -55,6 +55,8 @@ dependencies:
   # 모두 graceful-degrade — env 키 미설정 시 초기화 스킵, mock 분기 유지.
   supabase_flutter: ^2.5.0
   in_app_purchase: ^3.2.0
+  # Play 구독 base plan 가격 추출에 필요 (trial offer phase[0]=₩0 으로 표시되는 버그 회피).
+  in_app_purchase_android: ^0.4.0
   # ── 네이티브 OAuth (신규: 2026-06-03) ──
   # iOS Safari deep-link 라운드트립 회피 — AuthenticationServices 기반 native sheet.
   # 인증 후 idToken 을 supabase.signInWithIdToken 으로 교환 → 앱 자동 복귀.
