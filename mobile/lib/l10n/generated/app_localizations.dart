@@ -895,6 +895,18 @@ abstract class L10n {
   /// **'전체 기능 잠금 해제'**
   String get paywallSubDefault;
 
+  /// No description provided for @looptapPaywallTriggerExport.
+  ///
+  /// In ko, this message translates to:
+  /// **'내보내기는 Pro 전용 기능입니다 — 구독하시면 MIDI / 오디오를 저장할 수 있어요.'**
+  String get looptapPaywallTriggerExport;
+
+  /// No description provided for @looptapPaywallTriggerSongQuota.
+  ///
+  /// In ko, this message translates to:
+  /// **'무료 플랜의 곡 개수 한도에 도달했어요. Pro 로 업그레이드하면 무제한으로 만들 수 있습니다.'**
+  String get looptapPaywallTriggerSongQuota;
+
   /// No description provided for @paywallFeatureCloudTitle.
   ///
   /// In ko, this message translates to:

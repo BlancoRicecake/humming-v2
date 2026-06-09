@@ -80,6 +80,7 @@ class Pill extends StatelessWidget {
     super.key,
     required this.label,
     this.icon,
+    this.iconColor,
     this.onTap,
     this.tone = PillTone.surface,
     this.height = 32,
@@ -89,6 +90,8 @@ class Pill extends StatelessWidget {
 
   final String label;
   final IconData? icon;
+  /// 아이콘 색을 라벨(fg) 과 따로 지정하고 싶을 때. null 이면 fg 와 동색.
+  final Color? iconColor;
   final VoidCallback? onTap;
   final PillTone tone;
   final double height;
@@ -126,7 +129,7 @@ class Pill extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Ms(icon!, size: 15, color: fg),
+              Ms(icon!, size: 15, color: iconColor ?? fg),
               const SizedBox(width: 6),
             ],
             Text(label,

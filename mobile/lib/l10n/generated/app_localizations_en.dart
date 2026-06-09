@@ -462,6 +462,14 @@ class L10nEn extends L10n {
   String get paywallSubDefault => 'Unlock all features';
 
   @override
+  String get looptapPaywallTriggerExport =>
+      'Export is a Pro feature — subscribe to download MIDI / audio.';
+
+  @override
+  String get looptapPaywallTriggerSongQuota =>
+      'You\'ve reached the free plan\'s song limit. Pro unlocks unlimited songs.';
+
+  @override
   String get paywallFeatureCloudTitle => '5GB Cloud';
 
   @override

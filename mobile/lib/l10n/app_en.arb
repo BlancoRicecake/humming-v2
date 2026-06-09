@@ -155,6 +155,8 @@
   "paywallSubSync": "Cloud sync — pick up anywhere",
   "paywallSubBackup": "Never lose your voice",
   "paywallSubDefault": "Unlock all features",
+  "looptapPaywallTriggerExport": "Export is a Pro feature — subscribe to download MIDI / audio.",
+  "looptapPaywallTriggerSongQuota": "You've reached the free plan's song limit. Pro unlocks unlimited songs.",
   "paywallFeatureCloudTitle": "5GB Cloud",
   "paywallFeatureCloudSub": "Continue songs on every device",
   "paywallFeatureBackupTitle": "Permanent backup",

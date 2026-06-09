@@ -178,6 +178,8 @@
   "paywallSubSync": "클라우드 동기화로 어디서든 이어서 작업",
   "paywallSubBackup": "내 목소리를 잃지 않고 평생 보관",
   "paywallSubDefault": "전체 기능 잠금 해제",
+  "looptapPaywallTriggerExport": "내보내기는 Pro 전용 기능입니다 — 구독하시면 MIDI / 오디오를 저장할 수 있어요.",
+  "looptapPaywallTriggerSongQuota": "무료 플랜의 곡 개수 한도에 도달했어요. Pro 로 업그레이드하면 무제한으로 만들 수 있습니다.",
   "paywallFeatureCloudTitle": "5GB 클라우드",
   "paywallFeatureCloudSub": "모든 기기에서 작업물 이어쓰기",
   "paywallFeatureBackupTitle": "영구 보관",

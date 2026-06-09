@@ -52,37 +52,47 @@ class TransportBar extends StatelessWidget {
     return Row(
       children: [
         // ── left: options ──
+        // 작은 폰(iPhone SE 등) 에선 BPM stepper + 아이콘 3개 합이 부모 너비를
+        // 넘으므로 FittedBox scaleDown 으로 비율 유지하며 축소. clipBehavior 로
+        // overflow 데코(노란 빗금)도 안 뜨게.
         Expanded(
-          child: Row(
-            children: [
-              IconBtn(icon: LtIcons.straighten, active: metro, tooltip: 'Metronome', onTap: () => onMetro(!metro)),
-              const SizedBox(width: 8),
-              IconBtn(icon: LtIcons.timer, active: countIn, tooltip: 'Count-in', onTap: () => onCountIn(!countIn)),
-              const SizedBox(width: 8),
-              const IconBtn(icon: LtIcons.repeat, active: true, tooltip: 'Loop (always on)'),
-              const SizedBox(width: 12),
-              _BpmStepper(bpm: bpm, onBpm: onBpm),
-            ],
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconBtn(icon: LtIcons.straighten, active: metro, tooltip: 'Metronome', onTap: () => onMetro(!metro)),
+                const SizedBox(width: 8),
+                IconBtn(icon: LtIcons.timer, active: countIn, tooltip: 'Count-in', onTap: () => onCountIn(!countIn)),
+                const SizedBox(width: 8),
+                const IconBtn(icon: LtIcons.repeat, active: true, tooltip: 'Loop (always on)'),
+                const SizedBox(width: 12),
+                _BpmStepper(bpm: bpm, onBpm: onBpm),
+              ],
+            ),
           ),
         ),
         // ── center: transport ──
+        // 사이즈 위계: Play(52) > Record(44) > Stop(38). 줄어든 만큼 bar 전체
+        // 높이도 줄어듦 (Row 높이 = 가장 큰 자식 = Play).
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconBtn(icon: LtIcons.stop, size: 44, tooltip: 'Stop', onTap: onStop),
+            IconBtn(icon: LtIcons.stop, size: 38, tooltip: 'Stop', onTap: onStop),
             const SizedBox(width: 14),
             // play
             GestureDetector(
               onTap: onPlay,
               child: Container(
-                width: 60,
-                height: 60,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   color: LT.lime,
                   shape: BoxShape.circle,
                   boxShadow: [BoxShadow(color: LT.lime.withValues(alpha: 0.4), blurRadius: 24)],
                 ),
-                child: Center(child: Ms(playing ? LtIcons.pause : LtIcons.playArrow, size: 30, color: LT.bg, fill: 1)),
+                child: Center(child: Ms(playing ? LtIcons.pause : LtIcons.playArrow, size: 26, color: LT.bg, fill: 1)),
               ),
             ),
             if (showRecord) ...[
@@ -91,8 +101,8 @@ class TransportBar extends StatelessWidget {
               GestureDetector(
                 onTap: onRec,
                 child: Container(
-                  width: 52,
-                  height: 52,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: recording ? LT.danger : LT.surface2,
                     shape: BoxShape.circle,
@@ -101,8 +111,8 @@ class TransportBar extends StatelessWidget {
                   ),
                   child: Center(
                     child: Container(
-                      width: 18,
-                      height: 18,
+                      width: 15,
+                      height: 15,
                       decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle),
                     ),
                   ),
@@ -111,40 +121,49 @@ class TransportBar extends StatelessWidget {
             ],
           ],
         ),
+        // 좌측 BPM stepper 뒤의 SizedBox(width: 12) 와 대칭 맞추기 — Record 와
+        // "Swing" 라벨이 딱 붙어 보이던 문제.
+        const SizedBox(width: 12),
         // ── right: swing + bars + clear ──
+        // 좌측과 동일한 이유로 FittedBox scaleDown. alignment 는 centerRight 라
+        // 큰 폰에선 기존처럼 오른쪽 정렬, 좁아지면 비율 유지하며 자연 축소.
         Expanded(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              LtLabel('Swing', color: swing > 0 ? LT.lime : LT.t3),
-              SizedBox(
-                width: 84,
-                child: SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 3,
-                    activeTrackColor: LT.lime,
-                    inactiveTrackColor: LT.surface3,
-                    thumbColor: LT.lime,
-                    overlayShape: SliderComponentShape.noOverlay,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                  ),
-                  child: Slider(
-                    min: 0,
-                    max: 60,
-                    value: (swing * 100).clamp(0, 60),
-                    onChanged: (v) => onSwing(v / 100),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LtLabel('Swing', color: swing > 0 ? LT.lime : LT.t3),
+                SizedBox(
+                  width: 84,
+                  child: SliderTheme(
+                    data: SliderThemeData(
+                      trackHeight: 3,
+                      activeTrackColor: LT.lime,
+                      inactiveTrackColor: LT.surface3,
+                      thumbColor: LT.lime,
+                      overlayShape: SliderComponentShape.noOverlay,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    ),
+                    child: Slider(
+                      min: 0,
+                      max: 60,
+                      value: (swing * 100).clamp(0, 60),
+                      onChanged: (v) => onSwing(v / 100),
+                    ),
                   ),
                 ),
-              ),
-              SizedBox(
-                width: 30,
-                child: Text('${(swing * 100).round()}%', style: LTType.mono(size: 11, color: LT.t2)),
-              ),
-              const SizedBox(width: 10),
-              _BarsToggle(bars: bars, onBars: onBars),
-              const SizedBox(width: 10),
-              IconBtn(icon: LtIcons.backspace, tooltip: 'Clear track', onTap: onClear),
-            ],
+                SizedBox(
+                  width: 30,
+                  child: Text('${(swing * 100).round()}%', style: LTType.mono(size: 11, color: LT.t2)),
+                ),
+                const SizedBox(width: 10),
+                _BarsToggle(bars: bars, onBars: onBars),
+                const SizedBox(width: 10),
+                IconBtn(icon: LtIcons.backspace, tooltip: 'Clear track', onTap: onClear),
+              ],
+            ),
           ),
         ),
       ],

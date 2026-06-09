@@ -455,6 +455,14 @@ class L10nKo extends L10n {
   String get paywallSubDefault => '전체 기능 잠금 해제';
 
   @override
+  String get looptapPaywallTriggerExport =>
+      '내보내기는 Pro 전용 기능입니다 — 구독하시면 MIDI / 오디오를 저장할 수 있어요.';
+
+  @override
+  String get looptapPaywallTriggerSongQuota =>
+      '무료 플랜의 곡 개수 한도에 도달했어요. Pro 로 업그레이드하면 무제한으로 만들 수 있습니다.';
+
+  @override
   String get paywallFeatureCloudTitle => '5GB 클라우드';
 
   @override

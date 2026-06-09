@@ -28,7 +28,7 @@ class SongsScreen extends StatelessWidget {
   Future<void> _new(BuildContext context) async {
     final store = context.read<LoopStore>();
     if (!store.proActive && store.songs.length >= kFreeSongQuota) {
-      await showPaywallSheet(context);
+      await showPaywallSheet(context, trigger: PaywallTrigger.songQuota);
       if (!context.mounted) return;
       // paywall 닫혔는데도 여전히 비-Pro 라면 그대로 종료.
       if (!context.read<LoopStore>().proActive) return;

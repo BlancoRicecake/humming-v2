@@ -248,10 +248,16 @@ class DrumGrid extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: 52,
-                      child: Row(
-                        children: [
-                          Text(d.short, style: LTType.inter(size: 18, weight: FontWeight.w900, color: d.color)),
-                        ],
+                      child: LayoutBuilder(
+                        builder: (context, c) {
+                          // 행 높이의 70% 를 폰트 크기로, 시안 기준 18pt 상한.
+                          final size = (c.maxHeight * 0.7).clamp(10.0, 18.0);
+                          return Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(d.short,
+                                style: LTType.inter(size: size, weight: FontWeight.w900, color: d.color)),
+                          );
+                        },
                       ),
                     ),
                     Expanded(

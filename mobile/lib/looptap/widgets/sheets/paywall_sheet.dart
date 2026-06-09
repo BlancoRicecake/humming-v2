@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../../services/iap_pricing.dart';
 import '../../../services/iap_service.dart';
 import '../../app.dart' show rootMessengerKey;
@@ -14,12 +15,36 @@ import '../../theme/tokens.dart';
 import 'account_sheet.dart';
 import 'lt_modal.dart';
 
-Future<void> showPaywallSheet(BuildContext context) {
-  return showLtModal(context, width: 440, child: const _PaywallSheet());
+/// Paywall 진입점 — 어떤 기능 시도가 Pro 게이트에 막혀 시트가 떴는지.
+/// 상단 contextual banner 의 문구가 이걸로 결정됨. 사용자가 "왜 결제 화면이
+/// 떴는지" 즉시 인지하게 해주는 게 목적.
+enum PaywallTrigger {
+  /// 트랙 export 시도 (MIDI/오디오 내보내기).
+  export,
+  /// 무료 플랜 곡 개수 한도 도달.
+  songQuota,
+  /// 일반 업그레이드 진입 (계정/설정에서 직접 진입). 별도 banner 표시 없음.
+  upgrade;
+
+  /// banner 에 표시할 한 줄 — null 이면 banner 미노출.
+  String? hint(L10n l) => switch (this) {
+        PaywallTrigger.export => l.looptapPaywallTriggerExport,
+        PaywallTrigger.songQuota => l.looptapPaywallTriggerSongQuota,
+        PaywallTrigger.upgrade => null,
+      };
+}
+
+Future<void> showPaywallSheet(
+  BuildContext context, {
+  PaywallTrigger trigger = PaywallTrigger.upgrade,
+}) {
+  return showLtModal(context, width: 440, child: _PaywallSheet(trigger: trigger));
 }
 
 class _PaywallSheet extends StatefulWidget {
-  const _PaywallSheet();
+  const _PaywallSheet({required this.trigger});
+
+  final PaywallTrigger trigger;
 
   @override
   State<_PaywallSheet> createState() => _PaywallSheetState();
@@ -127,6 +152,32 @@ class _PaywallSheetState extends State<_PaywallSheet> {
             IconBtn(icon: LtIcons.close, tooltip: 'Close', onTap: () => Navigator.of(context).maybePop()),
           ],
         ),
+        // 진입점 contextual banner — Export 같은 특정 기능에서 들어왔을 때
+        // "왜 결제 화면이 떴는지" 즉시 인지시키는 핀포인트 메시지.
+        if (widget.trigger.hint(L10n.of(context)) != null) ...[
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: LT.lime.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(LTRadius.control),
+              border: Border.all(color: LT.lime.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Ms(LtIcons.workspacePremium, size: 16, color: LT.lime),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.trigger.hint(L10n.of(context))!,
+                    style: LTType.inter(size: 12, weight: FontWeight.w600, color: LT.t1, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 14),
         Text(
           'Unlock stems, unlimited cloud loops, and priority sync.',

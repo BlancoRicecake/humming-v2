@@ -971,7 +971,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final store = context.read<LoopStore>();
     debugPrint('[export] tap proActive=${store.proActive}');
     if (!store.proActive) {
-      await showPaywallSheet(context);
+      await showPaywallSheet(context, trigger: PaywallTrigger.export);
       if (!mounted) return;
       if (!context.read<LoopStore>().proActive) return; // 결제 안 한 채 닫힘.
     }
@@ -1096,44 +1096,55 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   Widget _topBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: LT.border))),
-      child: Row(
-        children: [
-          IconBtn(icon: LtIcons.arrowBack, tooltip: 'Back', onTap: _backWithSave),
-          const SizedBox(width: 8),
-          const Ms(LtIcons.edit, size: 14, color: LT.t3),
-          const SizedBox(width: 6),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 240),
-            child: IntrinsicWidth(
-              child: TextField(
-                controller: TextEditingController(text: _title)
-                  ..selection = TextSelection.collapsed(offset: _title.length),
-                onChanged: (v) => _title = v,
-                cursorColor: LT.lime,
-                style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t1),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 2),
-                  border: InputBorder.none,
-                ),
+    // 좌측 그룹(뒤로/제목/undo/redo)과 우측 그룹(mixer/key/saved/save/export) 으로
+    // 분리. Spacer 가 둘 사이를 벌리되, 작은 폰(iPhone SE 등)에선 좌·우 그룹의
+    // 자연 너비 합이 부모 폭을 넘기 때문에 각 그룹을 Flexible+FittedBox(scaleDown)
+    // 으로 감싸 비율 유지하며 축소. 큰 폰/아이패드는 원본 크기 그대로.
+    // _topBar 전용 컴팩트 사이즈 — 헤더 공간 절약 (옵션 B).
+    const btnSize = 30.0;
+    const pillH = 26.0;
+    const pillFS = 11.0;
+    const pillPad = 10.0;
+
+    final leftGroup = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconBtn(icon: LtIcons.arrowBack, size: btnSize, tooltip: 'Back', onTap: _backWithSave),
+        const SizedBox(width: 8),
+        const Ms(LtIcons.edit, size: 14, color: LT.t3),
+        const SizedBox(width: 6),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 240),
+          child: IntrinsicWidth(
+            child: TextField(
+              controller: TextEditingController(text: _title)
+                ..selection = TextSelection.collapsed(offset: _title.length),
+              onChanged: (v) => _title = v,
+              cursorColor: LT.lime,
+              style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t1),
+              decoration: const InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 2),
+                border: InputBorder.none,
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          _undoRedoBtn(LtIcons.undo, 'Undo', _undo.isNotEmpty, _undoAction),
-          const SizedBox(width: 6),
-          _undoRedoBtn(LtIcons.redo, 'Redo', _redo.isNotEmpty, _redoAction),
-          const Spacer(),
-          IconBtn(icon: LtIcons.tune, tooltip: 'Mixer', onTap: _openMixer),
-          const SizedBox(width: 8),
-          Pill(label: '$_keyRoot ${kScales[_scale]!.label}', icon: LtIcons.musicNote, onTap: _openKey),
-          const SizedBox(width: 8),
-          // Saved indicator — Save pill 왼쪽에 두어 Export 와 시각적 간섭 방지.
-          if (_saveLabel().isNotEmpty) ...[
-            AnimatedSwitcher(
+        ),
+      ],
+    );
+
+    // 아이콘 전용 버튼은 hold(롱프레스) 시 IconBtn 내부 Tooltip 으로 라벨 노출.
+    // Save / Export 의 텍스트 라벨을 빼는 대신 동일한 정보 전달.
+    final rightGroup = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Saved indicator — 고정폭 슬롯으로 예약. 라벨이 등장/사라져도 rightGroup
+        // 자연 너비 불변 → 다른 버튼들 흔들림/축소 없음.
+        SizedBox(
+          width: 90,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: AnimatedSwitcher(
               duration: LTMotion.state,
               child: Text(
                 _saveLabel(),
@@ -1145,17 +1156,58 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-          ],
-          Pill(label: 'Save', icon: LtIcons.save, onTap: _saveNow),
-          const SizedBox(width: 12),
-          // Pro 게이트 — 비-Pro 면 paywall 우선 표시, 통과 후 export drawer 진입.
-          Pill(
-            label: 'Export',
-            icon: LtIcons.iosShare,
-            tone: PillTone.lime,
-            onTap: _exportOrPaywall,
           ),
+        ),
+        const SizedBox(width: 8),
+        _undoRedoBtn(LtIcons.undo, 'Undo', _undo.isNotEmpty, _undoAction),
+        const SizedBox(width: 6),
+        _undoRedoBtn(LtIcons.redo, 'Redo', _redo.isNotEmpty, _redoAction),
+        const SizedBox(width: 8),
+        IconBtn(icon: LtIcons.save, size: btnSize, tooltip: 'Save', onTap: _saveNow),
+        const SizedBox(width: 8),
+        IconBtn(icon: LtIcons.tune, size: btnSize, tooltip: 'Mixer', onTap: _openMixer),
+        const SizedBox(width: 8),
+        Pill(
+          label: '$_keyRoot ${kScales[_scale]!.label}',
+          icon: LtIcons.musicNote,
+          height: pillH,
+          fontSize: pillFS,
+          horizontalPadding: pillPad,
+          onTap: _openKey,
+        ),
+        const SizedBox(width: 12),
+        // Pro 게이트 — 비-Pro 면 paywall 우선 표시, 통과 후 export drawer 진입.
+        // active: true 로 라임 배경 → 1순위 액션 시각 강조.
+        IconBtn(
+          icon: LtIcons.iosShare,
+          size: btnSize,
+          active: true,
+          tooltip: 'Export',
+          onTap: _exportOrPaywall,
+        ),
+      ],
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: LT.border))),
+      // 우측 그룹은 자연 크기 유지(라벨이 등장해도 버튼 사이즈 그대로). 좌측만
+      // 남은 공간(= 부모 폭 − 우측 자연 폭) 안에서 자연 크기를 쓰되, 그게 부족하면
+      // FittedBox(scaleDown) 으로 비율 유지하며 축소. Expanded 가 남은 폭 전부를
+      // 차지해서 좌측이 우측과 시각적으로 분리되도록 함.
+      child: Row(
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: leftGroup,
+              ),
+            ),
+          ),
+          rightGroup,
         ],
       ),
     );
@@ -1164,18 +1216,32 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   Widget _undoRedoBtn(IconData icon, String tip, bool enabled, VoidCallback onTap) {
     return Opacity(
       opacity: enabled ? 1 : 0.35,
-      child: IconBtn(icon: icon, tooltip: tip, onTap: enabled ? onTap : null),
+      // _topBar 내부 컴팩트 사이즈 (기본 36 → 30).
+      child: IconBtn(icon: icon, size: 30, tooltip: tip, onTap: enabled ? onTap : null),
     );
   }
 
   Widget _surfaceHeader(bool pitched) {
+    final hasInstrument = _activeId == 'melody' || _activeId == 'bass';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
       child: Row(
         children: [
-          Ms(_meta.icon, size: 18, color: _meta.color),
-          const SizedBox(width: 8),
-          Text(_meta.label, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.t1)),
+          // 트랙 식별 — melody/bass 는 instrument picker pill 이 라벨 역할까지
+          // 겸함 (아이콘은 트랙 컬러로 칠해 식별성 유지). 그 외 트랙은 기존
+          // 아이콘 + 라벨.
+          if (hasInstrument)
+            Pill(
+              label: instrumentLabel(_activeId, _instruments[_activeId] ?? (_activeId == 'bass' ? 33 : 0)),
+              icon: _meta.icon,
+              iconColor: _meta.color,
+              onTap: _openInstrument,
+            )
+          else ...[
+            Ms(_meta.icon, size: 18, color: _meta.color),
+            const SizedBox(width: 8),
+            Text(_meta.label, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.t1)),
+          ],
           if (_hasInputToggle) ...[
             const SizedBox(width: 6),
             _inputToggle(),
@@ -1184,15 +1250,6 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           if (_activeId == 'melody' && _inputMode == 'pads') ...[
             const SizedBox(width: 6),
             _chordToggle(),
-          ],
-          // per-track instrument picker (melody/bass)
-          if (_activeId == 'melody' || _activeId == 'bass') ...[
-            const SizedBox(width: 6),
-            Pill(
-              label: instrumentLabel(_activeId, _instruments[_activeId] ?? (_activeId == 'bass' ? 33 : 0)),
-              icon: LtIcons.piano,
-              onTap: _openInstrument,
-            ),
           ],
           const Spacer(),
           if (pitched) _octaveStepper(),
