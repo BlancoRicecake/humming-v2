@@ -123,3 +123,5 @@ landing/
 
 - 디자인 소스: `C:\Users\jlion\Desktop\Humming\design\humming-UI.pen` — `Landing Page` 프레임(`AmBaD`)
 - 이 사이트는 해당 디자인을 코드로 충실히 재현한 결과물입니다.
+
+<!-- auto-deploy test: 2026-06-09 -->
