@@ -54,3 +54,7 @@ backend/secrets/*.plist
 # iOS Google Sign In — bundle id 만 들어있어 강한 secret 은 아니지만
 # 사용자 지시로 git out-of-tree 유지. 빌드 시 backend/secrets 에서 복사.
 mobile/ios/Runner/GoogleService-Info.plist
+
+# App Review demo credentials (live password — git 에 절대 올리지 말 것).
+# fastlane deliver 가 디스크에서 읽어 ASC 로 푸시하므로 파일은 로컬 유지.
+mobile/ios/fastlane/metadata/review_information/

@@ -55,6 +55,14 @@ Sync App Store metadata (descriptions, keywords, etc) without binary
 
 Sync IAP products via custom Python script (App Store Connect API)
 
+### ios sync_play_iap
+
+```sh
+[bundle exec] fastlane ios sync_play_iap
+```
+
+Sync Play Console subscriptions via custom Python script (Android Publisher API)
+
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
