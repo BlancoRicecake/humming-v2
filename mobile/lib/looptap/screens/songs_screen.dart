@@ -87,12 +87,52 @@ class _Header extends StatelessWidget {
           ],
         ),
         const Spacer(),
+        if (context.watch<LoopStore>().proActive) ...[
+          _ProBadge(onTap: () => showAccountSheet(context)),
+          const SizedBox(width: 10),
+        ],
         IconBtn(icon: LtIcons.settings, size: 40, tooltip: 'Settings', onTap: () => showSettingsSheet(context)),
         const SizedBox(width: 10),
         _MyPageButton(),
         const SizedBox(width: 10),
         Pill(label: 'New song', icon: LtIcons.add, tone: PillTone.lime, height: 40, fontSize: 14, horizontalPadding: 18, onTap: onNew),
       ],
+    );
+  }
+}
+
+/// Pro 활성 시 헤더에 노출되는 lime pill — 시각적 active 피드백.
+/// 탭하면 account sheet 로 이동 (구독 관리 진입점).
+class _ProBadge extends StatelessWidget {
+  const _ProBadge({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: LT.lime,
+          borderRadius: BorderRadius.circular(LTRadius.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Ms(LtIcons.workspacePremium, size: 18, color: LT.bg),
+            const SizedBox(width: 6),
+            Text('PRO',
+                style: LTType.inter(
+                  size: 13,
+                  weight: FontWeight.w900,
+                  color: LT.bg,
+                  letterSpacing: 1,
+                )),
+          ],
+        ),
+      ),
     );
   }
 }

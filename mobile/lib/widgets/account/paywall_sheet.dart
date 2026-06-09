@@ -198,7 +198,7 @@ class _PaywallBodyState extends State<_PaywallBody> {
               'yearly',
               t.paywallPlanYearly,
               t.paywallPlanYearlyPrice(IapPricing.yearlyLabel()),
-              t.paywallPlanYearlyHint(IapPricing.yearlyAsMonthlyLabel(), IapPricing.yearlyDiscountPercent()),
+              t.paywallPlanYearlyHint(IapPricing.yearlyAsMonthlyLabel()),
             ),
             _planTile(
               'monthly',

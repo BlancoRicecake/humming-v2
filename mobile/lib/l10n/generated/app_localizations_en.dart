@@ -88,8 +88,8 @@ class L10nEn extends L10n {
   String get trialStartCta => 'Start 7-day free trial';
 
   @override
-  String trialPriceFootnote(String won) {
-    return '\$$won/month after trial';
+  String trialPriceFootnote(String price) {
+    return '$price/month after trial';
   }
 
   @override
@@ -494,8 +494,8 @@ class L10nEn extends L10n {
   }
 
   @override
-  String paywallPlanYearlyHint(String monthly, int pct) {
-    return '$monthly/mo · $pct% off';
+  String paywallPlanYearlyHint(String monthly) {
+    return '$monthly/mo equivalent';
   }
 
   @override

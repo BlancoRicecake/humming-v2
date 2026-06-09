@@ -1,0 +1,2 @@
+json_key_file("../../backend/secrets/google_play_service_account.json")
+package_name("com.humtrack.app")

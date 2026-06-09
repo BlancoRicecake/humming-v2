@@ -90,4 +90,9 @@ platform :ios do
   lane :sync_iap do
     sh("python3 ../../infra/scripts/asc_create_iap.py")
   end
+
+  desc "Sync Play Console subscriptions via custom Python script (Android Publisher API)"
+  lane :sync_play_iap do
+    sh("python3 ../../infra/scripts/play_create_iap.py")
+  end
 end

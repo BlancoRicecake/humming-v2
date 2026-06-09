@@ -250,8 +250,8 @@ abstract class L10n {
   /// No description provided for @trialPriceFootnote.
   ///
   /// In ko, this message translates to:
-  /// **'₩{won}/월 (체험 후 자동 결제)'**
-  String trialPriceFootnote(String won);
+  /// **'{price}/월 (체험 후 자동 결제)'**
+  String trialPriceFootnote(String price);
 
   /// No description provided for @cloudUsageLabel.
   ///
@@ -958,8 +958,8 @@ abstract class L10n {
   /// No description provided for @paywallPlanYearlyHint.
   ///
   /// In ko, this message translates to:
-  /// **'월 {monthly} · {pct}% 할인'**
-  String paywallPlanYearlyHint(String monthly, int pct);
+  /// **'월 {monthly} 환산'**
+  String paywallPlanYearlyHint(String monthly);
 
   /// No description provided for @paywallPlanMonthly.
   ///

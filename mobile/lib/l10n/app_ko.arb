@@ -36,8 +36,8 @@
   "valuePersistentVocal": "영구 보관",
 
   "trialStartCta": "7일 무료 체험 시작",
-  "trialPriceFootnote": "₩{won}/월 (체험 후 자동 결제)",
-  "@trialPriceFootnote": {"placeholders": {"won": {"type": "String", "example": "5,500"}}},
+  "trialPriceFootnote": "{price}/월 (체험 후 자동 결제)",
+  "@trialPriceFootnote": {"placeholders": {"price": {"type": "String", "example": "₩5,500"}}},
 
   "cloudUsageLabel": "{used} / {total} 사용 중",
   "@cloudUsageLabel": {"placeholders": {"used": {"type": "String"}, "total": {"type": "String"}}},
@@ -189,8 +189,8 @@
   "paywallPlanYearly": "연 구독",
   "paywallPlanYearlyPrice": "{price} / 년",
   "@paywallPlanYearlyPrice": {"placeholders": {"price": {"type": "String"}}},
-  "paywallPlanYearlyHint": "월 {monthly} · {pct}% 할인",
-  "@paywallPlanYearlyHint": {"placeholders": {"monthly": {"type": "String"}, "pct": {"type": "int"}}},
+  "paywallPlanYearlyHint": "월 {monthly} 환산",
+  "@paywallPlanYearlyHint": {"placeholders": {"monthly": {"type": "String"}}},
   "paywallPlanMonthly": "월 구독",
   "paywallPlanMonthlyPrice": "{price} / 월",
   "@paywallPlanMonthlyPrice": {"placeholders": {"price": {"type": "String"}}},

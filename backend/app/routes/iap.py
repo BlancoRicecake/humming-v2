@@ -291,18 +291,21 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
         # is a long base64 blob (>200 chars and no dots).
         looks_like_jws = raw.count(".") == 2
         looks_like_txid = raw.isdigit() and len(raw) <= 30
-        if looks_like_jws or looks_like_txid:
-            txid = raw
-            if looks_like_jws:
-                try:
-                    txid = str(_decode_apple_jws_unsafe(raw).get("transactionId") or raw)
-                except Exception:
-                    pass
-            info = await _apple_lookup_transaction(txid)
+        logger.info("iap verify raw len=%d dots=%d head=%r jws=%s txid=%s",
+                    len(raw), raw.count("."), raw[:40], looks_like_jws, looks_like_txid)
+        if looks_like_jws:
+            # StoreKit 2 JWS — verify locally against Apple's x5c cert chain.
+            # No roundtrip to App Store Server API needed (which would require
+            # a valid In-App Purchase key + .p8). The signature itself proves
+            # the receipt came from Apple.
+            tx = _decode_apple_jws_verified(raw)
+        elif looks_like_txid:
+            # transactionId only — must look it up through Server API.
+            info = await _apple_lookup_transaction(raw)
             signed = info.get("signedTransactionInfo")
             if not signed:
                 raise HTTPException(400, "apple: no signedTransactionInfo")
-            tx = _decode_apple_jws_unsafe(signed)
+            tx = _decode_apple_jws_verified(signed)
         else:
             # Legacy verifyReceipt path (StoreKit 1) with Shared Secret
             legacy = await _apple_verify_receipt_legacy(raw)

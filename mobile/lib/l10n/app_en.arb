@@ -33,7 +33,8 @@
   "valuePersistentVocal": "Permanent backup",
 
   "trialStartCta": "Start 7-day free trial",
-  "trialPriceFootnote": "${won}/month after trial",
+  "trialPriceFootnote": "{price}/month after trial",
+  "@trialPriceFootnote": {"placeholders": {"price": {"type": "String", "example": "$3.49"}}},
 
   "cloudUsageLabel": "{used} of {total} used",
 
@@ -164,7 +165,7 @@
   "paywallFeaturePrioritySub": "Faster humming analysis / render",
   "paywallPlanYearly": "Yearly",
   "paywallPlanYearlyPrice": "{price} / year",
-  "paywallPlanYearlyHint": "{monthly}/mo · {pct}% off",
+  "paywallPlanYearlyHint": "{monthly}/mo equivalent",
   "paywallPlanMonthly": "Monthly",
   "paywallPlanMonthlyPrice": "{price} / month",
   "paywallPlanMonthlyHint": "Cancel anytime",

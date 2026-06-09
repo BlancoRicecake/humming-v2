@@ -8,7 +8,10 @@
 //
 // 가격 결정 (2026-06-03):
 //   - 월: USD 3.49 / KRW 5,500
-//   - 연: USD 33.49 / KRW 55,000 (월 환산 ≈ USD 2.79 / KRW 4,583, 약 20% 할인 — USD 기준)
+//   - 연: USD 33.49 / KRW 55,000
+//   ※ 할인율 표기는 노출하지 않는다 — Apple/Google tier 매핑상 territory 별 환율
+//   차이로 KRW 는 약 16.67%, USD 는 약 20% 가 되어 일관된 수치를 보장할 수 없음
+//   (Apple 리뷰 가이드 3.1.1 currency mismatch 반려 회피).
 //
 // 변경 시 함께 갱신:
 //   - backend/.env.secrets 의 APPLE_IAP_PRICE_*
@@ -63,13 +66,6 @@ class IapPricing {
     final monthly = (yearlyKrw / 12).round();
     return '₩${_fmt(monthly)}';
   }
-
-  /// 연 대비 월 결제 할인율(%) — **USD 기준 20% 고정**.
-  ///
-  /// Apple tier 매핑 특성상 territory 별 KRW/USD 비율이 정확히 일치하지 않음
-  /// (예: KRW ₩5,500 → ₩55,000 = 16.67% 할인, USD $3.49 → $33.49 = 20% 할인).
-  /// 마케팅 일관성 + paywall UX 통일을 위해 **모든 locale 에서 20% 표시**.
-  static int yearlyDiscountPercent() => 20;
 
   // ─── 내부 ───────────────────────────────────────────────────────────
 

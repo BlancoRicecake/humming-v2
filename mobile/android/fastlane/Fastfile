@@ -1,0 +1,72 @@
+# Android Fastlane — Internal Testing 업로드 자동화.
+#
+# 사용:
+#   cd mobile/android && bundle exec fastlane internal
+#
+# 사전 조건:
+#   - mobile/android/key.properties 가 release 서명 키 정보를 가리킴
+#   - backend/secrets/google_play_service_account.json 의 service account 가
+#     Play Console 권한 "Manage testing track releases" 이상 보유
+#
+# 환경 변수 (dart-define 으로 빌드에 주입):
+#   SUPABASE_URL, SUPABASE_ANON_KEY, GOOGLE_WEB_CLIENT_ID, ENGINE_URL
+# 미설정 시 backend/.env.secrets 의 값을 참조.
+
+default_platform(:android)
+
+DEFINE_KEYS = %w[SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL]
+
+def collect_dart_defines
+  env = {}
+  DEFINE_KEYS.each do |k|
+    v = ENV[k]
+    next if v.nil? || v.empty?
+    env[k] = v
+  end
+  if env.empty?
+    # backend/.env.secrets 의 값을 폴백으로 시도.
+    secrets_path = File.expand_path("../../../backend/.env.secrets", __dir__)
+    if File.exist?(secrets_path)
+      File.readlines(secrets_path).each do |line|
+        line.strip!
+        next if line.start_with?("#") || line.empty?
+        k, v = line.split("=", 2)
+        env[k] = v if DEFINE_KEYS.include?(k) && !v.nil? && !v.empty?
+      end
+    end
+  end
+  env
+end
+
+platform :android do
+  desc "Build release .aab with LoopTap entry + dart-defines"
+  lane :build do |options|
+    entry = options[:entry] || "lib/looptap/main_looptap.dart"
+    defines = collect_dart_defines
+    UI.message "dart-defines: #{defines.keys.join(", ")}"
+    args = defines.map { |k, v| "--dart-define=#{k}=#{v}" }
+    sh("cd ../.. && flutter clean && flutter pub get")
+    sh("cd ../.. && flutter build appbundle --release -t #{entry} #{args.join(" ")}")
+  end
+
+  desc "Upload current .aab to Play Console Internal Testing track"
+  lane :upload_internal do
+    upload_to_play_store(
+      track: "internal",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      release_status: "draft",
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      changes_not_sent_for_review: true,
+    )
+  end
+
+  desc "Build LoopTap-entry release + upload to Internal Testing"
+  lane :internal do |options|
+    build(entry: options[:entry] || "lib/looptap/main_looptap.dart")
+    upload_internal
+  end
+end

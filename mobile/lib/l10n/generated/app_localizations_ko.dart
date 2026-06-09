@@ -88,8 +88,8 @@ class L10nKo extends L10n {
   String get trialStartCta => '7일 무료 체험 시작';
 
   @override
-  String trialPriceFootnote(String won) {
-    return '₩$won/월 (체험 후 자동 결제)';
+  String trialPriceFootnote(String price) {
+    return '$price/월 (체험 후 자동 결제)';
   }
 
   @override
@@ -487,8 +487,8 @@ class L10nKo extends L10n {
   }
 
   @override
-  String paywallPlanYearlyHint(String monthly, int pct) {
-    return '월 $monthly · $pct% 할인';
+  String paywallPlanYearlyHint(String monthly) {
+    return '월 $monthly 환산';
   }
 
   @override

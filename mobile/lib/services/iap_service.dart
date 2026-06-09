@@ -12,11 +12,19 @@
 //   5. onPurchaseResult    — Stream<IapResult>; ProjectStore 에서 listen 후 subscription 갱신.
 //
 // 스토어 가용성(`isAvailable`) 이 false 면 enabled=false → 호출자는 mockPurchase 폴백.
+//
+// 백엔드 verify payload (backend/app/models.py:IapVerifyRequest):
+//   { store: "app_store" | "play_store",
+//     receipt_data: <Apple JWS or transactionId; Google JSON {productId, purchaseToken}>,
+//     product_id?: <SKU> }
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+
+import 'auth_service.dart';
 
 const String kProductMonthly = 'humtrack_pro_monthly_v2';
 const String kProductYearly  = 'humtrack_pro_yearly';
@@ -90,16 +98,23 @@ class IapService {
   }
 
   Future<bool> buy(String productId) async {
+    debugPrint('[iap] buy() enabled=$_enabled products=${_products.map((p) => p.id).toList()} requested=$productId');
     if (!_enabled) return false;
+    if (_products.isEmpty) {
+      // 부트 시 loadProducts 가 아직 안 끝났거나 실패 — 한 번 더 시도.
+      debugPrint('[iap] buy() products empty → reload');
+      await loadProducts();
+    }
     final pd = _products.where((p) => p.id == productId).firstOrNull;
     if (pd == null) {
-      debugPrint('[iap] product not loaded: $productId');
+      debugPrint('[iap] product not loaded: $productId (have ${_products.length})');
       return false;
     }
     try {
       final param = PurchaseParam(productDetails: pd);
-      // 구독은 non-consumable.
-      return await _iap.buyNonConsumable(purchaseParam: param);
+      final ok = await _iap.buyNonConsumable(purchaseParam: param);
+      debugPrint('[iap] buyNonConsumable returned=$ok for $productId');
+      return ok;
     } catch (e) {
       debugPrint('[iap] buy failed: $e');
       return false;
@@ -133,6 +148,16 @@ class IapService {
           break;
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
+          // 로그인 안 된 상태에서 StoreKit 이 부팅 시 기존 영수증을 auto-replay
+          // 하는 경우(iOS sandbox 의 정상 동작) → 토큰이 없으므로 verify 가 무조건
+          // 401. 이때는 receipt 도 complete 하지 않고 큐에 남겨두어, 사용자가
+          // 로그인 + restore 했을 때 정상 흐름으로 복원되도록 한다.
+          final token = await AuthService.instance.currentAccessToken();
+          if (token == null || token.isEmpty) {
+            debugPrint('[iap] purchase delivered without auth — deferring (left in queue): ${p.productID}');
+            // 결과 emit 도 하지 않음 (paywall completer 가 의미 없는 false 로 풀리는 것 방지).
+            continue;
+          }
           final ok = await _verifyOnServer(p);
           _resultCtl.add(IapResult(
             ok: ok,
@@ -153,17 +178,40 @@ class IapService {
       return true;
     }
     try {
+      final isIos = defaultTargetPlatform == TargetPlatform.iOS;
+      final receipt = isIos
+          // App Store: StoreKit JWS / transactionId / legacy receipt — 그대로.
+          ? p.verificationData.serverVerificationData
+          // Play Store: backend 가 JSON {productId, purchaseToken} 으로 기대.
+          : jsonEncode({
+              'productId': p.productID,
+              'purchaseToken': p.verificationData.serverVerificationData,
+            });
       final body = {
+        'store': isIos ? 'app_store' : 'play_store',
+        'receipt_data': receipt,
         'product_id': p.productID,
-        'purchase_id': p.purchaseID,
-        'platform': defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
-        'verification_data': p.verificationData.serverVerificationData,
-        'source': p.verificationData.source,
       };
-      final r = await dio.post<Map<String, dynamic>>(_verifyPath, data: body);
-      return r.statusCode == 200 && (r.data?['ok'] == true);
+      debugPrint('[iap] verify POST product=${p.productID} receipt.len=${receipt.length} source=${p.verificationData.source}');
+      final r = await dio.post<Map<String, dynamic>>(
+        _verifyPath,
+        data: body,
+        options: Options(
+          // 4xx/5xx 도 throw 안 하고 응답으로 받아 body 까지 로깅.
+          validateStatus: (_) => true,
+        ),
+      );
+      if (r.statusCode != 200) {
+        debugPrint('[iap] verify non-200: ${r.statusCode} body=${r.data}');
+        return false;
+      }
+      // backend response: { status: SubStatus, product_id, expires_at, ... }
+      final status = (r.data?['status'] as String?)?.toLowerCase();
+      final ok = status == 'active' || status == 'trial';
+      debugPrint('[iap] verify ok=$ok status=$status data=${r.data}');
+      return ok;
     } catch (e) {
-      debugPrint('[iap] verify failed: $e');
+      debugPrint('[iap] verify exception: $e');
       return false;
     }
   }
