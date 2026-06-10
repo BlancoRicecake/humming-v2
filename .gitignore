@@ -75,3 +75,13 @@ mobile/ios/Podfile.lock
 # App Review demo credentials (live password — git 에 절대 올리지 말 것).
 # fastlane deliver 가 디스크에서 읽어 ASC 로 푸시하므로 파일은 로컬 유지.
 mobile/ios/fastlane/metadata/review_information/
+
+# Xcode/fastlane build artifacts
+mobile/ios/Runner.ipa
+mobile/ios/*.dSYM.zip
+mobile/ios/build/
+mobile/android/fastlane/report.xml
+mobile/android/fastlane/README.md
+mobile/fastlane/
+
+.vercel
