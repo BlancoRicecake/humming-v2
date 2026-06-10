@@ -6,34 +6,56 @@ import '../models/loop_models.dart';
 import 'theory.dart';
 
 /// A whole song flattened to one timeline (sections in order × repeats).
+/// melody/bass/drums are the main tracks; melodyDec/beatDec are the decoration
+/// ("꾸밈") layers (melody-fill pitched voice + beat-fill percussion).
 class FlatSong {
-  FlatSong(this.melody, this.bass, this.drums, this.steps);
+  FlatSong(
+    this.melody,
+    this.bass,
+    this.drums,
+    this.steps, {
+    this.melodyDec = const [],
+    this.beatDec = const [],
+  });
   final List<PitchNote> melody;
   final List<PitchNote> bass;
   final List<DrumNote> drums;
   final int steps;
+  final List<PitchNote> melodyDec;
+  final List<DrumNote> beatDec;
 }
 
 FlatSong flattenSong(List<Section> sections) {
   var off = 0;
-  final m = <PitchNote>[], b = <PitchNote>[], d = <DrumNote>[];
+  final m = <PitchNote>[], md = <PitchNote>[], b = <PitchNote>[];
+  final d = <DrumNote>[], bd = <DrumNote>[];
+  void pitched(TrackData? t, List<PitchNote> out) {
+    if (t == null) return;
+    for (final n in t.pitchNotes) {
+      out.add(PitchNote(midi: n.midi, freq: n.freq, step: n.step + off, dur: n.dur));
+    }
+  }
+
+  void perc(TrackData? t, List<DrumNote> out) {
+    if (t == null) return;
+    for (final n in t.drumNotes) {
+      out.add(DrumNote(kind: n.kind, step: n.step + off));
+    }
+  }
+
   for (final sec in sections) {
     final reps = sec.repeats;
     final st = stepsForBars(sec.bars);
     for (var r = 0; r < reps; r++) {
-      for (final n in sec.tracks['melody']!.pitchNotes) {
-        m.add(PitchNote(midi: n.midi, freq: n.freq, step: n.step + off, dur: n.dur));
-      }
-      for (final n in sec.tracks['bass']!.pitchNotes) {
-        b.add(PitchNote(midi: n.midi, freq: n.freq, step: n.step + off, dur: n.dur));
-      }
-      for (final n in sec.tracks['drums']!.drumNotes) {
-        d.add(DrumNote(kind: n.kind, step: n.step + off));
-      }
+      pitched(sec.tracks['melody'], m);
+      pitched(sec.tracks['melodyDec'], md);
+      pitched(sec.tracks['bass'], b);
+      perc(sec.tracks['drums'], d);
+      perc(sec.tracks['beatDec'], bd);
       off += st;
     }
   }
-  return FlatSong(m, b, d, math.max(16, off));
+  return FlatSong(m, b, d, math.max(16, off), melodyDec: md, beatDec: bd);
 }
 
 /// 30-bar waveform thumbnail (screens.jsx buildWave) from a flattened song.
@@ -47,7 +69,10 @@ List<double> buildWave(FlatSong flat) {
   for (final n in flat.drums) {
     bump(n.step, n.kind == 'kick' ? 0.55 : n.kind == 'snare' ? 0.42 : 0.18);
   }
-  for (final n in flat.melody) {
+  for (final n in flat.beatDec) {
+    bump(n.step, 0.14);
+  }
+  for (final n in [...flat.melody, ...flat.melodyDec]) {
     for (var s = n.step; s < n.step + n.dur && s < steps; s++) {
       bump(s, 0.3);
     }

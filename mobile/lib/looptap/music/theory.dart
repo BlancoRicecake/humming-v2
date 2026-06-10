@@ -99,20 +99,63 @@ int stepsForBars(int bars) => bars * kBeatsPerBar * kStepsPerBeat;
 enum TrackKind { pitched, bass, drums, vocal }
 
 class TrackMeta {
-  const TrackMeta(this.id, this.label, this.icon, this.color, this.kind);
+  const TrackMeta(
+    this.id,
+    this.label,
+    this.icon,
+    this.color,
+    this.kind, {
+    this.channel = 0,
+    this.defaultProgram = 0,
+    this.group = '',
+    this.decoration = false,
+    this.drumKinds,
+  });
   final String id;
   final String label;
   final IconData icon;
   final Color color;
   final TrackKind kind;
+
+  /// MIDI channel for live playback + export. Pitched tracks get distinct
+  /// channels (melody 0, bass 1, melody-fill 2); percussion tracks share ch9.
+  final int channel;
+
+  /// Default GM program (pitched tracks only; percussion ignores it).
+  final int defaultProgram;
+
+  /// Layer group — main + decoration tracks of the same group are paired
+  /// ('melody' | 'bass' | 'beat' | 'vocal').
+  final String group;
+
+  /// A decoration ("꾸밈") layer rather than a main track.
+  final bool decoration;
+
+  /// Percussion kinds for drum tracks (drives the drum surface + note map).
+  final List<String>? drumKinds;
 }
 
-/// Four tracks (README §engine.TRACKS). Order = arrangement strip order.
+/// Six tracks: main + decoration layers. Order = arrangement strip order
+/// (decoration rows sit right under their main row). `kTracks` is the single
+/// source of truth — data/audio/export/UI all iterate it instead of hardcoding
+/// the track ids.
 const List<TrackMeta> kTracks = [
-  TrackMeta('melody', 'Melody', LtIcons.piano, LT.lime, TrackKind.pitched),
-  TrackMeta('bass', 'Bass', LtIcons.audiotrack, LT.blue, TrackKind.bass),
-  TrackMeta('drums', 'Drums', LtIcons.graphicEq, LT.amber, TrackKind.drums),
-  TrackMeta('vocal', 'Vocal', LtIcons.mic, LT.pink, TrackKind.vocal),
+  TrackMeta('melody', 'Melody', LtIcons.piano, LT.lime, TrackKind.pitched,
+      channel: 0, defaultProgram: 0, group: 'melody'),
+  TrackMeta('melodyDec', 'Melody Fill', LtIcons.piano, LT.lime, TrackKind.pitched,
+      channel: 2, defaultProgram: 48, group: 'melody', decoration: true),
+  TrackMeta('bass', 'Bass', LtIcons.audiotrack, LT.blue, TrackKind.bass,
+      channel: 1, defaultProgram: 33, group: 'bass'),
+  TrackMeta('drums', 'Drums', LtIcons.graphicEq, LT.amber, TrackKind.drums,
+      channel: 9, group: 'beat', drumKinds: ['hihat', 'snare', 'kick']),
+  TrackMeta('beatDec', 'Beat Fill', LtIcons.graphicEq, LT.amber, TrackKind.drums,
+      channel: 9, group: 'beat', decoration: true, drumKinds: ['shaker', 'tambourine', 'clap']),
+  TrackMeta('vocal', 'Vocal', LtIcons.mic, LT.pink, TrackKind.vocal, group: 'vocal'),
 ];
+
+/// The pitched/bass tracks (melody, melody-fill, bass) — used wherever code
+/// needs to iterate the instrument-bearing voices.
+List<TrackMeta> get kPitchedTracks =>
+    kTracks.where((t) => t.kind == TrackKind.pitched || t.kind == TrackKind.bass).toList();
 
 TrackMeta trackById(String id) => kTracks.firstWhere((t) => t.id == id);

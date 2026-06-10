@@ -4,6 +4,8 @@
 // prototype's localStorage["looptap_songs_v1"]).
 import 'dart:convert';
 
+import '../music/theory.dart';
+
 /// A pitched note: { midi, freq, step, dur }.
 class PitchNote {
   PitchNote({required this.midi, required this.freq, required this.step, this.dur = 1});
@@ -96,7 +98,7 @@ class Section {
   int repeats;
 
   static Map<String, TrackData> _emptyTracks() => {
-        for (final id in const ['melody', 'bass', 'drums', 'vocal']) id: TrackData(),
+        for (final t in kTracks) t.id: TrackData(),
       };
 
   Section deepCopy() => Section(
@@ -147,9 +149,12 @@ class Song {
     List<Section>? sections,
     this.updatedAt,
     List<double>? wave,
-  })  : vol = vol ?? {'melody': 0.85, 'bass': 0.85, 'drums': 1, 'vocal': 0.85},
+  })  : vol = vol ?? {for (final t in kTracks) t.id: t.kind == TrackKind.drums ? 1.0 : 0.85},
         mutes = mutes ?? {},
-        instruments = instruments ?? {'melody': 0, 'bass': 33},
+        instruments = instruments ??
+            {
+              for (final t in kPitchedTracks) t.id: t.defaultProgram,
+            },
         sections = sections ?? [Section(id: 'A', name: 'A')],
         wave = wave ?? List<double>.filled(30, 0.12);
 

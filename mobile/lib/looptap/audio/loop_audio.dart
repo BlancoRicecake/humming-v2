@@ -11,11 +11,16 @@ import 'package:audioplayers/audioplayers.dart';
 
 import '../../audio/synth.dart';
 
-/// GM drum note numbers per kind (export.jsx DRUM_NOTE).
-const Map<String, int> kDrumNote = {'kick': 36, 'snare': 38, 'hihat': 42};
-
-const int _melodyCh = 0;
-const int _bassCh = 1;
+/// GM drum note numbers per kind. Main kit (kick/snare/hihat) + the beat-fill
+/// decoration kit (shaker/tambourine/clap) — both route to GM ch9.
+const Map<String, int> kDrumNote = {
+  'kick': 36,
+  'snare': 38,
+  'hihat': 42,
+  'shaker': 82,
+  'tambourine': 54,
+  'clap': 39,
+};
 
 class LoopAudio {
   LoopAudio._();
@@ -24,26 +29,26 @@ class LoopAudio {
   final SynthEngine _engine = SynthEngine();
   bool _ready = false;
 
-  // Current GM programs for the pitched voices — set per-song via [setPrograms].
-  int _melodyProg = 0; // default: acoustic grand
-  int _bassProg = 33; // default: fingered bass
+  // Current GM program per pitched channel — set per-song via [setPrograms].
+  // ch0 melody, ch1 bass, ch2 melody-fill (see kTracks in theory.dart).
+  final Map<int, int> _programs = {0: 0, 1: 33, 2: 48};
 
-  /// Switch the melody/bass instrument (GM program). Pre-selects the new program
+  /// Switch a channel's instrument (GM program). Pre-selects the new program
   /// with a silent note so the next audible note doesn't stall on the swap.
-  Future<void> setPrograms({int? melody, int? bass}) async {
-    if (melody != null) _melodyProg = melody;
-    if (bass != null) _bassProg = bass;
+  Future<void> setProgram(int channel, int program) async {
+    _programs[channel] = program;
     if (!_ready) return;
     try {
-      if (melody != null) {
-        await _engine.noteOn(channel: _melodyCh, pitch: 60, velocity: 1, program: _melodyProg);
-        await _engine.noteOff(channel: _melodyCh, pitch: 60);
-      }
-      if (bass != null) {
-        await _engine.noteOn(channel: _bassCh, pitch: 60, velocity: 1, program: _bassProg);
-        await _engine.noteOff(channel: _bassCh, pitch: 60);
-      }
+      await _engine.noteOn(channel: channel, pitch: 60, velocity: 1, program: program);
+      await _engine.noteOff(channel: channel, pitch: 60);
     } catch (_) {/* graceful */}
+  }
+
+  /// Set several channels' programs at once (channel -> GM program).
+  Future<void> setPrograms(Map<int, int> byChannel) async {
+    for (final e in byChannel.entries) {
+      await setProgram(e.key, e.value);
+    }
   }
 
   /// Load the SoundFont once (lazy — safe to call on first user gesture).
@@ -62,11 +67,12 @@ class LoopAudio {
     if (!_ready) return;
     try {
       await _engine.ensureDrumKit(0);
-      // pre-select melodic programs (silent notes) so first live note is instant
-      await _engine.noteOn(channel: _melodyCh, pitch: 60, velocity: 1, program: _melodyProg);
-      await _engine.noteOff(channel: _melodyCh, pitch: 60);
-      await _engine.noteOn(channel: _bassCh, pitch: 60, velocity: 1, program: _bassProg);
-      await _engine.noteOff(channel: _bassCh, pitch: 60);
+      // pre-select every pitched channel's program (silent notes) so the first
+      // live note on each voice is instant.
+      for (final e in _programs.entries) {
+        await _engine.noteOn(channel: e.key, pitch: 60, velocity: 1, program: e.value);
+        await _engine.noteOff(channel: e.key, pitch: 60);
+      }
     } catch (_) {/* graceful */}
   }
 
@@ -75,13 +81,12 @@ class LoopAudio {
   // Held live notes — sound lasts exactly as long as the pad is pressed, so the
   // duration the user HEARS matches the note that gets recorded (item 3).
   final Map<int, Timer> _liveTimers = {};
-  int _liveKey(int midi, bool bass) => (bass ? 2000 : 1000) + midi;
+  int _liveKey(int channel, int midi) => channel * 1000 + midi;
 
   /// Start a held note on pad press (paired with [noteOffLive] on release).
-  void noteOnLive(int midi, {required bool bass, double vol = 0.85}) {
-    final ch = bass ? _bassCh : _melodyCh;
-    final prog = bass ? _bassProg : _melodyProg;
-    void fire() => _engine.noteOn(channel: ch, pitch: midi, velocity: _vel(vol), program: prog);
+  void noteOnLive(int channel, int midi, {int? program, double vol = 0.85}) {
+    final prog = program ?? _programs[channel] ?? 0;
+    void fire() => _engine.noteOn(channel: channel, pitch: midi, velocity: _vel(vol), program: prog);
     if (!_ready) {
       ensure().then((_) {
         if (_ready) fire();
@@ -90,25 +95,24 @@ class LoopAudio {
       fire();
     }
     // safety auto-off in case a release event is ever missed
-    final key = _liveKey(midi, bass);
+    final key = _liveKey(channel, midi);
     _liveTimers[key]?.cancel();
-    _liveTimers[key] = Timer(const Duration(seconds: 4), () => noteOffLive(midi, bass: bass));
+    _liveTimers[key] = Timer(const Duration(seconds: 4), () => noteOffLive(channel, midi));
   }
 
   /// Stop a held note on pad release.
-  void noteOffLive(int midi, {required bool bass}) {
-    final key = _liveKey(midi, bass);
+  void noteOffLive(int channel, int midi) {
+    final key = _liveKey(channel, midi);
     _liveTimers.remove(key)?.cancel();
-    _engine.noteOff(channel: bass ? _bassCh : _melodyCh, pitch: midi);
+    _engine.noteOff(channel: channel, pitch: midi);
   }
 
   /// One-shot pitched voice (loop playback + grid preview). [durSec] sets release.
   /// Fire-and-forget on the hot path once warm.
-  void playPitch(int midi, {required bool bass, double vol = 0.85, double durSec = 0.4}) {
-    final ch = bass ? _bassCh : _melodyCh;
-    final prog = bass ? _bassProg : _melodyProg;
+  void playPitch(int channel, int midi, {int? program, double vol = 0.85, double durSec = 0.4}) {
+    final prog = program ?? _programs[channel] ?? 0;
     final rel = Duration(milliseconds: (durSec * 1000).round().clamp(60, 4000));
-    void fire() => _engine.playNote(channel: ch, pitch: midi, velocity: _vel(vol), program: prog, release: rel);
+    void fire() => _engine.playNote(channel: channel, pitch: midi, velocity: _vel(vol), program: prog, release: rel);
     if (!_ready) {
       ensure().then((_) {
         if (_ready) fire();
