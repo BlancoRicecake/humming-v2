@@ -24,6 +24,7 @@ import '../state/loop_prefs.dart';
 import '../state/loop_storage.dart';
 import '../state/loop_store.dart';
 import '../theme/atoms.dart';
+import '../theme/pad_scale.dart';
 import '../theme/tokens.dart';
 import '../widgets/arrangement.dart';
 import '../widgets/section_bar.dart';
@@ -74,32 +75,28 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   bool _metro = LoopPrefs.instance.metro.value; // shared with Settings sheet
   bool _countIn = true; // count-in on by default
   int _octave = 0;
-  // input mode per track ('pads' | 'grid') — melody/bass/drums each have one
-  String _melodyInput = 'pads';
-  String _bassInput = 'pads';
-  String _drumsInput = 'pads';
-  // melody chord mode: a pad tap places a key-based diatonic triad, not one note
-  bool _melodyChord = false;
+  // Pitched pads (melody / fill / bass): an 8-pad window that slides across a
+  // wider in-key ladder via a horizontal swipe. The offset (in scale degrees)
+  // is tracked per register — melody group and bass have separate ladders.
+  int _melodyWindow = 7; // ~oct4 (one octave up from the melody ladder base)
+  int _bassWindow = 7; // ~oct2 (one octave up from the bass ladder base)
+  // input mode per track id ('pads' | 'grid') — defaults to 'pads' when unset
+  final Map<String, String> _inputModes = {};
+  // chord mode per track id: a pad tap places a key-based diatonic triad, not a
+  // single note. Available on the melody group (melody + melody-fill).
+  final Map<String, bool> _chordMode = {};
+  bool get _chordOn => _chordMode[_activeId] ?? false;
   // per-track GM instrument (program number) — drives live sound + MIDI export
   late final Map<String, int> _instruments = Map.of(widget.song.instruments);
   int _countDown = 0; // count-in overlay (0 = none)
 
-  bool get _hasInputToggle => _activeId == 'melody' || _activeId == 'bass' || _activeId == 'drums';
-  String get _inputMode => switch (_activeId) {
-        'bass' => _bassInput,
-        'drums' => _drumsInput,
-        _ => _melodyInput,
-      };
-  void _setInputMode(String v) => setState(() {
-        switch (_activeId) {
-          case 'bass':
-            _bassInput = v;
-          case 'drums':
-            _drumsInput = v;
-          default:
-            _melodyInput = v;
-        }
-      });
+  bool get _hasInputToggle => _meta.kind != TrackKind.vocal;
+  String get _inputMode => _inputModes[_activeId] ?? 'pads';
+  void _setInputMode(String v) => setState(() => _inputModes[_activeId] = v);
+
+  // Active-track kind helpers.
+  bool get _isBass => _meta.kind == TrackKind.bass;
+  bool get _isPitched => _meta.kind == TrackKind.pitched || _meta.kind == TrackKind.bass;
 
   // glow: currently-sounding pitched notes (drums use press-only feedback)
   Set<int> _litMidis = {};
@@ -118,6 +115,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   // recorded-vocal playback state
   bool _vocalPlaying = false;
+  // Play song: section-instance start step -> that section's vocalPath (or null).
+  // The current section's vocal switches in as the playhead crosses each boundary.
+  Map<int, String?>? _songVocalSched;
 
   // undo / redo — snapshots of the editable song state
   final List<_EditSnapshot> _undo = [];
@@ -136,6 +136,39 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   TrackMeta get _meta => trackById(_activeId);
 
   List<Rung> get _ladder => buildLadder(_keyRoot, _scale, 4 + _octave, 8);
+
+  // Wide in-key ladders (~3 octaves) the pad window slides across — melody
+  // group sits mid-register, bass low.
+  // Visible pad count adapts to width: narrow phones keep 8, wide phones/tablets
+  // fan out to up to 12 so each pad stays a comfortable size (PadScale band).
+  // Clamped to the ladder length as a safety bound.
+  int get _padCount {
+    final w = (MediaQuery.maybeOf(context)?.size.width ?? 0) - 32; // surface h-padding
+    return math.min(padCountForWidth(w), _activeFullLadder.length);
+  }
+  List<Rung> get _melodyFullLadder => buildLadder(_keyRoot, _scale, 3 + _octave, 22);
+  List<Rung> get _bassFullLadder => buildLadder(_keyRoot, _scale, 1 + _octave, 22);
+  List<Rung> get _activeFullLadder => _isBass ? _bassFullLadder : _melodyFullLadder;
+  int get _windowOffset => _isBass ? _bassWindow : _melodyWindow;
+  int get _maxWindow => (_activeFullLadder.length - _padCount).clamp(0, _activeFullLadder.length);
+
+  /// The 8 pads currently shown for the active pitched track.
+  List<Rung> get _padWindow {
+    final full = _activeFullLadder;
+    final off = _windowOffset.clamp(0, _maxWindow);
+    return full.sublist(off, off + _padCount);
+  }
+
+  // Called when a pad swipe begins: release the note that started the gesture so
+  // it doesn't drone or get recorded. The strip's glide/snap is owned by NotePads.
+  void _padSlideStart(Rung n) {
+    final ch = _meta.channel;
+    for (final m in _chordMidis(n.midi)) {
+      _audio.noteOffLive(ch, m);
+    }
+    _pending.remove(n.midi);
+  }
+
   List<Rung> get _bassLadder {
     final full = buildLadder(_keyRoot, _scale, 2, 8);
     return const [0, 3, 4, 5, 7].map((i) => full[i]).toList();
@@ -148,10 +181,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   List<Rung> get _gridLadder => _activeId == 'bass' ? _bassGridLadder : _ladder;
 
   Map<String, PitchRange> get _ranges {
-    final l = _ladder, b = _bassLadder;
+    final mfull = _melodyFullLadder, bfull = _bassFullLadder;
+    // ranges span the whole slide ladders so the arrangement preview shows notes
+    // placed anywhere in the window.
+    final mel = PitchRange(mfull.first.midi - 2, mfull.last.midi + 2);
     return {
-      'melody': PitchRange(l.first.midi - 2, l.last.midi + 2),
-      'bass': PitchRange(b.first.midi - 2, b.last.midi + 2),
+      'melody': mel,
+      'melodyDec': mel, // melody-fill shares the melody register
+      'bass': PitchRange(bfull.first.midi - 2, bfull.last.midi + 2),
     };
   }
 
@@ -168,15 +205,13 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   bool _savedFlash = false;
   Timer? _flashTimer;
 
-  // 헤더(topBar) 접힘 상태. 4-lane arrangement 에 세로 공간 더 주려고 사용자가
-  // 접을 수 있게 함. 접히면 상단에 가는 pull-tab 만 남고, 탭하면 다시 펼쳐짐.
-  bool _topBarVisible = true;
-
   @override
   void initState() {
     super.initState();
-    // apply this song's chosen instruments, then warm the synth
-    _audio.setPrograms(melody: _instruments['melody'], bass: _instruments['bass']);
+    // apply this song's chosen instruments (per pitched channel), then warm the synth
+    _audio.setPrograms({
+      for (final t in kPitchedTracks) t.channel: _instruments[t.id] ?? t.defaultProgram,
+    });
     _audio.prewarm();
     // 12초마다 dirty 면 silent autosave — 사용자 명시적 Save 와 충돌 없음.
     _autosaveTimer = Timer.periodic(const Duration(seconds: 12), (_) => _autoSaveTick());
@@ -227,7 +262,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       // the recorded vocal to the loop start so it stays in sync.
       if (st == 0) {
         _freshThisLoop.clear();
-        if (_vocalPlaying) _audio.seekVocalToStart();
+        // single-section loop re-aligns its one vocal; song mode handles vocals
+        // per-section in _trigger (the step-0 boundary restarts the first one).
+        if (_songSection == null && _vocalPlaying) _audio.seekVocalToStart();
       }
       _trigger(st);
       _nextAbs++;
@@ -242,26 +279,38 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final T = _effectiveTracks;
     final sps = 60 / _bpm / kStepsPerBeat;
     double dsec(int dur) => (dur * sps * 0.95).clamp(0.12, 8);
+    // Play song: switch the recorded vocal in at each section boundary
+    final sched = _songVocalSched;
+    if (sched != null && sched.containsKey(step)) {
+      final path = sched[step];
+      if (path != null && !(_mutes['vocal'] ?? false)) {
+        _vocalPlaying = true;
+        _audio.playVocal(path, vol: _vol['vocal'] ?? 0.85);
+      } else {
+        _vocalPlaying = false;
+        _audio.stopVocal();
+      }
+    }
+    // Iterate every track (main + decoration). Pitched voices play on their own
+    // MIDI channel/program; percussion tracks (drums + beat-fill) share ch9 but
+    // keep independent mute/volume. Drums don't drive pad lighting.
     final litM = <int>{};
-    if (!(_mutes['melody'] ?? false)) {
-      for (final n in T['melody']!.pitchNotes.where((n) => n.step == step)) {
-        if (_freshThisLoop.contains('melody:${n.midi}:$step')) continue;
-        _audio.playPitch(n.midi, bass: false, vol: _vol['melody'] ?? 0.85, durSec: dsec(n.dur));
-        litM.add(n.midi);
-      }
-    }
-    if (!(_mutes['bass'] ?? false)) {
-      for (final n in T['bass']!.pitchNotes.where((n) => n.step == step)) {
-        if (_freshThisLoop.contains('bass:${n.midi}:$step')) continue;
-        _audio.playPitch(n.midi, bass: true, vol: _vol['bass'] ?? 0.85, durSec: dsec(n.dur));
-        litM.add(n.midi);
-      }
-    }
-    // drums play but don't drive pad lighting (press-only feedback — item 2)
-    if (!(_mutes['drums'] ?? false)) {
-      for (final n in T['drums']!.drumNotes.where((n) => n.step == step)) {
-        if (_freshThisLoop.contains('drums:${n.kind}:$step')) continue;
-        _audio.playDrum(n.kind, vol: _vol['drums'] ?? 1);
+    for (final tk in kTracks) {
+      if (_mutes[tk.id] ?? false) continue;
+      final data = T[tk.id];
+      if (data == null) continue;
+      if (tk.kind == TrackKind.pitched || tk.kind == TrackKind.bass) {
+        final prog = _instruments[tk.id] ?? tk.defaultProgram;
+        for (final n in data.pitchNotes.where((n) => n.step == step)) {
+          if (_freshThisLoop.contains('${tk.id}:${n.midi}:$step')) continue;
+          _audio.playPitch(tk.channel, n.midi, program: prog, vol: _vol[tk.id] ?? 0.85, durSec: dsec(n.dur));
+          litM.add(n.midi);
+        }
+      } else if (tk.kind == TrackKind.drums) {
+        for (final n in data.drumNotes.where((n) => n.step == step)) {
+          if (_freshThisLoop.contains('${tk.id}:${n.kind}:$step')) continue;
+          _audio.playDrum(n.kind, vol: _vol[tk.id] ?? 1);
+        }
       }
     }
     if (_metro && step % kStepsPerBeat == 0) {
@@ -312,6 +361,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       if (_songSection != null) {
         _songSection = null;
         _songSteps = null;
+        _songVocalSched = null;
       }
     });
   }
@@ -517,11 +567,25 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final flat = flattenSong(_sections);
     final disp = Section(id: 'song', name: 'SONG', bars: _bars);
     disp.tracks['melody'] = TrackData(notes: flat.melody);
+    disp.tracks['melodyDec'] = TrackData(notes: flat.melodyDec);
     disp.tracks['bass'] = TrackData(notes: flat.bass);
     disp.tracks['drums'] = TrackData(drums: flat.drums);
+    disp.tracks['beatDec'] = TrackData(drums: flat.beatDec);
+    // schedule each section instance's vocal at its flattened start step
+    final sched = <int, String?>{};
+    var off = 0;
+    for (final sec in _sections) {
+      final st = stepsForBars(sec.bars);
+      final vp = sec.tracks['vocal']?.vocalPath;
+      for (var r = 0; r < sec.repeats; r++) {
+        sched[off] = vp;
+        off += st;
+      }
+    }
     setState(() {
       _songSection = disp;
       _songSteps = flat.steps;
+      _songVocalSched = sched;
       _playStep.value = 0;
       _playing = true;
       _startClock();
@@ -532,31 +596,32 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   int _quantStep() => _playStep.value.round() % _steps;
 
   void _hitDrum(String kind) {
-    _audio.playDrum(kind, vol: _vol['drums'] ?? 1);
+    _audio.playDrum(kind, vol: _vol[_activeId] ?? 1);
     if (_recording && _playing && _songSection == null) {
       _pushUndo(coalesce: true);
       final s = _quantStep();
-      final dn = _tracks['drums']!.drumNotes;
+      final dn = _tracks[_activeId]!.drumNotes;
       if (!dn.any((x) => x.kind == kind && x.step == s)) {
         setState(() => dn.add(DrumNote(kind: kind, step: s)));
       }
       // heard live now → don't let the clock replay it this loop pass
-      _freshThisLoop.add('drums:$kind:$s');
+      _freshThisLoop.add('$_activeId:$kind:$s');
     }
   }
 
-  // drums Grid mode: tap a cell to toggle a hit at (kind, step)
+  // drums Grid mode: tap a cell to toggle a hit at (kind, step) on the active
+  // percussion track (main drums or beat-fill).
   void _toggleDrumCell(String kind, int step) {
     if (_songSection != null) return; // editing disabled while previewing the song
     _pushUndo(coalesce: true);
-    final dn = _tracks['drums']!.drumNotes;
+    final dn = _tracks[_activeId]!.drumNotes;
     final i = dn.indexWhere((x) => x.kind == kind && x.step == step);
     setState(() {
       if (i >= 0) {
         dn.removeAt(i);
       } else {
         dn.add(DrumNote(kind: kind, step: step));
-        _audio.playDrum(kind, vol: _vol['drums'] ?? 1);
+        _audio.playDrum(kind, vol: _vol[_activeId] ?? 1);
       }
     });
   }
@@ -569,7 +634,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   /// The midis a pad press produces: a diatonic triad in melody chord mode,
   /// otherwise just the pressed note.
-  List<int> _chordMidis(int rootMidi) => (_activeId == 'melody' && _melodyChord)
+  List<int> _chordMidis(int rootMidi) => (_meta.group == 'melody' && _chordOn)
       ? diatonicTriad(rootMidi, _keyRoot, _scale)
       : [rootMidi];
 
@@ -584,10 +649,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           index: root.index,
         );
 
-  void _pitchDown(Rung n, {required bool bass}) {
+  void _pitchDown(Rung n) {
     // held note(s): they sound while pressed, so what you hear == what's recorded
+    final ch = _meta.channel;
+    final prog = _instruments[_activeId] ?? _meta.defaultProgram;
     for (final m in _chordMidis(n.midi)) {
-      _audio.noteOnLive(m, bass: bass, vol: _vol[_activeId] ?? 0.85);
+      _audio.noteOnLive(ch, m, program: prog, vol: _vol[_activeId] ?? 0.85);
     }
     if (_recording && _playing && _songSection == null) {
       _pending[n.midi] = (step: _quantStep(), t: DateTime.now().millisecondsSinceEpoch);
@@ -595,10 +662,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   void _pitchUp(Rung n) {
-    final bass = _activeId == 'bass';
+    final ch = _meta.channel;
     final midis = _chordMidis(n.midi);
     for (final m in midis) {
-      _audio.noteOffLive(m, bass: bass);
+      _audio.noteOffLive(ch, m);
     }
     final p = _pending.remove(n.midi);
     if (p == null) return;
@@ -637,24 +704,34 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     });
   }
 
-  // grid place/erase work on the active pitched track (melody or bass)
+  // grid place/erase work on the active pitched track (melody / melody-fill / bass)
   void _gridPlace(Rung n, int a, int b) {
     _pushUndo(coalesce: true);
-    final bass = _activeId == 'bass';
     // preview sound length matches the drawn note length
     final sps = 60 / _bpm / kStepsPerBeat;
     final durSec = (((a - b).abs() + 1) * sps * 0.95).clamp(0.12, 8.0);
-    _audio.playPitch(n.midi, bass: bass, vol: _vol[_activeId] ?? 0.85, durSec: durSec);
+    _audio.playPitch(_meta.channel, n.midi,
+        program: _instruments[_activeId] ?? _meta.defaultProgram, vol: _vol[_activeId] ?? 0.85, durSec: durSec);
     _placePitched(_activeId, n, a, b);
     _freshThisLoop.add('$_activeId:${n.midi}:${a < b ? a : b}');
   }
 
+  // Erase only the touched CELL (one step), not the whole note: split the note
+  // into its before/after remainders so a long note keeps its other steps.
   void _gridErase(Rung n, int step) {
     _pushUndo(coalesce: true);
     setState(() {
-      _tracks[_activeId]!.pitchNotes.removeWhere(
-        (x) => x.midi == n.midi && step >= x.step && step < x.step + x.dur,
-      );
+      final notes = _tracks[_activeId]!.pitchNotes;
+      final i = notes.indexWhere((x) => x.midi == n.midi && step >= x.step && step < x.step + x.dur);
+      if (i < 0) return;
+      final note = notes.removeAt(i);
+      final end = note.step + note.dur; // exclusive
+      if (step > note.step) {
+        notes.add(PitchNote(midi: note.midi, freq: note.freq, step: note.step, dur: step - note.step));
+      }
+      if (step + 1 < end) {
+        notes.add(PitchNote(midi: note.midi, freq: note.freq, step: step + 1, dur: end - (step + 1)));
+      }
     });
   }
 
@@ -687,9 +764,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     });
   }
 
-  /// Start the recorded vocal with the loop (single-section play only for now).
+  /// Start the recorded vocal for single-section loop play. (Play song handles
+  /// per-section vocals via the schedule in _trigger, so skip here.)
   void _startVocalIfAny() {
-    if (_songSection != null) return; // "Play song" multi-section vocal = follow-up
+    if (_songSection != null) return;
     final path = _tracks['vocal']!.vocalPath;
     if (path != null && !(_mutes['vocal'] ?? false)) {
       _vocalPlaying = true;
@@ -736,25 +814,23 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   void _openInstrument() {
-    final id = _activeId; // 'melody' | 'bass'
+    final id = _activeId; // any pitched track: melody / melodyDec / bass
+    final ch = _meta.channel;
     showInstrumentSheet(
       context,
       trackId: id,
       trackLabel: trackById(id).label,
-      currentProgram: _instruments[id] ?? (id == 'bass' ? 33 : 0),
+      currentProgram: _instruments[id] ?? _meta.defaultProgram,
       onPick: (program) {
         _pushUndo(coalesce: true);
         setState(() => _instruments[id] = program);
-        _audio.setPrograms(
-          melody: id == 'melody' ? program : null,
-          bass: id == 'bass' ? program : null,
-        );
+        _audio.setProgram(ch, program);
         // preview the new timbre on an in-key note in that track's own register
-        // (bass uses the low bass ladder root; melody an in-key mid note).
-        final isBass = id == 'bass';
+        // (bass uses the low bass ladder root; melody/fill an in-key mid note).
+        final isBass = _isBass;
         final ladder = isBass ? _bassLadder : _ladder;
         final preview = ladder.isNotEmpty ? ladder[isBass ? 0 : 2].midi : 60;
-        _audio.playPitch(preview, bass: isBass, vol: _vol[id] ?? 0.85, durSec: 0.5);
+        _audio.playPitch(ch, preview, program: program, vol: _vol[id] ?? 0.85, durSec: 0.5);
       },
     );
   }
@@ -818,7 +894,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   Future<void> _humConvert(String audioPath) async {
     _pushUndo();
-    final drums = _activeId == 'drums';
+    final drums = _meta.kind == TrackKind.drums;
     final opts = eng.AnalyzeOptions(
       // snap to the song's chosen key/scale (LoopTap's in-key guarantee)
       autoKey: false,
@@ -905,13 +981,19 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void _humFallback() {
     setState(() {
       final t = _tracks[_activeId]!;
-      if (_activeId == 'drums') {
-        for (final n in genDrums(_steps)) {
+      final kind = _meta.kind;
+      if (kind == TrackKind.drums) {
+        // main kit → the canonical beat; decoration kit → a light fill on its
+        // own kinds (first kind every 2 steps).
+        final gen = _meta.decoration
+            ? [for (var s = 0; s < _steps; s += 2) DrumNote(kind: _meta.drumKinds!.first, step: s)]
+            : genDrums(_steps);
+        for (final n in gen) {
           if (!t.drumNotes.any((x) => x.kind == n.kind && x.step == n.step)) t.drumNotes.add(n);
         }
-      } else if (_activeId == 'bass') {
+      } else if (kind == TrackKind.bass) {
         t.pitchNotes.addAll(genBass(_bassLadder, _bars));
-      } else if (_activeId == 'melody') {
+      } else if (kind == TrackKind.pitched) {
         t.pitchNotes.addAll(genMelody(_ladder, _steps, _rng));
       }
     });
@@ -986,8 +1068,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       title: _title,
       sections: _sections,
       bpm: _bpm,
+      swing: _swing,
+      vol: Map.of(_vol),
       melodyProgram: _instruments['melody'] ?? 0,
       bassProgram: _instruments['bass'] ?? 33,
+      melodyDecProgram: _instruments['melodyDec'] ?? 48,
     );
   }
 
@@ -1004,7 +1089,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // ── build ─────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final pitched = _activeId == 'melody' || _activeId == 'bass';
+    final pitched = _isPitched;
     return Scaffold(
       backgroundColor: LT.bg,
       body: SafeArea(
@@ -1012,18 +1097,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           children: [
             Column(
               children: [
-                // 접힘/펼침 — AnimatedCrossFade 가 두 child 사이 fade + 높이를
-                // 부드럽게 보간. 접혔을 땐 가는 pull-tab 만 남아 ~16dp 절약 → 그
-                // 만큼 아래 arrangement 영역이 늘어남.
-                AnimatedCrossFade(
-                  duration: const Duration(milliseconds: 220),
-                  sizeCurve: Curves.easeOutCubic,
-                  crossFadeState: _topBarVisible
-                      ? CrossFadeState.showFirst
-                      : CrossFadeState.showSecond,
-                  firstChild: _topBar(),
-                  secondChild: _topBarHandle(),
-                ),
+                _topBar(),
                 SectionBar(
                   sections: _sections,
                   activeIdx: _activeIdx,
@@ -1201,14 +1275,6 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           tooltip: 'Export',
           onTap: _exportOrPaywall,
         ),
-        const SizedBox(width: 6),
-        // 헤더 접기 — 4-lane arrangement 공간 확보용.
-        IconBtn(
-          icon: LtIcons.expandLess,
-          size: btnSize - 4,
-          tooltip: 'Hide header',
-          onTap: () => setState(() => _topBarVisible = false),
-        ),
       ],
     );
 
@@ -1245,28 +1311,6 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// 접힌 topBar 자리에 노출되는 가는 pull-tab. 탭 시 펼침.
-  Widget _topBarHandle() {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _topBarVisible = true),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: LT.border))),
-        child: Center(
-          child: Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: LT.border,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _surfaceHeader(bool pitched) {
     final hasInstrument = _activeId == 'melody' || _activeId == 'bass';
 
@@ -1292,8 +1336,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           const SizedBox(width: 6),
           _inputToggle(),
         ],
-        // chord mode (melody pads only): a pad tap = a key-based triad
-        if (_activeId == 'melody' && _inputMode == 'pads') ...[
+        // chord mode (melody-group pads: melody + melody-fill): pad tap = triad
+        if (_meta.group == 'melody' && _inputMode == 'pads') ...[
           const SizedBox(width: 6),
           _chordToggle(),
         ],
@@ -1346,6 +1390,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final rightGroup = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // pitched pads: current swipe-able note range (melody/fill/bass).
+        if (pitched && _inputMode == 'pads') _rangeReadout(),
         if (pitched) _octaveStepper(),
         if (_activeId != 'vocal') ...[
           const SizedBox(width: 8),
@@ -1427,11 +1473,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
   }
 
-  // Melody chord-mode toggle (pads only): pad tap places a diatonic triad.
+  // Chord-mode toggle (melody-group pads only): pad tap places a diatonic triad.
+  // Independent per track so melody and melody-fill can differ.
   Widget _chordToggle() {
-    final on = _melodyChord;
+    final on = _chordOn;
     return GestureDetector(
-      onTap: () => setState(() => _melodyChord = !on),
+      onTap: () => setState(() => _chordMode[_activeId] = !on),
       child: Container(
         height: 32,
         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1453,8 +1500,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       children: [
         IconBtn(icon: LtIcons.remove, size: 30, tooltip: 'Octave down', onTap: () => setState(() => _octave = (_octave - 1).clamp(-2, 2))),
         SizedBox(
-          width: 34,
-          child: Text('8va${_octave >= 0 ? '+' : ''}$_octave',
+          width: 46,
+          child: Text('Oct ${_octave > 0 ? '+' : ''}$_octave',
               textAlign: TextAlign.center, style: LTType.mono(size: 11, color: LT.t2)),
         ),
         IconBtn(icon: LtIcons.add, size: 30, tooltip: 'Octave up', onTap: () => setState(() => _octave = (_octave + 1).clamp(-2, 2))),
@@ -1462,88 +1509,114 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
   }
 
+  // Passive status chip showing the current pad range (melody/fill/bass). NOT a
+  // control — the pads themselves are swiped to move the range.
+  Widget _rangeReadout() {
+    final w = _padWindow;
+    if (w.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: LT.surface2,
+          borderRadius: BorderRadius.circular(LTRadius.pill),
+          border: Border.all(color: LT.border),
+        ),
+        child: Text('${w.first.name}–${w.last.name}',
+            style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.t2)),
+      ),
+    );
+  }
+
   Widget _surface() {
-    switch (_activeId) {
-      case 'drums':
-        final dn = (_songSection ?? _sec).tracks['drums']!.drumNotes;
-        final map = <String, Set<int>>{};
-        for (final n in dn) {
-          (map[n.kind] ??= <int>{}).add(n.step);
-        }
-        if (_drumsInput == 'grid') {
-          return ValueListenableBuilder<double>(
-            valueListenable: _playStep,
-            builder: (_, ps, __) => DrumGrid(
-              notes: map,
-              onToggle: _toggleDrumCell,
-              playStep: ps,
-              steps: _steps,
-              bars: _bars,
-            ),
-          );
-        }
+    final kind = _meta.kind;
+    final src = (_songSection ?? _sec).tracks[_activeId]!;
+    if (kind == TrackKind.drums) {
+      final specs = drumSpecsFor(_meta.drumKinds);
+      final map = <String, Set<int>>{};
+      for (final n in src.drumNotes) {
+        (map[n.kind] ??= <int>{}).add(n.step);
+      }
+      if (_inputMode == 'grid') {
         return ValueListenableBuilder<double>(
           valueListenable: _playStep,
-          builder: (_, ps, __) => DrumSurface(
+          builder: (_, ps, __) => DrumGrid(
             notes: map,
-            onHit: _hitDrum,
+            onToggle: _toggleDrumCell,
             playStep: ps,
+            steps: _steps,
+            bars: _bars,
+            specs: specs,
+          ),
+        );
+      }
+      return ValueListenableBuilder<double>(
+        valueListenable: _playStep,
+        builder: (_, ps, __) => DrumSurface(
+          notes: map,
+          onHit: _hitDrum,
+          playStep: ps,
+          steps: _steps,
+          bars: _bars,
+          specs: specs,
+        ),
+      );
+    }
+    if (kind == TrackKind.pitched || kind == TrackKind.bass) {
+      final notes = src.pitchNotes;
+      if (_inputMode == 'grid') {
+        return ValueListenableBuilder<double>(
+          valueListenable: _playStep,
+          builder: (_, ps, __) => StepGrid(
+            ladder: _gridLadder,
+            notes: notes,
+            onPlace: _gridPlace,
+            onErase: _gridErase,
+            playStep: ps,
+            accent: _meta.color,
             steps: _steps,
             bars: _bars,
           ),
         );
-      case 'melody':
-      case 'bass':
-        final bass = _activeId == 'bass';
-        final notes = (_songSection ?? _sec).tracks[_activeId]!.pitchNotes;
-        if (_inputMode == 'grid') {
-          return ValueListenableBuilder<double>(
-            valueListenable: _playStep,
-            builder: (_, ps, __) => StepGrid(
-              ladder: _gridLadder,
-              notes: notes,
-              onPlace: _gridPlace,
-              onErase: _gridErase,
-              playStep: ps,
-              accent: _meta.color,
-              steps: _steps,
-              bars: _bars,
-            ),
-          );
-        }
-        if (bass) {
-          return BassPads(
-            bassLadder: _bassLadder,
-            litMidis: _litMidis,
-            accent: _meta.color,
-            onDown: (n) => _pitchDown(n, bass: true),
-            onUp: _pitchUp,
-          );
-        }
-        return NotePads(
-          ladder: _ladder,
-          litMidis: _litMidis,
-          accent: _meta.color,
-          onDown: (n) => _pitchDown(n, bass: false),
-          onUp: _pitchUp,
-        );
-      case 'vocal':
-        return VocalSurface(
-          clip: _tracks['vocal']!.clip,
-          onCommit: _commitVocal,
-          onClear: () {
-            _pushUndo();
-            _audio.stopVocal();
-            _vocalPlaying = false;
-            setState(() {
-              _tracks['vocal']!.clip = null;
-              _tracks['vocal']!.vocalPath = null;
-            });
-          },
-        );
-      default:
-        return _surfacePlaceholder();
+      }
+      // melody / melody-fill / bass: a horizontal strip of the whole in-key
+      // ladder; swipe to glide the strip and snap to a pad.
+      return NotePads(
+        key: ValueKey('pads-$_activeId'),
+        ladder: _activeFullLadder,
+        visibleCount: _padCount,
+        offset: _windowOffset.clamp(0, _maxWindow),
+        litMidis: _litMidis,
+        accent: _meta.color,
+        onDown: _pitchDown,
+        onUp: _pitchUp,
+        onSlideStart: _padSlideStart,
+        onOffsetChanged: (o) => setState(() {
+          if (_isBass) {
+            _bassWindow = o;
+          } else {
+            _melodyWindow = o;
+          }
+        }),
+      );
     }
+    if (kind == TrackKind.vocal) {
+      return VocalSurface(
+        clip: _tracks['vocal']!.clip,
+        onCommit: _commitVocal,
+        onClear: () {
+          _pushUndo();
+          _audio.stopVocal();
+          _vocalPlaying = false;
+          setState(() {
+            _tracks['vocal']!.clip = null;
+            _tracks['vocal']!.vocalPath = null;
+          });
+        },
+      );
+    }
+    return _surfacePlaceholder();
   }
 
   Widget _surfacePlaceholder() {

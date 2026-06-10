@@ -39,6 +39,14 @@ class LoopTapApp extends StatelessWidget {
           localizationsDelegates: L10n.localizationsDelegates,
           supportedLocales: L10n.supportedLocales,
           scaffoldMessengerKey: rootMessengerKey,
+          // Clamp OS font scaling so very large system text can't overflow the
+          // tuned landscape layout (pads/headers). PadScale handles per-device
+          // sizing; this just caps the accessibility multiplier.
+          builder: (context, child) => MediaQuery.withClampedTextScaling(
+            minScaleFactor: 0.9,
+            maxScaleFactor: 1.15,
+            child: child!,
+          ),
           home: const _AuthEventListener(child: SongsScreen()),
         ),
       ),

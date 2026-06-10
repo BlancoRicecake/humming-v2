@@ -1,5 +1,6 @@
 // LoopTap — arrangement strip + sweeping playhead (README §4.3, timeline.jsx).
-// 4 rows (Melody/Bass/Drums/Vocal): 96px label chip + 26px lane. A white
+// One row per track (main + decoration layers): an 88px label chip + lane. The
+// strip fills its space, or scrolls when there are more rows than fit. A white
 // playhead line sweeps across all lanes.
 import 'package:flutter/material.dart';
 
@@ -40,30 +41,50 @@ class Arrangement extends StatelessWidget {
   final int steps;
   final Map<String, PitchRange> ranges;
 
+  _Row _rowFor(int i) => _Row(
+        meta: kTracks[i],
+        data: section.tracks[kTracks[i].id]!,
+        selected: kTracks[i].id == activeId,
+        muted: mutes[kTracks[i].id] ?? false,
+        onSelect: () => onSelect(kTracks[i].id),
+        onToggleMute: () => onToggleMute(kTracks[i].id),
+        steps: steps,
+        range: ranges[kTracks[i].id],
+      );
+
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // lanes fill the height the parent gives us (the 1:2 split) so the
-        // strip scales with its allotted space instead of a fixed mini-map.
-        Column(
-          children: [
-            for (var i = 0; i < kTracks.length; i++) ...[
-              if (i > 0) const SizedBox(height: _rowGap),
-              Expanded(
-                child: _Row(
-                  meta: kTracks[i],
-                  data: section.tracks[kTracks[i].id]!,
-                  selected: kTracks[i].id == activeId,
-                  muted: mutes[kTracks[i].id] ?? false,
-                  onSelect: () => onSelect(kTracks[i].id),
-                  onToggleMute: () => onToggleMute(kTracks[i].id),
-                  steps: steps,
-                  range: ranges[kTracks[i].id],
+        // Lanes fill the allotted height when they fit; once there are too many
+        // tracks (main + decoration) for the 1:2 split, the strip scrolls so all
+        // rows stay reachable.
+        LayoutBuilder(
+          builder: (context, c) {
+            const rowH = 44.0;
+            final n = kTracks.length;
+            final needed = n * rowH + (n - 1) * _rowGap;
+            if (needed > c.maxHeight) {
+              return SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (var i = 0; i < n; i++) ...[
+                      if (i > 0) const SizedBox(height: _rowGap),
+                      SizedBox(height: rowH, child: _rowFor(i)),
+                    ],
+                  ],
                 ),
-              ),
-            ],
-          ],
+              );
+            }
+            return Column(
+              children: [
+                for (var i = 0; i < n; i++) ...[
+                  if (i > 0) const SizedBox(height: _rowGap),
+                  Expanded(child: _rowFor(i)),
+                ],
+              ],
+            );
+          },
         ),
         // playhead spanning the lane area
         Positioned(

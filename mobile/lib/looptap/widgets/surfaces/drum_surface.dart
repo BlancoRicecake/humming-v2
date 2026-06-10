@@ -1,9 +1,12 @@
 // LoopTap — Drums surface (the signature). README §5.
 // A center beat-grid (HH/SN/KK × step cells) flanked by symmetric KICK/SNARE/
 // HIHAT pads on BOTH left and right for two-thumb play.
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../theme/atoms.dart';
+import '../../theme/pad_scale.dart';
 import '../../theme/tokens.dart';
 import 'pad_fx.dart';
 
@@ -15,11 +18,29 @@ class DrumSpec {
   final Color color;
 }
 
+/// All known drum/percussion kinds → display spec. Main kit (HH/SN/KK) plus the
+/// beat-fill decoration kit (shaker/tambourine/clap). A track renders the subset
+/// named by its `drumKinds` (TrackMeta), so the surface UI is identical and only
+/// the three components differ.
+const Map<String, DrumSpec> kDrumSpecs = {
+  'hihat': DrumSpec('hihat', 'HI-HAT', 'HH', LT.blue),
+  'snare': DrumSpec('snare', 'SNARE', 'SN', LT.lime),
+  'kick': DrumSpec('kick', 'KICK', 'KK', LT.amber),
+  'shaker': DrumSpec('shaker', 'SHAKER', 'SH', LT.blue),
+  'tambourine': DrumSpec('tambourine', 'TAMB', 'TB', LT.lime),
+  'clap': DrumSpec('clap', 'CLAP', 'CL', LT.amber),
+};
+
+/// Default main kit (top→bottom = HH/SN/KK).
 const List<DrumSpec> kDrums = [
   DrumSpec('hihat', 'HI-HAT', 'HH', LT.blue),
   DrumSpec('snare', 'SNARE', 'SN', LT.lime),
   DrumSpec('kick', 'KICK', 'KK', LT.amber),
 ];
+
+/// Build the spec list for a track's drum kinds (order = display order).
+List<DrumSpec> drumSpecsFor(List<String>? kinds) =>
+    (kinds == null || kinds.isEmpty) ? kDrums : [for (final k in kinds) kDrumSpecs[k] ?? kDrumSpecs['kick']!];
 
 class DrumSurface extends StatelessWidget {
   const DrumSurface({
@@ -29,6 +50,7 @@ class DrumSurface extends StatelessWidget {
     required this.playStep,
     required this.steps,
     required this.bars,
+    this.specs = kDrums,
   });
 
   /// kind -> set of active steps.
@@ -38,14 +60,17 @@ class DrumSurface extends StatelessWidget {
   final int steps;
   final int bars;
 
+  /// The three components shown — main kit or a decoration kit (beat fill).
+  final List<DrumSpec> specs;
+
   Widget _column(String side) {
     return Column(
       children: [
-        for (var i = 0; i < kDrums.length; i++) ...[
+        for (var i = 0; i < specs.length; i++) ...[
           if (i > 0) const SizedBox(height: 6),
           // Press-only feedback: each pad lights only when YOU tap it (PadFx),
           // never its mirror twin — so two-thumb play stays unambiguous and in sync.
-          Expanded(child: _DrumPad(key: ValueKey('$side${kDrums[i].kind}'), spec: kDrums[i], onHit: onHit)),
+          Expanded(child: _DrumPad(key: ValueKey('$side${specs[i].kind}'), spec: specs[i], onHit: onHit)),
         ],
       ],
     );
@@ -59,7 +84,7 @@ class DrumSurface extends StatelessWidget {
       children: [
         Expanded(flex: 1, child: _column('L')),
         const SizedBox(width: 8),
-        Expanded(flex: 2, child: _BeatGrid(notes: notes, playStep: playStep, steps: steps, bars: bars)),
+        Expanded(flex: 2, child: _BeatGrid(notes: notes, playStep: playStep, steps: steps, bars: bars, specs: specs)),
         const SizedBox(width: 8),
         Expanded(flex: 1, child: _column('R')),
       ],
@@ -79,47 +104,53 @@ class _DrumPad extends StatelessWidget {
       borderRadius: LTRadius.card,
       idle: LT.surface2,
       onDown: () => onHit(spec.kind),
-      builder: (active) => Center(
-        // FittedBox keeps the label inside short pads instead of overflowing
-        // into neighbours; the pad itself clips (PadFx clipBehavior).
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  spec.short,
-                  style: LTType.inter(size: 26, weight: FontWeight.w900, color: active ? LT.bg : LT.t1, letterSpacing: 0.5),
+      builder: (active) => LayoutBuilder(
+        builder: (ctx, c) {
+          // Base sizes scale with the pad box (PadScale); FittedBox below still
+          // shrinks to fit very short/narrow pads so labels never overflow.
+          final sc = PadScale(math.min(c.maxWidth, c.maxHeight));
+          return Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      spec.short,
+                      style: LTType.inter(size: sc.title, weight: FontWeight.w900, color: active ? LT.bg : LT.t1, letterSpacing: 0.5),
+                    ),
+                    SizedBox(width: sc.gap + 4),
+                    Text(
+                      spec.label,
+                      style: LTType.inter(
+                        size: sc.sub,
+                        weight: FontWeight.w800,
+                        color: active ? LT.bg.withValues(alpha: 0.67) : spec.color,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Text(
-                  spec.label,
-                  style: LTType.inter(
-                    size: 11,
-                    weight: FontWeight.w800,
-                    color: active ? LT.bg.withValues(alpha: 0.67) : spec.color,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
 }
 
 class _BeatGrid extends StatelessWidget {
-  const _BeatGrid({required this.notes, required this.playStep, required this.steps, required this.bars});
+  const _BeatGrid({required this.notes, required this.playStep, required this.steps, required this.bars, this.specs = kDrums});
   final Map<String, Set<int>> notes;
   final double playStep;
   final int steps;
   final int bars;
+  final List<DrumSpec> specs;
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +172,7 @@ class _BeatGrid extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          for (final d in kDrums)
+          for (final d in specs)
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
@@ -212,6 +243,7 @@ class DrumGrid extends StatelessWidget {
     required this.playStep,
     required this.steps,
     required this.bars,
+    this.specs = kDrums,
   });
 
   final Map<String, Set<int>> notes;
@@ -219,6 +251,7 @@ class DrumGrid extends StatelessWidget {
   final double playStep;
   final int steps;
   final int bars;
+  final List<DrumSpec> specs;
 
   @override
   Widget build(BuildContext context) {
@@ -240,7 +273,7 @@ class DrumGrid extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          for (final d in kDrums)
+          for (final d in specs)
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),

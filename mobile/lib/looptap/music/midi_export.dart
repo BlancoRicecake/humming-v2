@@ -10,7 +10,14 @@ import '../models/loop_models.dart';
 import 'song_util.dart';
 import 'theory.dart';
 
-const Map<String, int> _drumNote = {'kick': 36, 'snare': 38, 'hihat': 42};
+const Map<String, int> _drumNote = {
+  'kick': 36,
+  'snare': 38,
+  'hihat': 42,
+  'shaker': 82,
+  'tambourine': 54,
+  'clap': 39,
+};
 
 class _Ev {
   _Ev(this.t, this.data);
@@ -28,7 +35,8 @@ List<int> _vlq(int n) {
   return b;
 }
 
-Uint8List buildMidi(FlatSong flat, int bpm, {int melodyProgram = 0, int bassProgram = 33}) {
+Uint8List buildMidi(FlatSong flat, int bpm,
+    {int melodyProgram = 0, int bassProgram = 33, int melodyDecProgram = 48}) {
   const tpq = 96;
   final tps = tpq / kStepsPerBeat;
   final evs = <_Ev>[];
@@ -36,6 +44,7 @@ Uint8List buildMidi(FlatSong flat, int bpm, {int melodyProgram = 0, int bassProg
   evs.add(_Ev(0, [0xFF, 0x51, 0x03, (mpq >> 16) & 0xff, (mpq >> 8) & 0xff, mpq & 0xff]));
   evs.add(_Ev(0, [0xC0, melodyProgram & 0x7f])); // ch0 melody instrument
   evs.add(_Ev(0, [0xC1, bassProgram & 0x7f])); // ch1 bass instrument
+  evs.add(_Ev(0, [0xC2, melodyDecProgram & 0x7f])); // ch2 melody-fill instrument
 
   void addPitched(List<PitchNote> notes, int ch) {
     for (final n in notes) {
@@ -48,14 +57,22 @@ Uint8List buildMidi(FlatSong flat, int bpm, {int melodyProgram = 0, int bassProg
 
   addPitched(flat.melody, 0);
   addPitched(flat.bass, 1);
-  for (final n in flat.drums) {
-    final pitch = _drumNote[n.kind];
-    if (pitch == null) continue;
-    final on = (n.step * tps).round();
-    final off = ((n.step + 1) * tps).round();
-    evs.add(_Ev(on, [0x99, pitch, 100])); // ch9 (GM drums)
-    evs.add(_Ev(off, [0x89, pitch, 0]));
+  addPitched(flat.melodyDec, 2);
+
+  // both percussion tracks (main drums + beat-fill) → GM ch9
+  void addDrums(List<DrumNote> notes) {
+    for (final n in notes) {
+      final pitch = _drumNote[n.kind];
+      if (pitch == null) continue;
+      final on = (n.step * tps).round();
+      final off = ((n.step + 1) * tps).round();
+      evs.add(_Ev(on, [0x99, pitch, 100])); // ch9 (GM drums)
+      evs.add(_Ev(off, [0x89, pitch, 0]));
+    }
   }
+
+  addDrums(flat.drums);
+  addDrums(flat.beatDec);
 
   // stable sort by time (preserve insertion order for equal times)
   final indexed = [for (var i = 0; i < evs.length; i++) (i, evs[i])];
@@ -88,9 +105,11 @@ Future<File> exportMidiSong(
   String title, {
   int melodyProgram = 0,
   int bassProgram = 33,
+  int melodyDecProgram = 48,
 }) async {
   final flat = flattenSong(sections);
-  final bytes = buildMidi(flat, bpm, melodyProgram: melodyProgram, bassProgram: bassProgram);
+  final bytes = buildMidi(flat, bpm,
+      melodyProgram: melodyProgram, bassProgram: bassProgram, melodyDecProgram: melodyDecProgram);
   final dir = await getApplicationDocumentsDirectory();
   final folder = Directory('${dir.path}/looptap/exports');
   if (!await folder.exists()) await folder.create(recursive: true);

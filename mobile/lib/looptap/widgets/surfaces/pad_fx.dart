@@ -18,6 +18,10 @@ class PadFx extends StatefulWidget {
     this.lit = false,
     this.onDown,
     this.onUp,
+    this.slidable = false,
+    this.onSlideStart,
+    this.onSlide,
+    this.onSlideEnd,
   });
 
   final Color accent;
@@ -29,6 +33,14 @@ class PadFx extends StatefulWidget {
   final VoidCallback? onDown;
   final VoidCallback? onUp;
 
+  /// When true, a horizontal drag turns into a "slide" instead of a held note:
+  /// the just-pressed note is cancelled ([onSlideStart]) and subsequent
+  /// horizontal motion is reported as deltas ([onSlide], +dx = drag right).
+  final bool slidable;
+  final VoidCallback? onSlideStart;
+  final ValueChanged<double>? onSlide;
+  final VoidCallback? onSlideEnd;
+
   @override
   State<PadFx> createState() => _PadFxState();
 }
@@ -36,6 +48,12 @@ class PadFx extends StatefulWidget {
 class _PadFxState extends State<PadFx> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(vsync: this, duration: LTMotion.pop);
   bool _pressed = false;
+
+  // slide-gesture tracking
+  static const double _slideThreshold = 10;
+  Offset? _downPos;
+  double _lastX = 0;
+  bool _sliding = false;
 
   bool get _active => widget.lit || _pressed || _c.isAnimating;
 
@@ -45,7 +63,10 @@ class _PadFxState extends State<PadFx> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
-  void _down() {
+  void _down(Offset pos) {
+    _downPos = pos;
+    _lastX = pos.dx;
+    _sliding = false;
     // Fire the sound FIRST so audio isn't queued behind the rebuild/animation.
     widget.onDown?.call();
     if (LoopPrefs.instance.haptics.value) HapticFeedback.lightImpact();
@@ -53,15 +74,42 @@ class _PadFxState extends State<PadFx> with SingleTickerProviderStateMixin {
     _c.forward(from: 0);
   }
 
+  void _move(Offset pos) {
+    if (!widget.slidable || _downPos == null) return;
+    if (!_sliding) {
+      final dx = pos.dx - _downPos!.dx;
+      final dy = pos.dy - _downPos!.dy;
+      // become a slide only on a clearly-horizontal drag
+      if (dx.abs() > _slideThreshold && dx.abs() > dy.abs()) {
+        _sliding = true;
+        _lastX = pos.dx;
+        setState(() => _pressed = false);
+        widget.onSlideStart?.call(); // host releases the just-pressed note
+      }
+      return;
+    }
+    final d = pos.dx - _lastX;
+    _lastX = pos.dx;
+    if (d != 0) widget.onSlide?.call(d);
+  }
+
   void _up() {
+    final wasSliding = _sliding;
+    _sliding = false;
+    _downPos = null;
     setState(() => _pressed = false);
-    widget.onUp?.call();
+    if (wasSliding) {
+      widget.onSlideEnd?.call(); // settle/snap the strip
+    } else {
+      widget.onUp?.call(); // a slide doesn't commit a note
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Listener(
-      onPointerDown: (_) => _down(),
+      onPointerDown: (e) => _down(e.localPosition),
+      onPointerMove: (e) => _move(e.localPosition),
       onPointerUp: (_) => _up(),
       onPointerCancel: (_) => _up(),
       child: AnimatedBuilder(

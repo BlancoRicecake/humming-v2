@@ -167,6 +167,8 @@ class LtIcons {
   static const person = Symbols.person;
   static const add = Symbols.add;
   static const remove = Symbols.remove;
+  static const chevronLeft = Symbols.chevron_left;
+  static const chevronRight = Symbols.chevron_right;
   static const close = Symbols.close;
   static const stop = Symbols.stop;
   static const playArrow = Symbols.play_arrow;
