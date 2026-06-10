@@ -19,14 +19,14 @@
 <meta property="og:locale:alternate" content="en_US">
 <meta property="og:title" content="HumTrack — 탭 몇 번이면, 곡이 완성">
 <meta property="og:description" content="탭으로 비트를 만드는 가장 쉬운 모바일 DAW. 흥얼거리면 MIDI가 됩니다.">
-<meta property="og:image" content="https://hum-track.com/assets/appicon.png">
-<meta property="og:image:width" content="1024">
-<meta property="og:image:height" content="1024">
+<meta property="og:image" content="https://hum-track.com/assets/og-en.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:url" content="https://hum-track.com/">
-<meta name="twitter:card" content="summary">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="HumTrack — 탭 몇 번이면, 곡이 완성">
 <meta name="twitter:description" content="탭으로 비트를 만드는 가장 쉬운 모바일 DAW. 흥얼거리면 MIDI가 됩니다.">
-<meta name="twitter:image" content="https://hum-track.com/assets/appicon.png">
+<meta name="twitter:image" content="https://hum-track.com/assets/og-en.png">
 <link rel="icon" type="image/png" href="assets/appicon.png">
 <link rel="apple-touch-icon" href="assets/appicon.png">
 <script type="application/ld+json">
@@ -737,6 +737,9 @@ function setLang(lang) {
     b.classList.toggle('active', (lang === 'ko' && i === 0) || (lang === 'en' && i === 1));
   });
   document.documentElement.lang = lang;
+  var ogImg = 'https://hum-track.com/assets/og-' + lang + '.png';
+  document.querySelector('meta[property="og:image"]').setAttribute('content', ogImg);
+  document.querySelector('meta[name="twitter:image"]').setAttribute('content', ogImg);
   try { localStorage.setItem('ht_lang', lang); } catch (e) {}
   renderScreens(lang);
 }
