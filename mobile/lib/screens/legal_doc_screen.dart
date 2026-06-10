@@ -16,16 +16,29 @@ extension on LegalDoc {
         LegalDoc.privacy => L10n.of(context).privacyTitle,
         LegalDoc.refund => L10n.of(context).refundScreenTitle,
       };
-  String get assetPath => switch (this) {
-        LegalDoc.terms => 'assets/legal/terms.md',
-        LegalDoc.privacy => 'assets/legal/privacy.md',
-        LegalDoc.refund => 'assets/legal/refund.md',
+  String get _slug => switch (this) {
+        LegalDoc.terms => 'terms',
+        LegalDoc.privacy => 'privacy',
+        LegalDoc.refund => 'refund',
       };
 }
 
 class LegalDocScreen extends StatelessWidget {
   const LegalDocScreen({super.key, required this.doc});
   final LegalDoc doc;
+
+  /// Load the language-matched markdown. For non-Korean UI we try the `_en`
+  /// variant (e.g. assets/legal/terms_en.md); if it hasn't been authored yet
+  /// we fall back to the Korean base file so the doc is always shown.
+  Future<String> _load(BuildContext context) async {
+    final isEn = Localizations.localeOf(context).languageCode == 'en';
+    if (isEn) {
+      try {
+        return await rootBundle.loadString('assets/legal/${doc._slug}_en.md');
+      } catch (_) {/* no EN file yet → fall back to Korean */}
+    }
+    return rootBundle.loadString('assets/legal/${doc._slug}.md');
+  }
 
   /// 로그인 시트 또는 다른 곳에서 풀모달 푸시.
   static Future<void> open(BuildContext context, LegalDoc doc) {
@@ -52,7 +65,7 @@ class LegalDocScreen extends StatelessWidget {
         centerTitle: true,
       ),
       body: FutureBuilder<String>(
-        future: rootBundle.loadString(doc.assetPath),
+        future: _load(context),
         builder: (ctx, snap) {
           if (!snap.hasData) {
             return const Center(

@@ -29,7 +29,7 @@ W_NEXT = 0.25        # voice-leading to the next note's raw pitch
 # 이탈(≈1st 반음 = 의도한 다른 음)은 건드리지 않음 → "실수만 잡고 의도는 유지".
 MAX_CORRECTION_ST = 0.7   # hard cap on auto-correction (semitones)
 WEAK_MAX_ST = 0.5         # mid-confidence tier cap
-AGGRESSIVE_MAX_ST = 99.0  # aggressive mode: effectively no cap → snap every off-scale note to scale
+AGGRESSIVE_MAX_ST = 1.2   # project-key mode: fix likely slips, don't rewrite melody
 LOW_PITCH_CONF = 0.2      # below this note confidence → don't trust the pitch
 
 # 오토키는 곡의 시작/초반부를 더 신뢰(보통 토닉·조성을 여기서 제시).
@@ -80,6 +80,7 @@ def apply_assistant(
     enabled: bool,
     key_confidence: float = 1.0,
     aggressive: bool = False,
+    tonic_fallback_pcs: Optional[List[int]] = None,
     debug_out: Optional[list] = None,
 ) -> int:
     """Annotate + (optionally) correct notes in place. Returns applied count.
@@ -148,8 +149,22 @@ def apply_assistant(
         best = min(in_key_cands, key=lambda c: (costs[c], abs(c - raw), c))
         correction = abs(best - raw)
 
+        fallback_best: Optional[int] = None
+        fallback_correction = math.inf
+        fallback_costs: dict[int, float] = {}
+        if has_key and tonic_fallback_pcs and original % 12 not in tonic_fallback_pcs:
+            fb_below, fb_above = nearest_in_key(original, tonic_fallback_pcs)
+            fb_candidates = sorted({fb_below, fb_above})
+            fallback_costs = {
+                c: candidate_cost(c, raw, prev_chosen, next_raw) for c in fb_candidates
+            }
+            fallback_best = min(fb_candidates, key=lambda c: (fallback_costs[c], abs(c - raw), c))
+            fallback_correction = abs(fallback_best - raw)
+
         # --- decide whether to auto-apply ---
         reason: Optional[str] = None
+        selected = int(best)
+        selected_source = "assistant"
         if not enabled:
             reason = "assistant_off"
         elif not has_key:
@@ -157,16 +172,24 @@ def apply_assistant(
         elif in_key:
             reason = "in_key"
         elif key_confidence < KEY_CONF_LOW:
-            reason = "low_key_confidence"
+            if (
+                fallback_best is not None
+                and fallback_correction <= AGGRESSIVE_MAX_ST
+                and float(getattr(n, "confidence", 1.0)) >= LOW_PITCH_CONF
+            ):
+                selected = int(fallback_best)
+                selected_source = "assistant"
+            else:
+                reason = "low_key_confidence"
         elif float(getattr(n, "confidence", 1.0)) < LOW_PITCH_CONF:
             reason = "low_pitch_confidence"
         elif correction > max_correction:
             reason = "correction_too_large"
 
         if reason is None:
-            n.pitch = int(best)
+            n.pitch = selected
             n.assisted = True
-            n.source = "assistant"
+            n.source = selected_source
             applied += 1
         else:
             n.pitch = original
@@ -181,6 +204,8 @@ def apply_assistant(
                 "idx": i, "raw_float": round(raw, 3), "raw_note": original,
                 "in_key": n.in_key, "candidates": list(n.candidates),
                 "candidate_costs": {int(c): round(v, 2) for c, v in costs.items()},
+                "tonic_fallback_pcs": list(tonic_fallback_pcs or []),
+                "fallback_costs": {int(c): round(v, 2) for c, v in fallback_costs.items()},
                 "selected": int(n.pitch), "correction_cents": n.correction_cents,
                 "source": n.source, "suppressed_reason": reason,
             })
@@ -226,9 +251,22 @@ def run_key_and_assistant(
         else:
             tonic, scl = key_tonic, scale
             conf = 1.0 if (key_tonic and scale) else 0.0
+    top_scores = score_keys(hist) if hist is not None else []
+    tonic_fallback_pcs: Optional[List[int]] = None
+    if tonic and len(top_scores) >= 2:
+        _c1, t1, m1 = top_scores[0]
+        _c2, t2, m2 = top_scores[1]
+        if t1 == t2 == tonic and {m1, m2} == {"major", "minor"}:
+            tonic_fallback_pcs = sorted(
+                set(scale_pitch_classes(tonic, "major"))
+                | set(scale_pitch_classes(tonic, "minor"))
+            )
+
     applied = apply_assistant(
         notes, tonic, scl, pitch_assistant, key_confidence=conf,
-        aggressive=assist_aggressive, debug_out=debug_out,
+        aggressive=assist_aggressive,
+        tonic_fallback_pcs=tonic_fallback_pcs,
+        debug_out=debug_out,
     )
 
     if tonic is None:
@@ -243,7 +281,7 @@ def run_key_and_assistant(
     key_applied = bool(pitch_assistant and tonic and conf >= KEY_CONF_LOW)
     top3 = [
         {"tonic": t, "scale": m, "correlation": round(c, 4)}
-        for c, t, m in (score_keys(hist)[:3] if hist is not None else [])
+        for c, t, m in top_scores[:3]
     ]
     return {
         "tonic": tonic, "scale": scl, "confidence": conf,

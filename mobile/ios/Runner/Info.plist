@@ -29,10 +29,28 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>마이크로 허밍을 녹음해 MIDI로 변환합니다.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>mailto</string>
+		<string>https</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>HumTrack</string>
+	<!--
+	  ITSAppUsesNonExemptEncryption = false → App Store Connect 의 수출 규정
+	  준수 (Export Compliance) 질문을 매 업로드마다 건너뛴다. 본 앱은 HTTPS
+	  (NSURLSession / Apple 표준 TLS) 외 별도 암호화 사용 없음 → 5D002.b.1
+	  exempt 에 해당하므로 false 가 정합. (앱에 커스텀 crypto 추가 시 재평가
+	  필요.)
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -40,7 +58,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>humming</string>
+	<string>HumTrack</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

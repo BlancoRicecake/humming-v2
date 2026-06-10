@@ -47,8 +47,11 @@ HIHAT = 42
 HIHAT_CENTROID = 4000.0  # centroid above this → hi-hat (snare max ~3344)
 HIHAT_ROLLOFF = 8000.0   # 85% rolloff above this → hi-hat (snare max ~7891 < hi-hat min ~8758)
 HIHAT_ZCR = 0.30         # zero-crossing rate above this → hi-hat (snare max ~0.18 < hi-hat min ~0.50)
+HIHAT_HIGH_RATIO = 0.22  # additional high-band evidence; used as a vote, not alone
 KICK_CENTROID = 1800.0   # kick centroid below this (kick max ~1236 < snare min ~2494)
 KICK_ZCR_MAX = 0.08      # ... AND zcr below this (kick max ~0.027 < snare min ~0.136)
+KICK_ROLLOFF_MAX = 2600.0
+KICK_FLATNESS_MAX = 0.015
 
 # debug-only band edges (not used in the decision)
 LOW_HZ = 150.0
@@ -103,12 +106,22 @@ def classify_features(seg: np.ndarray, sr: int) -> DrumHit:
     power = spec ** 2 + 1e-12
     flatness = float(np.exp(np.mean(np.log(power))) / (np.mean(power) + 1e-12))
 
-    # hi-hat first (bright/noisy — survives the phone high-pass cleanly),
-    # then kick (dark, low rolloff), else snare. Rolloff is the kick/snare axis
-    # (flatness doesn't separate them for this voice — see threshold notes).
-    if centroid >= HIHAT_CENTROID or rolloff >= HIHAT_ROLLOFF or zcr >= HIHAT_ZCR:
+    # Evidence voting keeps a single bright artifact from turning a snare/kick
+    # into a hat. ZCR is still allowed to dominate because noisy hats are the
+    # one class that consistently has very high crossing rates on phone mics.
+    hat_votes = int(centroid >= HIHAT_CENTROID)
+    hat_votes += int(rolloff >= HIHAT_ROLLOFF)
+    hat_votes += int(zcr >= HIHAT_ZCR)
+    hat_votes += int(high_ratio >= HIHAT_HIGH_RATIO)
+
+    kick_votes = int(centroid <= KICK_CENTROID)
+    kick_votes += int(zcr <= KICK_ZCR_MAX)
+    kick_votes += int(rolloff <= KICK_ROLLOFF_MAX)
+    kick_votes += int(flatness <= KICK_FLATNESS_MAX)
+
+    if zcr >= HIHAT_ZCR or (hat_votes >= 2 and centroid >= 3000.0):
         note = HIHAT
-    elif centroid <= KICK_CENTROID and zcr <= KICK_ZCR_MAX:
+    elif kick_votes >= 3 and high_ratio < HIHAT_HIGH_RATIO:
         note = KICK
     else:
         note = SNARE
@@ -118,3 +131,66 @@ def classify_features(seg: np.ndarray, sr: int) -> DrumHit:
 def classify_drum(seg: np.ndarray, sr: int) -> int:
     """Return a GM drum note (36/38/42) for a percussive audio segment."""
     return classify_features(seg, sr).gm_note
+
+
+# --- hybrid (within-take relative) thresholds ---
+# A take recorded on one mic/voice has a stable centroid scale, so kick is the
+# *lowest* centroid cluster regardless of the absolute level — far more robust
+# than a fixed kick threshold that breaks when the mic/strength changes. But a
+# UNIFORM take (e.g. all kicks) must not be split into kick/snare/hi-hat, so we
+# only do a relative kick/snare split when there's a real bimodal gap; else we
+# label the whole cluster by an absolute anchor.
+KICK_SNARE_MIN_SPREAD = 800.0   # min centroid spread (Hz) to consider a kick/snare split
+KICK_SNARE_GAP_FRAC = 0.35      # largest gap must be ≥ this fraction of the spread (bimodal)
+KICK_SNARE_ANCHOR = 2000.0      # uniform non-hat cluster: ≤ this → kick, else snare
+
+
+def classify_take(hits: List["DrumHit"]) -> List[int]:
+    """Re-decide kick/snare/hi-hat for a whole take using *relative* timbre.
+
+    Hi-hats stay absolute (bright/noisy survives the phone high-pass and is a
+    robust threshold). The remaining hits (kick vs snare) are split by a
+    within-take natural break on centroid — so kicks are simply the darker
+    cluster, immune to mic/strength shifts. Falls back to the per-hit absolute
+    label (``classify_features``) for short takes (<3 hits) where there's no
+    distribution to lean on.
+    """
+    n = len(hits)
+    base = [h.gm_note for h in hits]
+    if n < 3:
+        return base
+
+    cents = np.array([h.centroid for h in hits], dtype=np.float64)
+    zcrs = np.array([h.zcr for h in hits], dtype=np.float64)
+    rolls = np.array([h.rolloff for h in hits], dtype=np.float64)
+    highs = np.array([h.high_ratio for h in hits], dtype=np.float64)
+
+    # hi-hat: absolute (robust). Anything bright/noisy.
+    hat_votes = (
+        (cents >= HIHAT_CENTROID).astype(np.int32)
+        + (rolls >= HIHAT_ROLLOFF).astype(np.int32)
+        + (zcrs >= HIHAT_ZCR).astype(np.int32)
+        + (highs >= HIHAT_HIGH_RATIO).astype(np.int32)
+    )
+    is_hat = (zcrs >= HIHAT_ZCR) | ((hat_votes >= 2) & (cents >= 3000.0))
+    out = [HIHAT if is_hat[i] else base[i] for i in range(n)]
+
+    rest = [i for i in range(n) if not is_hat[i]]
+    if len(rest) >= 2:
+        rc = cents[rest]
+        spread = float(rc.max() - rc.min())
+        srt = np.sort(rc)
+        gaps = np.diff(srt)
+        max_gap = float(gaps.max()) if gaps.size else 0.0
+        if spread >= KICK_SNARE_MIN_SPREAD and max_gap >= KICK_SNARE_GAP_FRAC * spread:
+            # bimodal — split at the natural break (midpoint of the largest gap)
+            gi = int(np.argmax(gaps))
+            thresh = float((srt[gi] + srt[gi + 1]) / 2.0)
+            for i in rest:
+                out[i] = KICK if cents[i] <= thresh else SNARE
+        else:
+            # uniform cluster — all one type, decided by an absolute anchor
+            label = KICK if float(rc.mean()) <= KICK_SNARE_ANCHOR else SNARE
+            for i in rest:
+                out[i] = label
+    return out

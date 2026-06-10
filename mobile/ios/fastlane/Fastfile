@@ -12,6 +12,37 @@ SCHEME      = "Runner"
 WORKSPACE   = "Runner.xcworkspace"
 EXPORT_METHOD = "app-store"
 
+# Flutter dart-define 키 (Android Fastfile 과 동일하게 유지).
+DEFINE_KEYS = %w[SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL]
+
+def collect_dart_defines
+  env = {}
+  DEFINE_KEYS.each do |k|
+    v = ENV[k]
+    next if v.nil? || v.empty?
+    env[k] = v
+  end
+  if env.empty?
+    secrets_path = File.expand_path("../../../backend/.env.secrets", __dir__)
+    if File.exist?(secrets_path)
+      File.readlines(secrets_path).each do |line|
+        line.strip!
+        next if line.start_with?("#") || line.empty?
+        k, v = line.split("=", 2)
+        env[k] = v if DEFINE_KEYS.include?(k) && !v.nil? && !v.empty?
+      end
+    end
+  end
+  env
+end
+
+def flutter_prebuild_cmd
+  defines = collect_dart_defines
+  UI.message "dart-defines: #{defines.keys.join(", ")}"
+  args = defines.map { |k, v| "--dart-define=#{k}=#{v}" }.join(" ")
+  "cd .. && flutter clean && flutter pub get && flutter build ios --release --no-codesign -t lib/main.dart #{args}"
+end
+
 def asc_api_key
   unless ASC_KEY_ID && ASC_ISSUER_ID && ASC_KEY_FILEPATH
     UI.user_error!(
@@ -42,11 +73,12 @@ platform :ios do
   desc "Build and upload to TestFlight"
   lane :beta do
     api_key = asc_api_key
+    sh(flutter_prebuild_cmd)
     build_app(
       workspace: WORKSPACE,
       scheme: SCHEME,
       export_method: EXPORT_METHOD,
-      clean: true,
+      clean: false,
     )
     upload_to_testflight(
       api_key: api_key,
@@ -58,18 +90,20 @@ platform :ios do
   desc "Build and submit for App Store review"
   lane :release do
     api_key = asc_api_key
+    sh(flutter_prebuild_cmd)
     build_app(
       workspace: WORKSPACE,
       scheme: SCHEME,
       export_method: EXPORT_METHOD,
-      clean: true,
+      clean: false,
     )
     upload_to_app_store(
       api_key: api_key,
       submit_for_review: true,
       automatic_release: false,
       force: true,
-      skip_screenshots: true,
+      skip_screenshots: false,
+      overwrite_screenshots: true,
       precheck_include_in_app_purchases: false,
     )
   end
@@ -80,14 +114,22 @@ platform :ios do
     deliver(
       api_key: api_key,
       skip_binary_upload: true,
-      skip_screenshots: true,
+      skip_screenshots: false,
+      overwrite_screenshots: true,
       skip_metadata: false,
       force: true,
+      precheck_include_in_app_purchases: false,
+      run_precheck_before_submit: false,
     )
   end
 
   desc "Sync IAP products via custom Python script (App Store Connect API)"
   lane :sync_iap do
     sh("python3 ../../infra/scripts/asc_create_iap.py")
+  end
+
+  desc "Sync Play Console subscriptions via custom Python script (Android Publisher API)"
+  lane :sync_play_iap do
+    sh("python3 ../../infra/scripts/play_create_iap.py")
   end
 end

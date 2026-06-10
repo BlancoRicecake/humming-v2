@@ -50,6 +50,15 @@ class AuthError {
       AuthError._(code: 'generic', provider: provider, raw: raw);
 }
 
+/// 인증 관련 알림 이벤트 — UI 가 onAuthEvent 로 수신해 사용자에게 표시.
+enum AuthEventKind { sessionExpired, refreshFailed }
+
+class AuthEvent {
+  const AuthEvent(this.kind, {this.detail});
+  final AuthEventKind kind;
+  final String? detail;
+}
+
 class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
@@ -62,9 +71,10 @@ class AuthService {
   AuthSession _current = const AuthSession();
   AuthSession get current => _current;
 
-  /// 세션 만료(refresh token 소진)로 인한 강제 로그아웃 여부.
-  /// ProjectStore 또는 UI 레이어가 읽어 "세션이 만료됐습니다" 메시지 표시 후 false 로 리셋.
-  bool sessionExpiredByServer = false;
+  /// 세션 만료/리프레시 실패 등 사용자 안내가 필요한 이벤트 채널.
+  /// UI(account_sheet, paywall 등)가 이 stream 을 listen 해 dialog/snackbar 표시.
+  final _authEventCtl = StreamController<AuthEvent>.broadcast();
+  Stream<AuthEvent> get onAuthEvent => _authEventCtl.stream;
 
   /// signInWith 가 false 반환했을 때 진단용 에러 — 사용자 취소면 null.
   /// UI 단에서 L10n 으로 해석해 snackbar/dialog 등으로 표시.
@@ -99,13 +109,6 @@ class AuthService {
   void _onChange(sb.AuthState s) {
     final session = s.session;
     if (session == null) {
-      // TOKEN_REFRESH_FAILED / 서버 측 세션 무효화 → 강제 로그아웃.
-      // 수동 signOut()은 _manualSignOut 플래그로 구분.
-      if (!_manualSignOut &&
-          (s.event == sb.AuthChangeEvent.tokenRefreshed ||
-           s.event == sb.AuthChangeEvent.signedOut)) {
-        sessionExpiredByServer = true;
-      }
       _current = const AuthSession();
     } else {
       _emitFromSession(session);
@@ -113,8 +116,6 @@ class AuthService {
     }
     _sessionCtl.add(_current);
   }
-
-  bool _manualSignOut = false;
 
   void _emitFromSession(sb.Session session) {
     final u = session.user;
@@ -137,6 +138,31 @@ class AuthService {
     }
     _current = AuthSession(userId: u.id, email: u.email, provider: provider);
     _sessionCtl.add(_current);
+  }
+
+  /// Email + password 로그인 — 스토어 리뷰용 사전 생성 계정 전용.
+  /// public sign-up 은 백엔드에서 비활성. 사용자 취소가 따로 없으므로 실패
+  /// 시 [lastError] 가 채워진다.
+  Future<bool> signInWithEmail(String email, String password) async {
+    lastError = null;
+    _lastSignInProvider = 'email';
+    if (!_enabled) {
+      lastError = AuthError.disabled();
+      return false;
+    }
+    try {
+      final r = await sb.Supabase.instance.client.auth
+          .signInWithPassword(email: email, password: password);
+      return r.session != null;
+    } on sb.AuthException catch (e) {
+      debugPrint('[supabase] email signIn failed: ${e.message} (status=${e.statusCode})');
+      lastError = AuthError.generic('Email', e.message);
+      return false;
+    } catch (e) {
+      debugPrint('[supabase] email signIn error: $e');
+      lastError = AuthError.generic('Email', '$e');
+      return false;
+    }
   }
 
   /// provider: 'apple' | 'google'.
@@ -293,13 +319,43 @@ class AuthService {
   }
 
   /// 현재 세션의 access token — 백엔드 API 호출 시 Authorization: Bearer 로.
+  ///
+  /// 만료된(or 곧 만료될) 토큰이면 자동으로 refreshSession() 호출. Supabase SDK
+  /// 의 background auto-refresh 가 실패한 케이스(앱이 오래 백그라운드, 디바이스
+  /// 시계 점프 등)에서도 안전하게 fresh 토큰을 돌려주도록 보강.
   Future<String?> currentAccessToken() async {
     if (!_enabled) return null;
-    return sb.Supabase.instance.client.auth.currentSession?.accessToken;
+    final auth = sb.Supabase.instance.client.auth;
+    var session = auth.currentSession;
+    if (session == null) return null;
+    // expiresAt: epoch seconds. 60초 미만 남았으면 refresh.
+    final expSec = session.expiresAt;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final remaining = expSec == null ? 0 : (expSec - now);
+    if (remaining <= 60) {
+      try {
+        debugPrint('[supabase] session expiring (remaining=${remaining}s) → refresh');
+        final r = await auth.refreshSession();
+        session = r.session ?? auth.currentSession;
+      } catch (e) {
+        debugPrint('[supabase] refreshSession failed: $e');
+        // Refresh 실패 = refresh_token 도 만료/무효 → 복구 불가. 자동 signOut +
+        // UI 에 안내. (legacy 의 UnauthorizedException 대응을 LoopTap 에서는
+        // AuthEvent stream 으로 발행.)
+        _authEventCtl.add(AuthEvent(
+          AuthEventKind.refreshFailed,
+          detail: e.toString(),
+        ));
+        try {
+          await auth.signOut();
+        } catch (_) {}
+        return null;
+      }
+    }
+    return session?.accessToken;
   }
 
   Future<void> signOut() async {
-    _manualSignOut = true;
     _lastSignInProvider = null;
     // GoogleSignIn 패키지가 native 단에서 별도 account 캐시를 들고 있어 Supabase 만
     // signOut 하면 다음 시도 시 화면 없이 즉시 재로그인 됨. 양쪽 모두 비워야 함.
@@ -319,5 +375,6 @@ class AuthService {
   Future<void> dispose() async {
     await _sub?.cancel();
     await _sessionCtl.close();
+    await _authEventCtl.close();
   }
 }

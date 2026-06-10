@@ -4,7 +4,7 @@ const BASE = "/api";
 
 export async function assistNotes(
   notes: Note[],
-  options: Pick<AnalyzeOptions, "auto_key" | "pitch_assistant" | "key_tonic" | "scale">,
+  options: Pick<AnalyzeOptions, "auto_key" | "pitch_assistant" | "assist_aggressive" | "key_tonic" | "scale">,
 ): Promise<AssistResponse> {
   const res = await fetch(`${BASE}/assist`, {
     method: "POST",

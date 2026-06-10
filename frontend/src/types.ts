@@ -22,6 +22,7 @@ export interface AnalyzeOptions {
   // Stage 7 — key/scale
   auto_key: boolean;
   pitch_assistant: boolean;
+  assist_aggressive: boolean;
   key_tonic: string | null;
   scale: Scale | null;
   quantize_strength: number;
@@ -54,6 +55,10 @@ export interface Note {
   drum_zcr: number;             // zero-crossing rate (0-1)
   drum_rolloff: number;         // spectral rolloff 85% (Hz)
   drum_flatness: number;        // spectral flatness 0-1 (kick↔snare axis)
+  drum_lowmid_ratio: number;    // energy fraction 200-2kHz (kick/snare body; classifier input)
+  drum_mid_ratio: number;       // energy fraction 500-3kHz (classifier input)
+  drum_vhigh_ratio: number;     // energy fraction > 8kHz (hi-hat air; classifier input)
+  drum_sustain_ratio: number;   // 2nd-half/1st-half RMS over 120ms (classifier input)
   onset_strength: number;       // spectral-flux onset envelope at the hit
 }
 

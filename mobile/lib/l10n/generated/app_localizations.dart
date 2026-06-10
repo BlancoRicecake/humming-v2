@@ -250,8 +250,8 @@ abstract class L10n {
   /// No description provided for @trialPriceFootnote.
   ///
   /// In ko, this message translates to:
-  /// **'₩{won}/월 (체험 후 자동 결제)'**
-  String trialPriceFootnote(String won);
+  /// **'{price}/월 (체험 후 자동 결제)'**
+  String trialPriceFootnote(String price);
 
   /// No description provided for @cloudUsageLabel.
   ///
@@ -486,12 +486,6 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'로그인'**
   String get accountSignIn;
-
-  /// No description provided for @authSessionExpired.
-  ///
-  /// In ko, this message translates to:
-  /// **'로그인 세션이 만료됐어요. 다시 로그인해 주세요.'**
-  String get authSessionExpired;
 
   /// No description provided for @subFreePlan.
   ///
@@ -853,102 +847,6 @@ abstract class L10n {
   /// **'해지'**
   String get subCancelConfirmAction;
 
-  /// No description provided for @subHistoryTitle.
-  ///
-  /// In ko, this message translates to:
-  /// **'결제 이력'**
-  String get subHistoryTitle;
-
-  /// No description provided for @subHistoryLoadFailed.
-  ///
-  /// In ko, this message translates to:
-  /// **'이력을 불러오지 못했습니다'**
-  String get subHistoryLoadFailed;
-
-  /// No description provided for @subHistoryEmpty.
-  ///
-  /// In ko, this message translates to:
-  /// **'결제 이력이 없습니다'**
-  String get subHistoryEmpty;
-
-  /// No description provided for @subPlanYearly.
-  ///
-  /// In ko, this message translates to:
-  /// **'연간 플랜'**
-  String get subPlanYearly;
-
-  /// No description provided for @subPlanMonthly.
-  ///
-  /// In ko, this message translates to:
-  /// **'월간 플랜'**
-  String get subPlanMonthly;
-
-  /// No description provided for @subBadgeActive.
-  ///
-  /// In ko, this message translates to:
-  /// **'활성'**
-  String get subBadgeActive;
-
-  /// No description provided for @subBadgeTrial.
-  ///
-  /// In ko, this message translates to:
-  /// **'체험 중'**
-  String get subBadgeTrial;
-
-  /// No description provided for @subBadgeCancelled.
-  ///
-  /// In ko, this message translates to:
-  /// **'취소됨'**
-  String get subBadgeCancelled;
-
-  /// No description provided for @subBadgeExpired.
-  ///
-  /// In ko, this message translates to:
-  /// **'만료'**
-  String get subBadgeExpired;
-
-  /// No description provided for @subHistoryRowStarted.
-  ///
-  /// In ko, this message translates to:
-  /// **'시작: {date}'**
-  String subHistoryRowStarted(String date);
-
-  /// No description provided for @subHistoryRowTxId.
-  ///
-  /// In ko, this message translates to:
-  /// **'거래 ID: {id}'**
-  String subHistoryRowTxId(String id);
-
-  /// No description provided for @subHistoryTxCopied.
-  ///
-  /// In ko, this message translates to:
-  /// **'트랜잭션 ID가 복사되었습니다'**
-  String get subHistoryTxCopied;
-
-  /// No description provided for @subReceiptButtonIos.
-  ///
-  /// In ko, this message translates to:
-  /// **'App Store에서 영수증 확인'**
-  String get subReceiptButtonIos;
-
-  /// No description provided for @subReceiptButtonAndroid.
-  ///
-  /// In ko, this message translates to:
-  /// **'Google Play에서 영수증 확인'**
-  String get subReceiptButtonAndroid;
-
-  /// No description provided for @subOpenStoreIos.
-  ///
-  /// In ko, this message translates to:
-  /// **'App Store에서 관리'**
-  String get subOpenStoreIos;
-
-  /// No description provided for @subOpenStoreAndroid.
-  ///
-  /// In ko, this message translates to:
-  /// **'Google Play에서 관리'**
-  String get subOpenStoreAndroid;
-
   /// No description provided for @paywallHeadlineExport.
   ///
   /// In ko, this message translates to:
@@ -996,6 +894,18 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'전체 기능 잠금 해제'**
   String get paywallSubDefault;
+
+  /// No description provided for @looptapPaywallTriggerExport.
+  ///
+  /// In ko, this message translates to:
+  /// **'내보내기는 Pro 전용 기능입니다 — 구독하시면 MIDI / 오디오를 저장할 수 있어요.'**
+  String get looptapPaywallTriggerExport;
+
+  /// No description provided for @looptapPaywallTriggerSongQuota.
+  ///
+  /// In ko, this message translates to:
+  /// **'무료 플랜의 곡 개수 한도에 도달했어요. Pro 로 업그레이드하면 무제한으로 만들 수 있습니다.'**
+  String get looptapPaywallTriggerSongQuota;
 
   /// No description provided for @paywallFeatureCloudTitle.
   ///
@@ -1060,8 +970,8 @@ abstract class L10n {
   /// No description provided for @paywallPlanYearlyHint.
   ///
   /// In ko, this message translates to:
-  /// **'월 {monthly} · {pct}% 할인'**
-  String paywallPlanYearlyHint(String monthly, int pct);
+  /// **'월 {monthly} 환산'**
+  String paywallPlanYearlyHint(String monthly);
 
   /// No description provided for @paywallPlanMonthly.
   ///
@@ -1471,18 +1381,6 @@ abstract class L10n {
   /// **'내 기기로 받는 중'**
   String get syncProgressDownload;
 
-  /// No description provided for @syncProgressFailed.
-  ///
-  /// In ko, this message translates to:
-  /// **'오류가 발생했어요'**
-  String get syncProgressFailed;
-
-  /// No description provided for @syncProgressFailedSub.
-  ///
-  /// In ko, this message translates to:
-  /// **'다시 시도해 주세요.'**
-  String get syncProgressFailedSub;
-
   /// No description provided for @comingSoonFeature.
   ///
   /// In ko, this message translates to:
@@ -1771,18 +1669,6 @@ abstract class L10n {
   /// **'구독이 만료된 동안엔 새 업로드 / 동기화는 잠금돼요. 이전 작업물은 그대로 두고 언제든 다운로드하거나 삭제할 수 있어요.'**
   String get cloudDownloadBanner;
 
-  /// No description provided for @cloudDownloadEmptyTitle.
-  ///
-  /// In ko, this message translates to:
-  /// **'파일 목록을 불러올 수 없어요'**
-  String get cloudDownloadEmptyTitle;
-
-  /// No description provided for @cloudDownloadEmptySub.
-  ///
-  /// In ko, this message translates to:
-  /// **'재구독 후 클라우드 탭에서\n파일을 다운로드할 수 있어요.'**
-  String get cloudDownloadEmptySub;
-
   /// No description provided for @cloudDownloadCta.
   ///
   /// In ko, this message translates to:
@@ -1866,12 +1752,6 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'먼저 녹음하세요'**
   String get editPlayRecordFirst;
-
-  /// No description provided for @editActionNeedsRecording.
-  ///
-  /// In ko, this message translates to:
-  /// **'녹음이 있어야 사용할 수 있어요'**
-  String get editActionNeedsRecording;
 
   /// No description provided for @editPlayFailed.
   ///
@@ -2442,12 +2322,6 @@ abstract class L10n {
   /// **'링크 · Instagram · TikTok'**
   String get exportShareSub;
 
-  /// No description provided for @exportExporting.
-  ///
-  /// In ko, this message translates to:
-  /// **'내보내는 중...'**
-  String get exportExporting;
-
   /// No description provided for @exportFailed.
   ///
   /// In ko, this message translates to:
@@ -2771,6 +2645,180 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'서버 삭제 실패 ({status}){detail}'**
   String accountErrServerDelete(int status, String detail);
+
+  /// No description provided for @ltCardMore.
+  ///
+  /// In ko, this message translates to:
+  /// **'더 보기'**
+  String get ltCardMore;
+
+  /// No description provided for @ltSettingsDeleteAccount.
+  ///
+  /// In ko, this message translates to:
+  /// **'회원 탈퇴'**
+  String get ltSettingsDeleteAccount;
+
+  /// No description provided for @ltSettingsDeleteAccountConfirmTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'회원 탈퇴할까요?'**
+  String get ltSettingsDeleteAccountConfirmTitle;
+
+  /// No description provided for @ltSettingsDeleteAccountConfirmBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'계정과 모든 데이터가 영구적으로 삭제돼요. 되돌릴 수 없어요.'**
+  String get ltSettingsDeleteAccountConfirmBody;
+
+  /// No description provided for @ltSettingsDeleteAccountFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'탈퇴 실패: {err}'**
+  String ltSettingsDeleteAccountFailed(String err);
+
+  /// No description provided for @ltSettingsDeleteAccountDone.
+  ///
+  /// In ko, this message translates to:
+  /// **'회원 탈퇴가 완료됐어요.'**
+  String get ltSettingsDeleteAccountDone;
+
+  /// No description provided for @ltExportTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'\"{title}\" 내보내기'**
+  String ltExportTitle(String title);
+
+  /// No description provided for @ltExportMeta.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 {count}개 · {bars}마디 · {bpm} BPM'**
+  String ltExportMeta(int count, int bars, int bpm);
+
+  /// No description provided for @ltExportMidiTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI 파일'**
+  String get ltExportMidiTitle;
+
+  /// No description provided for @ltExportMidiSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'전체 곡 · 피아노 · 베이스 · 드럼 (ch10)'**
+  String get ltExportMidiSub;
+
+  /// No description provided for @ltExportWavTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'오디오 (WAV)'**
+  String get ltExportWavTitle;
+
+  /// No description provided for @ltExportWavSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'믹스된 전체 곡'**
+  String get ltExportWavSub;
+
+  /// No description provided for @ltExportStemsTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'스템'**
+  String get ltExportStemsTitle;
+
+  /// No description provided for @ltExportStemsSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙별 WAV 분리'**
+  String get ltExportStemsSub;
+
+  /// No description provided for @ltExportShareTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'공유'**
+  String get ltExportShareTitle;
+
+  /// No description provided for @ltExportShareSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'다른 앱으로 보내기'**
+  String get ltExportShareSub;
+
+  /// No description provided for @ltExportSaved.
+  ///
+  /// In ko, this message translates to:
+  /// **'{filename} 저장됨'**
+  String ltExportSaved(String filename);
+
+  /// No description provided for @ltExportFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI 내보내기 실패'**
+  String get ltExportFailed;
+
+  /// No description provided for @ltExportFooter.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션은 순서대로(반복 포함) 렌더링됩니다. MIDI는 모든 DAW 에서 열립니다. WAV / 스템은 곧 제공 예정.'**
+  String get ltExportFooter;
+
+  /// No description provided for @ltSettingsTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'설정'**
+  String get ltSettingsTitle;
+
+  /// No description provided for @ltSettingsMetronome.
+  ///
+  /// In ko, this message translates to:
+  /// **'메트로놈 클릭'**
+  String get ltSettingsMetronome;
+
+  /// No description provided for @ltSettingsMetronomeSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 중 클릭음 재생'**
+  String get ltSettingsMetronomeSub;
+
+  /// No description provided for @ltSettingsHaptics.
+  ///
+  /// In ko, this message translates to:
+  /// **'햅틱'**
+  String get ltSettingsHaptics;
+
+  /// No description provided for @ltSettingsHapticsSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'패드 탭 시 진동'**
+  String get ltSettingsHapticsSub;
+
+  /// No description provided for @ltSettingsAbout.
+  ///
+  /// In ko, this message translates to:
+  /// **'정보'**
+  String get ltSettingsAbout;
+
+  /// No description provided for @ltSettingsAboutSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'HumTrack · v0.4'**
+  String get ltSettingsAboutSub;
+
+  /// No description provided for @ltSettingsLegalSection.
+  ///
+  /// In ko, this message translates to:
+  /// **'약관 및 정책'**
+  String get ltSettingsLegalSection;
+
+  /// No description provided for @ltSettingsOpenSource.
+  ///
+  /// In ko, this message translates to:
+  /// **'오픈소스 라이선스'**
+  String get ltSettingsOpenSource;
+
+  /// No description provided for @ltSettingsContact.
+  ///
+  /// In ko, this message translates to:
+  /// **'문의하기'**
+  String get ltSettingsContact;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

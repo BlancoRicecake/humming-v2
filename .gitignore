@@ -46,13 +46,6 @@ mobile/ios/fastlane/Preview.html
 mobile/ios/fastlane/screenshots/**/*.png
 mobile/ios/fastlane/test_output
 
-# Fastlane (mobile/)
-mobile/fastlane/report.xml
-mobile/fastlane/Preview.html
-mobile/fastlane/test_output
-mobile/fastlane/screenshots-staging/
-mobile/fastlane/**/.DS_Store
-
 # Backend secrets (verbose form)
 backend/secrets/*.p8
 backend/secrets/*.json
@@ -78,3 +71,7 @@ mobile/macos/Flutter/GeneratedPluginRegistrant.swift
 # CocoaPods lockfile 은 iOS 빌드 환경/머신 별로 자주 갱신되어 diff 가 끼므로
 # 의도적으로 untracked (이미 main 에 한 번 커밋되어 있더라도 향후 변경은 무시).
 mobile/ios/Podfile.lock
+
+# App Review demo credentials (live password — git 에 절대 올리지 말 것).
+# fastlane deliver 가 디스크에서 읽어 ASC 로 푸시하므로 파일은 로컬 유지.
+mobile/ios/fastlane/metadata/review_information/

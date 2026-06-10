@@ -1,0 +1,8 @@
+What's new in 1.0.1
+
+- New tap-to-make-beats screen — start a loop with one tap
+- Chord input + extra instruments for richer arrangements
+- Sign in with Apple or Google
+- Smoother Pro purchase and restore flow
+- Refreshed settings (haptics, language, legal documents)
+- Stability improvements and bug fixes

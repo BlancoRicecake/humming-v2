@@ -88,8 +88,8 @@ class L10nEn extends L10n {
   String get trialStartCta => 'Start 7-day free trial';
 
   @override
-  String trialPriceFootnote(String won) {
-    return '\$$won/month after trial';
+  String trialPriceFootnote(String price) {
+    return '$price/month after trial';
   }
 
   @override
@@ -229,10 +229,6 @@ class L10nEn extends L10n {
 
   @override
   String get accountSignIn => 'Sign in';
-
-  @override
-  String get authSessionExpired =>
-      'Your session has expired. Please sign in again.';
 
   @override
   String get subFreePlan => 'Free plan';
@@ -442,58 +438,6 @@ class L10nEn extends L10n {
   String get subCancelConfirmAction => 'Cancel subscription';
 
   @override
-  String get subHistoryTitle => 'Payment history';
-
-  @override
-  String get subHistoryLoadFailed => 'Could not load history';
-
-  @override
-  String get subHistoryEmpty => 'No payment history';
-
-  @override
-  String get subPlanYearly => 'Yearly plan';
-
-  @override
-  String get subPlanMonthly => 'Monthly plan';
-
-  @override
-  String get subBadgeActive => 'Active';
-
-  @override
-  String get subBadgeTrial => 'Trial';
-
-  @override
-  String get subBadgeCancelled => 'Cancelled';
-
-  @override
-  String get subBadgeExpired => 'Expired';
-
-  @override
-  String subHistoryRowStarted(String date) {
-    return 'Started: $date';
-  }
-
-  @override
-  String subHistoryRowTxId(String id) {
-    return 'Transaction ID: $id';
-  }
-
-  @override
-  String get subHistoryTxCopied => 'Transaction ID copied';
-
-  @override
-  String get subReceiptButtonIos => 'View receipt on App Store';
-
-  @override
-  String get subReceiptButtonAndroid => 'View receipt on Google Play';
-
-  @override
-  String get subOpenStoreIos => 'Manage on App Store';
-
-  @override
-  String get subOpenStoreAndroid => 'Manage on Google Play';
-
-  @override
   String get paywallHeadlineExport => 'Pro is required to export';
 
   @override
@@ -516,6 +460,14 @@ class L10nEn extends L10n {
 
   @override
   String get paywallSubDefault => 'Unlock all features';
+
+  @override
+  String get looptapPaywallTriggerExport =>
+      'Export is a Pro feature — subscribe to download MIDI / audio.';
+
+  @override
+  String get looptapPaywallTriggerSongQuota =>
+      'You\'ve reached the free plan\'s song limit. Pro unlocks unlimited songs.';
 
   @override
   String get paywallFeatureCloudTitle => '5GB Cloud';
@@ -550,8 +502,8 @@ class L10nEn extends L10n {
   }
 
   @override
-  String paywallPlanYearlyHint(String monthly, int pct) {
-    return '$monthly/mo · $pct% off';
+  String paywallPlanYearlyHint(String monthly) {
+    return '$monthly/mo equivalent';
   }
 
   @override
@@ -790,12 +742,6 @@ class L10nEn extends L10n {
   String get syncProgressDownload => 'Downloading';
 
   @override
-  String get syncProgressFailed => 'Something went wrong';
-
-  @override
-  String get syncProgressFailedSub => 'Please try again.';
-
-  @override
   String get comingSoonFeature => 'Feature';
 
   @override
@@ -961,13 +907,6 @@ class L10nEn extends L10n {
       'While your subscription is expired, new uploads / sync are locked. Your previous songs remain — download or delete them anytime.';
 
   @override
-  String get cloudDownloadEmptyTitle => 'File list unavailable';
-
-  @override
-  String get cloudDownloadEmptySub =>
-      'Re-subscribe and use the Cloud tab\nto download your files.';
-
-  @override
   String get cloudDownloadCta => 'Download';
 
   @override
@@ -1013,9 +952,6 @@ class L10nEn extends L10n {
 
   @override
   String get editPlayRecordFirst => 'Record first';
-
-  @override
-  String get editActionNeedsRecording => 'Record something first to use this';
 
   @override
   String editPlayFailed(String err) {
@@ -1329,9 +1265,6 @@ class L10nEn extends L10n {
   String get exportShareSub => 'Link · Instagram · TikTok';
 
   @override
-  String get exportExporting => 'Exporting...';
-
-  @override
   String exportFailed(String err) {
     return 'Export failed: $err';
   }
@@ -1523,4 +1456,107 @@ class L10nEn extends L10n {
   String accountErrServerDelete(int status, String detail) {
     return 'Server delete failed ($status)$detail';
   }
+
+  @override
+  String get ltCardMore => 'More';
+
+  @override
+  String get ltSettingsDeleteAccount => 'Delete account';
+
+  @override
+  String get ltSettingsDeleteAccountConfirmTitle => 'Delete account?';
+
+  @override
+  String get ltSettingsDeleteAccountConfirmBody =>
+      'Your account and all data will be permanently removed. This cannot be undone.';
+
+  @override
+  String ltSettingsDeleteAccountFailed(String err) {
+    return 'Delete failed: $err';
+  }
+
+  @override
+  String get ltSettingsDeleteAccountDone => 'Account deleted.';
+
+  @override
+  String ltExportTitle(String title) {
+    return 'Export \"$title\"';
+  }
+
+  @override
+  String ltExportMeta(int count, int bars, int bpm) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sections',
+      one: '1 section',
+    );
+    return '$_temp0 · $bars bars · $bpm BPM';
+  }
+
+  @override
+  String get ltExportMidiTitle => 'MIDI file';
+
+  @override
+  String get ltExportMidiSub => 'Whole song · piano · bass · drums (ch10)';
+
+  @override
+  String get ltExportWavTitle => 'Audio (WAV)';
+
+  @override
+  String get ltExportWavSub => 'Full song, rendered mix';
+
+  @override
+  String get ltExportStemsTitle => 'Stems';
+
+  @override
+  String get ltExportStemsSub => 'Separate WAV per track';
+
+  @override
+  String get ltExportShareTitle => 'Share';
+
+  @override
+  String get ltExportShareSub => 'Send to another app';
+
+  @override
+  String ltExportSaved(String filename) {
+    return 'Saved $filename';
+  }
+
+  @override
+  String get ltExportFailed => 'MIDI export failed';
+
+  @override
+  String get ltExportFooter =>
+      'Sections render in order (with their repeats). MIDI opens in any DAW. WAV / stems are coming soon.';
+
+  @override
+  String get ltSettingsTitle => 'Settings';
+
+  @override
+  String get ltSettingsMetronome => 'Metronome click';
+
+  @override
+  String get ltSettingsMetronomeSub => 'Play a click while recording';
+
+  @override
+  String get ltSettingsHaptics => 'Haptics';
+
+  @override
+  String get ltSettingsHapticsSub => 'Buzz on pad hits';
+
+  @override
+  String get ltSettingsAbout => 'About';
+
+  @override
+  String get ltSettingsAboutSub => 'HumTrack · v0.4';
+
+  @override
+  String get ltSettingsLegalSection => 'Legal & Policies';
+
+  @override
+  String get ltSettingsOpenSource => 'Open-source licenses';
+
+  @override
+  String get ltSettingsContact => 'Contact support';
 }

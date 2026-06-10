@@ -88,8 +88,8 @@ class L10nKo extends L10n {
   String get trialStartCta => '7일 무료 체험 시작';
 
   @override
-  String trialPriceFootnote(String won) {
-    return '₩$won/월 (체험 후 자동 결제)';
+  String trialPriceFootnote(String price) {
+    return '$price/월 (체험 후 자동 결제)';
   }
 
   @override
@@ -226,9 +226,6 @@ class L10nKo extends L10n {
 
   @override
   String get accountSignIn => '로그인';
-
-  @override
-  String get authSessionExpired => '로그인 세션이 만료됐어요. 다시 로그인해 주세요.';
 
   @override
   String get subFreePlan => '무료 플랜';
@@ -434,58 +431,6 @@ class L10nKo extends L10n {
   String get subCancelConfirmAction => '해지';
 
   @override
-  String get subHistoryTitle => '결제 이력';
-
-  @override
-  String get subHistoryLoadFailed => '이력을 불러오지 못했습니다';
-
-  @override
-  String get subHistoryEmpty => '결제 이력이 없습니다';
-
-  @override
-  String get subPlanYearly => '연간 플랜';
-
-  @override
-  String get subPlanMonthly => '월간 플랜';
-
-  @override
-  String get subBadgeActive => '활성';
-
-  @override
-  String get subBadgeTrial => '체험 중';
-
-  @override
-  String get subBadgeCancelled => '취소됨';
-
-  @override
-  String get subBadgeExpired => '만료';
-
-  @override
-  String subHistoryRowStarted(String date) {
-    return '시작: $date';
-  }
-
-  @override
-  String subHistoryRowTxId(String id) {
-    return '거래 ID: $id';
-  }
-
-  @override
-  String get subHistoryTxCopied => '트랜잭션 ID가 복사되었습니다';
-
-  @override
-  String get subReceiptButtonIos => 'App Store에서 영수증 확인';
-
-  @override
-  String get subReceiptButtonAndroid => 'Google Play에서 영수증 확인';
-
-  @override
-  String get subOpenStoreIos => 'App Store에서 관리';
-
-  @override
-  String get subOpenStoreAndroid => 'Google Play에서 관리';
-
-  @override
   String get paywallHeadlineExport => '내보내려면 Pro 가 필요해요';
 
   @override
@@ -508,6 +453,14 @@ class L10nKo extends L10n {
 
   @override
   String get paywallSubDefault => '전체 기능 잠금 해제';
+
+  @override
+  String get looptapPaywallTriggerExport =>
+      '내보내기는 Pro 전용 기능입니다 — 구독하시면 MIDI / 오디오를 저장할 수 있어요.';
+
+  @override
+  String get looptapPaywallTriggerSongQuota =>
+      '무료 플랜의 곡 개수 한도에 도달했어요. Pro 로 업그레이드하면 무제한으로 만들 수 있습니다.';
 
   @override
   String get paywallFeatureCloudTitle => '5GB 클라우드';
@@ -542,8 +495,8 @@ class L10nKo extends L10n {
   }
 
   @override
-  String paywallPlanYearlyHint(String monthly, int pct) {
-    return '월 $monthly · $pct% 할인';
+  String paywallPlanYearlyHint(String monthly) {
+    return '월 $monthly 환산';
   }
 
   @override
@@ -779,12 +732,6 @@ class L10nKo extends L10n {
   String get syncProgressDownload => '내 기기로 받는 중';
 
   @override
-  String get syncProgressFailed => '오류가 발생했어요';
-
-  @override
-  String get syncProgressFailedSub => '다시 시도해 주세요.';
-
-  @override
   String get comingSoonFeature => '기능';
 
   @override
@@ -945,12 +892,6 @@ class L10nKo extends L10n {
       '구독이 만료된 동안엔 새 업로드 / 동기화는 잠금돼요. 이전 작업물은 그대로 두고 언제든 다운로드하거나 삭제할 수 있어요.';
 
   @override
-  String get cloudDownloadEmptyTitle => '파일 목록을 불러올 수 없어요';
-
-  @override
-  String get cloudDownloadEmptySub => '재구독 후 클라우드 탭에서\n파일을 다운로드할 수 있어요.';
-
-  @override
   String get cloudDownloadCta => '받기';
 
   @override
@@ -996,9 +937,6 @@ class L10nKo extends L10n {
 
   @override
   String get editPlayRecordFirst => '먼저 녹음하세요';
-
-  @override
-  String get editActionNeedsRecording => '녹음이 있어야 사용할 수 있어요';
 
   @override
   String editPlayFailed(String err) {
@@ -1310,9 +1248,6 @@ class L10nKo extends L10n {
   String get exportShareSub => '링크 · Instagram · TikTok';
 
   @override
-  String get exportExporting => '내보내는 중...';
-
-  @override
   String exportFailed(String err) {
     return '내보내기 실패: $err';
   }
@@ -1503,4 +1438,101 @@ class L10nKo extends L10n {
   String accountErrServerDelete(int status, String detail) {
     return '서버 삭제 실패 ($status)$detail';
   }
+
+  @override
+  String get ltCardMore => '더 보기';
+
+  @override
+  String get ltSettingsDeleteAccount => '회원 탈퇴';
+
+  @override
+  String get ltSettingsDeleteAccountConfirmTitle => '회원 탈퇴할까요?';
+
+  @override
+  String get ltSettingsDeleteAccountConfirmBody =>
+      '계정과 모든 데이터가 영구적으로 삭제돼요. 되돌릴 수 없어요.';
+
+  @override
+  String ltSettingsDeleteAccountFailed(String err) {
+    return '탈퇴 실패: $err';
+  }
+
+  @override
+  String get ltSettingsDeleteAccountDone => '회원 탈퇴가 완료됐어요.';
+
+  @override
+  String ltExportTitle(String title) {
+    return '\"$title\" 내보내기';
+  }
+
+  @override
+  String ltExportMeta(int count, int bars, int bpm) {
+    return '섹션 $count개 · $bars마디 · $bpm BPM';
+  }
+
+  @override
+  String get ltExportMidiTitle => 'MIDI 파일';
+
+  @override
+  String get ltExportMidiSub => '전체 곡 · 피아노 · 베이스 · 드럼 (ch10)';
+
+  @override
+  String get ltExportWavTitle => '오디오 (WAV)';
+
+  @override
+  String get ltExportWavSub => '믹스된 전체 곡';
+
+  @override
+  String get ltExportStemsTitle => '스템';
+
+  @override
+  String get ltExportStemsSub => '트랙별 WAV 분리';
+
+  @override
+  String get ltExportShareTitle => '공유';
+
+  @override
+  String get ltExportShareSub => '다른 앱으로 보내기';
+
+  @override
+  String ltExportSaved(String filename) {
+    return '$filename 저장됨';
+  }
+
+  @override
+  String get ltExportFailed => 'MIDI 내보내기 실패';
+
+  @override
+  String get ltExportFooter =>
+      '섹션은 순서대로(반복 포함) 렌더링됩니다. MIDI는 모든 DAW 에서 열립니다. WAV / 스템은 곧 제공 예정.';
+
+  @override
+  String get ltSettingsTitle => '설정';
+
+  @override
+  String get ltSettingsMetronome => '메트로놈 클릭';
+
+  @override
+  String get ltSettingsMetronomeSub => '녹음 중 클릭음 재생';
+
+  @override
+  String get ltSettingsHaptics => '햅틱';
+
+  @override
+  String get ltSettingsHapticsSub => '패드 탭 시 진동';
+
+  @override
+  String get ltSettingsAbout => '정보';
+
+  @override
+  String get ltSettingsAboutSub => 'HumTrack · v0.4';
+
+  @override
+  String get ltSettingsLegalSection => '약관 및 정책';
+
+  @override
+  String get ltSettingsOpenSource => '오픈소스 라이선스';
+
+  @override
+  String get ltSettingsContact => '문의하기';
 }

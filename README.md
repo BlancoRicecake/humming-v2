@@ -1,129 +1,57 @@
-# Humming V2 — voice-to-MIDI MVP
+# Humming V2 — SoundLab (voice-to-MIDI)
 
-Local-first web app that turns a humming recording into a single-line MIDI.
-Inspired by Dubler 2, but offline: record in the browser → analyze in a Python
-backend → visualize the result and export `.mid`. No cloud, no paid APIs.
+허밍/비트박스를 녹음해 **로컬에서** 단선율 MIDI/오디오로 변환·편집·재생하는 오프라인 voice-to-MIDI 웹앱.
+Dubler 2 류이되 완전 오프라인: 브라우저 녹음 → Python 백엔드 분석 → 시각화/편집 → `.mid`/`.wav` 내보내기. **유료 API·클라우드·모델 학습 없음.**
 
-## Status
-- [x] Stage 1 — humming → monophonic MIDI (onset segmentation + pitch median)
-- [x] Stage 2 — key/scale quantization + optional tempo-grid quantize
-- [x] Stage 3 — ghost-note filtering + consecutive same-pitch merge
-- [x] Stage 4 — legato/staccato auto-classification
-- [x] **+** pitch bend export, MIDI sanitization, SoundFont preview (FluidSynth)
-- [ ] Stage 5 — drum trigger few-shot prototype
-- [ ] Stage 6 — chord generation
-- [ ] Stage 7 — realtime WebSocket prototype
+> 📍 **먼저 읽기**
+> - 워크스페이스 전체 지도(랜딩/사운드랩/앱/데이터셋 위치·역할): [`PROJECT_MAP.md`](PROJECT_MAP.md)
+> - 사운드랩 상세 현황·설계 근거·로드맵: [`docs/STATUS.md`](docs/STATUS.md)
+>
+> 이 README는 **사운드랩(엔진 실험용 web: `frontend/` + `backend/`) 실행법** 위주다.
 
-## Layout
-```
-backend/
-  app/
-    main.py        FastAPI entry — /analyze /export_midi /render_audio /render_capabilities
-    analyze.py     load → onset (HPSS) → pyin → voiced gating → segments → quantize → articulation
-    onset.py       librosa onset detection (HPSS-aware) + tempo estimate
-    pitch.py       pYIN (auto frame_length) + optional torchcrepe backend
-    scales.py      diatonic / modal / pentatonic quantizer
-    grid.py        tempo-grid quantizer
-    midi_build.py  articulation transform + pitch-bend events + pretty_midi export
-    render.py      FluidSynth direct (bypasses pretty_midi.fluidsynth) for SF2 playback
-  bin/             bundled FluidSynth 2.5.4 win64 portable (auto-downloaded at scaffold time)
-  tests/           pytest regression suite + synthetic fixtures
-  smoke_test.py    standalone end-to-end check (no test framework)
-frontend/
-  src/
-    App.tsx                   record → analyze → visualize → playback → export
-    components/
-      Waveform.tsx            canvas: peaks + onset markers + pitch contour
-      PianoRoll.tsx           canvas: notes colored by articulation
-      ControlPanel.tsx        all analysis options
-      InstrumentSelect.tsx    SoundFont GM program + pitch-bend toggle
-      NoteTable.tsx           debug table with articulation column
-    lib/
-      wav.ts                  MediaRecorder blob → mono 22.05 kHz WAV
-      api.ts                  fetch wrappers
-      playback.ts             Tone.js preview + HTMLAudioElement for SoundFont renders
-    hooks/useRecorder.ts      MediaRecorder hook
-```
+## 구성 (요약)
+| 위치 | 역할 |
+|------|------|
+| `frontend/` + `backend/` | 🔬 **사운드랩** — 엔진을 앱에 탑재하기 전 로컬로 사운드 변환을 체크하는 실험 공간 |
+| `mobile/` | 📱 **앱** (Flutter) — 검증된 엔진을 탑재할 제품 |
+| `landing/` | 🌐 랜딩페이지 (Vercel) |
+| `../datasets/` | 🧪 실험 데이터셋 (backend 평가/튜닝 스크립트가 `../../datasets/`로 참조) |
 
-## Run
+## 파이프라인 (현재 코드 기준, 9-stage)
+입력(브라우저 녹음/샘플) → 전처리(mono 22.05kHz) → RMS 엔벨로프 voiced 구간(`envelope.py`) → chunk 분할(상태머신 + 내부 세분화) → **pYIN** 피치(`pitch.py`) → Note 생성(멜로딕/퍼커션 자동 분기) → Auto Key + Pitch Assistant(`key_detect.py`/`assistant.py`) → 재생(Tone.js)/렌더(FluidSynth SF2, `render.py`) → MIDI export(mido, `midi_build.py`).
 
-### Backend
-Python 3.11 recommended (librosa/numpy/scipy/numba wheels are best-supported there).
+> 피치 엔진은 **librosa pYIN 단일**. (Basic Pitch는 평가 후 미채택, CREPE 경로는 메인 빌드에서 제거 — [STATUS §9.2](docs/STATUS.md).)
 
+## 실행
+
+### 백엔드 (Python 3.11 권장)
 ```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
-.\.venv\Scripts\python -m pip install pyfluidsynth     # optional, for SoundFont preview
+.\.venv\Scripts\python -m pip install pyfluidsynth   # 선택: SoundFont 미리듣기
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
 
-#### SoundFont (FluidSynth) preview — optional
-The `/render_audio` endpoint synthesizes the detected notes through the user-provided
-GeneralUser GS SoundFont using FluidSynth. A portable FluidSynth 2.5.4 Windows x64
-build is already extracted under [`backend/bin/`](backend/bin/), and the backend adds
-that directory to `PATH` automatically at startup.
-
-Defaults (override with environment variables):
-- `HUMMING_SF2_PATH` — default `C:\Users\jlion\Downloads\GeneralUser_GS_v2.0.3--doc_r6\GeneralUser-GS\GeneralUser-GS.sf2`
-
-To verify the preview is wired up:
+#### SoundFont(FluidSynth) 미리듣기 — 선택
+`/render_audio`는 사용자 SF2(GeneralUser GS)를 FluidSynth로 합성한다. 번들 FluidSynth 2.5.4 win64가 [`backend/bin/`](backend/bin/)에 있고 백엔드가 시작 시 PATH에 자동 추가한다.
+- `HUMMING_SF2_PATH` — 미설정 시 `/render_capabilities`가 `soundfont_available:false` + error 반환.
 ```powershell
-curl http://127.0.0.1:8000/render_capabilities
-# expect: { "soundfont_available": true, ... }
+curl http://127.0.0.1:8000/render_capabilities   # soundfont_available 확인
 ```
 
-If `soundfont_available` is `false`, the response includes an `error` field describing what's missing.
-
-#### Optional pitch backend
-CREPE is heavy (≈2 GB of torch wheels) but more accurate on noisy vocals:
-```powershell
-.\.venv\Scripts\python -m pip install torch torchcrepe
-```
-Then choose "CREPE" in the UI control panel. pYIN is the default.
-
-### Frontend
+### 프론트엔드
 ```powershell
 cd frontend
 npm install
-npm run dev
+npm run dev   # http://localhost:5173, /api/* → 127.0.0.1:8000 프록시
 ```
-Open http://localhost:5173. Vite proxies `/api/*` → `http://127.0.0.1:8000`.
 
-## Pipeline
-1. Browser records via `MediaRecorder` (webm/opus).
-2. Client decodes blob → 22.05 kHz mono Float32 via `OfflineAudioContext`, encodes a 16-bit WAV.
-3. Backend reads WAV, runs HPSS-filtered onset detection.
-4. Pitch contour via `librosa.pyin` (auto `frame_length` from `fmin`), or CREPE if installed.
-5. Onsets without a voiced region within 120 ms are dropped.
-6. For each onset segment we skip a short attack window, median-filter the pitch frames, then take the median MIDI value over voiced frames above `voiced_prob_threshold`.
-7. The note's end is tightened to the last voiced frame + 20 ms — keeps repeated staccato notes distinct.
-8. Optional scale snap (`quantize_midi_to_scale`).
-9. Optional tempo-grid quantize (`1/4`, `1/8`, `1/16`, `1/32`, plus `1/8t`, `1/16t` triplets).
-10. Articulation classifier tags each transition as **legato** (gap < 30 ms), **staccato** (gap > 90 ms + sharp attack), or **normal**.
-11. MIDI export: dedup + same-pitch overlap clipping, articulation reshape (legato +15 ms overlap, staccato 60 % duration), optional pitch-bend events (sparse, ±2 st).
-12. Optional SoundFont render: pyfluidsynth direct → WAV bytes.
-
-## Regression suite
-
+## 회귀 테스트
 ```powershell
 cd backend
 .\.venv\Scripts\python -m pytest tests/ -v
 ```
 
-Covers: monotone, triad melody, pentatonic, vibrato non-explosion, noisy SNR 25 dB, staccato pitch recall, legato non-over-segmentation, scale-snap correctness, chromatic passthrough, staccato/legato articulation tagging, tempo-grid snap accuracy.
-
-## Debug knobs (Control Panel)
-- pitch backend (pYIN / CREPE), fmin, fmax
-- onset delta, min note duration, voiced threshold
-- HPSS toggle for onset detection
-- key + scale + quantize strength
-- tempo grid + grid strength + tempo override
-- same-pitch merge
-
-The UI surfaces onset markers, pitch contour, per-note confidence, voicing %, and articulation color/label — every analysis decision is inspectable.
-
-## Constraints honored
-- No paid APIs. No cloud. All processing on `localhost`.
-- No model training. pYIN / torchcrepe pretrained only.
-- Visualization-first: every detected signal is plotted or tabled.
+## 하드 제약
+유료 API ✗ · 클라우드 ✗(전부 localhost) · 모델 학습 ✗(기성 pretrained/DSP만) · 디버그 시각화 우선. 상세·근거는 [`docs/STATUS.md`](docs/STATUS.md).

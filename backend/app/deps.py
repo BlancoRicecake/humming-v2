@@ -79,6 +79,27 @@ class CurrentUser(dict):
         return self.get("email")
 
 
+@lru_cache
+def _get_supabase_jwks_client():
+    """Cached JWKS client pointing at Supabase Auth's public keys endpoint.
+
+    Supabase 2024+ rotated to asymmetric (RS256/ES256) signing keys for all
+    new projects. Tokens carry `kid` and must be verified against the
+    project's published JWKS, not the legacy HS256 shared secret. We keep
+    HS256 support as a fallback so older projects keep working.
+    """
+    s = get_settings()
+    if not s.supabase_url:
+        return None
+    try:
+        from jwt import PyJWKClient
+    except ImportError:
+        return None
+    # Supabase publishes JWKS at <project>/auth/v1/.well-known/jwks.json
+    jwks_url = f"{s.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+    return PyJWKClient(jwks_url, cache_keys=True, lifespan=3600)
+
+
 def _decode_supabase_jwt(token: str) -> dict:
     s = get_settings()
     try:
@@ -86,22 +107,43 @@ def _decode_supabase_jwt(token: str) -> dict:
     except ImportError as e:  # pragma: no cover
         raise HTTPException(500, f"pyjwt not installed: {e}")
 
+    # Read header to detect algorithm so we can route between HS256 (legacy
+    # shared secret) and RS256/ES256 (Supabase JWKS).
+    try:
+        header = pyjwt.get_unverified_header(token)
+    except Exception as e:
+        raise HTTPException(401, f"invalid token header: {e}")
+    alg = (header.get("alg") or "").upper()
+
+    if alg in ("RS256", "ES256"):
+        jwks = _get_supabase_jwks_client()
+        if jwks is None:
+            raise HTTPException(503, "JWKS client not configured (SUPABASE_URL missing)")
+        try:
+            signing_key = jwks.get_signing_key_from_jwt(token).key
+            return pyjwt.decode(
+                token,
+                signing_key,
+                algorithms=[alg],
+                options={"verify_aud": False},
+            )
+        except Exception as e:
+            raise HTTPException(401, f"invalid token: {e}")
+
+    # HS256 (legacy shared secret) path.
     if not s.supabase_jwt_secret:
-        # Soft fallback for dev only: decode without verifying signature.
-        # In prod the env var MUST be set; we still verify exp.
         logger.warning("SUPABASE_JWT_SECRET unset — decoding without signature verification")
         try:
             return pyjwt.decode(token, options={"verify_signature": False})
         except Exception as e:
             raise HTTPException(401, f"invalid token: {e}")
-
     try:
         return pyjwt.decode(
             token,
             s.supabase_jwt_secret,
             algorithms=["HS256"],
             audience="authenticated",
-            options={"verify_aud": False},  # supabase tokens use aud="authenticated"
+            options={"verify_aud": False},
         )
     except Exception as e:
         raise HTTPException(401, f"invalid token: {e}")

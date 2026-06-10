@@ -12,11 +12,19 @@
 //   5. onPurchaseResult    — Stream<IapResult>; ProjectStore 에서 listen 후 subscription 갱신.
 //
 // 스토어 가용성(`isAvailable`) 이 false 면 enabled=false → 호출자는 mockPurchase 폴백.
+//
+// 백엔드 verify payload (backend/app/models.py:IapVerifyRequest):
+//   { store: "app_store" | "play_store",
+//     receipt_data: <Apple JWS or transactionId; Google JSON {productId, purchaseToken}>,
+//     product_id?: <SKU> }
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+
+import 'auth_service.dart';
 
 const String kProductMonthly = 'humtrack_pro_monthly_v2';
 const String kProductYearly  = 'humtrack_pro_yearly';
@@ -46,10 +54,6 @@ class IapService {
 
   bool _enabled = false;
   bool get enabled => _enabled;
-
-  /// true 일 때만 restored 이벤트를 onPurchaseResult 에 emit.
-  /// restore() 호출 구간에서만 true — 앱 시작 시 StoreKit 자동 복원 이벤트를 차단.
-  bool _isExplicitRestore = false;
 
   List<ProductDetails> _products = const [];
   List<ProductDetails> get products => _products;
@@ -94,16 +98,23 @@ class IapService {
   }
 
   Future<bool> buy(String productId) async {
+    debugPrint('[iap] buy() enabled=$_enabled products=${_products.map((p) => p.id).toList()} requested=$productId');
     if (!_enabled) return false;
+    if (_products.isEmpty) {
+      // 부트 시 loadProducts 가 아직 안 끝났거나 실패 — 한 번 더 시도.
+      debugPrint('[iap] buy() products empty → reload');
+      await loadProducts();
+    }
     final pd = _products.where((p) => p.id == productId).firstOrNull;
     if (pd == null) {
-      debugPrint('[iap] product not loaded: $productId');
+      debugPrint('[iap] product not loaded: $productId (have ${_products.length})');
       return false;
     }
     try {
       final param = PurchaseParam(productDetails: pd);
-      // 구독은 non-consumable.
-      return await _iap.buyNonConsumable(purchaseParam: param);
+      final ok = await _iap.buyNonConsumable(purchaseParam: param);
+      debugPrint('[iap] buyNonConsumable returned=$ok for $productId');
+      return ok;
     } catch (e) {
       debugPrint('[iap] buy failed: $e');
       return false;
@@ -113,12 +124,9 @@ class IapService {
   Future<void> restore() async {
     if (!_enabled) return;
     try {
-      _isExplicitRestore = true;
       await _iap.restorePurchases();
     } catch (e) {
       debugPrint('[iap] restore failed: $e');
-    } finally {
-      _isExplicitRestore = false;
     }
   }
 
@@ -139,41 +147,23 @@ class IapService {
           if (p.pendingCompletePurchase) await _iap.completePurchase(p);
           break;
         case PurchaseStatus.purchased:
+        case PurchaseStatus.restored:
+          // 로그인 안 된 상태에서 StoreKit 이 부팅 시 기존 영수증을 auto-replay
+          // 하는 경우(iOS sandbox 의 정상 동작) → 토큰이 없으므로 verify 가 무조건
+          // 401. 이때는 receipt 도 complete 하지 않고 큐에 남겨두어, 사용자가
+          // 로그인 + restore 했을 때 정상 흐름으로 복원되도록 한다.
+          final token = await AuthService.instance.currentAccessToken();
+          if (token == null || token.isEmpty) {
+            debugPrint('[iap] purchase delivered without auth — deferring (left in queue): ${p.productID}');
+            // 결과 emit 도 하지 않음 (paywall completer 가 의미 없는 false 로 풀리는 것 방지).
+            continue;
+          }
           final ok = await _verifyOnServer(p);
-          // transactionDate null 은 sandbox 에서 간헐적으로 발생 — 그 경우 결제 시각을 now 로 간주.
-          final txDate = p.transactionDate != null
-              ? DateTime.fromMillisecondsSinceEpoch(int.tryParse(p.transactionDate!) ?? 0)
-              : DateTime.now();
-          // 구독 갱신 예상일: 현재 시각 기준 상품 기간만큼 앞으로 (백엔드 expires_at 이 없는 경우 추정).
-          final isYearly = p.productID == kProductYearly;
-          final renewsAt = txDate.add(Duration(days: isYearly ? 365 : 30));
           _resultCtl.add(IapResult(
             ok: ok,
             productId: p.productID,
             error: ok ? null : 'verify_failed',
-            renewsAt: renewsAt,
           ));
-          if (p.pendingCompletePurchase) await _iap.completePurchase(p);
-          break;
-        case PurchaseStatus.restored:
-          // 앱 시작 시 StoreKit 이 자동으로 발생시키는 restored 이벤트는 조용히 처리.
-          // 사용자가 직접 "구매 복원" 버튼을 눌렀을 때(_isExplicitRestore=true)만 emit.
-          if (_isExplicitRestore) {
-            final okR = await _verifyOnServer(p);
-            final txDateR = p.transactionDate != null
-                ? DateTime.fromMillisecondsSinceEpoch(int.tryParse(p.transactionDate!) ?? 0)
-                : DateTime.now();
-            final isYearlyR = p.productID == kProductYearly;
-            final renewsAtR = txDateR.add(Duration(days: isYearlyR ? 365 : 30));
-            _resultCtl.add(IapResult(
-              ok: okR,
-              productId: p.productID,
-              error: okR ? null : 'verify_failed',
-              renewsAt: renewsAtR,
-            ));
-          } else {
-            debugPrint('[iap] silent restore for ${p.productID} — completePurchase only');
-          }
           if (p.pendingCompletePurchase) await _iap.completePurchase(p);
           break;
       }
@@ -188,33 +178,41 @@ class IapService {
       return true;
     }
     try {
-      final platform = defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
+      final isIos = defaultTargetPlatform == TargetPlatform.iOS;
+      final receipt = isIos
+          // App Store: StoreKit JWS / transactionId / legacy receipt — 그대로.
+          ? p.verificationData.serverVerificationData
+          // Play Store: backend 가 JSON {productId, purchaseToken} 으로 기대.
+          : jsonEncode({
+              'productId': p.productID,
+              'purchaseToken': p.verificationData.serverVerificationData,
+            });
       final body = {
+        'store': isIos ? 'app_store' : 'play_store',
+        'receipt_data': receipt,
         'product_id': p.productID,
-        'purchase_id': p.purchaseID,
-        'transaction_id': p.purchaseID,
-        'platform': platform,
-        'store': platform == 'ios' ? 'app_store' : 'play_store',
-        'verification_data': p.verificationData.serverVerificationData,
-        'source': p.verificationData.source,
       };
-      final r = await dio.post<Map<String, dynamic>>(_verifyPath, data: body);
-      if (r.statusCode == 200) {
-        debugPrint('[iap] server verify ok: ${r.data}');
-        return true;
+      debugPrint('[iap] verify POST product=${p.productID} receipt.len=${receipt.length} source=${p.verificationData.source}');
+      final r = await dio.post<Map<String, dynamic>>(
+        _verifyPath,
+        data: body,
+        options: Options(
+          // 4xx/5xx 도 throw 안 하고 응답으로 받아 body 까지 로깅.
+          validateStatus: (_) => true,
+        ),
+      );
+      if (r.statusCode != 200) {
+        debugPrint('[iap] verify non-200: ${r.statusCode} body=${r.data}');
+        return false;
       }
-      // 4xx 응답 — 영수증 거부. 하지만 sandbox 환경에서는 production 백엔드가
-      // sandbox 영수증을 거부할 수 있으므로 fallback 으로 로컬 허용.
-      debugPrint('[iap] server verify returned ${r.statusCode} — falling back to local accept');
-      return true;
-    } on DioException catch (e) {
-      // 네트워크/타임아웃/5xx — 백엔드 문제로 결제 자체를 막아선 안 됨.
-      // sandbox 에서 production 검증 실패하는 케이스도 여기 해당.
-      debugPrint('[iap] verify network/server error: $e — accepting locally (sandbox fallback)');
-      return true;
+      // backend response: { status: SubStatus, product_id, expires_at, ... }
+      final status = (r.data?['status'] as String?)?.toLowerCase();
+      final ok = status == 'active' || status == 'trial';
+      debugPrint('[iap] verify ok=$ok status=$status data=${r.data}');
+      return ok;
     } catch (e) {
-      debugPrint('[iap] verify unexpected error: $e — accepting locally');
-      return true;
+      debugPrint('[iap] verify exception: $e');
+      return false;
     }
   }
 
