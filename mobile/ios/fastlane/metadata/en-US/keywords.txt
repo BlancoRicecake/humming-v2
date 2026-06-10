@@ -1,1 +1,1 @@
-DAW,music,maker,beat,song,songwriting,production,studio,humming,MIDI,chord,melody,loop,vocal,record
+DAW,humming,MIDI,compose,drum,machine,melody,chord,loop,beat,beginner,maker,music,song,record,vocal

@@ -119,8 +119,11 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css">
+<link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"></noscript>
+<link rel="preload" as="image" type="image/webp" href="assets/appicon.webp">
+<link rel="preload" href="app.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="app.css"></noscript>
 <script>document.documentElement.classList.add('anim');</script>
 <style>
 /* ─── Design tokens — synced to the LoopTap app (looptap/theme/tokens.dart) ─── */
@@ -229,7 +232,7 @@ html[lang="en"] .hero h1 { font-size: clamp(40px, 5vw, 66px); letter-spacing: -2
 .how-step { display: flex; gap: 16px; padding: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; transition: border-color 0.2s ease, transform 0.2s ease; }
 .how-step .n { width: 40px; height: 40px; flex: none; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); display: grid; place-items: center; color: var(--lime); }
 .how-step .n svg { width: 20px; height: 20px; }
-.how-step h4 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 5px; }
+.how-step h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 5px; }
 .how-step p { color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
 
 /* ─── FEATURES ─── */
@@ -274,7 +277,7 @@ html[lang="en"] .hero h1 { font-size: clamp(40px, 5vw, 66px); letter-spacing: -2
 .faq-item { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px 28px; margin-bottom: 10px; cursor: pointer; transition: border-color 0.2s ease; }
 .faq-item:hover { border-color: var(--border-strong); }
 .faq-q { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
-.faq-q h4 { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; }
+.faq-q h3 { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; }
 .faq-q .ic { color: var(--lime); font-size: 20px; font-weight: 300; transition: transform 0.3s ease; }
 .faq-item.open .ic { transform: rotate(45deg); }
 .faq-a { color: var(--text-secondary); font-size: 14px; line-height: 1.6; padding-right: 30px; max-height: 0; margin-top: 0; opacity: 0; overflow: hidden; transition: max-height 0.35s ease, opacity 0.3s ease, margin-top 0.3s ease; }
@@ -290,9 +293,9 @@ html[lang="en"] .hero h1 { font-size: clamp(40px, 5vw, 66px); letter-spacing: -2
 footer { border-top: 1px solid var(--border); padding: 60px 24px 40px; }
 .foot-inner { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; }
 .foot-brand .nav-brand { margin-bottom: 14px; }
-.foot-brand p { color: var(--text-tertiary); font-size: 13px; max-width: 300px; line-height: 1.6; }
+.foot-brand p { color: var(--text-secondary); font-size: 13px; max-width: 300px; line-height: 1.6; }
 .foot-col h5 { font-size: 12px; font-weight: 800; letter-spacing: 1px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 14px; }
-.foot-col a { display: block; color: var(--text-tertiary); font-size: 13px; text-decoration: none; padding: 5px 0; }
+.foot-col a { display: block; color: var(--text-secondary); font-size: 13px; text-decoration: none; padding: 5px 0; }
 .foot-col a:hover { color: var(--lime); }
 .foot-bottom { max-width: 1200px; margin: 40px auto 0; padding-top: 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; color: var(--text-tertiary); font-size: 12px; }
 .socials { display: flex; gap: 10px; }
@@ -380,7 +383,7 @@ footer { border-top: 1px solid var(--border); padding: 60px 24px 40px; }
 <nav class="nav">
   <div class="nav-inner">
     <div class="nav-brand">
-      <img class="brand-logo" src="assets/appicon.png" alt="HumTrack 로고" width="26" height="26">
+      <picture><source srcset="assets/appicon.webp" type="image/webp"><img class="brand-logo" src="assets/appicon.png" alt="HumTrack 로고" width="26" height="26" fetchpriority="high"></picture>
       <span>HumTrack</span>
     </div>
     <div class="nav-links">
@@ -404,6 +407,7 @@ footer { border-top: 1px solid var(--border); padding: 60px 24px 40px; }
   </div>
 </nav>
 
+<main>
 <!-- ──────────── HERO ──────────── -->
 <section class="hero" id="top">
   <div class="hero-grid">
@@ -460,21 +464,21 @@ footer { border-top: 1px solid var(--border); padding: 60px 24px 40px; }
       <div class="how-step">
         <div class="n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6M5.6 5.6l4.2 4.2M2 12h6M18.4 5.6l-4.2 4.2M22 12h-6"/><circle cx="12" cy="15" r="6"/></svg></div>
         <div>
-          <h4 data-ko="두드린다" data-en="Tap it out">Tap it out</h4>
+          <h3 data-ko="두드린다" data-en="Tap it out">Tap it out</h3>
           <p data-ko="드럼은 양손 패드로, 멜로디·베이스는 인키 레인으로. 박자에 맞춰 그리드에 기록돼요." data-en="Drums on two-thumb pads, melody and bass on in-key lanes — every hit lands on the grid, in time.">Drums on two-thumb pads, melody and bass on in-key lanes — every hit lands on the grid, in time.</p>
         </div>
       </div>
       <div class="how-step">
         <div class="n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/></svg></div>
         <div>
-          <h4 data-ko="흥얼거린다" data-en="Or just hum">Or just hum</h4>
+          <h3 data-ko="흥얼거린다" data-en="Or just hum">Or just hum</h3>
           <p data-ko="멜로디가 떠오르면 흥얼거리세요. 음정·박자를 분석해 인키 MIDI 노트로 얹어줍니다." data-en="Got a melody in your head? Hum it — we detect pitch and timing and drop it in as in-key MIDI.">Got a melody in your head? Hum it — we detect pitch and timing and drop it in as in-key MIDI.</p>
         </div>
       </div>
       <div class="how-step">
         <div class="n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></div>
         <div>
-          <h4 data-ko="내보낸다" data-en="Export it">Export it</h4>
+          <h3 data-ko="내보낸다" data-en="Export it">Export it</h3>
           <p data-ko="섹션을 배열해 곡을 완성하고 .mid · .wav · 스템으로 내보내 어디서든 이어 작업하세요." data-en="Arrange sections into a song, then export to .mid, .wav or stems and keep working anywhere.">Arrange sections into a song, then export to .mid, .wav or stems and keep working anywhere.</p>
         </div>
       </div>
@@ -589,42 +593,42 @@ footer { border-top: 1px solid var(--border); padding: 60px 24px 40px; }
   <div class="faq-list">
     <div class="faq-item open">
       <div class="faq-q">
-        <h4 data-ko="악기를 다룰 줄 몰라도 쓸 수 있나요?" data-en="Can I use it without knowing an instrument?">Can I use it without knowing an instrument?</h4>
+        <h3 data-ko="악기를 다룰 줄 몰라도 쓸 수 있나요?" data-en="Can I use it without knowing an instrument?">Can I use it without knowing an instrument?</h3>
         <span class="ic">+</span>
       </div>
       <div class="faq-a" data-ko="네, 그게 핵심이에요. 드럼은 양손 패드로 두드리고, 멜로디·베이스 레인엔 곡의 키에 맞는 음만 올라가 있어 아무거나 눌러도 어울립니다. 악보나 음악 이론 없이도 첫 비트를 만들 수 있어요." data-en="Yes — that's the whole point. Drums are two-thumb pads, and the melody and bass lanes only hold notes that fit the key, so anything you tap sounds right. No notation or theory needed.">Yes — that's the whole point. Drums are two-thumb pads, and the melody and bass lanes only hold notes that fit the key, so anything you tap sounds right. No notation or theory needed.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q">
-        <h4 data-ko="흥얼거림(허밍)은 어떻게 곡이 되나요?" data-en="How does humming become a track?">How does humming become a track?</h4>
+        <h3 data-ko="흥얼거림(허밍)은 어떻게 곡이 되나요?" data-en="How does humming become a track?">How does humming become a track?</h3>
         <span class="ic">+</span>
       </div>
       <div class="faq-a" data-ko="멜로디 화면에서 마이크 버튼을 눌러 흥얼거리면, 음정과 박자를 분석해 인키로 다듬은 MIDI 노트로 트랙에 얹어줍니다. 손으로 레인을 두드리는 것과 똑같이 편집할 수 있어요." data-en="On the melody screen, tap the mic and hum. We analyse pitch and timing and place it on the track as tidy, in-key MIDI — fully editable, just like notes you tapped in by hand.">On the melody screen, tap the mic and hum. We analyse pitch and timing and place it on the track as tidy, in-key MIDI — fully editable, just like notes you tapped in by hand.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q">
-        <h4 data-ko="무료로 만든 곡에 워터마크가 들어가나요?" data-en="Is there a watermark on free-tier songs?">Is there a watermark on free-tier songs?</h4>
+        <h3 data-ko="무료로 만든 곡에 워터마크가 들어가나요?" data-en="Is there a watermark on free-tier songs?">Is there a watermark on free-tier songs?</h3>
         <span class="ic">+</span>
       </div>
       <div class="faq-a" data-ko="아니요. 무료 사용자도 워터마크나 품질 저하 없이 모든 제작·편집 기능을 쓸 수 있어요. Pro 구독은 '내보내기'와 '클라우드 동기화'만 잠금 해제합니다." data-en="No. Free users get every creating and editing feature with no watermark or quality cap. Pro unlocks export and cloud sync only.">No. Free users get every creating and editing feature with no watermark or quality cap. Pro unlocks export and cloud sync only.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q">
-        <h4 data-ko="언제든 구독을 해지할 수 있나요?" data-en="Can I cancel anytime?">Can I cancel anytime?</h4>
+        <h3 data-ko="언제든 구독을 해지할 수 있나요?" data-en="Can I cancel anytime?">Can I cancel anytime?</h3>
         <span class="ic">+</span>
       </div>
       <div class="faq-a" data-ko="네. App Store / Google Play에서 한 번에 해지할 수 있고, 결제 주기 끝까지는 Pro 기능을 그대로 사용합니다." data-en="Yes — cancel anytime in the App Store / Google Play. Pro features remain active until the end of your billing cycle.">Yes — cancel anytime in the App Store / Google Play. Pro features remain active until the end of your billing cycle.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q">
-        <h4 data-ko="어떤 기기에서 쓸 수 있나요?" data-en="Which devices are supported?">Which devices are supported?</h4>
+        <h3 data-ko="어떤 기기에서 쓸 수 있나요?" data-en="Which devices are supported?">Which devices are supported?</h3>
         <span class="ic">+</span>
       </div>
       <div class="faq-a" data-ko="iOS 15 이상 / Android 10 이상에서 동작하며, 가로 화면에 최적화돼 있어요. 웹 에디터는 곧 출시 예정이며 Pro 사용자는 동일 계정으로 자동 접속됩니다." data-en="iOS 15+ and Android 10+, optimised for landscape. The web editor is coming soon and will be included for Pro subscribers.">iOS 15+ and Android 10+, optimised for landscape. The web editor is coming soon and will be included for Pro subscribers.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q">
-        <h4 data-ko="만든 곡의 저작권은 누구에게 있나요?" data-en="Who owns the songs I make?">Who owns the songs I make?</h4>
+        <h3 data-ko="만든 곡의 저작권은 누구에게 있나요?" data-en="Who owns the songs I make?">Who owns the songs I make?</h3>
         <span class="ic">+</span>
       </div>
       <div class="faq-a" data-ko="당연히 사용자에게 있습니다. 상업적 이용도 자유롭게 가능합니다." data-en="You do — and commercial use is completely free.">You do — and commercial use is completely free.</div>
@@ -648,11 +652,12 @@ footer { border-top: 1px solid var(--border); padding: 60px 24px 40px; }
   </div>
 </div>
 
+</main>
 <!-- ──────────── FOOTER ──────────── -->
 <footer>
   <div class="foot-inner">
     <div class="foot-brand">
-      <div class="nav-brand"><img class="brand-logo" src="assets/appicon.png" alt="HumTrack"><span>HumTrack</span></div>
+      <div class="nav-brand"><picture><source srcset="assets/appicon.webp" type="image/webp"><img class="brand-logo" src="assets/appicon.png" alt="HumTrack" width="26" height="26" loading="lazy"></picture><span>HumTrack</span></div>
       <p data-ko="탭 몇 번이면 누구나 곡을 만드는 모바일 DAW. HumTrack ♪ Seoul." data-en="The mobile DAW where anyone makes a track in a few taps. HumTrack ♪ Seoul.">The mobile DAW where anyone makes a track in a few taps. HumTrack ♪ Seoul.</p>
     </div>
     <div class="foot-col">
