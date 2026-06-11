@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:humming/looptap/models/loop_models.dart';
 import 'package:humming/looptap/music/midi_export.dart';
 import 'package:humming/looptap/music/song_util.dart';
+import 'package:humming/looptap/music/theory.dart';
 
 const _sr = 44100;
 
@@ -64,5 +65,20 @@ void main() {
     print('[808] melody/GM: ${m.sec.toStringAsFixed(2)}s peak=${(m.peak * 100).toStringAsFixed(1)}% '
         'rms=${(m.rms * 100).toStringAsFixed(1)}%');
     expect(m.peak, greaterThan(0.02));
+  });
+
+  test('added instance emits on its own channel and renders', () {
+    const exId = 'melody_x1';
+    final exFlat = FlatSong(const [], const [], const [], 32,
+        extraPitched: {
+          exId: [PitchNote(midi: 64, freq: 0, step: 0, dur: 8)]
+        });
+    final midi = buildMidi(exFlat, 90,
+        extras: const [TrackRef(exId, 'melody')], extraInstruments: const {exId: 24});
+    final timgm = File('assets/sounds/TimGM6mb.sf2').readAsBytesSync();
+    final r = _render(timgm, midi);
+    // ignore: avoid_print
+    print('[808] extra instance: ${r.sec.toStringAsFixed(2)}s peak=${(r.peak * 100).toStringAsFixed(1)}%');
+    expect(r.peak, greaterThan(0.02), reason: 'added instance should render audibly');
   });
 }

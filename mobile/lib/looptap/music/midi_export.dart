@@ -47,7 +47,9 @@ Uint8List buildMidi(FlatSong flat, int bpm,
     int melodyDecProgram = 48,
     double swing = 0,
     Set<String>? tracks,
-    Map<String, double>? vol}) {
+    Map<String, double>? vol,
+    List<TrackRef> extras = const [],
+    Map<String, int> extraInstruments = const {}}) {
   const tpq = 96;
   final tps = tpq / kStepsPerBeat;
   final evs = <_Ev>[];
@@ -99,6 +101,26 @@ Uint8List buildMidi(FlatSong flat, int bpm,
   if (want('drums')) addDrums(flat.drums);
   if (want('beatDec')) addDrums(flat.beatDec);
 
+  // added track instances — each on its allocated channel (pitched) or ch9 (drums).
+  if (extras.isNotEmpty) {
+    final metas = sectionTrackMetas(extras);
+    final chOf = {for (final mt in metas) mt.id: mt.channel};
+    int cc(double? v) => ((v ?? 0.85).clamp(0.0, 1.0) * 127).round().clamp(0, 127);
+    for (final ref in extras) {
+      if (!want(ref.id)) continue;
+      final base = trackById(ref.type);
+      if (base.kind == TrackKind.drums) {
+        addDrums(flat.extraDrums[ref.id] ?? const []);
+      } else {
+        final ch = chOf[ref.id] ?? 0;
+        final prog = extraInstruments[ref.id] ?? base.defaultProgram;
+        evs.add(_Ev(0, [0xC0 | ch, gm(prog) & 0x7f]));
+        if (vol != null) evs.add(_Ev(0, [0xB0 | ch, 0x07, cc(vol[ref.id])]));
+        addPitched(flat.extraPitched[ref.id] ?? const [], ch);
+      }
+    }
+  }
+
   // stable sort by time (preserve insertion order for equal times)
   final indexed = [for (var i = 0; i < evs.length; i++) (i, evs[i])];
   indexed.sort((a, b) {
@@ -136,10 +158,16 @@ Future<File> exportMidiSong(
   int melodyProgram = 0,
   int bassProgram = 33,
   int melodyDecProgram = 48,
+  List<TrackRef> extras = const [],
+  Map<String, int> instruments = const {},
 }) async {
   final flat = flattenSong(sections);
   final bytes = buildMidi(flat, bpm,
-      melodyProgram: melodyProgram, bassProgram: bassProgram, melodyDecProgram: melodyDecProgram);
+      melodyProgram: melodyProgram,
+      bassProgram: bassProgram,
+      melodyDecProgram: melodyDecProgram,
+      extras: extras,
+      extraInstruments: instruments);
   final dir = await getApplicationDocumentsDirectory();
   final folder = Directory('${dir.path}/looptap/exports');
   if (!await folder.exists()) await folder.create(recursive: true);

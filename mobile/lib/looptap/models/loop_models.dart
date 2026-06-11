@@ -87,13 +87,25 @@ class Section {
     required this.id,
     required this.name,
     Map<String, TrackData>? tracks,
+    List<TrackRef>? extras,
+    List<String>? order,
     this.bars = 2,
     this.repeats = 1,
-  }) : tracks = tracks ?? _emptyTracks();
+  })  : tracks = tracks ?? _emptyTracks(),
+        extras = extras ?? [],
+        order = order ?? [];
 
   String id;
   String name;
-  final Map<String, TrackData> tracks; // keyed by track id
+  final Map<String, TrackData> tracks; // keyed by track id (base ids + extra ids)
+  // User-added track instances beyond the fixed base 6. Their TrackData lives in
+  // [tracks] under the ref id; the section meta list = kTracks + these.
+  final List<TrackRef> extras;
+  // Explicit display order of track ids (drag-to-reorder). Display-only — channel
+  // allocation is independent, so reordering never reassigns a track's channel.
+  // Ids not listed here fall back to natural order (kTracks + extras) at the end;
+  // empty = pure natural order.
+  final List<String> order;
   int bars;
   int repeats;
 
@@ -105,6 +117,8 @@ class Section {
         id: id,
         name: name,
         tracks: tracks.map((k, v) => MapEntry(k, v.deepCopy())),
+        extras: [for (final e in extras) TrackRef(e.id, e.type)],
+        order: [...order],
         bars: bars,
         repeats: repeats,
       );
@@ -113,20 +127,32 @@ class Section {
         'id': id,
         'name': name,
         'tracks': tracks.map((k, v) => MapEntry(k, v.toJson())),
+        'extras': [for (final e in extras) e.toJson()],
+        'order': order,
         'bars': bars,
         'repeats': repeats,
       };
 
   static Section fromJson(Map<String, dynamic> j) {
     final rawTracks = (j['tracks'] as Map?)?.cast<String, dynamic>() ?? {};
+    final extras = [
+      for (final e in (j['extras'] as List?) ?? [])
+        TrackRef.fromJson((e as Map).cast<String, dynamic>()),
+    ];
+    // base tracks + any extra-instance tracks, all read from the saved map.
     final tracks = _emptyTracks();
-    for (final id in tracks.keys) {
+    for (final e in extras) {
+      tracks[e.id] = TrackData();
+    }
+    for (final id in tracks.keys.toList()) {
       tracks[id] = TrackData.fromJson(rawTracks[id] as Map<String, dynamic>?);
     }
     return Section(
       id: (j['id'] ?? 'sec') as String,
       name: (j['name'] ?? 'A') as String,
       tracks: tracks,
+      extras: extras,
+      order: [for (final o in (j['order'] as List?) ?? []) o as String],
       bars: (j['bars'] as num?)?.toInt() ?? 2,
       repeats: (j['repeats'] as num?)?.toInt() ?? 1,
     );

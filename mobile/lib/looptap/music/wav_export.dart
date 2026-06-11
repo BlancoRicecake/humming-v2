@@ -25,6 +25,7 @@ import '../models/loop_models.dart';
 import 'instruments.dart';
 import 'midi_export.dart';
 import 'song_util.dart';
+import 'theory.dart';
 
 const int _sr = 44100;
 const String _sfAsset = 'assets/sounds/TimGM6mb.sf2';
@@ -168,6 +169,8 @@ Future<File> exportWavSong(
   int melodyProgram = 0,
   int bassProgram = 33,
   int melodyDecProgram = 48,
+  List<TrackRef> extras = const [],
+  Map<String, int> instruments = const {},
 }) async {
   final flat = flattenSong(sections);
   final use808 = bassProgram == kProgram808;
@@ -175,13 +178,17 @@ Future<File> exportWavSong(
   List<Uint8List> sf2s;
   List<Map<String, Object>> jobs;
   if (use808) {
+    // rest = all GM lanes (base minus bass) + every added instance.
+    final restTracks = {'melody', 'melodyDec', 'drums', 'beatDec', for (final e in extras) e.id};
     final rest = buildMidi(flat, bpm,
         melodyProgram: melodyProgram,
         bassProgram: bassProgram,
         melodyDecProgram: melodyDecProgram,
         swing: swing,
         vol: vol,
-        tracks: const {'melody', 'melodyDec', 'drums', 'beatDec'});
+        tracks: restTracks,
+        extras: extras,
+        extraInstruments: instruments);
     // bassProgram 0 → selects the 808.sf2's single preset.
     final bassMidi = buildMidi(flat, bpm,
         bassProgram: 0, swing: swing, vol: vol, tracks: const {'bass'});
@@ -196,7 +203,9 @@ Future<File> exportWavSong(
         bassProgram: bassProgram,
         melodyDecProgram: melodyDecProgram,
         swing: swing,
-        vol: vol);
+        vol: vol,
+        extras: extras,
+        extraInstruments: instruments);
     sf2s = [await _sf2Bytes()];
     jobs = [
       {'sf2': 0, 'midi': midi},
@@ -225,31 +234,41 @@ Future<List<File>> exportStems(
   int melodyProgram = 0,
   int bassProgram = 33,
   int melodyDecProgram = 48,
+  List<TrackRef> extras = const [],
+  Map<String, int> instruments = const {},
 }) async {
   final flat = flattenSong(sections);
-  final present = <String>[
-    if (flat.melody.isNotEmpty) 'melody',
-    if (flat.bass.isNotEmpty) 'bass',
-    if (flat.melodyDec.isNotEmpty) 'melodyDec',
-    if (flat.drums.isNotEmpty) 'drums',
-    if (flat.beatDec.isNotEmpty) 'beatDec',
+  final labelOf = {for (final m in sectionTrackMetas(extras)) m.id: m.label};
+  // present lanes: non-empty base lanes + non-empty added instances.
+  final present = <({String id, String label})>[
+    if (flat.melody.isNotEmpty) (id: 'melody', label: 'melody'),
+    if (flat.bass.isNotEmpty) (id: 'bass', label: 'bass'),
+    if (flat.melodyDec.isNotEmpty) (id: 'melodyDec', label: 'melodyDec'),
+    if (flat.drums.isNotEmpty) (id: 'drums', label: 'drums'),
+    if (flat.beatDec.isNotEmpty) (id: 'beatDec', label: 'beatDec'),
+    for (final e in extras)
+      if ((flat.extraPitched[e.id]?.isNotEmpty ?? false) ||
+          (flat.extraDrums[e.id]?.isNotEmpty ?? false))
+        (id: e.id, label: labelOf[e.id] ?? e.id),
   ];
   final out = <File>[];
 
   if (present.isNotEmpty) {
     final use808 = bassProgram == kProgram808;
     final jobs = <Map<String, Object>>[
-      for (final t in present)
+      for (final p in present)
         {
-          'sf2': (t == 'bass' && use808) ? 1 : 0,
+          'sf2': (p.id == 'bass' && use808) ? 1 : 0,
           'midi': buildMidi(flat, bpm,
               melodyProgram: melodyProgram,
               // 808 bass stem → program 0 selects the 808.sf2 preset.
-              bassProgram: (t == 'bass' && use808) ? 0 : bassProgram,
+              bassProgram: (p.id == 'bass' && use808) ? 0 : bassProgram,
               melodyDecProgram: melodyDecProgram,
               swing: swing,
               vol: vol,
-              tracks: {t}),
+              tracks: {p.id},
+              extras: extras,
+              extraInstruments: instruments),
         },
     ];
     final wavs = await compute(_renderIso, {
@@ -260,9 +279,9 @@ Future<List<File>> exportStems(
       'tail': _tailSec,
     });
     for (var i = 0; i < present.length; i++) {
-      final f = File(await _exportPath('$title - ${present[i]}', 'wav'));
+      final f = File(await _exportPath('$title - ${present[i].label}', 'wav'));
       await f.writeAsBytes(wavs[i]);
-      _logWavStats('stem ${present[i]}', f.path, wavs[i]);
+      _logWavStats('stem ${present[i].label}', f.path, wavs[i]);
       out.add(f);
     }
   }

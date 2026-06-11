@@ -16,6 +16,8 @@ class FlatSong {
     this.steps, {
     this.melodyDec = const [],
     this.beatDec = const [],
+    this.extraPitched = const {},
+    this.extraDrums = const {},
   });
   final List<PitchNote> melody;
   final List<PitchNote> bass;
@@ -23,6 +25,9 @@ class FlatSong {
   final int steps;
   final List<PitchNote> melodyDec;
   final List<DrumNote> beatDec;
+  // Added track instances, flattened across sections, keyed by ref id.
+  final Map<String, List<PitchNote>> extraPitched;
+  final Map<String, List<DrumNote>> extraDrums;
 }
 
 FlatSong flattenSong(List<Section> sections) {
@@ -43,6 +48,8 @@ FlatSong flattenSong(List<Section> sections) {
     }
   }
 
+  final exP = <String, List<PitchNote>>{};
+  final exD = <String, List<DrumNote>>{};
   for (final sec in sections) {
     final reps = sec.repeats;
     final st = stepsForBars(sec.bars);
@@ -52,10 +59,20 @@ FlatSong flattenSong(List<Section> sections) {
       pitched(sec.tracks['bass'], b);
       perc(sec.tracks['drums'], d);
       perc(sec.tracks['beatDec'], bd);
+      // added instances: route by their base type's kind.
+      for (final ref in sec.extras) {
+        final drum = trackById(ref.type).kind == TrackKind.drums;
+        if (drum) {
+          perc(sec.tracks[ref.id], exD[ref.id] ??= []);
+        } else {
+          pitched(sec.tracks[ref.id], exP[ref.id] ??= []);
+        }
+      }
       off += st;
     }
   }
-  return FlatSong(m, b, d, math.max(16, off), melodyDec: md, beatDec: bd);
+  return FlatSong(m, b, d, math.max(16, off),
+      melodyDec: md, beatDec: bd, extraPitched: exP, extraDrums: exD);
 }
 
 /// 30-bar waveform thumbnail (screens.jsx buildWave) from a flattened song.

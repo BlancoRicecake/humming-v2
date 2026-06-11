@@ -3,6 +3,7 @@
 // strip fills its space, or scrolls when there are more rows than fit. A white
 // playhead line sweeps across all lanes.
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show timeDilation;
 
 import '../models/loop_models.dart';
 import '../music/theory.dart';
@@ -23,6 +24,7 @@ class Arrangement extends StatelessWidget {
   const Arrangement({
     super.key,
     required this.section,
+    required this.tracks,
     required this.activeId,
     required this.mutes,
     required this.onSelect,
@@ -31,9 +33,15 @@ class Arrangement extends StatelessWidget {
     required this.steps,
     required this.ranges,
     this.onSeek,
+    this.onAddTrack,
+    this.onReorder,
+    this.playing = false,
   });
 
   final Section section;
+
+  /// Ordered track metas to render (base 6 + added instances).
+  final List<TrackMeta> tracks;
   final String activeId;
   final Map<String, bool> mutes;
   final ValueChanged<String> onSelect;
@@ -45,57 +53,72 @@ class Arrangement extends StatelessWidget {
   /// Scrub the playhead by dragging across the lanes (null = read-only).
   final ValueChanged<double>? onSeek;
 
-  _Row _rowFor(int i) => _Row(
-        meta: kTracks[i],
-        data: section.tracks[kTracks[i].id]!,
-        selected: kTracks[i].id == activeId,
-        muted: mutes[kTracks[i].id] ?? false,
-        onSelect: () => onSelect(kTracks[i].id),
-        onToggleMute: () => onToggleMute(kTracks[i].id),
-        steps: steps,
-        range: ranges[kTracks[i].id],
-      );
+  /// Open the add-track picker (footer button); null hides it (song-preview).
+  final VoidCallback? onAddTrack;
+
+  /// Long-press-drag reorder of the rows; null disables (song-preview).
+  final void Function(int oldIndex, int newIndex)? onReorder;
+
+  /// Whether the transport is playing — the reorder slow-mo is skipped while
+  /// playing so the global timeDilation never dips the music tempo.
+  final bool playing;
+
+  static const double _rowH = 44.0;
+
+  _Row _rowFor(int i) {
+    final m = tracks[i];
+    return _Row(
+      meta: m,
+      data: section.tracks[m.id] ?? TrackData(),
+      selected: m.id == activeId,
+      muted: mutes[m.id] ?? false,
+      onSelect: () => onSelect(m.id),
+      onToggleMute: () => onToggleMute(m.id),
+      steps: steps,
+      range: ranges[m.id],
+      // long-press the label chip to drag-reorder (null = disabled).
+      reorderIndex: onReorder == null ? null : i,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    // Playhead spans only the actual lanes (not the empty space / footer below).
+    final lanesHeight = tracks.length * (_rowH + _rowGap);
+    return ClipRect(
+      child: Stack(
       children: [
-        // Lanes fill the allotted height when they fit; once there are too many
-        // tracks (main + decoration) for the 1:2 split, the strip scrolls so all
-        // rows stay reachable.
-        LayoutBuilder(
-          builder: (context, c) {
-            const rowH = 44.0;
-            final n = kTracks.length;
-            final needed = n * rowH + (n - 1) * _rowGap;
-            if (needed > c.maxHeight) {
-              return SingleChildScrollView(
-                child: Column(
-                  children: [
-                    for (var i = 0; i < n; i++) ...[
-                      if (i > 0) const SizedBox(height: _rowGap),
-                      SizedBox(height: rowH, child: _rowFor(i)),
-                    ],
-                  ],
-                ),
-              );
-            }
-            return Column(
-              children: [
-                for (var i = 0; i < n; i++) ...[
-                  if (i > 0) const SizedBox(height: _rowGap),
-                  Expanded(child: _rowFor(i)),
-                ],
-              ],
-            );
+        // Fixed-height rows in a reorderable list — long-press a label chip to
+        // drag it up/down; the others animate out of the way. The "+ Track"
+        // footer sits right under the last chip (non-reorderable).
+        ReorderableListView.builder(
+          padding: EdgeInsets.zero,
+          buildDefaultDragHandles: false,
+          itemCount: tracks.length,
+          onReorder: onReorder ?? (_, __) {},
+          // Flutter hardcodes the reorder animation at 250ms with no knob, so we
+          // slow it ~25% (×1.33) for the duration of the drag, restoring normal
+          // speed on drop. timeDilation is global, so we only apply it while
+          // stopped — never dipping the music tempo during playback.
+          onReorderStart: (_) {
+            if (!playing) timeDilation = 1.33;
           },
+          onReorderEnd: (_) => timeDilation = 1.0,
+          proxyDecorator: (child, index, anim) =>
+              Material(type: MaterialType.transparency, child: child),
+          footer: onAddTrack == null ? null : _AddTrackRow(onTap: onAddTrack!),
+          itemBuilder: (context, i) => Padding(
+            key: ValueKey(tracks[i].id),
+            padding: EdgeInsets.only(bottom: _rowGap),
+            child: SizedBox(height: _rowH, child: _rowFor(i)),
+          ),
         ),
         // playhead spanning the lane area — draggable to scrub when onSeek is set.
         Positioned(
           left: _labelW + _gap,
           right: 0,
           top: 0,
-          bottom: 0,
+          height: lanesHeight,
           child: LayoutBuilder(
             builder: (context, c) {
               final x = (playStep / steps) * c.maxWidth;
@@ -130,6 +153,7 @@ class Arrangement extends StatelessWidget {
           ),
         ),
       ],
+      ),
     );
   }
 }
@@ -144,6 +168,7 @@ class _Row extends StatelessWidget {
     required this.onToggleMute,
     required this.steps,
     required this.range,
+    this.reorderIndex,
   });
 
   final TrackMeta meta;
@@ -155,42 +180,54 @@ class _Row extends StatelessWidget {
   final int steps;
   final PitchRange? range;
 
+  /// Index in the reorderable list; non-null → the chip is a long-press drag
+  /// handle for reordering.
+  final int? reorderIndex;
+
   @override
   Widget build(BuildContext context) {
+    Widget chip = Container(
+      width: _labelW,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: selected ? meta.color.withValues(alpha: 0.12) : LT.surface,
+        borderRadius: BorderRadius.circular(LTRadius.chip),
+        border: Border.all(color: selected ? meta.color : LT.border),
+      ),
+      child: Row(
+        children: [
+          if (reorderIndex != null) ...[
+            Icon(Icons.drag_indicator, size: 11, color: LT.t3.withValues(alpha: 0.5)),
+            const SizedBox(width: 1),
+          ],
+          Ms(meta.icon, size: 11, color: selected ? meta.color : LT.t2),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(meta.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: LTType.inter(size: 10, weight: FontWeight.w700, color: selected ? LT.t1 : LT.t2)),
+          ),
+          GestureDetector(
+            onTap: onToggleMute,
+            behavior: HitTestBehavior.opaque,
+            child: Ms(muted ? LtIcons.volumeOff : LtIcons.volumeUp,
+                size: 11, color: muted ? LT.t3 : LT.t2),
+          ),
+        ],
+      ),
+    );
+    // long-press the chip → start a reorder drag.
+    if (reorderIndex != null) {
+      chip = ReorderableDelayedDragStartListener(index: reorderIndex!, child: chip);
+    }
     return GestureDetector(
       onTap: onSelect,
       behavior: HitTestBehavior.opaque,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // label chip (fills the row height)
-          Container(
-            width: _labelW,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            decoration: BoxDecoration(
-              color: selected ? meta.color.withValues(alpha: 0.12) : LT.surface,
-              borderRadius: BorderRadius.circular(LTRadius.chip),
-              border: Border.all(color: selected ? meta.color : LT.border),
-            ),
-            child: Row(
-              children: [
-                Ms(meta.icon, size: 11, color: selected ? meta.color : LT.t2),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(meta.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: LTType.inter(size: 10, weight: FontWeight.w700, color: selected ? LT.t1 : LT.t2)),
-                ),
-                GestureDetector(
-                  onTap: onToggleMute,
-                  behavior: HitTestBehavior.opaque,
-                  child: Ms(muted ? LtIcons.volumeOff : LtIcons.volumeUp,
-                      size: 11, color: muted ? LT.t3 : LT.t2),
-                ),
-              ],
-            ),
-          ),
+          chip,
           const SizedBox(width: _gap),
           // lane (fills the row height)
           Expanded(
@@ -207,6 +244,51 @@ class _Row extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Footer "+ Track" row, aligned under the label-chip column. Opens the picker.
+class _AddTrackRow extends StatelessWidget {
+  const _AddTrackRow({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: _rowGap),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          height: 30,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: _labelW,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: LT.surface2,
+                  borderRadius: BorderRadius.circular(LTRadius.chip),
+                  border: Border.all(color: LT.border),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Ms(LtIcons.add, size: 13, color: LT.t2),
+                    const SizedBox(width: 3),
+                    Text('Track',
+                        style: LTType.inter(size: 10, weight: FontWeight.w700, color: LT.t2)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: _gap),
+              const Expanded(child: SizedBox()),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -39,7 +39,7 @@ class LoopStore extends ChangeNotifier {
   // without a real purchase. Stripped from release builds (kDebugMode == false),
   // so store gating is unaffected in production. Flip to false to test the real
   // paywall flow in debug.
-  static const bool _debugProOverride = true;
+  static const bool _debugProOverride = false;
   bool get proActive => _pro == ProStatus.active || (kDebugMode && _debugProOverride);
   DateTime? get proRenewsAt => _renewsAt;
   bool get authEnabled => AuthService.instance.enabled;

@@ -147,7 +147,53 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   Map<String, TrackData> get _tracks => _sec.tracks;
   int get _bars => _sec.bars;
   int get _steps => _songSteps ?? stepsForBars(_bars);
-  TrackMeta get _meta => trackById(_activeId);
+
+  // The full track-meta list (base 6 + added instances) for a section, and for
+  // the active editing section. _meta resolves the active track from it so added
+  // instances get their own channel/label/instrument like the base tracks.
+  List<TrackMeta> _metasFor(Section s) => sectionTrackMetas(s.extras);
+  List<TrackMeta> get _editMetas => _metasFor(_sec);
+  TrackMeta get _meta =>
+      _editMetas.firstWhere((t) => t.id == _activeId, orElse: () => _editMetas.first);
+
+  /// Base track type of the active track — an added instance's type, or the id
+  /// itself for a base track. Used for type-keyed lookups (instrument list etc.).
+  String get _activeType {
+    for (final e in _sec.extras) {
+      if (e.id == _activeId) return e.type;
+    }
+    return _activeId;
+  }
+
+  /// Track metas in the section's display order (drag-reordered). Ids not listed
+  /// in [Section.order] fall back to natural order at the end.
+  List<TrackMeta> _orderedMetas(Section s) {
+    final byId = {for (final m in sectionTrackMetas(s.extras)) m.id: m};
+    final out = <TrackMeta>[];
+    for (final id in s.order) {
+      final m = byId.remove(id);
+      if (m != null) out.add(m);
+    }
+    out.addAll(byId.values);
+    return out;
+  }
+
+  /// Apply a drag-reorder of the arrangement rows. Display-only; written to every
+  /// section so the order stays consistent across the song.
+  void _reorderTracks(int oldIndex, int newIndex) {
+    final ids = _orderedMetas(_sec).map((m) => m.id).toList();
+    if (oldIndex < 0 || oldIndex >= ids.length) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+    final id = ids.removeAt(oldIndex);
+    ids.insert(newIndex.clamp(0, ids.length), id);
+    setState(() {
+      for (final s in _sections) {
+        s.order
+          ..clear()
+          ..addAll(ids);
+      }
+    });
+  }
 
   List<Rung> get _ladder => buildLadder(_keyRoot, _scale, 4 + _melodyOctave, 8);
 
@@ -210,11 +256,17 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     // ranges span the whole slide ladders so the arrangement preview shows notes
     // placed anywhere in the window.
     final mel = PitchRange(mfull.first.midi - 2, mfull.last.midi + 2);
-    return {
+    final bass = PitchRange(bfull.first.midi - 2, bfull.last.midi + 2);
+    final r = {
       'melody': mel,
       'melodyDec': mel, // melody-fill shares the melody register
-      'bass': PitchRange(bfull.first.midi - 2, bfull.last.midi + 2),
+      'bass': bass,
     };
+    // added pitched instances reuse their base type's range for the lane preview.
+    for (final e in _sec.extras) {
+      r[e.id] = e.type == 'bass' ? bass : mel;
+    }
+    return r;
   }
 
   // ── auto-save 상태 ────────────────────────────────────────────────
@@ -320,7 +372,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     // MIDI channel/program; percussion tracks (drums + beat-fill) share ch9 but
     // keep independent mute/volume. Drums don't drive pad lighting.
     final litM = <int>{};
-    for (final tk in kTracks) {
+    for (final tk in _metasFor(_songSection ?? _sec)) {
       if (_mutes[tk.id] ?? false) continue;
       final data = T[tk.id];
       if (data == null) continue;
@@ -371,6 +423,68 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       _freshThisLoop.clear();
       _startClock(); // rebase elapsed to the new position
     }
+  }
+
+  // ── add-track ─────────────────────────────────────────────────────
+  /// Append a new instance of [type] (one of the base track ids) to EVERY
+  /// section so the track set stays consistent across the song, then select it.
+  void _addTrack(String type) {
+    _pushUndo();
+    final id = '${type}_x${DateTime.now().microsecondsSinceEpoch}';
+    setState(() {
+      for (final s in _sections) {
+        s.extras.add(TrackRef(id, type));
+        s.tracks[id] = TrackData();
+      }
+      _instruments[id] = trackById(type).defaultProgram;
+      _activeId = id;
+      _inputModes[id] = 'pads';
+    });
+  }
+
+  Future<void> _openAddTrack() async {
+    final type = await showDialog<String>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: LT.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Add track',
+                      style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
+                ),
+              ),
+              // vocal is a single audio-recording track, not a synth voice — no
+              // instances of it.
+              for (final t in kTracks.where((t) => t.kind != TrackKind.vocal))
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(ctx).pop(t.id),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    child: Row(
+                      children: [
+                        Ms(t.icon, size: 18, color: t.color),
+                        const SizedBox(width: 12),
+                        Text(t.label, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t1)),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (type != null) _addTrack(type);
   }
 
   // ── transport actions ─────────────────────────────────────────────
@@ -853,12 +967,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   void _openInstrument() {
-    final id = _activeId; // any pitched track: melody / melodyDec / bass
+    final id = _activeId; // any pitched track: melody / melodyDec / bass (+ instances)
     final ch = _meta.channel;
     showInstrumentSheet(
       context,
-      trackId: id,
-      trackLabel: trackById(id).label,
+      trackId: _activeType, // base type drives the instrument list
+      trackLabel: _meta.label, // instance label (e.g. "Bass 2")
       currentProgram: _instruments[id] ?? _meta.defaultProgram,
       onPick: (program) {
         _pushUndo(coalesce: true);
@@ -1102,6 +1216,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     }
     if (!mounted) return;
     debugPrint('[export] opening drawer');
+    // union of added instances across sections (kept consistent by _addTrack).
+    final extras = <TrackRef>[];
+    final seen = <String>{};
+    for (final s in _sections) {
+      for (final e in s.extras) {
+        if (seen.add(e.id)) extras.add(e);
+      }
+    }
     await showExportDrawer(
       context,
       title: _title,
@@ -1112,6 +1234,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       melodyProgram: _instruments['melody'] ?? 0,
       bassProgram: _instruments['bass'] ?? 33,
       melodyDecProgram: _instruments['melodyDec'] ?? 48,
+      extras: extras,
+      instruments: Map.of(_instruments),
     );
   }
 
@@ -1159,10 +1283,15 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                       valueListenable: _playStep,
                       builder: (_, ps, __) => Arrangement(
                         section: _songSection ?? _sec,
+                        tracks: _orderedMetas(_songSection ?? _sec),
                         activeId: _activeId,
                         mutes: _mutes,
                         onSelect: (id) => setState(() => _activeId = id),
                         onToggleMute: _toggleMute,
+                        // editing only (song-preview is read-only)
+                        onAddTrack: _songSection == null ? _openAddTrack : null,
+                        onReorder: _songSection == null ? _reorderTracks : null,
+                        playing: _playing,
                         playStep: ps,
                         steps: _steps,
                         ranges: _ranges,
@@ -1353,7 +1482,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   Widget _surfaceHeader(bool pitched) {
-    final hasInstrument = _activeId == 'melody' || _activeId == 'bass';
+    final hasInstrument = _activeType == 'melody' || _activeType == 'bass';
 
     final leftGroup = Row(
       mainAxisSize: MainAxisSize.min,
@@ -1363,7 +1492,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         // 아이콘 + 라벨.
         if (hasInstrument)
           Pill(
-            label: instrumentLabel(_activeId, _instruments[_activeId] ?? (_activeId == 'bass' ? 33 : 0)),
+            label: instrumentLabel(_activeType, _instruments[_activeId] ?? _meta.defaultProgram),
             icon: _meta.icon,
             iconColor: _meta.color,
             onTap: _openInstrument,
@@ -1439,7 +1568,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           Pill(label: 'Hum to MIDI', icon: LtIcons.graphicEq, onTap: _openHum),
         ],
         const SizedBox(width: 8),
-        if (_inputMode == 'grid' && _activeId == 'drums')
+        if (_inputMode == 'grid' && _meta.kind == TrackKind.drums)
           hintSlot('tap cells to toggle')
         else if (_inputMode == 'grid' && pitched)
           hintSlot('tap · drag to lengthen · auto-merge')

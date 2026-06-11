@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../models/loop_models.dart';
 import '../../music/midi_export.dart';
+import '../../music/theory.dart';
 import '../../music/wav_export.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
@@ -21,6 +22,8 @@ Future<void> showExportDrawer(
   int melodyProgram = 0,
   int bassProgram = 33,
   int melodyDecProgram = 48,
+  List<TrackRef> extras = const [],
+  Map<String, int> instruments = const {},
 }) {
   return showGeneralDialog(
     context: context,
@@ -39,6 +42,8 @@ Future<void> showExportDrawer(
         melodyProgram: melodyProgram,
         bassProgram: bassProgram,
         melodyDecProgram: melodyDecProgram,
+        extras: extras,
+        instruments: instruments,
       ),
     ),
     transitionBuilder: (_, anim, __, child) => SlideTransition(
@@ -59,6 +64,8 @@ class _ExportDrawer extends StatefulWidget {
     required this.melodyProgram,
     required this.bassProgram,
     required this.melodyDecProgram,
+    required this.extras,
+    required this.instruments,
   });
   final String title;
   final List<Section> sections;
@@ -68,6 +75,8 @@ class _ExportDrawer extends StatefulWidget {
   final int melodyProgram;
   final int bassProgram;
   final int melodyDecProgram;
+  final List<TrackRef> extras;
+  final Map<String, int> instruments;
 
   @override
   State<_ExportDrawer> createState() => _ExportDrawerState();
@@ -103,7 +112,9 @@ class _ExportDrawerState extends State<_ExportDrawer> {
       final file = await exportWavSong(widget.sections, widget.bpm, widget.swing, widget.vol, widget.title,
           melodyProgram: widget.melodyProgram,
           bassProgram: widget.bassProgram,
-          melodyDecProgram: widget.melodyDecProgram);
+          melodyDecProgram: widget.melodyDecProgram,
+          extras: widget.extras,
+          instruments: widget.instruments);
       await _share([XFile(file.path, mimeType: 'audio/wav')], '${widget.title}.wav');
       if (mounted) _note(L10n.of(context).ltExportSaved(file.uri.pathSegments.last));
     } catch (e, st) {
@@ -120,7 +131,9 @@ class _ExportDrawerState extends State<_ExportDrawer> {
       final files = await exportStems(widget.sections, widget.bpm, widget.swing, widget.vol, widget.title,
           melodyProgram: widget.melodyProgram,
           bassProgram: widget.bassProgram,
-          melodyDecProgram: widget.melodyDecProgram);
+          melodyDecProgram: widget.melodyDecProgram,
+          extras: widget.extras,
+          instruments: widget.instruments);
       if (files.isEmpty) {
         if (mounted) _note(L10n.of(context).ltExportFailed, ok: false);
       } else {
@@ -147,6 +160,8 @@ class _ExportDrawerState extends State<_ExportDrawer> {
         melodyProgram: widget.melodyProgram,
         bassProgram: widget.bassProgram,
         melodyDecProgram: widget.melodyDecProgram,
+        extras: widget.extras,
+        instruments: widget.instruments,
       );
       debugPrint('[export] midi written: ${file.path}');
       // 파일 저장 후 iOS 의 share sheet 로 사용자에게 노출 — Documents 폴더가

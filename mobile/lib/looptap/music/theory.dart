@@ -133,6 +133,32 @@ class TrackMeta {
 
   /// Percussion kinds for drum tracks (drives the drum surface + note map).
   final List<String>? drumKinds;
+
+  TrackMeta copyWith({String? id, String? label, int? channel}) => TrackMeta(
+        id ?? this.id,
+        label ?? this.label,
+        icon,
+        color,
+        kind,
+        channel: channel ?? this.channel,
+        defaultProgram: defaultProgram,
+        group: group,
+        decoration: decoration,
+        drumKinds: drumKinds,
+      );
+}
+
+/// An added track instance: a unique [id] plus the base track [type] it copies
+/// (one of the kTracks ids). The fixed base tracks aren't TrackRefs — only the
+/// user-added extras are.
+class TrackRef {
+  const TrackRef(this.id, this.type);
+  final String id;
+  final String type;
+
+  Map<String, dynamic> toJson() => {'id': id, 'type': type};
+  static TrackRef fromJson(Map<String, dynamic> j) =>
+      TrackRef(j['id'] as String, j['type'] as String);
 }
 
 /// Six tracks: main + decoration layers. Order = arrangement strip order
@@ -159,3 +185,30 @@ List<TrackMeta> get kPitchedTracks =>
     kTracks.where((t) => t.kind == TrackKind.pitched || t.kind == TrackKind.bass).toList();
 
 TrackMeta trackById(String id) => kTracks.firstWhere((t) => t.id == id);
+
+/// Pitched MIDI channels still free after the base tracks claim 0,1,2 (melody,
+/// bass, melody-fill) and 9 (drums). Added pitched instances draw from here so
+/// each gets its own instrument; drum instances all share ch9.
+const List<int> kExtraPitchChannels = [3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15];
+
+/// The full ordered track-meta list for a section: the fixed base tracks
+/// (kTracks, channels unchanged) followed by [extras], each given an allocated
+/// channel and a numbered label (e.g. "Melody 2"). The base case (no extras) is
+/// exactly kTracks, so existing songs/playback/export are unchanged.
+List<TrackMeta> sectionTrackMetas(List<TrackRef> extras) {
+  final out = <TrackMeta>[...kTracks];
+  if (extras.isEmpty) return out;
+  final perType = <String, int>{for (final t in kTracks) t.id: 1};
+  var pi = 0;
+  for (final e in extras) {
+    final base = trackById(e.type);
+    final n = perType[e.type] = (perType[e.type] ?? 1) + 1;
+    final ch = base.kind == TrackKind.drums
+        ? 9
+        : base.kind == TrackKind.vocal
+            ? 0
+            : (pi < kExtraPitchChannels.length ? kExtraPitchChannels[pi++] : kExtraPitchChannels.last);
+    out.add(base.copyWith(id: e.id, label: '${base.label} $n', channel: ch));
+  }
+  return out;
+}
