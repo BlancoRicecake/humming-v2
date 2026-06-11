@@ -116,49 +116,6 @@ class IapPricing {
     return base.pricingPhases.last;
   }
 
-  // ─── 스토어 base plan 가격 추출 ─────────────────────────────────────
-
-  /// 스토어 ProductDetails 에서 base plan 의 recurring 가격(formatted)을 추출.
-  /// 못 찾으면 null → 호출 측에서 KRW 폴백.
-  static String? _storeBasePrice(ProductDetails? p) {
-    if (p == null) return null;
-    if (p is GooglePlayProductDetails) {
-      final phase = _basePhase(p);
-      if (phase != null) return phase.formattedPrice;
-    }
-    if (p.rawPrice > 0) return p.price;
-    return null;
-  }
-
-  static _RawPrice? _storeBaseRawPrice(ProductDetails? p) {
-    if (p == null) return null;
-    if (p is GooglePlayProductDetails) {
-      final phase = _basePhase(p);
-      if (phase != null) {
-        return _RawPrice(
-          phase.priceAmountMicros / 1000000,
-          phase.priceCurrencyCode,
-        );
-      }
-    }
-    if (p.rawPrice > 0) return _RawPrice(p.rawPrice, p.currencyCode);
-    return null;
-  }
-
-  /// Play 구독의 base plan offer (offerId == null) 의 recurring phase.
-  /// Trial/intro offer 가 별도로 존재해도 base offer 의 영속 phase 가격을 돌려줌.
-  static PricingPhaseWrapper? _basePhase(GooglePlayProductDetails p) {
-    final offers = p.productDetails.subscriptionOfferDetails;
-    if (offers == null || offers.isEmpty) return null;
-    final base = offers.firstWhere(
-      (o) => o.offerId == null,
-      orElse: () => offers.last,
-    );
-    if (base.pricingPhases.isEmpty) return null;
-    // 마지막 phase = 영속 recurring (앞 phase 는 intro/trial 의 임시 가격).
-    return base.pricingPhases.last;
-  }
-
   // ─── 내부 ───────────────────────────────────────────────────────────
 
   static ProductDetails? _find(String id) {
