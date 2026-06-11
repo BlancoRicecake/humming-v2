@@ -1528,7 +1528,7 @@ class L10nEn extends L10n {
 
   @override
   String get ltExportFooter =>
-      'Sections render in order (with their repeats). MIDI opens in any DAW. WAV / stems are coming soon.';
+      'Sections render in order (with their repeats). MIDI opens in any DAW. WAV & stems are audio rendered through the SoundFont.';
 
   @override
   String get ltSettingsTitle => 'Settings';

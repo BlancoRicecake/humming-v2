@@ -1504,7 +1504,7 @@ class L10nKo extends L10n {
 
   @override
   String get ltExportFooter =>
-      '섹션은 순서대로(반복 포함) 렌더링됩니다. MIDI는 모든 DAW 에서 열립니다. WAV / 스템은 곧 제공 예정.';
+      '섹션은 순서대로(반복 포함) 렌더링됩니다. MIDI는 모든 DAW 에서 열립니다. WAV·스템은 사운드폰트로 렌더된 오디오입니다.';
 
   @override
   String get ltSettingsTitle => '설정';

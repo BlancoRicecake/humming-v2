@@ -35,8 +35,18 @@ List<int> _vlq(int n) {
   return b;
 }
 
+/// [swing] shifts odd steps later by `swing*0.5` of a step (groove match with
+/// live playback). [tracks] limits which lanes are emitted (null = all) — used
+/// for per-stem rendering. [vol] sets per-channel CC7 volume from the mixer
+/// (null = no CC7). All three default to no-op, so the plain `.mid` export
+/// (exportMidiSong) is byte-identical to before.
 Uint8List buildMidi(FlatSong flat, int bpm,
-    {int melodyProgram = 0, int bassProgram = 33, int melodyDecProgram = 48}) {
+    {int melodyProgram = 0,
+    int bassProgram = 33,
+    int melodyDecProgram = 48,
+    double swing = 0,
+    Set<String>? tracks,
+    Map<String, double>? vol}) {
   const tpq = 96;
   final tps = tpq / kStepsPerBeat;
   final evs = <_Ev>[];
@@ -46,33 +56,44 @@ Uint8List buildMidi(FlatSong flat, int bpm,
   evs.add(_Ev(0, [0xC1, bassProgram & 0x7f])); // ch1 bass instrument
   evs.add(_Ev(0, [0xC2, melodyDecProgram & 0x7f])); // ch2 melody-fill instrument
 
+  // Per-channel volume (CC7) from the mixer — only when rendering audio.
+  if (vol != null) {
+    int cc(double? v) => ((v ?? 0.85).clamp(0.0, 1.0) * 127).round().clamp(0, 127);
+    evs.add(_Ev(0, [0xB0, 0x07, cc(vol['melody'])])); // ch0
+    evs.add(_Ev(0, [0xB1, 0x07, cc(vol['bass'])])); // ch1
+    evs.add(_Ev(0, [0xB2, 0x07, cc(vol['melodyDec'] ?? vol['melody'])])); // ch2
+    evs.add(_Ev(0, [0xB9, 0x07, cc(vol['drums'])])); // ch9 (drums + beat-fill share)
+  }
+
+  // Swing-aware step→tick: odd steps nudged later by swing*0.5 of a step.
+  double onTick(int step) => (step + (step.isOdd ? swing * 0.5 : 0)) * tps;
+  bool want(String t) => tracks == null || tracks.contains(t);
+
   void addPitched(List<PitchNote> notes, int ch) {
     for (final n in notes) {
-      final on = (n.step * tps).round();
-      final off = ((n.step + n.dur) * tps).round();
-      evs.add(_Ev(on, [0x90 | ch, n.midi, 100]));
-      evs.add(_Ev(off, [0x80 | ch, n.midi, 0]));
+      final on = onTick(n.step);
+      evs.add(_Ev(on.round(), [0x90 | ch, n.midi, 100]));
+      evs.add(_Ev((on + n.dur * tps).round(), [0x80 | ch, n.midi, 0]));
     }
   }
 
-  addPitched(flat.melody, 0);
-  addPitched(flat.bass, 1);
-  addPitched(flat.melodyDec, 2);
+  if (want('melody')) addPitched(flat.melody, 0);
+  if (want('bass')) addPitched(flat.bass, 1);
+  if (want('melodyDec')) addPitched(flat.melodyDec, 2);
 
   // both percussion tracks (main drums + beat-fill) → GM ch9
   void addDrums(List<DrumNote> notes) {
     for (final n in notes) {
       final pitch = _drumNote[n.kind];
       if (pitch == null) continue;
-      final on = (n.step * tps).round();
-      final off = ((n.step + 1) * tps).round();
-      evs.add(_Ev(on, [0x99, pitch, 100])); // ch9 (GM drums)
-      evs.add(_Ev(off, [0x89, pitch, 0]));
+      final on = onTick(n.step);
+      evs.add(_Ev(on.round(), [0x99, pitch, 100])); // ch9 (GM drums)
+      evs.add(_Ev((on + tps).round(), [0x89, pitch, 0]));
     }
   }
 
-  addDrums(flat.drums);
-  addDrums(flat.beatDec);
+  if (want('drums')) addDrums(flat.drums);
+  if (want('beatDec')) addDrums(flat.beatDec);
 
   // stable sort by time (preserve insertion order for equal times)
   final indexed = [for (var i = 0; i < evs.length; i++) (i, evs[i])];

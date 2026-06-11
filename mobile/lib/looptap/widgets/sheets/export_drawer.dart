@@ -99,7 +99,10 @@ class _ExportDrawerState extends State<_ExportDrawer> {
     if (_busy != null) return;
     setState(() => _busy = 'wav');
     try {
-      final file = await exportWavSong(widget.sections, widget.bpm, widget.swing, widget.vol, widget.title);
+      final file = await exportWavSong(widget.sections, widget.bpm, widget.swing, widget.vol, widget.title,
+          melodyProgram: widget.melodyProgram,
+          bassProgram: widget.bassProgram,
+          melodyDecProgram: widget.melodyDecProgram);
       await _share([XFile(file.path, mimeType: 'audio/wav')], '${widget.title}.wav');
       if (mounted) _note(L10n.of(context).ltExportSaved(file.uri.pathSegments.last));
     } catch (e, st) {
@@ -113,7 +116,10 @@ class _ExportDrawerState extends State<_ExportDrawer> {
     if (_busy != null) return;
     setState(() => _busy = 'stems');
     try {
-      final files = await exportStems(widget.sections, widget.bpm, widget.swing, widget.vol, widget.title);
+      final files = await exportStems(widget.sections, widget.bpm, widget.swing, widget.vol, widget.title,
+          melodyProgram: widget.melodyProgram,
+          bassProgram: widget.bassProgram,
+          melodyDecProgram: widget.melodyDecProgram);
       if (files.isEmpty) {
         if (mounted) _note(L10n.of(context).ltExportFailed, ok: false);
       } else {

@@ -501,7 +501,7 @@
   "ltExportSaved": "Saved {filename}",
   "@ltExportSaved": {"placeholders": {"filename": {"type": "String"}}},
   "ltExportFailed": "MIDI export failed",
-  "ltExportFooter": "Sections render in order (with their repeats). MIDI opens in any DAW. WAV / stems are coming soon.",
+  "ltExportFooter": "Sections render in order (with their repeats). MIDI opens in any DAW. WAV & stems are audio rendered through the SoundFont.",
   "ltSettingsTitle": "Settings",
   "ltSettingsMetronome": "Metronome click",
   "ltSettingsMetronomeSub": "Play a click while recording",
