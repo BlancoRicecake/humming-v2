@@ -164,7 +164,7 @@ class Song {
   String scale;
   int bpm;
   double swing; // 0–0.6
-  int bars; // 2 | 4
+  int bars; // 1 | 2 | 4
   final Map<String, double> vol;
   final Map<String, bool> mutes;
   /// Per-track GM program (melody/bass). Drives live playback + MIDI export.

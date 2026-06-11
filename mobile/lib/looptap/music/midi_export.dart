@@ -2,11 +2,12 @@
 // buildMidi: piano ch1, fingered bass ch2 (prog 33), drums GM ch10. The whole
 // song is flattened (sections × repeats) onto one timeline.
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/loop_models.dart';
+import 'instruments.dart';
 import 'song_util.dart';
 import 'theory.dart';
 
@@ -51,10 +52,13 @@ Uint8List buildMidi(FlatSong flat, int bpm,
   final tps = tpq / kStepsPerBeat;
   final evs = <_Ev>[];
   final mpq = (60000000 / bpm).round();
+  // A Standard MIDI File can only carry GM programs (0–127); the 808 sentinel
+  // (and any out-of-range value) falls back to the nearest GM voice.
+  int gm(int p) => p > 127 ? kProgram808MidiFallback : p;
   evs.add(_Ev(0, [0xFF, 0x51, 0x03, (mpq >> 16) & 0xff, (mpq >> 8) & 0xff, mpq & 0xff]));
-  evs.add(_Ev(0, [0xC0, melodyProgram & 0x7f])); // ch0 melody instrument
-  evs.add(_Ev(0, [0xC1, bassProgram & 0x7f])); // ch1 bass instrument
-  evs.add(_Ev(0, [0xC2, melodyDecProgram & 0x7f])); // ch2 melody-fill instrument
+  evs.add(_Ev(0, [0xC0, gm(melodyProgram) & 0x7f])); // ch0 melody instrument
+  evs.add(_Ev(0, [0xC1, gm(bassProgram) & 0x7f])); // ch1 bass instrument
+  evs.add(_Ev(0, [0xC2, gm(melodyDecProgram) & 0x7f])); // ch2 melody-fill instrument
 
   // Per-channel volume (CC7) from the mixer — only when rendering audio.
   if (vol != null) {
@@ -102,7 +106,12 @@ Uint8List buildMidi(FlatSong flat, int bpm,
     return c != 0 ? c : a.$1.compareTo(b.$1);
   });
   final sorted = [for (final e in indexed) e.$2];
-  sorted.add(_Ev(flat.steps * tps.round(), [0xFF, 0x2F, 0x00])); // end of track
+  // End of track at the loop end, but never before the last event — a note held
+  // past the loop boundary would otherwise make the EOT delta negative (corrupt
+  // VLQ / wrong length). Take the later of the two.
+  final loopEnd = (flat.steps * tps).round();
+  final lastEv = sorted.isEmpty ? 0 : sorted.last.t;
+  sorted.add(_Ev(loopEnd < lastEv ? lastEv : loopEnd, [0xFF, 0x2F, 0x00]));
 
   final body = <int>[];
   var prev = 0;
@@ -137,5 +146,13 @@ Future<File> exportMidiSong(
   final safe = title.trim().isEmpty ? 'loop' : title.trim().replaceAll(RegExp(r'[^\w\-]+'), '_');
   final file = File('${folder.path}/$safe.mid');
   await file.writeAsBytes(bytes);
+  if (kDebugMode) {
+    final hdrOk = bytes.length > 14 &&
+        bytes[0] == 0x4D && bytes[1] == 0x54 && bytes[2] == 0x68 && bytes[3] == 0x64;
+    final eotOk = bytes.length > 3 &&
+        bytes[bytes.length - 3] == 0xFF && bytes[bytes.length - 2] == 0x2F;
+    debugPrint('[export] MIDI ${file.path.split('/').last}: ${bytes.length}B '
+        'hdrOK=$hdrOk eotOK=$eotOk steps=${flat.steps} bpm=$bpm');
+  }
   return file;
 }

@@ -22,13 +22,25 @@ class SynthEngine {
   factory SynthEngine() => _instance;
 
   static const String _sfAsset = 'assets/sounds/TimGM6mb.sf2';
+  static const String _sf808Asset = 'assets/sounds/808.sf2';
+
+  /// Sentinel "program" meaning "play the 808 sub-bass soundfont" instead of a
+  /// GM program. Out of GM range (0–127) so it never collides. Mirrors
+  /// kProgram808 in looptap/music/instruments.dart.
+  static const int program808 = 128;
 
   final MidiPro _midi = MidiPro();
   int? _sfId;
   Future<int>? _loading;
+  // The 808 sub-bass lives in a second soundfont (no GM slot for it).
+  int? _sf808Id;
+  Future<int>? _loading808;
 
   // 채널별로 마지막 select 된 program 캐시 — 같은 program 재선택 비용 절약.
   final Map<int, int> _channelProgram = <int, int>{};
+  // 채널이 현재 어느 soundfont(sfId)에 바인딩됐는지 — 808 채널은 _sf808Id 로
+  // playNote/stopNote 해야 하므로 추적한다.
+  final Map<int, int> _channelSf = <int, int>{};
 
   // 재생 중인 (channel, pitch) → 예약된 release 타이머. stopAll 시 모두 취소.
   final Map<int, Map<int, Timer>> _activeReleases = <int, Map<int, Timer>>{};
@@ -59,6 +71,43 @@ class SynthEngine {
     _channelProgram[channel] = program;
   }
 
+  /// 808 sub-bass soundfont 1회 로드 (lazy). 중복 호출은 동일 Future 공유.
+  Future<int> _ensure808() {
+    if (_sf808Id != null) return Future.value(_sf808Id);
+    return _loading808 ??= _midi
+        .loadSoundfontAsset(assetPath: _sf808Asset, bank: 0, program: 0)
+        .then((id) {
+      _sf808Id = id;
+      debugPrint('[synth] loaded 808 soundfont sfId=$id');
+      return id;
+    }).catchError((Object e, StackTrace st) {
+      _loading808 = null;
+      debugPrint('[synth] 808 load failed: $e');
+      throw e;
+    });
+  }
+
+  /// 멜로딕 채널을 [program] 에 맞는 soundfont/instrument 로 바인딩하고, 그 채널이
+  /// 써야 할 sfId 를 돌려준다. program == [program808] 이면 808 soundfont 로,
+  /// 그 외 GM program 이면 메인 soundfont 로 라우팅. program == null 이면 기존
+  /// 바인딩 유지(시퀀서 per-note 호출용).
+  Future<int> _bindChannel(int channel, int? program) async {
+    final mainId = await ensureLoaded();
+    if (program == null) return _channelSf[channel] ?? mainId;
+    if (program == program808) {
+      final sf8 = await _ensure808();
+      if (_channelProgram[channel] != program808) {
+        await _midi.selectInstrument(sfId: sf8, channel: channel, bank: 0, program: 0);
+        _channelProgram[channel] = program808;
+      }
+      _channelSf[channel] = sf8;
+      return sf8;
+    }
+    await _ensureProgram(mainId, channel, program);
+    _channelSf[channel] = mainId;
+    return mainId;
+  }
+
   /// 단음 재생. [release] 이후 자동으로 stopNote.
   /// 같은 (channel, pitch) 가 이미 울리고 있으면 먼저 정지.
   Future<void> playNote({
@@ -68,8 +117,7 @@ class SynthEngine {
     int program = 0,
     Duration release = const Duration(milliseconds: 600),
   }) async {
-    final sfId = await ensureLoaded();
-    await _ensureProgram(sfId, channel, program);
+    final sfId = await _bindChannel(channel, program);
 
     // 동일 키 중첩 방지.
     _cancelRelease(channel, pitch);
@@ -126,13 +174,15 @@ class SynthEngine {
     int velocity = 100,
     int? program,
   }) async {
-    final sfId = await ensureLoaded();
+    final mainId = await ensureLoaded();
+    int sfId = mainId;
     if (channel == drumChannel) {
       // 키트 선택은 play() 프리앰블에서 1회 수행. 시퀀서 per-note noteOn 은 program 을
       // 넘기지 않으므로(null) 여기서 재선택하지 않아 선택된 키트를 유지한다.
       if (program != null) await ensureDrumKit(program);
-    } else if (program != null) {
-      await _ensureProgram(sfId, channel, program);
+    } else {
+      // 멜로딕 채널 — 808/GM soundfont 라우팅. program==null 이면 기존 바인딩 유지.
+      sfId = await _bindChannel(channel, program);
     }
     final v = velocity.clamp(1, 127);
     final p = pitch.clamp(0, 127);
@@ -144,7 +194,8 @@ class SynthEngine {
   }
 
   Future<void> noteOff({required int channel, required int pitch}) async {
-    final sfId = _sfId;
+    // 채널이 808 로 바인딩됐으면 그 sfId 로 stop 해야 음이 꺼진다.
+    final sfId = _channelSf[channel] ?? _sfId;
     if (sfId == null) return;
     try {
       await _midi.stopNote(channel: channel, key: pitch.clamp(0, 127), sfId: sfId);
@@ -159,10 +210,11 @@ class SynthEngine {
       }
       m.clear();
     }
-    final sfId = _sfId;
-    if (sfId == null) return;
-    try {
-      await _midi.stopAllNotes(sfId: sfId);
-    } catch (_) {/* 로드 전이거나 plugin 미연결 — 무시 */}
+    for (final id in {_sfId, _sf808Id}) {
+      if (id == null) continue;
+      try {
+        await _midi.stopAllNotes(sfId: id);
+      } catch (_) {/* 로드 전이거나 plugin 미연결 — 무시 */}
+    }
   }
 }

@@ -29,6 +29,9 @@ class StepGrid extends StatefulWidget {
     required this.accent,
     required this.steps,
     required this.bars,
+    this.windowOffset = 0,
+    this.maxOffset = 0,
+    this.onWindowChanged,
   });
 
   final List<Rung> ladder;
@@ -40,6 +43,12 @@ class StepGrid extends StatefulWidget {
   final int steps;
   final int bars;
 
+  /// Current pitch-window offset (shared with the pads) and its max, plus a
+  /// callback to move it — dragging the row labels vertically scrolls the range.
+  final int windowOffset;
+  final int maxOffset;
+  final ValueChanged<int>? onWindowChanged;
+
   @override
   State<StepGrid> createState() => _StepGridState();
 }
@@ -48,6 +57,10 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
   final GlobalKey _laneKey = GlobalKey();
   _Draft? _draft;
   String? _mode; // 'paint' | 'erase'
+
+  // row-label vertical drag → pitch-window scroll accumulator.
+  double _winAccum = 0;
+  int _winOffset = 0;
 
   // gentle pulse for the active hold-drag preview ("release to place")
   late final AnimationController _pulse =
@@ -132,23 +145,73 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
         Expanded(
           child: Row(
             children: [
-              // note-name labels (root colored)
-              SizedBox(
-                width: 30,
-                child: Column(
+              // note-name labels (root colored). Drag vertically to move the
+              // pitch window — the grid then reaches the full slide range.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragStart: widget.onWindowChanged == null
+                    ? null
+                    : (_) {
+                        _winAccum = 0;
+                        _winOffset = widget.windowOffset;
+                      },
+                onVerticalDragUpdate: widget.onWindowChanged == null
+                    ? null
+                    : (d) {
+                        _winAccum += d.delta.dy;
+                        const sens = 24.0; // px per pitch step
+                        // drag down → reveal higher pitches (offset increases)
+                        while (_winAccum.abs() >= sens) {
+                          final dir = _winAccum > 0 ? 1 : -1;
+                          _winAccum -= dir * sens;
+                          _winOffset = (_winOffset + dir).clamp(0, widget.maxOffset);
+                          widget.onWindowChanged!(_winOffset);
+                        }
+                      },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    for (final n in _rows)
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 4),
-                            child: Text(n.name,
-                                style: LTType.mono(
-                                    size: 9, weight: FontWeight.w700, color: n.degree == 0 ? widget.accent : LT.t3)),
-                          ),
+                    // scroll affordance rail: ▲ higher / grip / ▼ lower. The
+                    // arrow lights up while there's more range in that direction.
+                    if (widget.onWindowChanged != null)
+                      SizedBox(
+                        width: 13,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Icon(Icons.keyboard_arrow_up,
+                                size: 13,
+                                color: widget.windowOffset < widget.maxOffset
+                                    ? widget.accent
+                                    : LT.t3.withValues(alpha: 0.25)),
+                            Icon(Icons.drag_indicator, size: 11, color: LT.t3.withValues(alpha: 0.4)),
+                            Icon(Icons.keyboard_arrow_down,
+                                size: 13,
+                                color: widget.windowOffset > 0
+                                    ? widget.accent
+                                    : LT.t3.withValues(alpha: 0.25)),
+                          ],
                         ),
                       ),
+                    SizedBox(
+                      width: 28,
+                      child: Column(
+                        children: [
+                          for (final n in _rows)
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Text(n.name,
+                                      style: LTType.mono(
+                                          size: 9, weight: FontWeight.w700, color: n.degree == 0 ? widget.accent : LT.t3)),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -181,9 +244,9 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
             ],
           ),
         ),
-        // beat numbers
+        // beat numbers (aligned to the lane start: rail 13 + labels 28 + gap 4)
         Padding(
-          padding: const EdgeInsets.only(left: 34, top: 5),
+          padding: const EdgeInsets.only(left: 45, top: 5),
           child: Row(
             children: [
               for (var b = 0; b < beats; b++)

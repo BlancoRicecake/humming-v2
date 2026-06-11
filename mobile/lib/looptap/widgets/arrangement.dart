@@ -30,6 +30,7 @@ class Arrangement extends StatelessWidget {
     required this.playStep,
     required this.steps,
     required this.ranges,
+    this.onSeek,
   });
 
   final Section section;
@@ -40,6 +41,9 @@ class Arrangement extends StatelessWidget {
   final double playStep;
   final int steps;
   final Map<String, PitchRange> ranges;
+
+  /// Scrub the playhead by dragging across the lanes (null = read-only).
+  final ValueChanged<double>? onSeek;
 
   _Row _rowFor(int i) => _Row(
         meta: kTracks[i],
@@ -86,34 +90,43 @@ class Arrangement extends StatelessWidget {
             );
           },
         ),
-        // playhead spanning the lane area
+        // playhead spanning the lane area — draggable to scrub when onSeek is set.
         Positioned(
           left: _labelW + _gap,
           right: 0,
           top: 0,
           bottom: 0,
-          child: IgnorePointer(
-            child: LayoutBuilder(
-              builder: (context, c) {
-                final x = (playStep / steps) * c.maxWidth;
-                return Stack(
-                  children: [
-                    Positioned(
-                      left: x,
-                      top: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 2,
-                        decoration: BoxDecoration(
-                          color: LT.t1.withValues(alpha: 0.9),
-                          boxShadow: [BoxShadow(color: LT.t1, blurRadius: 6)],
-                        ),
+          child: LayoutBuilder(
+            builder: (context, c) {
+              final x = (playStep / steps) * c.maxWidth;
+              void seek(Offset p) =>
+                  onSeek?.call((p.dx / c.maxWidth * steps).clamp(0, steps.toDouble()));
+              final line = Stack(
+                children: [
+                  Positioned(
+                    left: x,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 2,
+                      decoration: BoxDecoration(
+                        color: LT.t1.withValues(alpha: 0.9),
+                        boxShadow: [BoxShadow(color: LT.t1, blurRadius: 6)],
                       ),
                     ),
-                  ],
-                );
-              },
-            ),
+                  ),
+                ],
+              );
+              if (onSeek == null) return IgnorePointer(child: line);
+              // Horizontal drag scrubs; taps still fall through to lane rows
+              // (translucent) so tapping a lane keeps selecting its track.
+              return GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragStart: (d) => seek(d.localPosition),
+                onHorizontalDragUpdate: (d) => seek(d.localPosition),
+                child: line,
+              );
+            },
           ),
         ),
       ],
@@ -212,7 +225,9 @@ class _LanePainter extends CustomPainter {
     final w = size.width, h = size.height;
 
     if (meta.kind == TrackKind.drums) {
-      const rows = ['hihat', 'snare', 'kick'];
+      // Use the track's own kit so the beat-fill lane (shaker/tambourine/clap)
+      // draws too — hardcoding the main kit hid beatDec notes in the strip.
+      final rows = meta.drumKinds ?? const ['hihat', 'snare', 'kick'];
       for (var ri = 0; ri < rows.length; ri++) {
         final y = h * (ri + 0.5) / rows.length;
         for (final n in data.drumNotes.where((n) => n.kind == rows[ri])) {

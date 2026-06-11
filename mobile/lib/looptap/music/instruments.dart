@@ -6,8 +6,16 @@ class InstrumentDef {
   const InstrumentDef(this.id, this.label, this.program);
   final String id;
   final String label;
-  final int program; // GM program number (0–127)
+  final int program; // GM program (0–127) or kProgram808 sentinel
 }
+
+/// Sentinel "program" for the synthetic 808 sub-bass — it has no GM slot, so it
+/// routes to a second soundfont (assets/sounds/808.sf2) in live playback and is
+/// rendered separately for WAV export. Out of GM range (0–127) so it never
+/// collides. Mirrors SynthEngine.program808. The plain .mid export falls back to
+/// [kProgram808MidiFallback] since a Standard MIDI File can't carry a custom patch.
+const int kProgram808 = 128;
+const int kProgram808MidiFallback = 38; // GM Synth Bass 1 — nearest GM voice
 
 /// Melody (pitched lead / keys) — 8 voices.
 const List<InstrumentDef> kMelodyInstruments = [
@@ -21,7 +29,7 @@ const List<InstrumentDef> kMelodyInstruments = [
   InstrumentDef('synth_lead', 'Synth Lead', 81),
 ];
 
-/// Bass — 6 voices.
+/// Bass — 8 voices.
 const List<InstrumentDef> kBassInstruments = [
   InstrumentDef('acoustic_bass', 'Acoustic Bass', 32),
   InstrumentDef('fingered_bass', 'Fingered Bass', 33),
@@ -29,6 +37,9 @@ const List<InstrumentDef> kBassInstruments = [
   InstrumentDef('fretless_bass', 'Fretless Bass', 35),
   InstrumentDef('slap_bass', 'Slap Bass', 36),
   InstrumentDef('synth_bass', 'Synth Bass', 38),
+  InstrumentDef('sub_bass', 'Sub Bass', 39), // round GM sub (Synth Bass 2)
+  // Synthetic 808 sub-bass — hip-hop/pop. Routes to assets/sounds/808.sf2.
+  InstrumentDef('eight08', '808', kProgram808),
 ];
 
 /// Default GM program per track (matches the original hard-coded sound).

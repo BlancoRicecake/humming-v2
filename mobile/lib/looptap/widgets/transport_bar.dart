@@ -262,7 +262,7 @@ class _BarsToggle extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final b in const [2, 4])
+          for (final b in const [1, 2, 4])
             GestureDetector(
               onTap: () => onBars(b),
               child: Container(

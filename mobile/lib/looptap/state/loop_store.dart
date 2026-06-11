@@ -35,7 +35,12 @@ class LoopStore extends ChangeNotifier {
   bool get loaded => _loaded;
   Map<String, String>? get user => _user;
   bool get isSignedIn => _user != null;
-  bool get proActive => _pro == ProStatus.active;
+  // Debug-only Pro override so paywall-gated features (export) can be exercised
+  // without a real purchase. Stripped from release builds (kDebugMode == false),
+  // so store gating is unaffected in production. Flip to false to test the real
+  // paywall flow in debug.
+  static const bool _debugProOverride = true;
+  bool get proActive => _pro == ProStatus.active || (kDebugMode && _debugProOverride);
   DateTime? get proRenewsAt => _renewsAt;
   bool get authEnabled => AuthService.instance.enabled;
   bool get iapEnabled => IapService.instance.enabled;

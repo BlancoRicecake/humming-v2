@@ -14,6 +14,7 @@
 // full-mix WAV is the instrumental; each section's vocal recording is included
 // in Stems as a separate file.
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:dart_melty_soundfont/dart_melty_soundfont.dart';
 import 'package:flutter/foundation.dart';
@@ -21,11 +22,13 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/loop_models.dart';
+import 'instruments.dart';
 import 'midi_export.dart';
 import 'song_util.dart';
 
 const int _sr = 44100;
 const String _sfAsset = 'assets/sounds/TimGM6mb.sf2';
+const String _sf808Asset = 'assets/sounds/808.sf2';
 // Render past the last note-off so reverb/release tails aren't cut.
 const double _tailSec = 1.2;
 
@@ -35,33 +38,60 @@ Future<Uint8List> _sf2Bytes() async {
   return bd.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes);
 }
 
-// ── isolate render: SF2 bytes + one or more MIDI byte-blobs → WAV bytes ──
-// Loads the SoundFont once and renders each MIDI through MidiFileSequencer.
+Future<Uint8List> _sf808Bytes() async {
+  final bd = await rootBundle.load(_sf808Asset);
+  return bd.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes);
+}
+
+// ── isolate render ──────────────────────────────────────────────────
+// Input: a['sf2s'] = list of SoundFont blobs; a['jobs'] = list of {sf2:int(index
+// into sf2s), midi:Uint8List}; a['mix'] = bool. Each job renders its MIDI through
+// its own SoundFont — this is how the 808 bass lane (a second SF2) is mixed with
+// the GM lanes. When mix=true the job buffers are summed into one WAV; otherwise
+// one WAV per job (stems).
 List<Uint8List> _renderIso(Map<String, dynamic> a) {
-  final sf2 = ByteData.sublistView(a['sf2'] as Uint8List);
-  final midis = (a['midis'] as List).cast<Uint8List>();
+  final sf2s = (a['sf2s'] as List).cast<Uint8List>();
+  final jobs = (a['jobs'] as List).cast<Map>();
   final sampleRate = a['sampleRate'] as int;
   final tailSec = a['tail'] as double;
+  final mix = a['mix'] as bool;
 
-  final out = <Uint8List>[];
-  for (final m in midis) {
+  final lefts = <Float32List>[];
+  final rights = <Float32List>[];
+  var maxN = 0;
+  for (final job in jobs) {
     final synth = Synthesizer.loadByteData(
-      sf2,
+      ByteData.sublistView(sf2s[job['sf2'] as int]),
       SynthesizerSettings(sampleRate: sampleRate, enableReverbAndChorus: true),
     );
-    final midiFile = MidiFile.fromByteData(ByteData.sublistView(m));
+    final midiFile = MidiFile.fromByteData(ByteData.sublistView(job['midi'] as Uint8List));
     final seq = MidiFileSequencer(synth);
     seq.play(midiFile, loop: false);
 
     final totalSec = midiFile.length.inMicroseconds / 1e6 + tailSec;
     final n = (totalSec * sampleRate).ceil();
+    if (n > maxN) maxN = n;
     final left = Float32List(n);
     final right = Float32List(n);
     seq.render(left, right);
-
-    out.add(_encodeWav(left, right, sampleRate));
+    lefts.add(left);
+    rights.add(right);
   }
-  return out;
+
+  if (!mix) {
+    return [for (var i = 0; i < lefts.length; i++) _encodeWav(lefts[i], rights[i], sampleRate)];
+  }
+  // Sum all job buffers (different lengths possible) into one mix.
+  final left = Float32List(maxN);
+  final right = Float32List(maxN);
+  for (var j = 0; j < lefts.length; j++) {
+    final l = lefts[j], r = rights[j];
+    for (var i = 0; i < l.length; i++) {
+      left[i] += l[i];
+      right[i] += r[i];
+    }
+  }
+  return [_encodeWav(left, right, sampleRate)];
 }
 
 // Mono 16-bit PCM WAV from interleaved L/R float buffers.
@@ -96,6 +126,27 @@ Uint8List _encodeWav(Float32List left, Float32List right, int sr) {
   return data.buffer.asUint8List();
 }
 
+// Debug-only: report duration + level so an export can be sanity-checked from
+// logs (non-silent? right length?) without pulling the file off-device.
+void _logWavStats(String tag, String path, Uint8List wav) {
+  if (!kDebugMode) return;
+  final samples = (wav.length - 44) ~/ 2;
+  final sec = samples / _sr;
+  final bd = ByteData.sublistView(wav, 44);
+  var peak = 0;
+  var sumSq = 0.0;
+  for (var i = 0; i + 1 < bd.lengthInBytes; i += 2) {
+    final s = bd.getInt16(i, Endian.little);
+    final a = s.abs();
+    if (a > peak) peak = a;
+    sumSq += s * s.toDouble();
+  }
+  final rms = samples > 0 ? math.sqrt(sumSq / samples) : 0.0;
+  debugPrint('[export] $tag ${path.split('/').last}: '
+      '${(wav.length / 1024).toStringAsFixed(0)}KB, ${sec.toStringAsFixed(2)}s, '
+      'peak=${(peak / 32768 * 100).toStringAsFixed(1)}% rms=${(rms / 32768 * 100).toStringAsFixed(1)}%');
+}
+
 // ── public API ──────────────────────────────────────────────────────
 Future<String> _exportPath(String title, String ext) async {
   final dir = await getApplicationDocumentsDirectory();
@@ -105,7 +156,9 @@ Future<String> _exportPath(String title, String ext) async {
   return '${folder.path}/$safe.$ext';
 }
 
-/// Full-mix instrumental WAV — all five lanes through the SF2.
+/// Full-mix instrumental WAV — all five lanes. When the bass uses the 808 (no GM
+/// slot) the bass lane renders through 808.sf2 and the rest through the GM SF2,
+/// then the two are summed so the mix matches live playback.
 Future<File> exportWavSong(
   List<Section> sections,
   int bpm,
@@ -117,20 +170,48 @@ Future<File> exportWavSong(
   int melodyDecProgram = 48,
 }) async {
   final flat = flattenSong(sections);
-  final midi = buildMidi(flat, bpm,
-      melodyProgram: melodyProgram,
-      bassProgram: bassProgram,
-      melodyDecProgram: melodyDecProgram,
-      swing: swing,
-      vol: vol);
+  final use808 = bassProgram == kProgram808;
+
+  List<Uint8List> sf2s;
+  List<Map<String, Object>> jobs;
+  if (use808) {
+    final rest = buildMidi(flat, bpm,
+        melodyProgram: melodyProgram,
+        bassProgram: bassProgram,
+        melodyDecProgram: melodyDecProgram,
+        swing: swing,
+        vol: vol,
+        tracks: const {'melody', 'melodyDec', 'drums', 'beatDec'});
+    // bassProgram 0 → selects the 808.sf2's single preset.
+    final bassMidi = buildMidi(flat, bpm,
+        bassProgram: 0, swing: swing, vol: vol, tracks: const {'bass'});
+    sf2s = [await _sf2Bytes(), await _sf808Bytes()];
+    jobs = [
+      {'sf2': 0, 'midi': rest},
+      {'sf2': 1, 'midi': bassMidi},
+    ];
+  } else {
+    final midi = buildMidi(flat, bpm,
+        melodyProgram: melodyProgram,
+        bassProgram: bassProgram,
+        melodyDecProgram: melodyDecProgram,
+        swing: swing,
+        vol: vol);
+    sf2s = [await _sf2Bytes()];
+    jobs = [
+      {'sf2': 0, 'midi': midi},
+    ];
+  }
   final wavs = await compute(_renderIso, {
-    'sf2': await _sf2Bytes(),
-    'midis': <Uint8List>[midi],
+    'sf2s': sf2s,
+    'jobs': jobs,
+    'mix': true,
     'sampleRate': _sr,
     'tail': _tailSec,
   });
   final f = File(await _exportPath(title, 'wav'));
   await f.writeAsBytes(wavs.first);
+  _logWavStats('WAV mix', f.path, wavs.first);
   return f;
 }
 
@@ -156,25 +237,32 @@ Future<List<File>> exportStems(
   final out = <File>[];
 
   if (present.isNotEmpty) {
-    final midis = [
+    final use808 = bassProgram == kProgram808;
+    final jobs = <Map<String, Object>>[
       for (final t in present)
-        buildMidi(flat, bpm,
-            melodyProgram: melodyProgram,
-            bassProgram: bassProgram,
-            melodyDecProgram: melodyDecProgram,
-            swing: swing,
-            vol: vol,
-            tracks: {t}),
+        {
+          'sf2': (t == 'bass' && use808) ? 1 : 0,
+          'midi': buildMidi(flat, bpm,
+              melodyProgram: melodyProgram,
+              // 808 bass stem → program 0 selects the 808.sf2 preset.
+              bassProgram: (t == 'bass' && use808) ? 0 : bassProgram,
+              melodyDecProgram: melodyDecProgram,
+              swing: swing,
+              vol: vol,
+              tracks: {t}),
+        },
     ];
     final wavs = await compute(_renderIso, {
-      'sf2': await _sf2Bytes(),
-      'midis': midis,
+      'sf2s': [await _sf2Bytes(), if (use808) await _sf808Bytes()],
+      'jobs': jobs,
+      'mix': false,
       'sampleRate': _sr,
       'tail': _tailSec,
     });
     for (var i = 0; i < present.length; i++) {
       final f = File(await _exportPath('$title - ${present[i]}', 'wav'));
       await f.writeAsBytes(wavs[i]);
+      _logWavStats('stem ${present[i]}', f.path, wavs[i]);
       out.add(f);
     }
   }

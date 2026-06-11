@@ -74,7 +74,21 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   bool _recording = false;
   bool _metro = LoopPrefs.instance.metro.value; // shared with Settings sheet
   bool _countIn = true; // count-in on by default
-  int _octave = 0;
+  // Octave shift, tracked PER REGISTER (melody group + bass) — mirrors the
+  // per-register windows below. A single global octave made changing one track's
+  // octave move every other pitched track; scoping it per register fixes that.
+  // melody + melody-fill share the melody register (same ladder/window/octave).
+  int _melodyOctave = 0;
+  int _bassOctave = 0;
+  int get _octave => _isBass ? _bassOctave : _melodyOctave; // active-track view
+  void _setOctave(int v) => setState(() {
+        final c = v.clamp(-2, 2);
+        if (_isBass) {
+          _bassOctave = c;
+        } else {
+          _melodyOctave = c;
+        }
+      });
   // Pitched pads (melody / fill / bass): an 8-pad window that slides across a
   // wider in-key ladder via a horizontal swipe. The offset (in scale degrees)
   // is tracked per register — melody group and bass have separate ladders.
@@ -135,7 +149,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   int get _steps => _songSteps ?? stepsForBars(_bars);
   TrackMeta get _meta => trackById(_activeId);
 
-  List<Rung> get _ladder => buildLadder(_keyRoot, _scale, 4 + _octave, 8);
+  List<Rung> get _ladder => buildLadder(_keyRoot, _scale, 4 + _melodyOctave, 8);
 
   // Wide in-key ladders (~3 octaves) the pad window slides across — melody
   // group sits mid-register, bass low.
@@ -146,8 +160,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final w = (MediaQuery.maybeOf(context)?.size.width ?? 0) - 32; // surface h-padding
     return math.min(padCountForWidth(w), _activeFullLadder.length);
   }
-  List<Rung> get _melodyFullLadder => buildLadder(_keyRoot, _scale, 3 + _octave, 22);
-  List<Rung> get _bassFullLadder => buildLadder(_keyRoot, _scale, 1 + _octave, 22);
+  List<Rung> get _melodyFullLadder => buildLadder(_keyRoot, _scale, 3 + _melodyOctave, 22);
+  List<Rung> get _bassFullLadder => buildLadder(_keyRoot, _scale, 1 + _bassOctave, 22);
   List<Rung> get _activeFullLadder => _isBass ? _bassFullLadder : _melodyFullLadder;
   int get _windowOffset => _isBass ? _bassWindow : _melodyWindow;
   int get _maxWindow => (_activeFullLadder.length - _padCount).clamp(0, _activeFullLadder.length);
@@ -174,11 +188,22 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     return const [0, 3, 4, 5, 7].map((i) => full[i]).toList();
   }
 
-  // full 8-row in-key bass ladder (one octave down) for the bass Grid
-  List<Rung> get _bassGridLadder => buildLadder(_keyRoot, _scale, 2 + _octave, 8);
+  /// active pitched ladder for the Grid surface — the SAME windowed slice the
+  /// pads show, so the grid covers the full slide range too (drag the row
+  /// labels vertically to move the window).
+  List<Rung> get _gridLadder => _padWindow;
 
-  /// active pitched ladder for the Grid surface (melody high / bass low)
-  List<Rung> get _gridLadder => _activeId == 'bass' ? _bassGridLadder : _ladder;
+  /// Move the pitched pad/grid window (shared by pads + grid). Clamped.
+  void _setWindowOffset(int o) {
+    final c = o.clamp(0, _maxWindow);
+    setState(() {
+      if (_isBass) {
+        _bassWindow = c;
+      } else {
+        _melodyWindow = c;
+      }
+    });
+  }
 
   Map<String, PitchRange> get _ranges {
     final mfull = _melodyFullLadder, bfull = _bassFullLadder;
@@ -304,7 +329,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         for (final n in data.pitchNotes.where((n) => n.step == step)) {
           if (_freshThisLoop.contains('${tk.id}:${n.midi}:$step')) continue;
           _audio.playPitch(tk.channel, n.midi, program: prog, vol: _vol[tk.id] ?? 0.85, durSec: dsec(n.dur));
-          litM.add(n.midi);
+          // glow only the ACTIVE track's pads — otherwise a melody note would
+          // light a same-pitch pad on melody-fill/bass while they're showing.
+          if (tk.id == _activeId) litM.add(n.midi);
         }
       } else if (tk.kind == TrackKind.drums) {
         for (final n in data.drumNotes.where((n) => n.step == step)) {
@@ -332,6 +359,18 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void _stopClock() {
     _ticker?.dispose();
     _ticker = null;
+  }
+
+  /// Scrub the playhead to [step] (arrangement drag). While playing, rebase the
+  /// clock so playback continues from the new position; song-preview is read-only.
+  void _seekTo(double step) {
+    if (_songSection != null) return;
+    final s = step.clamp(0.0, _steps.toDouble());
+    _playStep.value = s;
+    if (_playing) {
+      _freshThisLoop.clear();
+      _startClock(); // rebase elapsed to the new position
+    }
   }
 
   // ── transport actions ─────────────────────────────────────────────
@@ -1127,6 +1166,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                         playStep: ps,
                         steps: _steps,
                         ranges: _ranges,
+                        // song-preview is read-only → no scrubbing there
+                        onSeek: _songSection == null ? _seekTo : null,
                       ),
                     ),
                   ),
@@ -1498,13 +1539,13 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconBtn(icon: LtIcons.remove, size: 30, tooltip: 'Octave down', onTap: () => setState(() => _octave = (_octave - 1).clamp(-2, 2))),
+        IconBtn(icon: LtIcons.remove, size: 30, tooltip: 'Octave down', onTap: () => _setOctave(_octave - 1)),
         SizedBox(
           width: 46,
           child: Text('Oct ${_octave > 0 ? '+' : ''}$_octave',
               textAlign: TextAlign.center, style: LTType.mono(size: 11, color: LT.t2)),
         ),
-        IconBtn(icon: LtIcons.add, size: 30, tooltip: 'Octave up', onTap: () => setState(() => _octave = (_octave + 1).clamp(-2, 2))),
+        IconBtn(icon: LtIcons.add, size: 30, tooltip: 'Octave up', onTap: () => _setOctave(_octave + 1)),
       ],
     );
   }
@@ -1577,6 +1618,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
             accent: _meta.color,
             steps: _steps,
             bars: _bars,
+            // vertical drag on the row labels moves the pitch window (same
+            // window the pads slide), so the grid reaches the full range.
+            windowOffset: _windowOffset.clamp(0, _maxWindow),
+            maxOffset: _maxWindow,
+            onWindowChanged: _setWindowOffset,
           ),
         );
       }
@@ -1592,13 +1638,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         onDown: _pitchDown,
         onUp: _pitchUp,
         onSlideStart: _padSlideStart,
-        onOffsetChanged: (o) => setState(() {
-          if (_isBass) {
-            _bassWindow = o;
-          } else {
-            _melodyWindow = o;
-          }
-        }),
+        onOffsetChanged: _setWindowOffset,
       );
     }
     if (kind == TrackKind.vocal) {

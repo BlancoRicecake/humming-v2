@@ -1,5 +1,6 @@
-// LoopTap — Export panel (right drawer, README §8). MIDI is fully wired; WAV /
-// Stems / Share are locked in v1 (follow-up — see looptap-flutter-port memory).
+// LoopTap — Export panel (right drawer, README §8). MIDI, WAV, Stems and Share
+// are all wired: MIDI via buildMidi; WAV/Stems render the song's MIDI through
+// the bundled SF2 (see wav_export.dart). Gated behind Pro by the caller.
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -214,7 +215,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                     children: [
                       _Row(icon: LtIcons.piano, title: l.ltExportMidiTitle, sub: l.ltExportMidiSub, color: LT.lime, onTap: _doMidi),
                       const SizedBox(height: 12),
-                      // WAV / Stems — on-device oscillator render (instrumental;
+                      // WAV / Stems — on-device SF2 render (instrumental mix;
                       // each section's vocal recording is added to Stems as-is).
                       _Row(
                         icon: LtIcons.graphicEq,
