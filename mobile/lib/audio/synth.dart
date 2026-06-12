@@ -8,6 +8,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_midi_pro/flutter_midi_pro.dart';
 
+import '../looptap/music/soundfont_catalog.dart';
+
 /// 싱글톤 합성 엔진. SoundFont 1회 로딩 후 재사용.
 ///
 /// 사용 흐름:
@@ -23,11 +25,20 @@ class SynthEngine {
 
   static const String _sfAsset = 'assets/sounds/TimGM6mb.sf2';
   static const String _sf808Asset = 'assets/sounds/808.sf2';
+  static const String _sfHipHopAsset = 'assets/sounds/hiphop_kit.sf2';
 
   /// Sentinel "program" meaning "play the 808 sub-bass soundfont" instead of a
   /// GM program. Out of GM range (0–127) so it never collides. Mirrors
   /// kProgram808 in looptap/music/instruments.dart.
   static const int program808 = 128;
+
+  /// Sentinel "drum kit" meaning "play the bundled CC0 hip-hop kit soundfont"
+  /// instead of a GM bank-128 kit. Mirrors kProgramHipHopKit in instruments.dart.
+  static const int kitHipHop = 200;
+
+  /// Dedicated channel for the metronome wood-block — kept OFF the drum channel
+  /// so the click never disturbs the user's selected drum kit (ch9).
+  static const int clickChannel = 15;
 
   final MidiPro _midi = MidiPro();
   int? _sfId;
@@ -35,6 +46,13 @@ class SynthEngine {
   // The 808 sub-bass lives in a second soundfont (no GM slot for it).
   int? _sf808Id;
   Future<int>? _loading808;
+  // The CC0 hip-hop drum kit lives in a third soundfont (not a GM kit).
+  int? _sfHipHopId;
+  Future<int>? _loadingHipHop;
+  // Runtime catalog soundfonts (slot >= 1000) loaded from downloaded files,
+  // keyed by slot. Each is its own loaded soundfont id.
+  final Map<int, int> _slotSfId = <int, int>{};
+  final Map<int, Future<int>?> _loadingSlot = <int, Future<int>?>{};
 
   // 채널별로 마지막 select 된 program 캐시 — 같은 program 재선택 비용 절약.
   final Map<int, int> _channelProgram = <int, int>{};
@@ -87,6 +105,22 @@ class SynthEngine {
     });
   }
 
+  /// CC0 hip-hop kit soundfont 1회 로드 (lazy). 중복 호출은 동일 Future 공유.
+  Future<int> _ensureHipHopKit() {
+    if (_sfHipHopId != null) return Future.value(_sfHipHopId);
+    return _loadingHipHop ??= _midi
+        .loadSoundfontAsset(assetPath: _sfHipHopAsset, bank: 0, program: 0)
+        .then((id) {
+      _sfHipHopId = id;
+      debugPrint('[synth] loaded hiphop kit sfId=$id');
+      return id;
+    }).catchError((Object e, StackTrace st) {
+      _loadingHipHop = null;
+      debugPrint('[synth] hiphop kit load failed: $e');
+      throw e;
+    });
+  }
+
   /// 멜로딕 채널을 [program] 에 맞는 soundfont/instrument 로 바인딩하고, 그 채널이
   /// 써야 할 sfId 를 돌려준다. program == [program808] 이면 808 soundfont 로,
   /// 그 외 GM program 이면 메인 soundfont 로 라우팅. program == null 이면 기존
@@ -103,9 +137,49 @@ class SynthEngine {
       _channelSf[channel] = sf8;
       return sf8;
     }
+    if (isDynamicSlot(program)) {
+      final bound = await _bindDynamic(channel, program);
+      if (bound != null) return bound;
+      // file not downloaded / load failed → fall back to grand piano so the
+      // track still makes sound rather than going silent.
+      await _ensureProgram(mainId, channel, 0);
+      _channelSf[channel] = mainId;
+      return mainId;
+    }
     await _ensureProgram(mainId, channel, program);
     _channelSf[channel] = mainId;
     return mainId;
+  }
+
+  /// Bind a channel to a downloaded catalog soundfont (slot >= 1000). Returns
+  /// its sfId, or null when the file isn't present yet / fails to load.
+  Future<int?> _bindDynamic(int channel, int slot) async {
+    final entry = SoundfontCatalog.instance.bySlot(slot);
+    final path = SoundfontCatalog.instance.localPath(slot);
+    if (entry == null || path == null) return null;
+    int sfId;
+    try {
+      sfId = await (_loadingSlot[slot] ??= _midi
+          .loadSoundfontFile(filePath: path, bank: entry.sfBank, program: entry.sfProgram)
+          .then((id) {
+        _slotSfId[slot] = id;
+        return id;
+      }).catchError((Object e) {
+        _loadingSlot[slot] = null;
+        throw e;
+      }));
+    } catch (e) {
+      debugPrint('[synth] dynamic slot $slot load failed: $e');
+      return null;
+    }
+    final marker = 100000 + slot; // distinct from GM (0-127) + drum (1000+prog)
+    if (_channelProgram[channel] != marker) {
+      await _midi.selectInstrument(
+          sfId: sfId, channel: channel, bank: entry.sfBank, program: entry.sfProgram);
+      _channelProgram[channel] = marker;
+    }
+    _channelSf[channel] = sfId;
+    return sfId;
   }
 
   /// 단음 재생. [release] 이후 자동으로 stopNote.
@@ -151,13 +225,35 @@ class SynthEngine {
   /// 드럼 채널(9)을 GM bank 128 / 지정 키트 program 으로 셋업.
   /// 캐시는 `1000+program`(멜로딕 0..127 과 비충돌)으로 같은 키트 재선택을 회피.
   Future<void> ensureDrumKit(int program) async {
-    final sfId = await ensureLoaded();
     final marker = 1000 + program;
     if (_channelProgram[drumChannel] == marker) return;
+    // The hip-hop kit lives in its own soundfont; GM kits are bank 128 of the
+    // main soundfont. Either way bind the drum channel's sfId so drum noteOn/Off
+    // route to the right soundfont.
+    final int sfId;
+    final int bank;
+    final int prog;
+    if (program == kitHipHop) {
+      sfId = await _ensureHipHopKit();
+      bank = 128;
+      prog = 0;
+    } else if (isDynamicSlot(program)) {
+      // A downloaded catalog drum kit. _bindDynamic owns the drum channel's
+      // cache marker + sf binding; falls back to the GM standard kit when the
+      // file isn't present yet.
+      if (await _bindDynamic(drumChannel, program) != null) return;
+      sfId = await ensureLoaded();
+      bank = 128;
+      prog = 0;
+    } else {
+      sfId = await ensureLoaded();
+      bank = 128;
+      prog = program;
+    }
     try {
-      await _midi.selectInstrument(
-          sfId: sfId, channel: drumChannel, bank: 128, program: program);
+      await _midi.selectInstrument(sfId: sfId, channel: drumChannel, bank: bank, program: prog);
       _channelProgram[drumChannel] = marker;
+      _channelSf[drumChannel] = sfId;
     } catch (e) {
       debugPrint('[synth] drum select failed (kit=$program): $e');
     }
@@ -165,6 +261,22 @@ class SynthEngine {
 
   /// 하위호환 — 기본 Standard 키트(program 0).
   Future<void> ensureDrumChannel() => ensureDrumKit(0);
+
+  /// 메트로놈 클릭 — 드럼 채널(ch9)과 분리된 전용 채널에서 GM 우드블록(prog 115)을
+  /// 멜로딕 노트로 울린다. 사용자가 고른 드럼 킷을 절대 건드리지 않는다.
+  Future<void> playClick(bool accent) async {
+    final pitch = accent ? 84 : 79;
+    try {
+      final sfId = await ensureLoaded();
+      await _ensureProgram(sfId, clickChannel, 115); // GM Wood Block
+      await _midi.playNote(channel: clickChannel, key: pitch, velocity: accent ? 100 : 66, sfId: sfId);
+      Timer(const Duration(milliseconds: 110), () async {
+        try {
+          await _midi.stopNote(channel: clickChannel, key: pitch, sfId: sfId);
+        } catch (_) {/* 이미 정지 */}
+      });
+    } catch (_) {/* 로드 전 무시 — 호출자가 fire-and-forget 이라 여기서 삼킨다 */}
+  }
 
   /// 노트온. release 타이머 없음 — 호출자가 noteOff 책임.
   /// [program] 이 주어지면 멜로딕 채널의 악기를 설정한다(드럼 채널 무시).
@@ -180,6 +292,8 @@ class SynthEngine {
       // 키트 선택은 play() 프리앰블에서 1회 수행. 시퀀서 per-note noteOn 은 program 을
       // 넘기지 않으므로(null) 여기서 재선택하지 않아 선택된 키트를 유지한다.
       if (program != null) await ensureDrumKit(program);
+      // 선택된 키트가 별도 soundfont(힙합 등)일 수 있으니 그 sfId 로 발음한다.
+      sfId = _channelSf[drumChannel] ?? mainId;
     } else {
       // 멜로딕 채널 — 808/GM soundfont 라우팅. program==null 이면 기존 바인딩 유지.
       sfId = await _bindChannel(channel, program);
@@ -210,7 +324,7 @@ class SynthEngine {
       }
       m.clear();
     }
-    for (final id in {_sfId, _sf808Id}) {
+    for (final id in {_sfId, _sf808Id, _sfHipHopId, ..._slotSfId.values}) {
       if (id == null) continue;
       try {
         await _midi.stopAllNotes(sfId: id);

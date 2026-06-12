@@ -566,6 +566,8 @@
   "ltExportShareSub": "다른 앱으로 보내기",
   "ltExportSaved": "{filename} 저장됨",
   "@ltExportSaved": {"placeholders": {"filename": {"type": "String"}}},
+  "ltExportVocalSkipped": "이전 형식 보컬 {count}개는 믹스에 포함되지 않았어요",
+  "@ltExportVocalSkipped": {"placeholders": {"count": {"type": "int"}}},
   "ltExportFailed": "MIDI 내보내기 실패",
   "ltExportFooter": "섹션은 순서대로(반복 포함) 렌더링됩니다. MIDI는 모든 DAW 에서 열립니다. WAV·스템은 사운드폰트로 렌더된 오디오입니다.",
   "ltSettingsTitle": "설정",

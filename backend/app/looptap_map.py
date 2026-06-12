@@ -72,14 +72,21 @@ def build_ladder(name: str, mode: str, oct: int, count: int = 8) -> List[Rung]:
 
 
 def phrase_octave_shift(midis: Sequence[int], ladder: List[Rung]) -> int:
-    """edit_screen.dart _phraseOctaveShift — whole-octave shift centering the
-    phrase median on the ladder's range."""
-    lst = sorted(midis)
+    """hum_map.dart phraseOctaveShift — whole-octave shift centering the
+    phrase MEAN on the ladder's range.
+
+    Mean, not median: the shift must agree between the engine's notes and the
+    intended melody, and the median is a knife-edge statistic — when the phrase
+    center sits near the ÷12 rounding boundary, a 1-semitone median difference
+    flips the WHOLE phrase by an octave (HumTrans dev: 6% of samples, each one
+    scoring ~0 pitch). The mean moves smoothly with small note differences
+    (dev100 shift agreement 0.94 → 0.96, app_note_f1_t1 0.871 → 0.890)."""
+    lst = list(midis)
     if not lst:
         return 0
-    median = lst[len(lst) // 2]                       # Dart list[length ~/ 2]
+    mean = sum(lst) / len(lst)                        # Dart reduce(+) / length
     center = (ladder[0].midi + ladder[-1].midi) // 2  # Dart (first+last) ~/ 2
-    return _round_dart((center - median) / 12) * 12
+    return _round_dart((center - mean) / 12) * 12
 
 
 def snap_to_ladder(midi: int, ladder: List[Rung]) -> Rung:

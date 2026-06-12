@@ -9,11 +9,11 @@
     },
     "layer2_app": {
       "app_step_f1": 0.5266,
-      "app_note_f1": 0.4542,
-      "app_pitch_acc": 0.8625,
-      "app_pc_acc": 0.8758,
+      "app_note_f1": 0.4869,
+      "app_pitch_acc": 0.9246,
+      "app_pc_acc": 0.9246,
       "app_step_f1_t1": 0.9586,
-      "app_note_f1_t1": 0.864
+      "app_note_f1_t1": 0.8978
     },
     "ceiling": {
       "survival": 0.9989,
@@ -35,11 +35,12 @@
     "min_notes": 3,
     "bpm": null,
     "pitch_model": "pyin",
+    "layers": "both",
     "normalize_key": true,
     "onset_tol": 0.12,
     "offset_tol": 0.18,
     "pitch_tol": 0,
-    "csv": "looptap_eval_dev_v2.csv",
-    "summary_json": "looptap_summary_dev_v2.json"
+    "csv": "looptap_eval_dev.csv",
+    "summary_json": "looptap_summary_dev.json"
   }
 }

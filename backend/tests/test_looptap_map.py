@@ -48,11 +48,19 @@ def test_build_ladder_a_major_bass_octave():
 
 def test_phrase_octave_shift_folds_high_phrase_down():
     ladder = build_ladder("C", "minor", 4, 8)  # 60..72, center 66
-    # median 84 → (66-84)/12 = -1.5 → round-away → -2 → -24
+    # mean 84 → (66-84)/12 = -1.5 → round-away → -2 → -24
     assert phrase_octave_shift([83, 84, 85], ladder) == -24
     # already centered → no shift
     assert phrase_octave_shift([66], ladder) == 0
     assert phrase_octave_shift([], ladder) == 0
+
+
+def test_phrase_octave_shift_uses_mean_not_median():
+    # Median knife-edge regression (HumTrans dev F01_0032_0001_1): median 60
+    # would sit exactly on the 0.5 rounding boundary → +12, but the mean
+    # (61.67) stays clearly on the no-shift side.
+    ladder = build_ladder("C", "minor", 4, 8)  # 60..72, center 66
+    assert phrase_octave_shift([60, 60, 65], ladder) == 0
 
 
 def test_snap_to_ladder():
@@ -119,7 +127,9 @@ def _golden():
             "ladder_midis": [r.midi for r in ladder],
             "octave_shift": [
                 {"midis": m, "out": phrase_octave_shift(m, ladder)}
-                for m in ([60, 62], [83, 84, 85], [40], [66], [])
+                # [60, 60, 65] pins the mean rule (median would flip by +12
+                # on the C-minor ladder — the knife-edge this rule replaced)
+                for m in ([60, 62], [83, 84, 85], [40], [66], [], [60, 60, 65])
             ],
             "snap": [
                 {"midi": x, "out": snap_to_ladder(x, ladder).midi}

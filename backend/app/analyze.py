@@ -60,10 +60,12 @@ HOP = 256
 # Decoder probe / debug surface (Opus integration)
 # ============================================================================
 # Last decode metadata — populated by _load_audio, consumed by analyze_audio()
-# at response-pack time. Module-level is fine because analyze_audio runs
-# under the per-request slot (Semaphore(2) in main.py) so there is no
-# interleaving between concurrent /analyze calls within a single Python
-# function frame.
+# at response-pack time. Module-level is fine because /analyze (main.py) calls
+# analyze_audio() synchronously on the event loop (no thread pool / no
+# semaphore), so within one worker process two /analyze calls never interleave
+# inside this function frame. If analyze_audio is ever moved off the event
+# loop (cf. /autotune's to_thread + Semaphore(2)), this slot must become
+# per-call state first.
 _LAST_DECODE_INFO: Dict[str, Optional[object]] = {}
 
 

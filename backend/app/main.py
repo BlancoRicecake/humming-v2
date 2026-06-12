@@ -9,20 +9,25 @@ Endpoints (one per pipeline boundary):
 """
 from __future__ import annotations
 
+import asyncio
 import base64
+import functools
 import json
 import logging
+import math
 import os
 import re
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+import anyio
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .analyze import analyze_audio, process_vocal
+from . import soundfonts as soundfonts_mod
 from .assistant import run_key_and_assistant
 from .midi_build import notes_to_midi_bytes, tracks_to_midi_bytes
 from . import render as render_mod
@@ -181,6 +186,26 @@ def get_sample(slug: str):
     )
 
 
+# --- runtime soundfont catalog ----------------------------------------------
+# Instruments the app downloads on demand (no app release to add a sound). See
+# app/soundfonts.py for the catalog.json schema + the add-a-sound recipe.
+@app.get("/soundfonts")
+def list_soundfonts() -> List[dict]:
+    return soundfonts_mod.load_catalog()
+
+
+@app.get("/soundfonts/{entry_id}")
+def get_soundfont(entry_id: str):
+    path = soundfonts_mod.entry_file(entry_id)
+    if path is None:
+        raise HTTPException(404, f"unknown soundfont: {entry_id}")
+    return FileResponse(
+        str(path),
+        media_type="audio/x-soundfont",
+        filename=path.name,
+    )
+
+
 # --- analysis + export ------------------------------------------------------
 _analyze_decorators = []
 if limiter is not None:
@@ -240,6 +265,60 @@ async def process_vocal_ep(audio: UploadFile = File(...), denoise: str = Form("1
     except Exception as e:
         logger.exception("process_vocal failed")
         raise HTTPException(500, f"process_vocal failed: {e}")
+    return {
+        "duration": dur,
+        "sample_rate": sr,
+        "peaks": peaks,
+        "audio_b64": base64.b64encode(wav).decode("ascii"),
+    }
+
+
+# Cap concurrent WORLD jobs — each is multi-second CPU-bound work peaking at
+# ~200MB of float64 buffers, run off the event loop via anyio.to_thread.
+_autotune_sem = asyncio.Semaphore(2)
+
+
+@app.post("/autotune")
+@_apply(_analyze_decorators)
+async def autotune_ep(
+    request: Request,
+    audio: UploadFile = File(...),
+    key: str = Form(...),
+    scale: str = Form(...),
+    strength: str = Form("1.0"),
+    retune_ms: str = Form("80"),
+    denoise: str = Form("1"),
+):
+    """보컬 오토튠 — WORLD 보코더로 곡의 키/스케일에 피치 보정 (포먼트 보존).
+    strength 0..1 (보정 강도), retune_ms (보정 속도 시정수). 반환 형식은
+    /process_vocal 과 동일: 보정된 WAV(base64) + 표시용 peaks + duration."""
+    from .autotune import autotune_vocal
+
+    raw = await audio.read()
+    if not raw:
+        raise HTTPException(400, "empty audio upload")
+    # chunked uploads carry no Content-Length, so the middleware can't cap them
+    if len(raw) > _settings.max_body_bytes:
+        raise HTTPException(413, f"body too large (>{_settings.max_body_bytes} bytes)")
+    try:
+        s = min(max(float(strength), 0.0), 1.0)
+        r = min(max(float(retune_ms), 1.0), 1000.0)
+    except ValueError:
+        raise HTTPException(400, "invalid strength/retune_ms")
+    if not math.isfinite(s) or not math.isfinite(r):  # NaN survives min/max clamping
+        raise HTTPException(400, "invalid strength/retune_ms")
+    try:
+        async with _autotune_sem:
+            wav, peaks, dur, sr = await anyio.to_thread.run_sync(functools.partial(
+                autotune_vocal, raw, key, scale,
+                strength=s, retune_ms=r, denoise=(denoise != "0")))
+    except HTTPException:  # decode failures are already 4xx — don't mask as 500
+        raise
+    except ValueError as e:  # unknown tonic/scale, over-long input
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("autotune failed")
+        raise HTTPException(500, f"autotune failed: {e}")
     return {
         "duration": dur,
         "sample_rate": sr,

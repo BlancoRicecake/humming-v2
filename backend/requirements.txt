@@ -7,6 +7,9 @@ numpy>=1.26,<2.1
 scipy>=1.11
 librosa>=0.10.1
 soundfile>=0.12
+# Autotune (/autotune): WORLD vocoder — f0-replacement resynthesis with
+# formant preservation. cp311 manylinux wheels (no compiler needed in Docker).
+pyworld>=0.3.4
 mido>=1.3
 # Optional - SoundFont preview via FluidSynth. Requires libfluidsynth-3.dll
 # (bundled portable build under backend/bin/ is auto-loaded by app.render).

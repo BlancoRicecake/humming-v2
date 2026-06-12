@@ -33,6 +33,19 @@ class LoopAudio {
   // ch0 melody, ch1 bass, ch2 melody-fill (see kTracks in theory.dart).
   final Map<int, int> _programs = {0: 0, 1: 33, 2: 48};
 
+  // Current drum kit (GM bank-128 program, or the hip-hop sentinel). Applied to
+  // ch9; re-asserted in prewarm so the metronome/count-in can't leave it wrong.
+  int _drumKit = 0;
+
+  /// Choose the drum kit for ch9 (GM kit program, or kProgramHipHopKit).
+  Future<void> setDrumKit(int program) async {
+    _drumKit = program;
+    if (!_ready) return;
+    try {
+      await _engine.ensureDrumKit(program);
+    } catch (_) {/* graceful */}
+  }
+
   /// Switch a channel's instrument (GM program). Pre-selects the new program
   /// with a silent note so the next audible note doesn't stall on the swap.
   Future<void> setProgram(int channel, int program) async {
@@ -66,7 +79,7 @@ class LoopAudio {
     await ensure();
     if (!_ready) return;
     try {
-      await _engine.ensureDrumKit(0);
+      await _engine.ensureDrumKit(_drumKit);
       // pre-select every pitched channel's program (silent notes) so the first
       // live note on each voice is instant.
       for (final e in _programs.entries) {
@@ -143,20 +156,17 @@ class LoopAudio {
     });
   }
 
-  /// Metronome click — accent on bar 1 (wood block 76), else 77.
+  /// Metronome click — plays on a dedicated channel (GM wood block) so it never
+  /// disturbs the user's selected drum kit on ch9. Accent on bar 1.
   Future<void> click(bool accent) async {
     await ensure();
-    final pitch = accent ? 76 : 77;
-    await _engine.ensureDrumKit(0);
-    await _engine.noteOn(channel: SynthEngine.drumChannel, pitch: pitch, velocity: accent ? 90 : 64);
-    Timer(const Duration(milliseconds: 120), () {
-      _engine.noteOff(channel: SynthEngine.drumChannel, pitch: pitch);
-    });
+    await _engine.playClick(accent);
   }
 
   // ── recorded vocal playback (audioplayers, plays alongside the SF2 synth) ──
   final AudioPlayer _vocalPlayer = AudioPlayer();
   bool _vocalConfigured = false;
+  String? _preparedPath; // source already loaded — start is just seek+resume
 
   Future<void> _configVocal() async {
     if (_vocalConfigured) return;
@@ -176,12 +186,33 @@ class LoopAudio {
     ));
   }
 
-  /// Start playing the recorded vocal file from its start.
-  Future<void> playVocal(String path, {double vol = 0.85}) async {
+  /// Pre-load the vocal source so [playVocal] starts without the source-load
+  /// latency (call when the section becomes active / the editor opens).
+  Future<void> prepareVocal(String path) async {
     await _configVocal();
     try {
+      await _vocalPlayer.setSource(DeviceFileSource(path));
+      _preparedPath = path;
+    } catch (_) {
+      _preparedPath = null;
+    }
+  }
+
+  /// Start the recorded vocal from t=0. With [loop] (a take trimmed to exactly
+  /// one loop) the player loops natively — no wrap-time seek needed; unaligned
+  /// takes keep ReleaseMode.stop and the caller re-aligns on loop wrap.
+  Future<void> playVocal(String path, {double vol = 0.85, bool loop = false}) async {
+    await _configVocal();
+    try {
+      await _vocalPlayer.setReleaseMode(loop ? ReleaseMode.loop : ReleaseMode.stop);
       await _vocalPlayer.setVolume(vol.clamp(0.0, 1.0));
-      await _vocalPlayer.play(DeviceFileSource(path), volume: vol.clamp(0.0, 1.0));
+      if (_preparedPath == path) {
+        await _vocalPlayer.seek(Duration.zero);
+        await _vocalPlayer.resume();
+      } else {
+        await _vocalPlayer.play(DeviceFileSource(path), volume: vol.clamp(0.0, 1.0));
+        _preparedPath = path;
+      }
     } catch (_) {/* file missing / unsupported — stay silent */}
   }
 

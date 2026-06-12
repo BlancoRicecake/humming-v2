@@ -45,22 +45,53 @@ class DrumNote {
 
 /// One track's content. Pitched/bass/drums use [notes]; vocal uses [clip].
 class TrackData {
-  TrackData({List<PitchNote>? notes, List<DrumNote>? drums, this.clip, this.vocalPath})
-      : pitchNotes = notes ?? [],
+  TrackData({
+    List<PitchNote>? notes,
+    List<DrumNote>? drums,
+    this.clip,
+    this.vocalPath,
+    this.vocalOrigPath,
+    this.vocalAligned = false,
+    this.vocalBpm,
+    this.vocalBars,
+  })  : pitchNotes = notes ?? [],
         drumNotes = drums ?? [];
 
   final List<PitchNote> pitchNotes;
   final List<DrumNote> drumNotes;
-  /// Vocal waveform amplitudes (audio only — no MIDI), or null when empty.
+  /// Vocal waveform peaks (audio only — no MIDI), or null when empty.
   List<double>? clip;
-  /// Path to the recorded vocal audio file (m4a) for playback, or null.
+  /// Recorded vocal file under Documents/looptap/vocals/ — stored as a
+  /// BASENAME (resolve via LoopStorage.resolveVocal). Absolute paths from old
+  /// saves are migrated in [fromJson].
   String? vocalPath;
+  /// Pre-autotune original take (basename), kept for "revert to original".
+  String? vocalOrigPath;
+  /// True when the take was recorded via the loop-aligned modal: starts on the
+  /// downbeat and is trimmed to exactly the section's loop length AT THE
+  /// BPM/BARS IT WAS RECORDED ([vocalBpm]/[vocalBars]).
+  bool vocalAligned;
+  /// Loop context the take was recorded at. A take is only loop-length-exact
+  /// for that bpm/bars combination — null on old saves (treated as unaligned).
+  int? vocalBpm;
+  int? vocalBars;
+
+  /// Whether the take is loop-aligned FOR the given playback context: aligned
+  /// takes are exactly one loop long only at the bpm/bars they were recorded,
+  /// so a later tempo/length change must fall back to unaligned playback
+  /// (seek-on-wrap) or it desyncs cumulatively. Missing context → not aligned.
+  bool vocalIsAligned(int bpm, int bars) =>
+      vocalAligned && vocalBpm == bpm && vocalBars == bars;
 
   TrackData deepCopy() => TrackData(
         notes: pitchNotes.map((n) => n.copyWith()).toList(),
         drums: drumNotes.map((n) => n.copyWith()).toList(),
         clip: clip == null ? null : List<double>.from(clip!),
         vocalPath: vocalPath,
+        vocalOrigPath: vocalOrigPath,
+        vocalAligned: vocalAligned,
+        vocalBpm: vocalBpm,
+        vocalBars: vocalBars,
       );
 
   Map<String, dynamic> toJson() => {
@@ -68,7 +99,15 @@ class TrackData {
         if (drumNotes.isNotEmpty) 'drums': drumNotes.map((n) => n.toJson()).toList(),
         if (clip != null) 'clip': clip,
         if (vocalPath != null) 'vocalPath': vocalPath,
+        if (vocalOrigPath != null) 'vocalOrigPath': vocalOrigPath,
+        if (vocalAligned) 'vocalAligned': true,
+        if (vocalBpm != null) 'vocalBpm': vocalBpm,
+        if (vocalBars != null) 'vocalBars': vocalBars,
       };
+
+  // Legacy saves stored absolute paths, which break when the iOS container
+  // UUID changes — keep only the basename and resolve dynamically.
+  static String? _basename(String? p) => p?.split('/').last.split('\\').last;
 
   static TrackData fromJson(Map<String, dynamic>? j) {
     if (j == null) return TrackData();
@@ -76,7 +115,11 @@ class TrackData {
       notes: (j['notes'] as List?)?.map((e) => PitchNote.fromJson(e as Map<String, dynamic>)).toList(),
       drums: (j['drums'] as List?)?.map((e) => DrumNote.fromJson(e as Map<String, dynamic>)).toList(),
       clip: (j['clip'] as List?)?.map((e) => (e as num).toDouble()).toList(),
-      vocalPath: j['vocalPath'] as String?,
+      vocalPath: _basename(j['vocalPath'] as String?),
+      vocalOrigPath: _basename(j['vocalOrigPath'] as String?),
+      vocalAligned: (j['vocalAligned'] as bool?) ?? false,
+      vocalBpm: (j['vocalBpm'] as num?)?.toInt(),
+      vocalBars: (j['vocalBars'] as num?)?.toInt(),
     );
   }
 }

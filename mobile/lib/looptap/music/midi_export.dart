@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/loop_models.dart';
 import 'instruments.dart';
 import 'song_util.dart';
+import 'soundfont_catalog.dart';
 import 'theory.dart';
 
 const Map<String, int> _drumNote = {
@@ -45,6 +46,7 @@ Uint8List buildMidi(FlatSong flat, int bpm,
     {int melodyProgram = 0,
     int bassProgram = 33,
     int melodyDecProgram = 48,
+    int drumProgram = 0,
     double swing = 0,
     Set<String>? tracks,
     Map<String, double>? vol,
@@ -61,6 +63,11 @@ Uint8List buildMidi(FlatSong flat, int bpm,
   evs.add(_Ev(0, [0xC0, gm(melodyProgram) & 0x7f])); // ch0 melody instrument
   evs.add(_Ev(0, [0xC1, gm(bassProgram) & 0x7f])); // ch1 bass instrument
   evs.add(_Ev(0, [0xC2, gm(melodyDecProgram) & 0x7f])); // ch2 melody-fill instrument
+  // ch9 drum kit (GM bank-128 program). Skip program 0 (Standard, the default) so
+  // the plain .mid export stays byte-identical when no kit is chosen.
+  if (drumProgram > 0 && drumProgram <= 127) {
+    evs.add(_Ev(0, [0xC9, drumProgram & 0x7f]));
+  }
 
   // Per-channel volume (CC7) from the mixer — only when rendering audio.
   if (vol != null) {
@@ -158,16 +165,25 @@ Future<File> exportMidiSong(
   int melodyProgram = 0,
   int bassProgram = 33,
   int melodyDecProgram = 48,
+  int drumProgram = 0,
   List<TrackRef> extras = const [],
   Map<String, int> instruments = const {},
 }) async {
   final flat = flattenSong(sections);
+  // A .mid can't carry a custom soundfont — fall back to the nearest GM voice:
+  // hip-hop kit → its GM kit; runtime-catalog slots → the entry's midi_fallback.
+  int gmOf(int p) => isDynamicSlot(p) ? SoundfontCatalog.instance.midiFallback(p) : p;
+  final gmKit = drumProgram == kProgramHipHopKit
+      ? kProgramHipHopKitMidiFallback
+      : gmOf(drumProgram);
+  final gmInstruments = {for (final e in instruments.entries) e.key: gmOf(e.value)};
   final bytes = buildMidi(flat, bpm,
-      melodyProgram: melodyProgram,
-      bassProgram: bassProgram,
-      melodyDecProgram: melodyDecProgram,
+      melodyProgram: gmOf(melodyProgram),
+      bassProgram: gmOf(bassProgram),
+      melodyDecProgram: gmOf(melodyDecProgram),
+      drumProgram: gmKit,
       extras: extras,
-      extraInstruments: instruments);
+      extraInstruments: gmInstruments);
   final dir = await getApplicationDocumentsDirectory();
   final folder = Directory('${dir.path}/looptap/exports');
   if (!await folder.exists()) await folder.create(recursive: true);

@@ -17,26 +17,48 @@ class EngineConfig {
 }
 
 class AssistResult {
-  AssistResult(this.notes, this.detectedKey, this.assistAppliedCount, this.keyCandidates);
+  AssistResult(
+    this.notes,
+    this.detectedKey,
+    this.assistAppliedCount,
+    this.keyCandidates,
+  );
   final List<Note> notes;
   final DetectedKey? detectedKey;
   final int assistAppliedCount;
   final List<KeyCandidate> keyCandidates;
 }
 
+class EngineApiException implements Exception {
+  const EngineApiException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class EngineApi {
   EngineApi({String? baseUrl})
-      : _dio = Dio(BaseOptions(
+    : _dio = Dio(
+        BaseOptions(
           baseUrl: baseUrl ?? EngineConfig.baseUrl,
           connectTimeout: const Duration(seconds: 8),
+          sendTimeout: const Duration(seconds: 30),
           receiveTimeout: const Duration(seconds: 90),
-        )) {
+        ),
+      ) {
     debugPrint('[engine] baseUrl=${_dio.options.baseUrl}');
-    _dio.interceptors.add(LogInterceptor(
-      request: true, requestHeader: false, requestBody: false,
-      responseHeader: false, responseBody: false, error: true,
-      logPrint: (o) => debugPrint('[dio] $o'),
-    ));
+    _dio.interceptors.add(
+      LogInterceptor(
+        request: true,
+        requestHeader: false,
+        requestBody: false,
+        responseHeader: false,
+        responseBody: false,
+        error: true,
+        logPrint: (o) => debugPrint('[dio] $o'),
+      ),
+    );
   }
   final Dio _dio;
 
@@ -52,9 +74,33 @@ class EngineApi {
     }
   }
 
+  /// 런타임 사운드폰트 카탈로그 매니페스트 (앱 재출시 없이 추가되는 악기들).
+  /// 호출부는 SoundfontEntry 로 매핑 — 여기서는 raw map 리스트만 반환해
+  /// engine_api 가 looptap 모델에 의존하지 않게 한다.
+  Future<List<T>> _catalogRaw<T>(T Function(Map<String, dynamic>) map) async {
+    final r = await _dio.get<List<dynamic>>('/soundfonts');
+    return (r.data ?? []).map((e) => map((e as Map).cast<String, dynamic>())).toList();
+  }
+
+  /// 사운드폰트 카탈로그 — [fromJson] 으로 각 행을 매핑해 반환.
+  Future<List<T>> soundfontCatalogMapped<T>(T Function(Map<String, dynamic>) fromJson) =>
+      _catalogRaw(fromJson);
+
+  /// 사운드폰트 SF2 파일 다운로드 (bytes).
+  Future<Uint8List> downloadSoundfont(String id) async {
+    final r = await _dio.get<List<int>>(
+      '/soundfonts/$id',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(r.data!);
+  }
+
   /// 녹음 파일 경로 → 분석 결과(notes, 추천 key, 보정 개수 …).
   /// 컨테이너는 Opus(.caf/.ogg) 또는 AAC(.m4a). 서버 ffmpeg pipe 가 magic bytes 로 판별 — filename 무시.
-  Future<AnalyzeResponse> analyze(String wavPath, AnalyzeOptions options) async {
+  Future<AnalyzeResponse> analyze(
+    String wavPath,
+    AnalyzeOptions options,
+  ) async {
     final form = FormData.fromMap({
       'audio': await MultipartFile.fromFile(wavPath, filename: 'input.opus'),
       'options': jsonEncode(options.toJson()),
@@ -65,39 +111,104 @@ class EngineApi {
 
   /// 보컬 — 악기 변환 없이 목소리 그대로. 가벼운 정리된 WAV bytes + 표시용 파형 peaks + 길이.
   /// 입력 컨테이너는 Opus(.caf/.ogg)/AAC(.m4a). 서버는 magic bytes 로 판별.
-  Future<({Uint8List wav, List<double> peaks, double duration})> processVocal(String wavPath) async {
+  Future<({Uint8List wav, List<double> peaks, double duration})> processVocal(
+    String wavPath,
+  ) async {
     final form = FormData.fromMap({
       'audio': await MultipartFile.fromFile(wavPath, filename: 'vocal.opus'),
       'denoise': '1',
     });
-    final r = await _dio.post<Map<String, dynamic>>('/process_vocal', data: form);
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/process_vocal',
+      data: form,
+    );
     final j = r.data!;
     return (
       wav: base64Decode(j['audio_b64'] as String),
-      peaks: ((j['peaks'] ?? []) as List).map((e) => (e as num).toDouble()).toList(),
+      peaks:
+          ((j['peaks'] ?? []) as List)
+              .map((e) => (e as num).toDouble())
+              .toList(),
       duration: (j['duration'] as num?)?.toDouble() ?? 0,
     );
   }
 
+  /// 보컬 오토튠 — WORLD 보코더로 곡의 키/스케일에 피치 보정 (백엔드 /autotune).
+  /// 반환 형식은 [processVocal] 과 동일: 보정된 WAV bytes + 표시용 peaks + 길이.
+  Future<({Uint8List wav, List<double> peaks, double duration})> autotuneVocal(
+    String path, {
+    required String keyTonic,
+    required String scale,
+    double strength = 1.0,
+    double retuneMs = 80,
+  }) async {
+    final form = FormData.fromMap({
+      'audio': await MultipartFile.fromFile(path, filename: 'vocal.wav'),
+      'key': keyTonic,
+      'scale': scale,
+      'strength': '$strength',
+      'retune_ms': '$retuneMs',
+      'denoise': '1',
+    });
+    late final Response<Map<String, dynamic>> r;
+    try {
+      r = await _dio.post<Map<String, dynamic>>('/autotune', data: form);
+    } on DioException catch (e) {
+      throw EngineApiException(_errorDetail(e) ?? 'Autotune failed');
+    }
+    final j = r.data!;
+    return (
+      wav: base64Decode(j['audio_b64'] as String),
+      peaks:
+          ((j['peaks'] ?? []) as List)
+              .map((e) => (e as num).toDouble())
+              .toList(),
+      duration: (j['duration'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  String? _errorDetail(DioException e) {
+    final data = e.response?.data;
+    if (data is Map && data['detail'] != null) return '${data['detail']}';
+    if (data is String && data.trim().isNotEmpty) return data;
+    return e.message;
+  }
+
   /// 이미 분석된 notes 에 키/어시스턴트만 빠르게 재적용 (pYIN 재실행 없음).
   Future<AssistResult> assist(List<Note> notes, AnalyzeOptions options) async {
-    final r = await _dio.post<Map<String, dynamic>>('/assist', data: {
-      'notes': notes.map((n) => n.toJson()).toList(),
-      'options': options.toJson(),
-    });
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/assist',
+      data: {
+        'notes': notes.map((n) => n.toJson()).toList(),
+        'options': options.toJson(),
+      },
+    );
     final j = r.data!;
     return AssistResult(
-      ((j['notes'] ?? []) as List).map((e) => Note.fromJson(e as Map<String, dynamic>)).toList(),
-      j['detected_key'] == null ? null : DetectedKey.fromJson(j['detected_key'] as Map<String, dynamic>),
+      ((j['notes'] ?? []) as List)
+          .map((e) => Note.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      j['detected_key'] == null
+          ? null
+          : DetectedKey.fromJson(j['detected_key'] as Map<String, dynamic>),
       (j['assist_applied_count'] as num?)?.toInt() ?? 0,
-      ((j['key_candidates'] ?? []) as List).map((e) => KeyCandidate.fromJson(e as Map<String, dynamic>)).toList(),
+      ((j['key_candidates'] ?? []) as List)
+          .map((e) => KeyCandidate.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
   /// 단음 미리듣기용 — pitch 1개를 짧은 길이(기본 0.5s)로 렌더해 WAV bytes 반환.
   /// @deprecated 6-3 이후 온디바이스 합성(`SynthEngine`)으로 대체됨. 호환을 위해 잠시 유지.
-  @Deprecated('Use SynthEngine().playNote — backend round-trip removed in task 6-3')
-  Future<Uint8List> previewNote(int pitch, {int program = 0, double duration = 0.5, int velocity = 100}) async {
+  @Deprecated(
+    'Use SynthEngine().playNote — backend round-trip removed in task 6-3',
+  )
+  Future<Uint8List> previewNote(
+    int pitch, {
+    int program = 0,
+    double duration = 0.5,
+    int velocity = 100,
+  }) async {
     final note = Note(
       start: 0,
       end: duration,
@@ -126,12 +237,17 @@ class EngineApi {
   /// 처리하며 (커밋 `6de9bec`), 모바일 코드에서 살아있는 호출처는 사실상
   /// 없음 (`previewNote` 가 호환 보조용으로만 호출). 호환 + 회귀 검증용으로
   /// 보존하나 신규 호출처 금지.
-  @Deprecated('On-device SynthEngine replaces /render_audio playback (task 6-6). '
-      'Kept for backward-compat only — do not add new call sites.')
+  @Deprecated(
+    'On-device SynthEngine replaces /render_audio playback (task 6-6). '
+    'Kept for backward-compat only — do not add new call sites.',
+  )
   Future<Uint8List> renderAudio(List<Note> notes, {int program = 0}) async {
     final r = await _dio.post<List<int>>(
       '/render_audio',
-      data: {'notes': notes.map((n) => n.toJson()).toList(), 'program': program},
+      data: {
+        'notes': notes.map((n) => n.toJson()).toList(),
+        'program': program,
+      },
       options: Options(responseType: ResponseType.bytes),
     );
     return Uint8List.fromList(r.data!);
@@ -144,13 +260,21 @@ class EngineApi {
   /// (커밋 `6de9bec`). 현재 살아있는 호출처는 `ProjectStore.exportMixWav()`
   /// → `sheets.dart` 의 `_exportFile(midi: false)` 뿐.
   /// 향후 export 도 온디바이스 PCM bounce 로 옮기면 deprecate 가능.
-  Future<Uint8List> renderMix(List<({List<Note> notes, int program})> tracks) async {
+  Future<Uint8List> renderMix(
+    List<({List<Note> notes, int program})> tracks,
+  ) async {
     final r = await _dio.post<List<int>>(
       '/render_mix',
       data: {
-        'tracks': tracks
-            .map((t) => {'notes': t.notes.map((n) => n.toJson()).toList(), 'program': t.program})
-            .toList(),
+        'tracks':
+            tracks
+                .map(
+                  (t) => {
+                    'notes': t.notes.map((n) => n.toJson()).toList(),
+                    'program': t.program,
+                  },
+                )
+                .toList(),
       },
       options: Options(responseType: ResponseType.bytes),
     );
@@ -158,10 +282,18 @@ class EngineApi {
   }
 
   /// notes → .mid bytes (단일 트랙).
-  Future<Uint8List> exportMidi(List<Note> notes, {int program = 0, double tempoBpm = 120}) async {
+  Future<Uint8List> exportMidi(
+    List<Note> notes, {
+    int program = 0,
+    double tempoBpm = 120,
+  }) async {
     final r = await _dio.post<List<int>>(
       '/export_midi',
-      data: {'notes': notes.map((n) => n.toJson()).toList(), 'program': program, 'tempo_bpm': tempoBpm},
+      data: {
+        'notes': notes.map((n) => n.toJson()).toList(),
+        'program': program,
+        'tempo_bpm': tempoBpm,
+      },
       options: Options(responseType: ResponseType.bytes),
     );
     return Uint8List.fromList(r.data!);
@@ -176,13 +308,16 @@ class EngineApi {
       '/export_midi',
       data: {
         'tempo_bpm': tempoBpm,
-        'tracks': tracks
-            .map((t) => {
-                  'notes': t.notes.map((n) => n.toJson()).toList(),
-                  'program': t.program,
-                  'channel': t.channel,
-                })
-            .toList(),
+        'tracks':
+            tracks
+                .map(
+                  (t) => {
+                    'notes': t.notes.map((n) => n.toJson()).toList(),
+                    'program': t.program,
+                    'channel': t.channel,
+                  },
+                )
+                .toList(),
       },
       options: Options(responseType: ResponseType.bytes),
     );

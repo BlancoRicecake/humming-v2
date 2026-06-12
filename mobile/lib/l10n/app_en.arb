@@ -500,6 +500,8 @@
   "ltExportShareSub": "Send to another app",
   "ltExportSaved": "Saved {filename}",
   "@ltExportSaved": {"placeholders": {"filename": {"type": "String"}}},
+  "ltExportVocalSkipped": "{count, plural, one{1 older-format vocal wasn't included in the mix} other{{count} older-format vocals weren't included in the mix}}",
+  "@ltExportVocalSkipped": {"placeholders": {"count": {"type": "int"}}},
   "ltExportFailed": "MIDI export failed",
   "ltExportFooter": "Sections render in order (with their repeats). MIDI opens in any DAW. WAV & stems are audio rendered through the SoundFont.",
   "ltSettingsTitle": "Settings",

@@ -12,6 +12,7 @@ import '../../main.dart' show engineApi;
 import '../../services/auth_service.dart';
 import '../../services/iap_service.dart';
 import '../models/loop_models.dart';
+import '../music/soundfont_catalog.dart';
 import '../music/theory.dart';
 import 'loop_storage.dart';
 
@@ -49,6 +50,11 @@ class LoopStore extends ChangeNotifier {
   Future<void> bootstrap() async {
     // IAP verify dio 주입 + Bearer 인터셉터는 main_looptap.dart 가 init() 이전에
     // 이미 처리. 여기서는 song / auth / iap 상태만 hydrate.
+    await LoopStorage.ensureDirs(); // warm Documents cache for vocal basename resolution
+    // Runtime soundfont catalog: warm the cached manifest (instant, offline-ok)
+    // then refresh from the backend in the background.
+    await SoundfontCatalog.instance.warm();
+    unawaited(SoundfontCatalog.instance.refresh());
     final loaded = await LoopStorage.load();
     _songs
       ..clear()
@@ -250,8 +256,15 @@ class LoopStore extends ChangeNotifier {
   Future<void> delete(String id) async {
     _songs.removeWhere((s) => s.id == id);
     await _persist();
+    // reference-based sweep (NOT prefix delete): a duplicated song shares the
+    // source song's vocal files, so only drop files nothing references.
+    await LoopStorage.sweepVocals(_songs);
     notifyListeners();
   }
+
+  /// Drop vocal files no song references anymore. Call when an editor session
+  /// ends (its undo stack — the last holder of stale paths — is gone).
+  Future<void> sweepVocals() => LoopStorage.sweepVocals(_songs);
 
   /// 새 ID 로 deep-copy + " (copy)" suffix. 새 노래는 grid 맨 앞으로.
   Future<Song> duplicate(Song src) async {

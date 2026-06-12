@@ -1,122 +1,36 @@
-// LoopTap — Vocal recorder (audio only, no MIDI). README §5.
-// Big red record ring + a live/"recorded" pink waveform strip. Real mic capture
-// via the `record` package; the waveform amplitudes are stored as the clip.
-import 'dart:async';
-
+// LoopTap — Vocal track surface (audio only, no MIDI). README §5.
+// Big red record ring + the recorded take's pink peak strip. Capture itself
+// lives in the loop-aligned record modal (sheets/vocal_record_modal.dart) —
+// the single recording path: count-in, backing loop, WAV, downbeat alignment.
+// This surface just shows the committed clip and triggers the modal.
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:record/record.dart';
 
-import '../../../audio/container.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 
-class VocalSurface extends StatefulWidget {
-  const VocalSurface({super.key, required this.clip, required this.onCommit, required this.onClear});
+class VocalSurface extends StatelessWidget {
+  const VocalSurface({
+    super.key,
+    required this.clip,
+    required this.onRecord,
+    required this.onClear,
+    this.onAutotune,
+    this.onRevert,
+  });
 
+  /// Peaks of the committed take (null when nothing is recorded).
   final List<double>? clip;
-  /// (waveform amplitudes, recorded audio file path) — path may be null.
-  final void Function(List<double> wf, String? path) onCommit;
+  /// Opens the loop-aligned record modal.
+  final VoidCallback onRecord;
   final VoidCallback onClear;
-
-  @override
-  State<VocalSurface> createState() => _VocalSurfaceState();
-}
-
-class _VocalSurfaceState extends State<VocalSurface> {
-  final AudioRecorder _rec = AudioRecorder();
-  StreamSubscription<Amplitude>? _ampSub;
-  Timer? _msTimer;
-
-  bool _recording = false;
-  int _ms = 0;
-  List<double> _levels = List.filled(64, 0.05);
-  final List<double> _captured = [];
-
-  @override
-  void dispose() {
-    _ampSub?.cancel();
-    _msTimer?.cancel();
-    _rec.dispose();
-    super.dispose();
-  }
-
-  double _norm(double dbfs) => ((dbfs + 50) / 50).clamp(0.05, 1.0);
-
-  Future<void> _toggle() async {
-    if (_recording) {
-      await _stop();
-    } else {
-      await _start();
-    }
-  }
-
-  Future<void> _start() async {
-    bool ok = false;
-    try {
-      ok = await _rec.hasPermission();
-    } catch (_) {
-      ok = false;
-    }
-    if (!ok) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Microphone permission needed'), duration: Duration(milliseconds: 1200)),
-        );
-      }
-      return;
-    }
-    try {
-      final dir = await getTemporaryDirectory();
-      // Opus + 플랫폼별 컨테이너(.caf/.ogg) — AAC .m4a 의 finalize race 회피.
-      // (자세한 사유: lib/audio/container.dart)
-      final path =
-          '${dir.path}/humtrack_vocal_${DateTime.now().millisecondsSinceEpoch}${opusContainerExt()}';
-      await _rec.start(
-        const RecordConfig(encoder: AudioEncoder.opus, sampleRate: 44100, numChannels: 1),
-        path: path,
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Recording unavailable: $e'), duration: const Duration(milliseconds: 1400)),
-        );
-      }
-      return;
-    }
-    _captured.clear();
-    setState(() {
-      _recording = true;
-      _ms = 0;
-      _levels = List.filled(64, 0.05);
-    });
-    _msTimer = Timer.periodic(const Duration(milliseconds: 100), (_) => setState(() => _ms += 100));
-    _ampSub = _rec.onAmplitudeChanged(const Duration(milliseconds: 70)).listen((a) {
-      final v = _norm(a.current);
-      _captured.add(v);
-      setState(() => _levels = [..._levels.sublist(1), v]);
-    });
-  }
-
-  Future<void> _stop() async {
-    _ampSub?.cancel();
-    _msTimer?.cancel();
-    String? path;
-    try {
-      path = await _rec.stop(); // record returns the saved file path
-    } catch (_) {}
-    setState(() => _recording = false);
-    final wf = _captured.isNotEmpty
-        ? List<double>.from(_captured)
-        : List<double>.generate(48, (i) => 0.2 + (i % 7) / 10);
-    widget.onCommit(wf, path);
-  }
+  /// Opens the autotune presets (shown when a clip exists).
+  final VoidCallback? onAutotune;
+  /// Swaps back to the pre-autotune take (shown when one exists).
+  final VoidCallback? onRevert;
 
   @override
   Widget build(BuildContext context) {
-    final clip = widget.clip;
-    final wave = _recording ? _levels : (clip != null && clip.isNotEmpty ? clip : List.filled(64, 0.05));
-    final time = '${_ms ~/ 60000}:${((_ms ~/ 1000) % 60).toString().padLeft(2, '0')}';
+    final wave = (clip != null && clip!.isNotEmpty) ? clip! : List.filled(64, 0.05);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
@@ -126,7 +40,7 @@ class _VocalSurfaceState extends State<VocalSurface> {
             mainAxisSize: MainAxisSize.min,
             children: [
               GestureDetector(
-                onTap: _toggle,
+                onTap: onRecord,
                 child: Container(
                   width: 84,
                   height: 84,
@@ -135,22 +49,18 @@ class _VocalSurfaceState extends State<VocalSurface> {
                     border: Border.all(color: LT.danger, width: 3),
                   ),
                   child: Center(
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: _recording ? 30 : 62,
-                      height: _recording ? 30 : 62,
-                      decoration: BoxDecoration(
-                        color: LT.danger,
-                        borderRadius: BorderRadius.circular(_recording ? 7 : 999),
-                      ),
+                    child: Container(
+                      width: 62,
+                      height: 62,
+                      decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                _recording ? time : (clip != null ? 'Recorded' : 'Tap to record'),
-                style: LTType.mono(size: 13, weight: FontWeight.w700, color: _recording ? LT.danger : LT.t2),
+                clip != null ? 'Recorded' : 'Tap to record',
+                style: LTType.mono(size: 13, weight: FontWeight.w700, color: LT.t2),
               ),
             ],
           ),
@@ -173,7 +83,7 @@ class _VocalSurfaceState extends State<VocalSurface> {
                         height: (l * 80).clamp(4, 80),
                         margin: const EdgeInsets.symmetric(horizontal: 0.75),
                         decoration: BoxDecoration(
-                          color: (_recording || clip != null) ? LT.pink : LT.surface3,
+                          color: clip != null ? LT.pink : LT.surface3,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -182,9 +92,21 @@ class _VocalSurfaceState extends State<VocalSurface> {
               ),
             ),
           ),
-          if (clip != null && !_recording) ...[
+          if (clip != null) ...[
             const SizedBox(width: 24),
-            IconBtn(icon: LtIcons.delete, tooltip: 'Clear', size: 40, onTap: widget.onClear),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (onAutotune != null)
+                  IconBtn(icon: LtIcons.autoFix, tooltip: 'Autotune', size: 40, onTap: onAutotune!),
+                if (onRevert != null) ...[
+                  const SizedBox(height: 8),
+                  IconBtn(icon: LtIcons.restore, tooltip: 'Original', size: 40, onTap: onRevert!),
+                ],
+                if (onAutotune != null || onRevert != null) const SizedBox(height: 8),
+                IconBtn(icon: LtIcons.delete, tooltip: 'Clear', size: 40, onTap: onClear),
+              ],
+            ),
           ],
         ],
       ),

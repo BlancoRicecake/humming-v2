@@ -22,6 +22,7 @@ Future<void> showExportDrawer(
   int melodyProgram = 0,
   int bassProgram = 33,
   int melodyDecProgram = 48,
+  int drumProgram = 0,
   List<TrackRef> extras = const [],
   Map<String, int> instruments = const {},
 }) {
@@ -42,6 +43,7 @@ Future<void> showExportDrawer(
         melodyProgram: melodyProgram,
         bassProgram: bassProgram,
         melodyDecProgram: melodyDecProgram,
+        drumProgram: drumProgram,
         extras: extras,
         instruments: instruments,
       ),
@@ -64,6 +66,7 @@ class _ExportDrawer extends StatefulWidget {
     required this.melodyProgram,
     required this.bassProgram,
     required this.melodyDecProgram,
+    required this.drumProgram,
     required this.extras,
     required this.instruments,
   });
@@ -75,6 +78,7 @@ class _ExportDrawer extends StatefulWidget {
   final int melodyProgram;
   final int bassProgram;
   final int melodyDecProgram;
+  final int drumProgram;
   final List<TrackRef> extras;
   final Map<String, int> instruments;
 
@@ -109,14 +113,20 @@ class _ExportDrawerState extends State<_ExportDrawer> {
     if (_busy != null) return;
     setState(() => _busy = 'wav');
     try {
-      final file = await exportWavSong(widget.sections, widget.bpm, widget.swing, widget.vol, widget.title,
+      final res = await exportWavSong(widget.sections, widget.bpm, widget.swing, widget.vol, widget.title,
           melodyProgram: widget.melodyProgram,
           bassProgram: widget.bassProgram,
           melodyDecProgram: widget.melodyDecProgram,
+          drumProgram: widget.drumProgram,
           extras: widget.extras,
           instruments: widget.instruments);
+      final file = res.file;
       await _share([XFile(file.path, mimeType: 'audio/wav')], '${widget.title}.wav');
-      if (mounted) _note(L10n.of(context).ltExportSaved(file.uri.pathSegments.last));
+      if (mounted) {
+        _note(res.skippedVocals > 0
+            ? L10n.of(context).ltExportVocalSkipped(res.skippedVocals)
+            : L10n.of(context).ltExportSaved(file.uri.pathSegments.last));
+      }
     } catch (e, st) {
       debugPrint('[export] wav failed: $e\n$st');
       if (mounted) _note(L10n.of(context).ltExportFailed, ok: false);
@@ -132,6 +142,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
           melodyProgram: widget.melodyProgram,
           bassProgram: widget.bassProgram,
           melodyDecProgram: widget.melodyDecProgram,
+          drumProgram: widget.drumProgram,
           extras: widget.extras,
           instruments: widget.instruments);
       if (files.isEmpty) {
@@ -160,6 +171,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
         melodyProgram: widget.melodyProgram,
         bassProgram: widget.bassProgram,
         melodyDecProgram: widget.melodyDecProgram,
+        drumProgram: widget.drumProgram,
         extras: widget.extras,
         instruments: widget.instruments,
       );

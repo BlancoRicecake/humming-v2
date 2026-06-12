@@ -1,3 +1,4 @@
+import AVFoundation
 import Flutter
 import UIKit
 
@@ -12,5 +13,66 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    // humming/audio — output-route queries (mirrors Android MainActivity.kt).
+    // "wired" enables live autotune monitoring; "bluetooth" only allows the
+    // backing loop during recording; "none" mutes the backing (speaker bleed).
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "humming.audio") {
+      let channel = FlutterMethodChannel(name: "humming/audio", binaryMessenger: registrar.messenger())
+      channel.setMethodCallHandler { call, result in
+        switch call.method {
+        case "hasHeadset":
+          result(AppDelegate.headsetRoute() != "none")
+        case "headsetRoute":
+          result(AppDelegate.headsetRoute())
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+    }
+
+    // humming/autotune_monitor — live pitch-corrected monitoring while
+    // recording (wired headphones only; see AutotuneMonitor.swift).
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "humming.autotune_monitor") {
+      let channel = FlutterMethodChannel(name: "humming/autotune_monitor", binaryMessenger: registrar.messenger())
+      // the monitor pushes "monitorStopped" back over this channel when it
+      // shuts itself down (wired headphones unplugged mid-recording)
+      AutotuneMonitor.shared.channel = channel
+      channel.setMethodCallHandler { call, result in
+        switch call.method {
+        case "start":
+          let args = call.arguments as? [String: Any] ?? [:]
+          let ok = AutotuneMonitor.shared.start(
+            key: args["key"] as? String ?? "A",
+            scale: args["scale"] as? String ?? "minor",
+            strength: args["strength"] as? Double ?? 1.0
+          )
+          result(ok)
+        case "stop":
+          AutotuneMonitor.shared.stop()
+          result(true)
+        case "releaseSession":
+          AutotuneMonitor.shared.releaseSession()
+          result(true)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+    }
+  }
+
+  private static func headsetRoute() -> String {
+    let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
+    for o in outputs {
+      switch o.portType {
+      case .headphones, .usbAudio:
+        return "wired"
+      case .bluetoothA2DP, .bluetoothLE, .bluetoothHFP:
+        return "bluetooth"
+      default:
+        continue
+      }
+    }
+    return "none"
   }
 }
