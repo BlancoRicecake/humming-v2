@@ -227,6 +227,11 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
           encoder: AudioEncoder.wav,
           sampleRate: _sr,
           numChannels: 1,
+          // Don't let the recorder grab Bluetooth SCO / flip the audio route:
+          // on Android that disconnects flutter_midi_pro's Oboe output stream
+          // and it doesn't recover, so synth sound (instrument preview, loop,
+          // drums) goes dead after the first recording.
+          androidConfig: AndroidRecordConfig(manageBluetooth: false),
         ),
         path: path,
       );

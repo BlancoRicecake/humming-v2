@@ -33,18 +33,27 @@ class LoopAudio {
   // ch0 melody, ch1 bass, ch2 melody-fill (see kTracks in theory.dart).
   final Map<int, int> _programs = {0: 0, 1: 33, 2: 48};
 
-  // Current drum kit (GM bank-128 program, or the hip-hop sentinel). Applied to
-  // ch9; re-asserted in prewarm so the metronome/count-in can't leave it wrong.
-  int _drumKit = 0;
+  /// The default (base drums + beat-fill) percussion channel.
+  static const int drumChannel = SynthEngine.drumChannel;
 
-  /// Choose the drum kit for ch9 (GM kit program, or kProgramHipHopKit).
-  Future<void> setDrumKit(int program) async {
-    _drumKit = program;
+  // Per-channel drum kit (channel -> GM bank-128 program / hip-hop / catalog
+  // slot). ch9 is the base drums+beat-fill kit; added drum tracks each have
+  // their own channel + kit. Re-asserted in prewarm so the metronome/count-in
+  // can't leave any of them wrong.
+  final Map<int, int> _drumKits = {drumChannel: 0};
+
+  /// Choose the drum kit for a specific channel (base drums use [drumChannel];
+  /// added drum tracks use their allocated channel).
+  Future<void> setDrumKitOn(int channel, int program) async {
+    _drumKits[channel] = program;
     if (!_ready) return;
     try {
-      await _engine.ensureDrumKit(program);
+      await _engine.ensureDrumKitOn(channel, program);
     } catch (_) {/* graceful */}
   }
+
+  /// Base drum channel convenience.
+  Future<void> setDrumKit(int program) => setDrumKitOn(drumChannel, program);
 
   /// Switch a channel's instrument (GM program). Pre-selects the new program
   /// with a silent note so the next audible note doesn't stall on the swap.
@@ -79,7 +88,10 @@ class LoopAudio {
     await ensure();
     if (!_ready) return;
     try {
-      await _engine.ensureDrumKit(_drumKit);
+      // re-assert every drum channel's kit (base ch9 + any added drum tracks)
+      for (final e in _drumKits.entries) {
+        await _engine.ensureDrumKitOn(e.key, e.value);
+      }
       // pre-select every pitched channel's program (silent notes) so the first
       // live note on each voice is instant.
       for (final e in _programs.entries) {
@@ -135,24 +147,25 @@ class LoopAudio {
     fire();
   }
 
-  /// Drum hit (tap feedback + loop playback). Fire-and-forget on the hot path:
-  /// once warm, dispatch noteOn immediately without awaiting the continuation.
-  void playDrum(String kind, {double vol = 1}) {
+  /// Drum hit (tap feedback + loop playback) on [channel] — base drums use
+  /// [drumChannel]; an added drum track passes its own channel so it sounds
+  /// through that track's kit. Fire-and-forget on the hot path.
+  void playDrum(String kind, {int channel = drumChannel, double vol = 1}) {
     final pitch = kDrumNote[kind];
     if (pitch == null) return;
     if (!_ready) {
       // cold path: warm up then hit (first tap only)
-      prewarm().then((_) => _fireDrum(pitch, vol));
+      prewarm().then((_) => _fireDrum(channel, pitch, vol));
       return;
     }
-    _fireDrum(pitch, vol);
+    _fireDrum(channel, pitch, vol);
   }
 
-  void _fireDrum(int pitch, double vol) {
-    _engine.noteOn(channel: SynthEngine.drumChannel, pitch: pitch, velocity: _vel(vol));
+  void _fireDrum(int channel, int pitch, double vol) {
+    _engine.noteOn(channel: channel, pitch: pitch, velocity: _vel(vol));
     // GM percussion samples are one-shot; schedule a tidy note-off.
     Timer(const Duration(milliseconds: 220), () {
-      _engine.noteOff(channel: SynthEngine.drumChannel, pitch: pitch);
+      _engine.noteOff(channel: channel, pitch: pitch);
     });
   }
 

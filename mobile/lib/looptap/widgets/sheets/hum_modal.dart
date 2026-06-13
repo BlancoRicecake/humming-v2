@@ -145,7 +145,14 @@ class _HumModalState extends State<_HumModal> {
       final path =
           '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${opusContainerExt()}';
       await _rec.start(
-        const RecordConfig(encoder: AudioEncoder.opus, sampleRate: 16000, numChannels: 1),
+        const RecordConfig(
+          encoder: AudioEncoder.opus,
+          sampleRate: 16000,
+          numChannels: 1,
+          // see vocal_record_modal: keep the recorder off Bluetooth SCO so it
+          // doesn't disconnect the synth's Oboe output stream on Android.
+          androidConfig: AndroidRecordConfig(manageBluetooth: false),
+        ),
         path: path,
       );
       // Start the loop backing on the downbeat, right after recording opens, so

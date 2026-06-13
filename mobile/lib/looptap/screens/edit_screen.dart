@@ -175,8 +175,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     return _activeId;
   }
 
-  String get _instrumentTargetId =>
-      _meta.kind == TrackKind.drums ? 'drums' : _activeId;
+  // Each track — including every drum track (base drums, beat-fill, and added
+  // instances) — owns its own instrument/kit, keyed by its own id.
+  String get _instrumentTargetId => _activeId;
 
   /// Track metas in the section's display order (drag-reordered). Ids not listed
   /// in [Section.order] fall back to natural order at the end.
@@ -310,7 +311,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       for (final t in kPitchedTracks)
         t.channel: _instruments[t.id] ?? t.defaultProgram,
     });
-    _audio.setDrumKit(_instruments['drums'] ?? kDefaultDrumKit);
+    _applyDrumKits();
     _audio.prewarm();
     // Pre-download any runtime-catalog instruments this song uses so live
     // playback + export resolve the real SF2 (else they fall back to GM until
@@ -439,7 +440,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       } else if (tk.kind == TrackKind.drums) {
         for (final n in data.drumNotes.where((n) => n.step == step)) {
           if (_freshThisLoop.contains('${tk.id}:${n.kind}:$step')) continue;
-          _audio.playDrum(n.kind, vol: _vol[tk.id] ?? 1);
+          _audio.playDrum(n.kind, channel: tk.channel, vol: _vol[tk.id] ?? 1);
         }
       }
     }
@@ -491,6 +492,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       _activeId = id;
       _inputModes[id] = 'pads';
     });
+    // a new drum track needs its kit selected on its freshly-allocated channel
+    if (trackById(type).kind == TrackKind.drums) {
+      final m = _editMetas.firstWhere((t) => t.id == id);
+      _audio.setDrumKitOn(m.channel, _instruments[id] ?? kDefaultDrumKit);
+    }
   }
 
   Future<void> _openAddTrack() async {
@@ -843,8 +849,21 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // ── editing ───────────────────────────────────────────────────────
   int _quantStep() => _playStep.value.round() % _steps;
 
+  // Re-assert every drum track's kit on its channel: base drums + beat-fill
+  // share ch9 (one kit); each added drum track owns its channel + kit. The drum
+  // kit is a sticky synth-side selection, so this runs on open / undo-restore /
+  // after adding a track.
+  void _applyDrumKits() {
+    _audio.setDrumKitOn(LoopAudio.drumChannel, _instruments['drums'] ?? kDefaultDrumKit);
+    for (final m in _editMetas) {
+      if (m.kind == TrackKind.drums && m.channel != LoopAudio.drumChannel) {
+        _audio.setDrumKitOn(m.channel, _instruments[m.id] ?? kDefaultDrumKit);
+      }
+    }
+  }
+
   void _hitDrum(String kind) {
-    _audio.playDrum(kind, vol: _vol[_activeId] ?? 1);
+    _audio.playDrum(kind, channel: _meta.channel, vol: _vol[_activeId] ?? 1);
     if (_recording && _playing && _songSection == null) {
       _pushUndo(coalesce: true);
       final s = _quantStep();
@@ -871,7 +890,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         dn.removeAt(i);
       } else {
         dn.add(DrumNote(kind: kind, step: step));
-        _audio.playDrum(kind, vol: _vol[_activeId] ?? 1);
+        _audio.playDrum(kind, channel: _meta.channel, vol: _vol[_activeId] ?? 1);
       }
     });
   }
@@ -1139,20 +1158,13 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       currentProgram: _instruments[id] ?? _meta.defaultProgram,
       onPick: (program) {
         _pushUndo(coalesce: true);
-        setState(() {
-          if (_meta.kind == TrackKind.drums) {
-            // Drum lanes share MIDI ch9, so one kit selection must drive both
-            // drums and beat-fill to keep live playback/export consistent.
-            _instruments['drums'] = program;
-            _instruments['beatDec'] = program;
-          } else {
-            _instruments[id] = program;
-          }
-        });
-        // Drums pick a KIT (ch9 soundfont/bank-128 program), not a pitched voice.
+        // every track stores its own instrument/kit under its own id.
+        setState(() => _instruments[id] = program);
+        // Drums pick a KIT (bank-128 program / kit soundfont) on the track's own
+        // channel, so each drum track sounds independently.
         if (_meta.kind == TrackKind.drums) {
-          _audio.setDrumKit(program);
-          _audio.playDrum('kick', vol: _vol[_activeId] ?? 1);
+          _audio.setDrumKitOn(ch, program);
+          _audio.playDrum('kick', channel: ch, vol: _vol[_activeId] ?? 1);
           return;
         }
         _audio.setProgram(ch, program);
@@ -2394,9 +2406,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       _title = s.title;
       _playStep.value = 0;
     });
-    // re-assert the ch9 kit — pitched programs ride along on every playPitch
-    // call, but the drum kit is a sticky synth-side setting.
-    _audio.setDrumKit(_instruments['drums'] ?? kDefaultDrumKit);
+    // re-assert each drum track's kit — pitched programs ride along on every
+    // playPitch call, but the drum kit is a sticky synth-side setting.
+    _applyDrumKits();
   }
 
   void _undoAction() {

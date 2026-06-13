@@ -222,13 +222,16 @@ class SynthEngine {
 
   static const int drumChannel = 9;
 
-  /// 드럼 채널(9)을 GM bank 128 / 지정 키트 program 으로 셋업.
-  /// 캐시는 `1000+program`(멜로딕 0..127 과 비충돌)으로 같은 키트 재선택을 회피.
-  Future<void> ensureDrumKit(int program) async {
+  /// [channel] 을 GM bank 128 / 지정 키트 program 으로 셋업. ch9(기본 드럼) 뿐
+  /// 아니라 추가 드럼 트랙의 전용 채널에도 쓴다 — FluidSynth/AVAudioUnitSampler
+  /// 모두 임의 채널에서 bank-128 킷을 재생하므로, 트랙마다 다른 킷을 동시에 울릴
+  /// 수 있다. 캐시는 `_channelProgram[channel]` 의 `1000+program` 마커로 같은
+  /// 킷 재선택을 회피.
+  Future<void> ensureDrumKitOn(int channel, int program) async {
     final marker = 1000 + program;
-    if (_channelProgram[drumChannel] == marker) return;
+    if (_channelProgram[channel] == marker) return;
     // The hip-hop kit lives in its own soundfont; GM kits are bank 128 of the
-    // main soundfont. Either way bind the drum channel's sfId so drum noteOn/Off
+    // main soundfont. Either way bind the channel's sfId so drum noteOn/Off
     // route to the right soundfont.
     final int sfId;
     final int bank;
@@ -238,10 +241,10 @@ class SynthEngine {
       bank = 128;
       prog = 0;
     } else if (isDynamicSlot(program)) {
-      // A downloaded catalog drum kit. _bindDynamic owns the drum channel's
-      // cache marker + sf binding; falls back to the GM standard kit when the
-      // file isn't present yet.
-      if (await _bindDynamic(drumChannel, program) != null) return;
+      // A downloaded catalog drum kit. _bindDynamic owns the channel's cache
+      // marker + sf binding; falls back to the GM standard kit when the file
+      // isn't present yet.
+      if (await _bindDynamic(channel, program) != null) return;
       sfId = await ensureLoaded();
       bank = 128;
       prog = 0;
@@ -251,13 +254,16 @@ class SynthEngine {
       prog = program;
     }
     try {
-      await _midi.selectInstrument(sfId: sfId, channel: drumChannel, bank: bank, program: prog);
-      _channelProgram[drumChannel] = marker;
-      _channelSf[drumChannel] = sfId;
+      await _midi.selectInstrument(sfId: sfId, channel: channel, bank: bank, program: prog);
+      _channelProgram[channel] = marker;
+      _channelSf[channel] = sfId;
     } catch (e) {
-      debugPrint('[synth] drum select failed (kit=$program): $e');
+      debugPrint('[synth] drum select failed (ch=$channel kit=$program): $e');
     }
   }
+
+  /// 기본 드럼 채널(9) 셋업.
+  Future<void> ensureDrumKit(int program) => ensureDrumKitOn(drumChannel, program);
 
   /// 하위호환 — 기본 Standard 키트(program 0).
   Future<void> ensureDrumChannel() => ensureDrumKit(0);
