@@ -110,7 +110,8 @@ class L10nEn extends L10n {
   String get projectActionDeleteFromCloud => 'Delete from Cloud only';
 
   @override
-  String get projectActionDeleteFromCloudSub => 'Your local copy stays untouched';
+  String get projectActionDeleteFromCloudSub =>
+      'Your local copy stays untouched';
 
   @override
   String get syncInProgress => 'Uploading to Cloud...';
@@ -128,7 +129,8 @@ class L10nEn extends L10n {
   String get settingsAutoSync => 'Auto sync';
 
   @override
-  String get settingsAutoSyncDesc => 'Automatically upload changed songs to Cloud';
+  String get settingsAutoSyncDesc =>
+      'Automatically upload changed songs to Cloud';
 
   @override
   String get menuLanguage => 'Language';
@@ -155,7 +157,8 @@ class L10nEn extends L10n {
   String get songsEmptyTitle => 'Start a new song';
 
   @override
-  String get songsEmptySub => 'Hum it and we\'ll turn it into instruments — record and edit in one place';
+  String get songsEmptySub =>
+      'Hum it and we\'ll turn it into instruments — record and edit in one place';
 
   @override
   String get songsEmptyCta => 'Start';
@@ -281,7 +284,8 @@ class L10nEn extends L10n {
   String get accountMenuCloudRecover => 'Recover from Cloud';
 
   @override
-  String get accountMenuCloudRecoverSub => 'Your songs are kept until you delete them';
+  String get accountMenuCloudRecoverSub =>
+      'Your songs are kept until you delete them';
 
   @override
   String get accountMenuLanguage => 'Language / 언어';
@@ -323,7 +327,8 @@ class L10nEn extends L10n {
   String get labelAccountId => 'Account ID';
 
   @override
-  String get withdrawHint => 'Deleting your account removes all local projects and Cloud data.\nIf subscribed, please cancel separately in App Store / Google Play.';
+  String get withdrawHint =>
+      'Deleting your account removes all local projects and Cloud data.\nIf subscribed, please cancel separately in App Store / Google Play.';
 
   @override
   String get withdrawCta => 'Delete account';
@@ -332,7 +337,8 @@ class L10nEn extends L10n {
   String get withdrawConfirmTitle => 'Delete your account?';
 
   @override
-  String get withdrawConfirmBody => 'Your account and all data will be permanently removed and cannot be recovered.';
+  String get withdrawConfirmBody =>
+      'Your account and all data will be permanently removed and cannot be recovered.';
 
   @override
   String get withdrawConfirmAction => 'Delete';
@@ -378,7 +384,8 @@ class L10nEn extends L10n {
   }
 
   @override
-  String get subStatusExpiredBody => 'Resubscribe and your Cloud songs come back instantly';
+  String get subStatusExpiredBody =>
+      'Resubscribe and your Cloud songs come back instantly';
 
   @override
   String get subStatusAnonymous => 'No subscription';
@@ -415,7 +422,8 @@ class L10nEn extends L10n {
   String get subResubCta => 'Resubscribe to Pro';
 
   @override
-  String get subResubHint => 'Your previous songs are still there — resubscribe to sync again';
+  String get subResubHint =>
+      'Your previous songs are still there — resubscribe to sync again';
 
   @override
   String get subStartCta => 'Subscribe';
@@ -454,10 +462,12 @@ class L10nEn extends L10n {
   String get paywallSubDefault => 'Unlock all features';
 
   @override
-  String get looptapPaywallTriggerExport => 'Export is a Pro feature — subscribe to download MIDI / audio.';
+  String get looptapPaywallTriggerExport =>
+      'Export is a Pro feature — subscribe to download MIDI / audio.';
 
   @override
-  String get looptapPaywallTriggerSongQuota => 'You\'ve reached the free plan\'s song limit. Pro unlocks unlimited songs.';
+  String get looptapPaywallTriggerSongQuota =>
+      'You\'ve reached the free plan\'s song limit. Pro unlocks unlimited songs.';
 
   @override
   String get paywallFeatureCloudTitle => '5GB Cloud';
@@ -516,7 +526,8 @@ class L10nEn extends L10n {
   }
 
   @override
-  String get paywallFooterTrial => 'We\'ll remind you before trial ends · cancel anytime';
+  String get paywallFooterTrial =>
+      'We\'ll remind you before trial ends · cancel anytime';
 
   @override
   String get paywallRestoreLink => 'Restore purchases';
@@ -555,7 +566,8 @@ class L10nEn extends L10n {
   String get logoutConfirmTitle => 'Sign out?';
 
   @override
-  String get logoutConfirmBody => 'Local projects on this device stay. Cloud songs come back next time you sign in.';
+  String get logoutConfirmBody =>
+      'Local projects on this device stay. Cloud songs come back next time you sign in.';
 
   @override
   String get logoutCta => 'Sign out';
@@ -570,7 +582,8 @@ class L10nEn extends L10n {
   String get restoreOkBody => 'Pro features are back.';
 
   @override
-  String get restoreEmptyBody => 'Check that you signed in with the right account.';
+  String get restoreEmptyBody =>
+      'Check that you signed in with the right account.';
 
   @override
   String get projectOptionUploadProBadge => 'Pro required';
@@ -617,13 +630,15 @@ class L10nEn extends L10n {
   }
 
   @override
-  String get projectDeleteBody => 'The local file will be permanently deleted. This cannot be undone.';
+  String get projectDeleteBody =>
+      'The local file will be permanently deleted. This cannot be undone.';
 
   @override
   String get cloudFreeImageHeadline => 'You don\'t have a Cloud yet';
 
   @override
-  String get cloudFreeImageSub => 'Get 5GB of Cloud with Pro\nto continue your songs on every device.';
+  String get cloudFreeImageSub =>
+      'Get 5GB of Cloud with Pro\nto continue your songs on every device.';
 
   @override
   String get cloudValueBackupTitle => 'Permanent backup';
@@ -652,7 +667,8 @@ class L10nEn extends L10n {
   String get cloudProEmptyTitle => 'Cloud is empty';
 
   @override
-  String get cloudProEmptySub => 'Open the ⋯ menu of a song in My Songs\nand tap \"Upload to Cloud\".';
+  String get cloudProEmptySub =>
+      'Open the ⋯ menu of a song in My Songs\nand tap \"Upload to Cloud\".';
 
   @override
   String get cloudGoToLocalTab => 'Go to My Songs';
@@ -661,7 +677,8 @@ class L10nEn extends L10n {
   String get cloudGraceTitle => 'Pro has expired';
 
   @override
-  String get cloudGraceBody => 'Your data is preserved. Download anytime — and resubscribe to turn sync back on.';
+  String get cloudGraceBody =>
+      'Your data is preserved. Download anytime — and resubscribe to turn sync back on.';
 
   @override
   String get cloudGraceEmpty => 'Cloud is empty';
@@ -748,7 +765,8 @@ class L10nEn extends L10n {
   String get proWelcomeStep1Bold => 'Upload to Cloud';
 
   @override
-  String get proWelcomeStep2 => 'Sign in on another device — Cloud shows up automatically';
+  String get proWelcomeStep2 =>
+      'Sign in on another device — Cloud shows up automatically';
 
   @override
   String get proWelcomeStep3 => 'Work freely from either side';
@@ -757,13 +775,16 @@ class L10nEn extends L10n {
   String get proWelcomeCta => 'Explore Cloud';
 
   @override
-  String get recPermDenied => 'Microphone access is required. Please allow it again.';
+  String get recPermDenied =>
+      'Microphone access is required. Please allow it again.';
 
   @override
-  String get recPermPermanentlyDenied => 'Enable Microphone access from Settings > Privacy.';
+  String get recPermPermanentlyDenied =>
+      'Enable Microphone access from Settings > Privacy.';
 
   @override
-  String get recPermRestricted => 'Microphone is restricted on this device, so recording is unavailable.';
+  String get recPermRestricted =>
+      'Microphone is restricted on this device, so recording is unavailable.';
 
   @override
   String get recPermChecking => 'Checking microphone permission…';
@@ -803,31 +824,36 @@ class L10nEn extends L10n {
   String get faq1Q => 'How much can I do for free?';
 
   @override
-  String get faq1A => 'Record → analyze → edit — all available for free. Export, Cloud sync, and permanent vocal backup unlock with Pro.';
+  String get faq1A =>
+      'Record → analyze → edit — all available for free. Export, Cloud sync, and permanent vocal backup unlock with Pro.';
 
   @override
   String get faq2Q => 'What instruments are available?';
 
   @override
-  String get faq2A => 'Piano · Synth · Acoustic guitar · Electric guitar · Bass · Drums and your original vocal — switch instantly by tapping a card.';
+  String get faq2A =>
+      'Piano · Synth · Acoustic guitar · Electric guitar · Bass · Drums and your original vocal — switch instantly by tapping a card.';
 
   @override
   String get faq3Q => 'Who can hear my voice?';
 
   @override
-  String get faq3A => 'By default everything is processed on-device. Pro syncs your vocals to your encrypted Cloud backup only.';
+  String get faq3A =>
+      'By default everything is processed on-device. Pro syncs your vocals to your encrypted Cloud backup only.';
 
   @override
   String get faq4Q => 'What happens to my songs if I cancel?';
 
   @override
-  String get faq4A => 'Local projects stay and remain editable. Cloud sync and new exports pause, and resubscribing restores everything.';
+  String get faq4A =>
+      'Local projects stay and remain editable. Cloud sync and new exports pause, and resubscribing restores everything.';
 
   @override
   String get faq5Q => 'Can I get a refund?';
 
   @override
-  String get faq5A => 'Payments follow App Store · Google Play policy. Please request refunds through the store directly.';
+  String get faq5A =>
+      'Payments follow App Store · Google Play policy. Please request refunds through the store directly.';
 
   @override
   String get contactTitle => 'Contact us';
@@ -836,7 +862,8 @@ class L10nEn extends L10n {
   String get contactHeadline => 'How can we help?';
 
   @override
-  String get contactSub => 'Most answers are in the FAQ. Otherwise, reach us below.';
+  String get contactSub =>
+      'Most answers are in the FAQ. Otherwise, reach us below.';
 
   @override
   String get contactEmail => 'Email';
@@ -876,7 +903,8 @@ class L10nEn extends L10n {
   String get cloudDownloadTitle => 'Recover from Cloud';
 
   @override
-  String get cloudDownloadBanner => 'While your subscription is expired, new uploads / sync are locked. Your previous songs remain — download or delete them anytime.';
+  String get cloudDownloadBanner =>
+      'While your subscription is expired, new uploads / sync are locked. Your previous songs remain — download or delete them anytime.';
 
   @override
   String get cloudDownloadCta => 'Download';
@@ -910,7 +938,8 @@ class L10nEn extends L10n {
   String get editMicPermNeededTitle => 'Microphone permission needed';
 
   @override
-  String get editMicPermNeededBody => 'Allow HumTrack microphone access in iPad Settings → Privacy → Microphone.';
+  String get editMicPermNeededBody =>
+      'Allow HumTrack microphone access in iPad Settings → Privacy → Microphone.';
 
   @override
   String get editMicPermLabel => 'Microphone permission required';
@@ -1090,7 +1119,8 @@ class L10nEn extends L10n {
   String get anchorKeyTitle => 'Set project key';
 
   @override
-  String get anchorKeySub => 'All tracks will align to this key. Pick the right one.';
+  String get anchorKeySub =>
+      'All tracks will align to this key. Pick the right one.';
 
   @override
   String get anchorKeyTagDetected => 'Detected';
@@ -1137,7 +1167,8 @@ class L10nEn extends L10n {
   String get keyPickerAuto => 'Auto (recommended)';
 
   @override
-  String get keyPickerMainRole => 'Main key reference track (all tracks follow)';
+  String get keyPickerMainRole =>
+      'Main key reference track (all tracks follow)';
 
   @override
   String get keyPickerMajor => 'Major';
@@ -1175,7 +1206,12 @@ class L10nEn extends L10n {
   String get chordPickerScopeRoot => 'Root';
 
   @override
-  String chordPickerSummary(String scope, String root, String keyPart, String chordPart) {
+  String chordPickerSummary(
+    String scope,
+    String root,
+    String keyPart,
+    String chordPart,
+  ) {
     return '$scope: $root$keyPart$chordPart';
   }
 
@@ -1243,7 +1279,8 @@ class L10nEn extends L10n {
   String get metronomeOff => 'Stop metronome';
 
   @override
-  String get metronomeNote => 'BPM applies to the whole project. The Quantize grid also uses this BPM.';
+  String get metronomeNote =>
+      'BPM applies to the whole project. The Quantize grid also uses this BPM.';
 
   @override
   String metronomeBeatSec(String sec) {
@@ -1272,7 +1309,8 @@ class L10nEn extends L10n {
   String get quantizeTitle => 'Quantize';
 
   @override
-  String get quantizeBpmHint => 'BPM is a project-wide setting; adjust from the metronome button in the transport.';
+  String get quantizeBpmHint =>
+      'BPM is a project-wide setting; adjust from the metronome button in the transport.';
 
   @override
   String get quantizeGridLabel => 'Grid';
@@ -1292,7 +1330,8 @@ class L10nEn extends L10n {
   String get quantizeStrengthMax => '100%: perfect align';
 
   @override
-  String get quantizeFooter => 'When tracks drift slightly, aligning to the same BPM/grid resyncs them automatically.';
+  String get quantizeFooter =>
+      'When tracks drift slightly, aligning to the same BPM/grid resyncs them automatically.';
 
   @override
   String get quantizeOff => 'off';
@@ -1309,13 +1348,15 @@ class L10nEn extends L10n {
   String get cardInstrumentFallback => 'Instrument';
 
   @override
-  String get helpInstrumentBody => 'Choose how this track sounds. The detected pitches play back through a SoundFont preset.';
+  String get helpInstrumentBody =>
+      'Choose how this track sounds. The detected pitches play back through a SoundFont preset.';
 
   @override
   String get cardKeyLabel => 'KEY';
 
   @override
-  String get helpKeyBody => 'The tonic (C, D…) and mode (major/minor) of the song. AUTO = inferred from analysis. Tap to set manually. Confidence = how sure the estimate is (0–1).';
+  String get helpKeyBody =>
+      'The tonic (C, D…) and mode (major/minor) of the song. AUTO = inferred from analysis. Tap to set manually. Confidence = how sure the estimate is (0–1).';
 
   @override
   String get keyAnalysisPending => 'Pending analysis';
@@ -1329,7 +1370,8 @@ class L10nEn extends L10n {
   String get cardAssistLabel => 'Pitch assist';
 
   @override
-  String get helpAssistBody => 'Slightly off-key notes are pulled to the nearest in-key pitch. \"Corrected\" = number actually moved.';
+  String get helpAssistBody =>
+      'Slightly off-key notes are pulled to the nearest in-key pitch. \"Corrected\" = number actually moved.';
 
   @override
   String get assistCorrected => 'Corrected';
@@ -1341,7 +1383,8 @@ class L10nEn extends L10n {
   String get cardQuantizeLabel => 'Quantize';
 
   @override
-  String get helpQuantizeBody => 'When tracks drift slightly, aligning them to the same BPM/grid resyncs everything. The original timing is preserved — toggle off to restore it.';
+  String get helpQuantizeBody =>
+      'When tracks drift slightly, aligning them to the same BPM/grid resyncs everything. The original timing is preserved — toggle off to restore it.';
 
   @override
   String get conflictTitle => 'Both sides changed';
@@ -1378,7 +1421,8 @@ class L10nEn extends L10n {
   String get authErrDisabled => 'Auth disabled (Supabase keys not set)';
 
   @override
-  String get authErrIdentityBlockedGeneric => 'This email is already signed up with a different method.\nPlease sign in with the original method.';
+  String get authErrIdentityBlockedGeneric =>
+      'This email is already signed up with a different method.\nPlease sign in with the original method.';
 
   @override
   String authErrIdentityBlockedSpecific(String providers) {
@@ -1386,7 +1430,8 @@ class L10nEn extends L10n {
   }
 
   @override
-  String get authErrGoogleNoIdToken => 'Google: idToken missing (check serverClientId / iOS client config)';
+  String get authErrGoogleNoIdToken =>
+      'Google: idToken missing (check serverClientId / iOS client config)';
 
   @override
   String authErrAppleCode(String code, String message) {
@@ -1422,7 +1467,8 @@ class L10nEn extends L10n {
   String get ltSettingsDeleteAccountConfirmTitle => 'Delete account?';
 
   @override
-  String get ltSettingsDeleteAccountConfirmBody => 'Your account and all data will be permanently removed. This cannot be undone.';
+  String get ltSettingsDeleteAccountConfirmBody =>
+      'Your account and all data will be permanently removed. This cannot be undone.';
 
   @override
   String ltSettingsDeleteAccountFailed(String err) {
@@ -1492,7 +1538,8 @@ class L10nEn extends L10n {
   String get ltExportFailed => 'MIDI export failed';
 
   @override
-  String get ltExportFooter => 'Sections render in order (with their repeats). MIDI opens in any DAW. WAV & stems are audio rendered through the SoundFont.';
+  String get ltExportFooter =>
+      'Sections render in order (with their repeats). MIDI opens in any DAW. WAV & stems are audio rendered through the SoundFont.';
 
   @override
   String get ltSettingsTitle => 'Settings';
