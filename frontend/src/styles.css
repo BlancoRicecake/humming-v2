@@ -233,3 +233,32 @@ footer {
   font-size: 13px;
 }
 .file-pick:hover .file-button { border-color: var(--accent); }
+
+/* --- tab bar (Engine / Sound Picker) --- */
+.tabbar { display: flex; gap: 8px; margin-top: 10px; }
+button.active { border-color: var(--accent); color: var(--accent); }
+
+/* --- sound picker (Space B) --- */
+.sp { display: flex; flex-direction: column; gap: 12px; }
+.sp-bar { justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.sp-roles { display: flex; gap: 6px; }
+.sp-export { gap: 8px; align-items: center; }
+.sp .warn { color: var(--warn); font-size: 13px; }
+.sp .err { color: var(--err); font-size: 13px; }
+.sp-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; align-items: start; }
+.sp-group { padding: 10px 12px; }
+.sp-group-head {
+  font-size: 11px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 8px;
+}
+.sp-rows { display: flex; flex-direction: column; gap: 4px; }
+.sp-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px; border-radius: 6px; border: 1px solid transparent;
+}
+.sp-row:hover { border-color: var(--line); }
+.sp-row-sel { border-color: var(--accent); }
+.sp-play, .sp-star { padding: 2px 8px; min-width: 30px; font-size: 13px; }
+.sp-star.active { color: var(--accent); border-color: var(--accent); }
+.sp-label { flex: 1; font-size: 13px; }
+.sp-src { font-size: 10px; white-space: nowrap; }

@@ -25,6 +25,7 @@ import { ControlPanel } from "./components/ControlPanel";
 import { NoteTable } from "./components/NoteTable";
 import { SamplePicker } from "./components/SamplePicker";
 import { CandidatePicker } from "./components/CandidatePicker";
+import { SoundPicker } from "./components/soundpicker/SoundPicker";
 import { buildInstrumentPalette, instrumentKey } from "./lib/instruments";
 import { expandChords } from "./lib/chords";
 import type { AnalyzeOptions, AnalyzeResponse, Scale } from "./types";
@@ -69,6 +70,7 @@ export default function App() {
   const [osc, setOsc] = useState<OscType>("triangle");
   const [showEnvelope, setShowEnvelope] = useState(true);
   const [caps, setCaps] = useState<RenderCapabilities | null>(null);
+  const [mode, setMode] = useState<"engine" | "picker">("engine");
   const [instKey, setInstKey] = useState<string>("");
   const [chordMode, setChordMode] = useState(false);
   const [rendering, setRendering] = useState(false);
@@ -372,8 +374,18 @@ export default function App() {
         <p className="sub">
           input → preprocess → voice-region → chunk → pitch → notes → key/scale → synth → output
         </p>
+        <nav className="tabbar">
+          <button className={mode === "engine" ? "active" : ""} onClick={() => setMode("engine")}>
+            Engine
+          </button>
+          <button className={mode === "picker" ? "active" : ""} onClick={() => setMode("picker")}>
+            Sound Picker
+          </button>
+        </nav>
       </header>
 
+      {mode === "engine" && (
+      <>
       {/* Stage 1 — input */}
       <section className="row">
         <button
@@ -597,6 +609,10 @@ export default function App() {
           </section>
         </>
       )}
+      </>
+      )}
+
+      {mode === "picker" && <SoundPicker caps={caps} />}
 
       <footer>
         <small>

@@ -79,6 +79,17 @@ def is_available() -> bool:
     return _STATE.fluidsynth_module is not None and _STATE.sf2_path is not None
 
 
+def is_engine_available() -> bool:
+    """FluidSynth module loaded, regardless of the global SF2.
+
+    The audition path passes its own sf2 path (GM / catalog / sentinel), so it
+    only needs the synth engine — not ``_STATE.sf2_path``. Kept separate from
+    ``is_available()`` so the existing /render_* endpoints are unaffected.
+    """
+    initialize()
+    return _STATE.fluidsynth_module is not None
+
+
 # Minimal GM list — the user asked specifically for piano, others are nice-to-have.
 GM_PROGRAMS: List[Tuple[int, str]] = [
     (0,  "Acoustic Grand Piano"),
@@ -149,6 +160,19 @@ _DEMO_DRUM: List[Tuple[float, float, int]] = [  # GM drum map: 36 kick, 38 snare
     (0.00, 0.20, 36), (0.25, 0.15, 42), (0.50, 0.20, 38), (0.75, 0.15, 42),
     (1.00, 0.20, 36), (1.25, 0.15, 42), (1.50, 0.20, 38), (1.75, 0.15, 42),
 ]
+_DEMO_BASS: List[Tuple[float, float, int]] = [  # low-register walk: C2 G2 C3 C2
+    (0.00, 0.45, 36), (0.50, 0.45, 43), (1.00, 0.45, 48), (1.50, 0.60, 36),
+]
+
+
+def _phrase_for(track_type: str) -> List[Tuple[float, float, int]]:
+    """Audition phrase per track type (the new audition path picks by role,
+    not by ``bank == 128``)."""
+    if track_type == "drums":
+        return _DEMO_DRUM
+    if track_type == "bass":
+        return _DEMO_BASS
+    return _DEMO_MELODIC
 
 
 def render_demo_to_wav(bank: int, program: int, sample_rate: int = 44100) -> bytes:
@@ -274,6 +298,77 @@ def render_notes_to_wav(
         scale = min(8.0, 32000.0 / peak)  # 작은 신호도 풀스케일로 증폭(상한 8x)
         stereo = (stereo.astype(np.float32) * scale).astype(np.int16)
 
+        buf = io.BytesIO()
+        sf.write(buf, stereo, sample_rate, format="WAV", subtype="PCM_16")
+        return buf.getvalue()
+    finally:
+        try: synth.delete()
+        except Exception: pass
+
+
+def render_demo_through_sf2(
+    sf2_path: str,
+    sf_bank: int,
+    sf_program: int,
+    track_type: str = "melody",
+    sample_rate: int = 44100,
+) -> bytes:
+    """Render the per-track-type audition phrase through an ARBITRARY .sf2.
+
+    Used by the sound-picker (Space B) to audition GM, downloaded catalog, and
+    the 808/hip-hop sentinel soundfonts alike. Loads ``sf2_path`` into a
+    throwaway Synth — it never touches ``_STATE.sf2_path``, so it is
+    concurrent-safe and leaves the engine-experiment space (Space A) untouched.
+
+    Drums route to channel 9 (GM percussion); melody/bass to channel 0.
+
+    Raises ``FileNotFoundError`` if ``sf2_path`` is missing and ``RuntimeError``
+    if the soundfont fails to load.
+    """
+    initialize()
+    if _STATE.fluidsynth_module is None:
+        raise RuntimeError(_STATE.error or "SoundFont engine unavailable")
+    if not Path(sf2_path).is_file():
+        raise FileNotFoundError(sf2_path)
+
+    fluidsynth = _STATE.fluidsynth_module
+    channel = 9 if track_type == "drums" else 0
+    synth = fluidsynth.Synth(samplerate=float(sample_rate), gain=0.5)
+    try:
+        sfid = synth.sfload(sf2_path)
+        if sfid == -1:
+            raise RuntimeError(f"sfload failed for {sf2_path}")
+        synth.program_select(channel, sfid, int(sf_bank), int(sf_program))
+
+        phrase = _phrase_for(track_type)
+        events: List[Tuple[float, int, int, int]] = []  # (time, rank, pitch, vel)
+        for start, dur, pitch in phrase:
+            events.append((start, 1, pitch, 100))
+            events.append((start + dur, 0, pitch, 0))
+        events.sort(key=lambda e: (e[0], e[1]))
+
+        out = []
+        cursor = 0.0
+        for t_sec, kind, pitch, vel in events:
+            n_samples = int(round((t_sec - cursor) * sample_rate))
+            if n_samples > 0:
+                out.append(np.asarray(synth.get_samples(n_samples), dtype=np.int16))
+            if kind == 1:
+                synth.noteon(channel, pitch, vel)
+            else:
+                synth.noteoff(channel, pitch)
+            cursor = t_sec
+        tail = int(round(0.7 * sample_rate))
+        if tail > 0:
+            out.append(np.asarray(synth.get_samples(tail), dtype=np.int16))
+
+        audio = np.concatenate(out) if out else np.zeros(int(0.1 * sample_rate), dtype=np.int16)
+        if audio.size % 2 != 0:
+            audio = audio[:-1]
+        stereo = audio.reshape(-1, 2)
+        peak = float(np.max(np.abs(stereo))) or 1.0
+        scale = min(8.0, 32000.0 / peak)  # 작은 신호도 풀스케일로 증폭(상한 8x)
+        stereo = (stereo.astype(np.float32) * scale).astype(np.int16)
         buf = io.BytesIO()
         sf.write(buf, stereo, sample_rate, format="WAV", subtype="PCM_16")
         return buf.getvalue()

@@ -1,4 +1,4 @@
-import type { AnalyzeOptions, AnalyzeResponse, AssistResponse, Note, RenderCapabilities, SoundfontPreset } from "../types";
+import type { AnalyzeOptions, AnalyzeResponse, AssistResponse, AuditionItem, AuditionPaletteResponse, AuditionRenderRequest, Note, RenderCapabilities, SoundfontPreset, TrackType } from "../types";
 
 const BASE = "/api";
 
@@ -102,4 +102,32 @@ export async function renderAudio(
   });
   if (!res.ok) throw new Error(`render failed: ${res.status} ${await res.text()}`);
   return res.blob();
+}
+
+// --- sound picker (Space B) -------------------------------------------------
+export async function getAuditionPalette(role: TrackType): Promise<AuditionPaletteResponse> {
+  const res = await fetch(`${BASE}/audition_palette?role=${encodeURIComponent(role)}`);
+  if (!res.ok) throw new Error(`audition_palette failed: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+export async function auditionRender(req: AuditionRenderRequest): Promise<Blob> {
+  const res = await fetch(`${BASE}/audition_render`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`audition_render failed: ${res.status} ${await res.text()}`);
+  return res.blob();
+}
+
+// Map a palette item to its render request (discriminated by source).
+export function toRenderRequest(it: AuditionItem): AuditionRenderRequest {
+  if (it.source === "gm") {
+    return { source: "gm", bank: it.gm!.bank, program: it.gm!.program, track_type: it.track_type };
+  }
+  if (it.source === "catalog") {
+    return { source: "catalog", soundfont_id: it.soundfont_id!, track_type: it.track_type };
+  }
+  return { source: "sentinel", sentinel_id: it.sentinel_id!, track_type: it.track_type };
 }

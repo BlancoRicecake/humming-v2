@@ -28,6 +28,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .analyze import analyze_audio, process_vocal
 from . import soundfonts as soundfonts_mod
+from . import audition_palette as audition_palette_mod
 from .assistant import run_key_and_assistant
 from .midi_build import notes_to_midi_bytes, tracks_to_midi_bytes
 from . import render as render_mod
@@ -396,6 +397,80 @@ async def render_demo(payload: dict):
     except Exception as e:
         logger.exception("render_demo failed")
         raise HTTPException(500, f"render_demo failed: {e}")
+    return Response(content=wav, media_type="audio/wav")
+
+
+# --- sound picker (Space B): per-track-type audition ------------------------
+@app.get("/audition_palette")
+def audition_palette(role: str):
+    """Ordered, categorized audition items for a track type (melody|bass|drums).
+
+    Unifies GM programs, downloaded catalog soundfonts, and the 808/hip-hop
+    sentinels. See app/audition_palette.py for the item shape.
+    """
+    if role not in audition_palette_mod.ROLES:
+        raise HTTPException(400, "role must be melody|bass|drums")
+    if not render_mod.is_engine_available():
+        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+    return {"role": role, "items": audition_palette_mod.build_palette(role)}
+
+
+def _resolve_audition_source(source: str, payload: dict) -> Tuple[str, int, int]:
+    """(sf2_path, sf_bank, sf_program) for an audition render request.
+
+    Raises ValueError on a bad request shape and KeyError on an unknown id /
+    missing file (mapped to 400 / 404 by the endpoint).
+    """
+    if source == "gm":
+        return (render_mod.get_state().sf2_path,
+                int(payload.get("bank") or 0), int(payload.get("program") or 0))
+    if source == "catalog":
+        sid = str(payload.get("soundfont_id") or "")
+        path = soundfonts_mod.entry_file(sid)
+        if path is None:
+            raise KeyError(f"unknown soundfont: {sid}")
+        entry = next((e for e in soundfonts_mod.load_catalog() if e["id"] == sid), None)
+        if entry is None:
+            raise KeyError(f"unknown soundfont: {sid}")
+        return (str(path), int(entry.get("sf_bank", 0)), int(entry.get("sf_program", 0)))
+    if source == "sentinel":
+        sid = str(payload.get("sentinel_id") or "")
+        path = audition_palette_mod.sentinel_sf2_path(sid)
+        meta = audition_palette_mod.SENTINELS.get(sid)
+        if path is None or meta is None:
+            raise KeyError(f"unknown or missing sentinel: {sid}")
+        return (str(path), int(meta["sf_bank"]), int(meta["sf_program"]))
+    raise ValueError(f"unknown source: {source}")
+
+
+@app.post("/audition_render")
+async def audition_render(payload: dict):
+    """Render the per-track-type audition phrase through a GM / catalog /
+    sentinel sound → WAV. The sound is selected by ``source``; see
+    _resolve_audition_source."""
+    if not render_mod.is_engine_available():
+        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+    source = str(payload.get("source") or "gm")
+    track_type = str(payload.get("track_type") or "melody")
+    sample_rate = int(payload.get("sample_rate") or 44100)
+    if track_type not in audition_palette_mod.ROLES:
+        raise HTTPException(400, "track_type must be melody|bass|drums")
+    try:
+        sf2_path, sf_bank, sf_program = _resolve_audition_source(source, payload)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not sf2_path:
+        raise HTTPException(503, "global SoundFont unavailable")
+    try:
+        wav = render_mod.render_demo_through_sf2(
+            sf2_path, sf_bank, sf_program, track_type=track_type, sample_rate=sample_rate)
+    except FileNotFoundError as e:
+        raise HTTPException(404, f"soundfont file missing: {e}")
+    except Exception as e:
+        logger.exception("audition_render failed")
+        raise HTTPException(500, f"audition_render failed: {e}")
     return Response(content=wav, media_type="audio/wav")
 
 

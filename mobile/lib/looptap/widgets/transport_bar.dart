@@ -2,10 +2,13 @@
 // left: metronome · count-in · loop(always on) · BPM stepper
 // center: stop · play(lime) · record(red ring)
 // right: SWING slider · 2|4 bars · clear track
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
+import 'sheets/lt_modal.dart';
 
 class TransportBar extends StatelessWidget {
   const TransportBar({
@@ -187,10 +190,43 @@ class TransportBar extends StatelessWidget {
   }
 }
 
-class _BpmStepper extends StatelessWidget {
+const int _kBpmMin = 40, _kBpmMax = 220;
+
+class _BpmStepper extends StatefulWidget {
   const _BpmStepper({required this.bpm, required this.onBpm});
   final int bpm;
   final ValueChanged<int> onBpm;
+
+  @override
+  State<_BpmStepper> createState() => _BpmStepperState();
+}
+
+class _BpmStepperState extends State<_BpmStepper> {
+  // Local mirror so a fast hold-repeat steps off the freshest value instead of
+  // the (next-frame-stale) widget.bpm prop.
+  late int _bpm = widget.bpm;
+
+  @override
+  void didUpdateWidget(_BpmStepper old) {
+    super.didUpdateWidget(old);
+    // resync on an external change (loaded song, etc.) that isn't our own step
+    if (widget.bpm != old.bpm && widget.bpm != _bpm) _bpm = widget.bpm;
+  }
+
+  void _step(int delta) {
+    final next = (_bpm + delta).clamp(_kBpmMin, _kBpmMax);
+    if (next == _bpm) return;
+    setState(() => _bpm = next);
+    widget.onBpm(next);
+  }
+
+  Future<void> _editDirect() async {
+    final v = await _promptBpm(context, _bpm);
+    if (v != null && v != _bpm) {
+      setState(() => _bpm = v);
+      widget.onBpm(v);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -204,43 +240,195 @@ class _BpmStepper extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _StepBtn('−', () => onBpm((bpm - 1).clamp(40, 220))),
-          SizedBox(
-            width: 58,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text('$bpm', style: LTType.mono(size: 15, weight: FontWeight.w700, color: LT.t1)),
-                const SizedBox(width: 3),
-                Text('BPM', style: LTType.inter(size: 9, color: LT.t3)),
-              ],
+          _StepBtn('−', (m) => _step(-m)),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _editDirect, // tap the number → type a value directly
+            child: SizedBox(
+              width: 58,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text('$_bpm', style: LTType.mono(size: 15, weight: FontWeight.w700, color: LT.t1)),
+                  const SizedBox(width: 3),
+                  Text('BPM', style: LTType.inter(size: 9, color: LT.t3)),
+                ],
+              ),
             ),
           ),
-          _StepBtn('+', () => onBpm((bpm + 1).clamp(40, 220))),
+          _StepBtn('+', (m) => _step(m)),
         ],
       ),
     );
   }
 }
 
-class _StepBtn extends StatelessWidget {
-  const _StepBtn(this.glyph, this.onTap);
+/// ± button: a tap steps once; press-and-hold auto-repeats, getting gradually
+/// faster (shorter interval + larger step) the longer it's held.
+class _StepBtn extends StatefulWidget {
+  const _StepBtn(this.glyph, this.onStep);
   final String glyph;
-  final VoidCallback onTap;
+  final void Function(int magnitude) onStep;
+
+  @override
+  State<_StepBtn> createState() => _StepBtnState();
+}
+
+class _StepBtnState extends State<_StepBtn> {
+  Timer? _hold;
+  int _fires = 0;
+
+  void _start() {
+    _fires = 0;
+    widget.onStep(1); // immediate first step (also the plain-tap case)
+    _hold = Timer(const Duration(milliseconds: 360), _repeat); // hold delay before auto-repeat
+  }
+
+  void _repeat() {
+    _fires++;
+    // grow the step after sustained holding so the full 40–220 range is reachable
+    final mag = _fires > 36 ? 5 : (_fires > 16 ? 2 : 1);
+    widget.onStep(mag);
+    // accelerate: 210ms → 40ms between repeats
+    final ms = (210 - _fires * 8).clamp(40, 210);
+    _hold = Timer(Duration(milliseconds: ms), _repeat);
+  }
+
+  void _stop() {
+    _hold?.cancel();
+    _hold = null;
+  }
+
+  @override
+  void dispose() {
+    _hold?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+    // Listener (raw pointer) rather than GestureDetector: a long press never
+    // gets stolen by the tap recognizer, so down/up reliably bracket the hold.
+    return Listener(
+      onPointerDown: (_) => _start(),
+      onPointerUp: (_) => _stop(),
+      onPointerCancel: (_) => _stop(),
       child: SizedBox(
         width: 26,
         height: 26,
         child: Center(
-          child: Text(glyph, style: LTType.inter(size: 18, weight: FontWeight.w700, color: LT.t1)),
+          child: Text(widget.glyph, style: LTType.inter(size: 18, weight: FontWeight.w700, color: LT.t1)),
         ),
       ),
+    );
+  }
+}
+
+/// Direct BPM entry — a small modal with a numeric field. Returns the clamped
+/// value, or null on cancel / invalid.
+Future<int?> _promptBpm(BuildContext context, int current) {
+  final ctrl = TextEditingController(text: '$current')
+    ..selection = TextSelection(baseOffset: 0, extentOffset: '$current'.length);
+  return showLtModal<int>(
+    context,
+    width: 260,
+    child: _BpmInput(ctrl: ctrl),
+  );
+}
+
+class _BpmInput extends StatefulWidget {
+  const _BpmInput({required this.ctrl});
+  final TextEditingController ctrl;
+
+  @override
+  State<_BpmInput> createState() => _BpmInputState();
+}
+
+class _BpmInputState extends State<_BpmInput> {
+  String? _error;
+
+  void _submit() {
+    final v = int.tryParse(widget.ctrl.text.trim());
+    if (v == null || v < _kBpmMin || v > _kBpmMax) {
+      setState(() => _error = '$_kBpmMin–$_kBpmMax');
+      return;
+    }
+    Navigator.of(context).pop(v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Set BPM', style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1)),
+        const SizedBox(height: 14),
+        TextField(
+          controller: widget.ctrl,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          maxLength: 3,
+          onSubmitted: (_) => _submit(),
+          style: LTType.mono(size: 24, weight: FontWeight.w700, color: LT.t1),
+          decoration: InputDecoration(
+            counterText: '',
+            errorText: _error,
+            hintText: '$_kBpmMin–$_kBpmMax',
+            filled: true,
+            fillColor: LT.surface2,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(LTRadius.pill),
+              borderSide: const BorderSide(color: LT.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(LTRadius.pill),
+              borderSide: const BorderSide(color: LT.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(LTRadius.pill),
+              borderSide: const BorderSide(color: LT.lime),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(LTRadius.pill),
+                    border: Border.all(color: LT.border),
+                  ),
+                  child: Text('Cancel', style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t2)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: GestureDetector(
+                onTap: _submit,
+                child: Container(
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: LT.lime,
+                    borderRadius: BorderRadius.circular(LTRadius.pill),
+                  ),
+                  child: Text('Set', style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

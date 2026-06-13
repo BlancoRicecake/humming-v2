@@ -136,3 +136,48 @@ export interface RenderCapabilities {
   error: string | null;
   available_programs: { id: number; name: string }[];
 }
+
+// --- sound picker (Space B) -------------------------------------------------
+export type TrackType = "melody" | "bass" | "drums";
+
+export interface AuditionItem {
+  key: string;                               // stable unique id within the role
+  source: "gm" | "catalog" | "sentinel";
+  label: string;
+  category: string;                          // section header
+  role: TrackType;
+  sf_bank: number;
+  sf_program: number;
+  track_type: TrackType;                     // which demo phrase
+  gm: { bank: number; program: number } | null;
+  soundfont_id: string | null;
+  sentinel_id: string | null;
+}
+
+export interface AuditionPaletteResponse {
+  role: TrackType;
+  items: AuditionItem[];
+}
+
+export type AuditionRenderRequest =
+  | { source: "gm"; bank: number; program: number; track_type: TrackType; sample_rate?: number }
+  | { source: "catalog"; soundfont_id: string; track_type: TrackType; sample_rate?: number }
+  | { source: "sentinel"; sentinel_id: string; track_type: TrackType; sample_rate?: number };
+
+// A starred sound — self-contained so the export can be re-rendered without
+// re-fetching the palette.
+export interface CuratedSound {
+  key: string;
+  source: "gm" | "catalog" | "sentinel";
+  label: string;
+  category: string;
+  sf_bank: number;
+  sf_program: number;
+  track_type: TrackType;
+  gm: { bank: number; program: number } | null;
+  soundfont_id: string | null;
+  sentinel_id: string | null;
+  starred_at: string;                        // ISO timestamp
+}
+
+export type CurationMap = Record<TrackType, CuratedSound[]>;

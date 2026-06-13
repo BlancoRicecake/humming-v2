@@ -8,7 +8,26 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    AppDelegate.configurePlaybackSession()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  /// flutter_midi_pro sets NO AVAudioSession category, so iOS defaults to
+  /// soloAmbient — which respects the hardware silent switch. The result:
+  /// synth output (instrument preview, loop playback) is silent whenever the
+  /// ringer switch is set to silent, while Android (no such switch) always
+  /// plays. Force .playback so music audio plays regardless of the switch —
+  /// the standard category for a music-creation app. The record + autotune
+  /// monitor flows switch to .playAndRecord while active and this resting
+  /// category applies the rest of the time.
+  static func configurePlaybackSession() {
+    let session = AVAudioSession.sharedInstance()
+    do {
+      try session.setCategory(.playback, options: [])
+      try session.setActive(true)
+    } catch {
+      NSLog("[audio] playback session setup failed: \(error)")
+    }
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
