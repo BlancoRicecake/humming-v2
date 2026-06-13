@@ -174,8 +174,11 @@ const List<TrackMeta> kTracks = [
       channel: 1, defaultProgram: 33, group: 'bass'),
   TrackMeta('drums', 'Drums', LtIcons.graphicEq, LT.amber, TrackKind.drums,
       channel: 9, group: 'beat', drumKinds: ['hihat', 'snare', 'kick']),
+  // Beat-fill is its own track with an independent kit, so it lives on its own
+  // channel (10) rather than sharing the drums' ch9. (Live only — export renders
+  // each drum lane as a separate ch9 job through its kit.)
   TrackMeta('beatDec', 'Beat Fill', LtIcons.graphicEq, LT.amber, TrackKind.drums,
-      channel: 9, group: 'beat', decoration: true, drumKinds: ['shaker', 'tambourine', 'clap']),
+      channel: 10, group: 'beat', decoration: true, drumKinds: ['shaker', 'tambourine', 'clap']),
   TrackMeta('vocal', 'Vocal', LtIcons.mic, LT.pink, TrackKind.vocal, group: 'vocal'),
 ];
 
@@ -186,10 +189,13 @@ List<TrackMeta> get kPitchedTracks =>
 
 TrackMeta trackById(String id) => kTracks.firstWhere((t) => t.id == id);
 
-/// Pitched MIDI channels still free after the base tracks claim 0,1,2 (melody,
-/// bass, melody-fill) and 9 (drums). Added pitched instances draw from here so
-/// each gets its own instrument; drum instances all share ch9.
-const List<int> kExtraPitchChannels = [3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15];
+/// MIDI channels free after the base tracks claim 0,1,2 (melody, bass,
+/// melody-fill), 9 (drums) and 15 (metronome click). Added track instances —
+/// pitched AND drums — each draw a distinct channel from here so they get an
+/// independent instrument/kit. (FluidSynth on Android + AVAudioUnitSampler on
+/// iOS both play a bank-128 kit on any channel, so a drum instance need not be
+/// on ch9.)
+const List<int> kExtraPitchChannels = [3, 4, 5, 6, 7, 8, 11, 12, 13, 14];
 
 /// The full ordered track-meta list for a section: the fixed base tracks
 /// (kTracks, channels unchanged) followed by [extras], each given an allocated
@@ -203,11 +209,12 @@ List<TrackMeta> sectionTrackMetas(List<TrackRef> extras) {
   for (final e in extras) {
     final base = trackById(e.type);
     final n = perType[e.type] = (perType[e.type] ?? 1) + 1;
-    final ch = base.kind == TrackKind.drums
-        ? 9
-        : base.kind == TrackKind.vocal
-            ? 0
-            : (pi < kExtraPitchChannels.length ? kExtraPitchChannels[pi++] : kExtraPitchChannels.last);
+    // Vocal stays nominal ch0 (audio-only, no synth voice); every other added
+    // instance — pitched or drums — gets its own channel so its kit/instrument
+    // is independent of the base tracks and of other instances.
+    final ch = base.kind == TrackKind.vocal
+        ? 0
+        : (pi < kExtraPitchChannels.length ? kExtraPitchChannels[pi++] : kExtraPitchChannels.last);
     out.add(base.copyWith(id: e.id, label: '${base.label} $n', channel: ch));
   }
   return out;

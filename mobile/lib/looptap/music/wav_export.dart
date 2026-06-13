@@ -342,10 +342,59 @@ Future<({File file, int skippedVocals})> exportWavSong(
   // A dynamic-but-not-downloaded drum kit falls back to the GM standard kit.
   final drumGm = isDynamicSlot(drumProgram) ? 0 : drumProgram;
 
-  final gmTracks = <String>{'melody', 'melodyDec', 'bass', 'drums', 'beatDec', for (final e in extras) e.id};
-  gmTracks.removeAll({if (use808) 'bass', if (useHipHop || useDynDrum) ...['drums', 'beatDec'], ...dynLanes});
+  // Drum lanes that carry their OWN kit, independent of the base ch9 'drums'
+  // kit: beat-fill + every added drum track. Each renders as a separate ch9
+  // job through its kit's SF2 and is summed like the 808/hip-hop lanes, so
+  // different drum tracks can use different kits in one mix. (MeltySynth only
+  // treats ch9 as percussion, so "per-kit" means per-render, not per-channel.)
+  final perKitDrums = <String>[
+    if (flat.beatDec.isNotEmpty) 'beatDec',
+    for (final e in extras)
+      if (trackById(e.type).kind == TrackKind.drums &&
+          (flat.extraDrums[e.id]?.isNotEmpty ?? false))
+        e.id,
+  ];
+  final perKitDrumJobs = <Map<String, Object>>[];
+  final perKitDrumLanes = <String>{}; // pulled out of the GM render
+  for (final lane in perKitDrums) {
+    perKitDrumLanes.add(lane);
+    if (silent(lane)) continue; // excluded from GM + no job → silent
+    final kit = instruments[lane] ?? kDefaultDrumKit;
+    final int sfIdx;
+    final int gmKit;
+    if (kit == kProgramHipHopKit) {
+      if (idxHip == 0) {
+        sf2s.add(await _sfHipHopBytes());
+        idxHip = sf2s.length - 1;
+      }
+      sfIdx = idxHip;
+      gmKit = 0;
+    } else if (isDynamicSlot(kit) && SoundfontCatalog.instance.localPath(kit) != null) {
+      sf2s.add(await File(SoundfontCatalog.instance.localPath(kit)!).readAsBytes());
+      sfIdx = sf2s.length - 1;
+      gmKit = 0;
+    } else {
+      sfIdx = 0; // a GM kit lives in bank 128 of the main SF2
+      gmKit = isDynamicSlot(kit) ? 0 : kit;
+    }
+    perKitDrumJobs.add({
+      'sf2': sfIdx,
+      // notes emit on ch9 (addDrums), so ch9's CC7 must carry THIS lane's volume.
+      'midi': buildMidi(flat, bpm,
+          drumProgram: gmKit,
+          swing: swing,
+          vol: {...vol, 'drums': vol[lane] ?? 0.85},
+          tracks: {lane},
+          extras: extras,
+          extraInstruments: instruments),
+    });
+  }
+
+  final gmTracks = <String>{'melody', 'melodyDec', 'bass', 'drums', for (final e in extras) e.id};
+  gmTracks.removeAll({if (use808) 'bass', if (useHipHop || useDynDrum) 'drums', ...dynLanes, ...perKitDrumLanes});
   gmTracks.removeWhere(silent);
-  final hipTracks = {for (final id in const ['drums', 'beatDec']) if (!silent(id)) id};
+  // base 'drums' (ch9) only — beat-fill is now its own per-kit job above.
+  final hipTracks = silent('drums') ? const <String>{} : const {'drums'};
   final jobs = <Map<String, Object>>[
     {
       'sf2': 0,
@@ -364,12 +413,13 @@ Future<({File file, int skippedVocals})> exportWavSong(
       // bassProgram 0 → selects the 808.sf2's single preset.
       {'sf2': idx808, 'midi': buildMidi(flat, bpm, bassProgram: 0, swing: swing, vol: vol, tracks: const {'bass'})},
     if (useHipHop && hipTracks.isNotEmpty)
-      // drums+beat-fill → the hip-hop kit's bank-128 preset (ch9 default).
+      // base drums → the hip-hop kit's bank-128 preset (ch9 default).
       {'sf2': idxHip, 'midi': buildMidi(flat, bpm, swing: swing, vol: vol, tracks: hipTracks)},
     if (useDynDrum && hipTracks.isNotEmpty)
-      // drums+beat-fill → the catalog kit's bank-128 preset (ch9 default).
+      // base drums → the catalog kit's bank-128 preset (ch9 default).
       {'sf2': idxDynDrum, 'midi': buildMidi(flat, bpm, swing: swing, vol: vol, tracks: hipTracks)},
     ...dynJobs,
+    ...perKitDrumJobs,
   ];
   final vocal = await _vocalJobs(sections, bpm, vol['vocal'] ?? 0.85);
   final wavs = await compute(_renderIso, {
@@ -436,17 +486,42 @@ Future<List<File>> exportStems(
     }
     final jobs = <Map<String, Object>>[];
     for (final p in present) {
-      final isDrum = p.id == 'drums' || p.id == 'beatDec';
-      final isHipDrum = useHipHop && isDrum;
+      final isBaseDrums = p.id == 'drums';
+      final extraDrum =
+          extras.any((e) => e.id == p.id && trackById(e.type).kind == TrackKind.drums);
+      // beat-fill + added drum tracks each carry their own kit; only the base
+      // 'drums' lane uses the song-level drumProgram.
+      final isDrum = isBaseDrums || p.id == 'beatDec' || extraDrum;
       final isBass808 = use808 && p.id == 'bass';
+      int sf2i = 0;
+      int gmKit = 0;
+      if (isBass808) {
+        sf2i = idx808;
+      } else if (isDrum) {
+        // each drum stem renders through ITS kit — same resolution as the mix.
+        final kit = isBaseDrums ? drumProgram : (instruments[p.id] ?? kDefaultDrumKit);
+        if (kit == kProgramHipHopKit) {
+          if (idxHip == 0) {
+            sf2s.add(await _sfHipHopBytes());
+            idxHip = sf2s.length - 1;
+          }
+          sf2i = idxHip;
+        } else if (isDynamicSlot(kit) && SoundfontCatalog.instance.localPath(kit) != null) {
+          sf2s.add(await File(SoundfontCatalog.instance.localPath(kit)!).readAsBytes());
+          sf2i = sf2s.length - 1;
+        } else {
+          sf2i = 0; // GM kit lives in bank 128 of the main SF2
+          gmKit = isDynamicSlot(kit) ? 0 : kit;
+        }
+      }
       jobs.add({
-        'sf2': isHipDrum ? idxHip : (isBass808 ? idx808 : 0),
+        'sf2': sf2i,
         'midi': buildMidi(flat, bpm,
             melodyProgram: melodyProgram,
             // 808 bass stem → program 0 selects the 808.sf2 preset.
             bassProgram: isBass808 ? 0 : bassProgram,
             melodyDecProgram: melodyDecProgram,
-            drumProgram: isHipDrum ? 0 : (isDrum ? drumProgram : 0),
+            drumProgram: gmKit,
             swing: swing,
             vol: vol,
             tracks: {p.id},
