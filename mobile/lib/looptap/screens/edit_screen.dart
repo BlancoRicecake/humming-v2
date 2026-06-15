@@ -152,6 +152,15 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // id; '' = "computed, just use the raw single take". Cleared on record/edit.
   final Map<String, String> _vocalMix = {};
 
+  // ── song-level continuous vocal take (recorded over the WHOLE song) ──
+  // Local mirror of widget.song.songVocal*; written back in _snapshot. Plays
+  // from step 0 during Play Song, replacing the per-section vocal schedule.
+  late String? _songVocalPath = widget.song.songVocalPath;
+  late List<double>? _songVocalPeaks = widget.song.songVocalPeaks;
+  late int? _songVocalBpm = widget.song.songVocalBpm;
+  late int? _songVocalBars = widget.song.songVocalBars;
+  bool _songVocalActive = false; // the live vocal currently IS the song-level take
+
   // undo / redo — snapshots of the editable song state
   final List<_EditSnapshot> _undo = [];
   final List<_EditSnapshot> _redo = [];
@@ -169,6 +178,16 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   List<String> get _fillKinds => (_songSection ?? _sec).fillKinds;
   int get _bars => _sec.bars;
   int get _steps => _songSteps ?? stepsForBars(_bars);
+
+  // Total bars across the whole arrangement (every section instance) — the
+  // song-level vocal is recorded as one continuous "loop" this long.
+  int get _songTotalBars {
+    var b = 0;
+    for (final sec in _sections) {
+      b += sec.bars * sec.repeats;
+    }
+    return b;
+  }
 
   // The full track-meta list (base 6 + added instances) for a section, and for
   // the active editing section. _meta resolves the active track from it so added
@@ -400,7 +419,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         // Aligned takes loop natively in the player (ReleaseMode.loop) — a
         // wrap-time seek would only add a glitch on top. Alignment is only
         // valid at the take's recorded bpm/bars (vocalIsAligned).
-        if (_songSection == null && _vocalPlaying && !_vocalLoopNative) {
+        // Re-sync a non-natively-looping vocal at the loop start: the single
+        // section take, or the song-level take during Play Song.
+        if (_vocalPlaying &&
+            !_vocalLoopNative &&
+            (_songSection == null || _songVocalActive)) {
           _audio.seekVocalToStart();
         }
       }
@@ -603,6 +626,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     _stopClock();
     _audio.stopAll();
     _vocalPlaying = false;
+    _songVocalActive = false;
     _playStep.value = 0;
     setState(() {
       _playing = false;
@@ -885,11 +909,27 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     setState(() {
       _songSection = disp;
       _songSteps = flat.steps;
-      _songVocalSched = sched;
       _playStep.value = 0;
       _playing = true;
-      _startClock();
     });
+    // A song-level take plays from step 0 and REPLACES the per-section vocals;
+    // otherwise fall back to the per-section schedule.
+    if (_songVocalPath != null) {
+      _songVocalSched = null;
+      final native = _songVocalBpm == _bpm && _songVocalBars == _songTotalBars;
+      _vocalLoopNative = native;
+      _vocalPlaying = true;
+      _songVocalActive = true;
+      _audio.playVocal(
+        LoopStorage.resolveVocal(_songVocalPath!),
+        vol: _vol['vocal'] ?? 0.85,
+        loop: native,
+      );
+    } else {
+      _songVocalSched = sched;
+      _songVocalActive = false;
+    }
+    _startClock();
   }
 
   // ── editing ───────────────────────────────────────────────────────
@@ -1473,6 +1513,88 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ── song-level vocal: one continuous take over the WHOLE song ─────────
+  Future<void> _openSongVocalRecord() async {
+    _audio.ensure();
+    if (_playing) _stopAll();
+    final route = await headsetRoute();
+    final canMonitorBacking = route != HeadsetRoute.none;
+    if (!mounted) return;
+    showVocalRecordModal(
+      context,
+      accent: LT.pink,
+      bpm: _bpm,
+      bars: _songTotalBars, // record the whole arrangement as one long "loop"
+      headset: route,
+      keyTonic: _keyRoot,
+      scale: _engineScale[_scale] ?? _scale,
+      latencyMs: LoopPrefs.instance.vocalLatencyMs.value,
+      onClick: canMonitorBacking ? (accent) => _audio.click(accent) : null,
+      startBacking: canMonitorBacking ? _startSongBacking : null,
+      stopBacking: canMonitorBacking ? _stopSongBacking : null,
+      onDone: _commitSongVocal,
+    );
+  }
+
+  // Full-song backing while recording the song vocal: play every section's
+  // instrument lanes from step 0 (no vocals — they'd bleed into the take).
+  void _startSongBacking() {
+    _audio.ensure();
+    _stopClock();
+    final flat = flattenSong(_sections);
+    final disp = Section(id: 'song', name: 'SONG', bars: _bars);
+    disp.tracks['melody'] = TrackData(notes: flat.melody);
+    disp.tracks['melodyDec'] = TrackData(notes: flat.melodyDec);
+    disp.tracks['bass'] = TrackData(notes: flat.bass);
+    disp.tracks['drums'] = TrackData(drums: flat.drums);
+    disp.tracks['beatDec'] = TrackData(drums: flat.beatDec);
+    _playStep.value = 0;
+    _freshThisLoop.clear();
+    setState(() {
+      _songSection = disp;
+      _songSteps = flat.steps;
+      _songVocalSched = null;
+      _playing = true;
+    });
+    _startClock();
+  }
+
+  void _stopSongBacking() {
+    _stopClock();
+    _audio.stopAll();
+    _playStep.value = 0;
+    if (mounted) {
+      setState(() {
+        _playing = false;
+        _songSection = null;
+        _songSteps = null;
+        _litMidis = {};
+      });
+    }
+  }
+
+  Future<bool> _commitSongVocal(List<double> peaks, String? path) async {
+    if (path == null) return false;
+    final persisted = await LoopStorage.copyVocal(path, widget.song.id, 'song');
+    if (!mounted) return false;
+    if (persisted == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't save the recording"),
+          duration: Duration(milliseconds: 1600),
+        ),
+      );
+      return false;
+    }
+    setState(() {
+      _songVocalPath = persisted;
+      _songVocalPeaks = peaks;
+      _songVocalBpm = _bpm;
+      _songVocalBars = _songTotalBars;
+    });
+    return true;
+  }
+
   // ── autotune (server-side WORLD vocoder; non-destructive) ─────────
   void _openAutotune() {
     if (_playing) _stopAll();
@@ -1881,6 +2003,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       sections: _sections.map((s) => s.deepCopy()).toList(),
       updatedAt: DateTime.now(),
       wave: buildWave(flat),
+      songVocalPath: _songVocalPath,
+      songVocalPeaks: _songVocalPeaks,
+      songVocalBpm: _songVocalBpm,
+      songVocalBars: _songVocalBars,
     );
   }
 
@@ -2604,6 +2730,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       return VocalSurface(
         clip: vt.clip,
         onRecord: _openVocalRecord,
+        // "Rec over song" only when the arrangement spans >1 section instance.
+        onRecordSong: _sections.fold<int>(0, (a, s) => a + s.repeats) > 1
+            ? _openSongVocalRecord
+            : null,
         onEdit: vt.effectiveClips.isNotEmpty ? _openVocalEditor : null,
         onAutotune: _openAutotune,
         onRevert: vt.vocalOrigPath != null ? _revertAutotune : null,

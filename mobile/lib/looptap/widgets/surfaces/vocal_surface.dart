@@ -17,6 +17,7 @@ class VocalSurface extends StatelessWidget {
     this.onAutotune,
     this.onRevert,
     this.onEdit,
+    this.onRecordSong,
   });
 
   /// Peaks of the committed take (null when nothing is recorded).
@@ -31,6 +32,9 @@ class VocalSurface extends StatelessWidget {
   /// Opens the clip editor (trim/fade/gain + sound processing). Shown when a
   /// clip exists.
   final VoidCallback? onEdit;
+  /// Records ONE continuous take over the whole song. Shown only when the
+  /// arrangement spans more than one section instance.
+  final VoidCallback? onRecordSong;
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +70,16 @@ class VocalSurface extends StatelessWidget {
                 clip != null ? 'Recorded' : 'Tap to record',
                 style: LTType.mono(size: 13, weight: FontWeight.w700, color: LT.t2),
               ),
+              if (onRecordSong != null) ...[
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: onRecordSong,
+                  child: Text(
+                    'Rec over song',
+                    style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.pink),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(width: 24),

@@ -381,6 +381,10 @@ class Song {
     List<Section>? sections,
     this.updatedAt,
     List<double>? wave,
+    this.songVocalPath,
+    this.songVocalPeaks,
+    this.songVocalBpm,
+    this.songVocalBars,
   })  : vol = vol ?? {for (final t in kTracks) t.id: t.kind == TrackKind.drums ? 1.0 : 0.85},
         mutes = mutes ?? {},
         instruments = instruments ??
@@ -405,6 +409,13 @@ class Song {
   DateTime? updatedAt;
   /// 30-bar waveform thumbnail for the songs grid.
   List<double> wave;
+  /// Optional song-level continuous vocal take — recorded over the WHOLE song
+  /// and played from step 0 during Play Song (avoids the per-section repeat
+  /// conflict). Basename under Documents/looptap/vocals; null when none.
+  String? songVocalPath;
+  List<double>? songVocalPeaks; // display peaks
+  int? songVocalBpm; // bpm at record time
+  int? songVocalBars; // total song bars at record time (loop length)
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -420,6 +431,10 @@ class Song {
         'sections': sections.map((s) => s.toJson()).toList(),
         'updatedAt': updatedAt?.millisecondsSinceEpoch,
         'wave': wave,
+        if (songVocalPath != null) 'songVocalPath': songVocalPath,
+        if (songVocalPeaks != null) 'songVocalPeaks': songVocalPeaks,
+        if (songVocalBpm != null) 'songVocalBpm': songVocalBpm,
+        if (songVocalBars != null) 'songVocalBars': songVocalBars,
       };
 
   static Song fromJson(Map<String, dynamic> j) => Song(
@@ -440,6 +455,13 @@ class Song {
             ? null
             : DateTime.fromMillisecondsSinceEpoch((j['updatedAt'] as num).toInt()),
         wave: (j['wave'] as List?)?.map((e) => (e as num).toDouble()).toList(),
+        songVocalPath:
+            (j['songVocalPath'] as String?)?.split('/').last.split('\\').last,
+        songVocalPeaks: (j['songVocalPeaks'] as List?)
+            ?.map((e) => (e as num).toDouble())
+            .toList(),
+        songVocalBpm: (j['songVocalBpm'] as num?)?.toInt(),
+        songVocalBars: (j['songVocalBars'] as num?)?.toInt(),
       );
 
   static String encodeList(List<Song> songs) =>
