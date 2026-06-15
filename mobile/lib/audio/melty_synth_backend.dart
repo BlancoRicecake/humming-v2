@@ -41,10 +41,12 @@ class MeltyEngine {
   static final MeltyEngine _instance = MeltyEngine._();
   factory MeltyEngine() => _instance;
 
-  // iOS uses the smaller TimGM6mb (parses ~5x faster than GeneralUser-GS on the
-  // main isolate, and MeltySynth renders it correctly). Android keeps
-  // GeneralUser-GS via FluidSynth (SynthEngine._sfAsset).
-  static const String _sfAsset = 'assets/sounds/TimGM6mb.sf2';
+  // SAME soundfont as Android (SynthEngine._sfAsset) so iOS and Android sound
+  // the same — MeltySynth renders GeneralUser-GS correctly (AVAudioUnitSampler
+  // could not, which is why we left flutter_midi_pro). Note: it's 31MB, so the
+  // one-time parse on first load is heavier; pre-warm ensureLoaded behind a
+  // loading state if first-play jank shows up.
+  static const String _sfAsset = 'assets/sounds/GeneralUser-GS.sf2';
   static const String _sf808Asset = 'assets/sounds/808.sf2';
   static const String _sfHipHopAsset = 'assets/sounds/hiphop_kit.sf2';
 
@@ -144,7 +146,7 @@ class MeltyEngine {
     await FlutterPcmSound.setup(sampleRate: _sampleRate, channelCount: 1);
     FlutterPcmSound.setFeedThreshold(_frames);
     FlutterPcmSound.setFeedCallback(_onFeed);
-    await FlutterPcmSound.start();
+    FlutterPcmSound.start(); // returns bool (not a Future) in this version
   }
 
   // Called by flutter_pcm_sound whenever its buffer drops below the threshold.

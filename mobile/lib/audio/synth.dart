@@ -2,8 +2,8 @@
 // 단음 미리듣기와 향후 트랙 재생(task #5)에서 공용으로 사용.
 // 백엔드 /render_audio 의존 제거 — 200~500ms 네트워크 지연을 즉시 응답으로 대체.
 //
-// 자산(메인 GM): Android = assets/sounds/GeneralUser-GS.sf2 (~31MB), iOS =
-// assets/sounds/TimGM6mb.sf2 (~5.7MB) — iOS AVAudioUnitSampler 호환 문제로 분기.
+// 자산(메인 GM): assets/sounds/GeneralUser-GS.sf2 (~31MB). Android 은 이 파일을
+// flutter_midi_pro(FluidSynth)로, iOS 는 MeltyEngine 이 같은 파일을 로드 — 동일 음색.
 // 채널 0 을 미리듣기 전용으로 사용 — 트랙 재생용 채널과 분리.
 import 'dart:async';
 import 'dart:io' show Platform;
@@ -26,15 +26,9 @@ class SynthEngine {
   static final SynthEngine _instance = SynthEngine._();
   factory SynthEngine() => _instance;
 
-  // Main GM soundfont — platform-split on purpose. Android's FluidSynth renders
-  // GeneralUser-GS faithfully, but iOS's AVAudioUnitSampler mis-renders it (e.g.
-  // GM program 0 "Piano 1" comes out as a wrong sound), so iOS uses the smaller
-  // TimGM6mb, which AVAudioUnitSampler plays correctly. Both ship in pubspec
-  // assets. (A single cross-platform engine — MeltySynth, already used for WAV
-  // export — would unify these but is a larger change.)
-  static final String _sfAsset = Platform.isIOS
-      ? 'assets/sounds/TimGM6mb.sf2'
-      : 'assets/sounds/GeneralUser-GS.sf2';
+  // GM soundfont for the flutter_midi_pro path (Android only — iOS routes through
+  // MeltyEngine, which loads the SAME GeneralUser-GS, so both platforms match).
+  static const String _sfAsset = 'assets/sounds/GeneralUser-GS.sf2';
   static const String _sf808Asset = 'assets/sounds/808.sf2';
   static const String _sfHipHopAsset = 'assets/sounds/hiphop_kit.sf2';
 
