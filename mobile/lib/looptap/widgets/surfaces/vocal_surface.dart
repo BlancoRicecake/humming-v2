@@ -18,6 +18,7 @@ class VocalSurface extends StatelessWidget {
     this.onRevert,
     this.onEdit,
     this.onRecordSong,
+    this.onClearSong,
   });
 
   /// Peaks of the committed take (null when nothing is recorded).
@@ -35,6 +36,8 @@ class VocalSurface extends StatelessWidget {
   /// Records ONE continuous take over the whole song. Shown only when the
   /// arrangement spans more than one section instance.
   final VoidCallback? onRecordSong;
+  /// Clears the song-level take. Non-null only when one exists.
+  final VoidCallback? onClearSong;
 
   @override
   Widget build(BuildContext context) {
@@ -75,8 +78,18 @@ class VocalSurface extends StatelessWidget {
                 GestureDetector(
                   onTap: onRecordSong,
                   child: Text(
-                    'Rec over song',
+                    onClearSong != null ? 'Re-rec over song' : 'Rec over song',
                     style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.pink),
+                  ),
+                ),
+              ],
+              if (onClearSong != null) ...[
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: onClearSong,
+                  child: Text(
+                    'Clear song vocal',
+                    style: LTType.mono(size: 10, weight: FontWeight.w600, color: LT.t3),
                   ),
                 ),
               ],

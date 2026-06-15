@@ -25,6 +25,7 @@ Future<void> showExportDrawer(
   int drumProgram = 0,
   List<TrackRef> extras = const [],
   Map<String, int> instruments = const {},
+  String? songVocalPath,
 }) {
   return showGeneralDialog(
     context: context,
@@ -46,6 +47,7 @@ Future<void> showExportDrawer(
         drumProgram: drumProgram,
         extras: extras,
         instruments: instruments,
+        songVocalPath: songVocalPath,
       ),
     ),
     transitionBuilder: (_, anim, __, child) => SlideTransition(
@@ -69,6 +71,7 @@ class _ExportDrawer extends StatefulWidget {
     required this.drumProgram,
     required this.extras,
     required this.instruments,
+    this.songVocalPath,
   });
   final String title;
   final List<Section> sections;
@@ -81,6 +84,7 @@ class _ExportDrawer extends StatefulWidget {
   final int drumProgram;
   final List<TrackRef> extras;
   final Map<String, int> instruments;
+  final String? songVocalPath;
 
   @override
   State<_ExportDrawer> createState() => _ExportDrawerState();
@@ -119,7 +123,8 @@ class _ExportDrawerState extends State<_ExportDrawer> {
           melodyDecProgram: widget.melodyDecProgram,
           drumProgram: widget.drumProgram,
           extras: widget.extras,
-          instruments: widget.instruments);
+          instruments: widget.instruments,
+          songVocalPath: widget.songVocalPath);
       final file = res.file;
       await _share([XFile(file.path, mimeType: 'audio/wav')], '${widget.title}.wav');
       if (mounted) {
@@ -144,7 +149,8 @@ class _ExportDrawerState extends State<_ExportDrawer> {
           melodyDecProgram: widget.melodyDecProgram,
           drumProgram: widget.drumProgram,
           extras: widget.extras,
-          instruments: widget.instruments);
+          instruments: widget.instruments,
+          songVocalPath: widget.songVocalPath);
       if (files.isEmpty) {
         if (mounted) _note(L10n.of(context).ltExportFailed, ok: false);
       } else {

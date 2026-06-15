@@ -223,6 +223,40 @@ Future<({Map<String, Uint8List> bytes, List<Map<String, Object>> schedule, int s
   );
 }
 
+/// Song-level continuous vocal: load the one take and schedule it from t=0 over
+/// the whole arrangement (mirrors live playback, which replaces the per-section
+/// vocals with this single clip). Same return shape as [_vocalJobs].
+Future<({Map<String, Uint8List> bytes, List<Map<String, Object>> schedule, int skipped})>
+    _songVocalJob(String path, List<Section> sections, int bpm, double gain) async {
+  if (gain <= 0) return (bytes: <String, Uint8List>{}, schedule: const <Map<String, Object>>[], skipped: 0);
+  final bytes = await _loadVocalBytes(path);
+  if (bytes == null) {
+    return (bytes: <String, Uint8List>{}, schedule: const <Map<String, Object>>[], skipped: 1);
+  }
+  final spStep = 60 / bpm / kStepsPerBeat * _sr; // samples per 16th step
+  var totalSteps = 0;
+  for (final sec in sections) {
+    totalSteps += stepsForBars(sec.bars) * sec.repeats;
+  }
+  final len = (totalSteps * spStep).round(); // mixVocalsInto caps at the take length
+  return (
+    bytes: {path: bytes},
+    schedule: <Map<String, Object>>[
+      {
+        'name': path,
+        'start': 0,
+        'len': len,
+        'gain': gain,
+        'trimStart': 0,
+        'trimEnd': -1,
+        'fadeInMs': 0,
+        'fadeOutMs': 0,
+      },
+    ],
+    skipped: 0,
+  );
+}
+
 /// Pure schedule walk (testable): one entry per CLIP per section INSTANCE whose
 /// take loaded ([names]), at `(cumulative + clip.startStep) × samples-per-step`.
 /// Section boundaries are multiples of 16 steps, so swing (odd 16ths only) never
@@ -396,6 +430,7 @@ Future<({File file, int skippedVocals})> exportWavSong(
   int drumProgram = 0,
   List<TrackRef> extras = const [],
   Map<String, int> instruments = const {},
+  String? songVocalPath,
 }) async {
   final flat = flattenSong(sections);
   // Custom-soundfont lanes (no GM slot) render through their own SF2 and are
@@ -550,7 +585,11 @@ Future<({File file, int skippedVocals})> exportWavSong(
     ...dynJobs,
     ...perKitDrumJobs,
   ];
-  final vocal = await _vocalJobs(sections, bpm, vol['vocal'] ?? 0.85);
+  // A song-level take (recorded over the whole song) replaces the per-section
+  // vocal schedule — one clip mixed from t=0, mirroring live playback.
+  final vocal = songVocalPath != null
+      ? await _songVocalJob(songVocalPath, sections, bpm, vol['vocal'] ?? 0.85)
+      : await _vocalJobs(sections, bpm, vol['vocal'] ?? 0.85);
   final wavs = await compute(_renderIso, {
     'sf2s': sf2s,
     'jobs': jobs,
@@ -579,6 +618,7 @@ Future<List<File>> exportStems(
   int drumProgram = 0,
   List<TrackRef> extras = const [],
   Map<String, int> instruments = const {},
+  String? songVocalPath,
 }) async {
   final flat = flattenSong(sections);
   final labelOf = {for (final m in sectionTrackMetas(extras)) m.id: m.label};
@@ -673,16 +713,25 @@ Future<List<File>> exportStems(
     }
   }
 
-  // vocal stem — a per-section MIX of every vocal-kind lane's takes (positions,
-  // trim/fade/gain applied), not just the first raw take. Muted lanes (vol 0)
-  // are excluded inside the bounce.
-  for (var i = 0; i < sections.length; i++) {
-    final sec = sections[i];
-    final bytes = await bounceSectionVocalWav(sec, bpm, vol);
-    if (bytes == null) continue;
-    final f = File(await _exportPath('$title - vocal ${i + 1} ${sec.name}', 'wav'));
-    await f.writeAsBytes(bytes);
-    out.add(f);
+  // Vocal stem(s). A song-level take replaces the per-section vocals (mirrors
+  // the full-mix/playback), so export it as ONE stem; otherwise one per-section
+  // MIX of every vocal-kind lane's takes (positions/trim/fade/gain applied).
+  if (songVocalPath != null) {
+    final bytes = await _loadVocalBytes(songVocalPath);
+    if (bytes != null) {
+      final f = File(await _exportPath('$title - vocal (song)', 'wav'));
+      await f.writeAsBytes(bytes);
+      out.add(f);
+    }
+  } else {
+    for (var i = 0; i < sections.length; i++) {
+      final sec = sections[i];
+      final bytes = await bounceSectionVocalWav(sec, bpm, vol);
+      if (bytes == null) continue;
+      final f = File(await _exportPath('$title - vocal ${i + 1} ${sec.name}', 'wav'));
+      await f.writeAsBytes(bytes);
+      out.add(f);
+    }
   }
   return out;
 }
