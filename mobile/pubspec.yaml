@@ -109,7 +109,7 @@ flutter:
 
   assets:
     - assets/icon/
-    - assets/sounds/TimGM6mb.sf2
+    - assets/sounds/GeneralUser-GS.sf2
     - assets/sounds/808.sf2
     - assets/sounds/hiphop_kit.sf2
     - assets/legal/

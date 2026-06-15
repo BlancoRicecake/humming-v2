@@ -2,7 +2,7 @@
 // 단음 미리듣기와 향후 트랙 재생(task #5)에서 공용으로 사용.
 // 백엔드 /render_audio 의존 제거 — 200~500ms 네트워크 지연을 즉시 응답으로 대체.
 //
-// 자산: assets/sounds/TimGM6mb.sf2 (General MIDI 음원, 5.4MB).
+// 자산: assets/sounds/GeneralUser-GS.sf2 (General MIDI 음원, GeneralUser GS v2, ~31MB).
 // 채널 0 을 미리듣기 전용으로 사용 — 트랙 재생용 채널과 분리.
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -23,7 +23,7 @@ class SynthEngine {
   static final SynthEngine _instance = SynthEngine._();
   factory SynthEngine() => _instance;
 
-  static const String _sfAsset = 'assets/sounds/TimGM6mb.sf2';
+  static const String _sfAsset = 'assets/sounds/GeneralUser-GS.sf2';
   static const String _sf808Asset = 'assets/sounds/808.sf2';
   static const String _sfHipHopAsset = 'assets/sounds/hiphop_kit.sf2';
 

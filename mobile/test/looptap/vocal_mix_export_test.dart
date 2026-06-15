@@ -83,4 +83,91 @@ void main() {
     expect(scheduleVocalMixes([sec('A', vocal: 'v.wav')], bpm, 0, {'v.wav'}), isEmpty);
     expect(scheduleVocalMixes([sec('A', vocal: 'v.wav')], bpm, 1, {}), isEmpty);
   });
+
+  group('multi-clip', () {
+    test('each clip schedules at its own startStep with combined gain', () {
+      final s = Section(id: 'A', name: 'A', bars: 2); // 32 steps
+      s.tracks['vocal'] = TrackData(clips: [
+        VocalClip(path: 'a.wav', startStep: 0, gain: 0.5),
+        VocalClip(path: 'b.wav', startStep: 16, gain: 1.0),
+      ]);
+      final jobs = scheduleVocalMixes([s], bpm, 0.8, {'a.wav', 'b.wav'});
+      expect(jobs.length, 2);
+      expect(jobs[0]['name'], 'a.wav');
+      expect(jobs[0]['start'], 0);
+      expect(jobs[0]['gain'], closeTo(0.8 * 0.5, 1e-9));
+      expect(jobs[1]['name'], 'b.wav');
+      expect(jobs[1]['start'], (16 * spStep).round());
+      expect(jobs[1]['len'], (16 * spStep).round()); // room left after step 16
+      expect(jobs[1]['gain'], closeTo(0.8, 1e-9));
+    });
+
+    test('a clip starting past the section boundary is dropped', () {
+      final s = Section(id: 'A', name: 'A', bars: 1); // 16 steps
+      s.tracks['vocal'] = TrackData(clips: [
+        VocalClip(path: 'a.wav', startStep: 20), // beyond 16 → out of loop
+      ]);
+      expect(scheduleVocalMixes([s], bpm, 1.0, {'a.wav'}), isEmpty);
+    });
+
+    test('legacy single take schedules identically to a step-0 clip', () {
+      final legacy = scheduleVocalMixes([sec('A', bars: 2, vocal: 'v.wav')], bpm, 0.7, {'v.wav'});
+      final s = Section(id: 'A', name: 'A', bars: 2);
+      s.tracks['vocal'] = TrackData(clips: [VocalClip(path: 'v.wav')]);
+      final explicit = scheduleVocalMixes([s], bpm, 0.7, {'v.wav'});
+      expect(legacy.single['start'], explicit.single['start']);
+      expect(legacy.single['len'], explicit.single['len']);
+      expect(legacy.single['gain'], explicit.single['gain']);
+    });
+
+    test('three sequential chunks each sound at their own startStep', () {
+      // each take is 0.05 s (2205 samples) of constant 1.0
+      final src = Float32List.fromList(List.filled(2205, 1.0));
+      final clips = [
+        VocalClip(path: 'a.wav', startStep: 0),
+        VocalClip(path: 'a.wav', startStep: 8),
+        VocalClip(path: 'a.wav', startStep: 16),
+      ];
+      final lane = bounceVocalClips(clips, 2, bpm, {'a.wav': (pcm: src, sampleRate: sr)});
+      for (final step in [0, 8, 16]) {
+        final at = (step * spStep).round();
+        expect(lane[at], closeTo(1.0, 1e-5), reason: 'audible at step $step');
+        // silent in the gap a little before the next chunk's start
+        final gap = at + 3000;
+        if (gap < lane.length) expect(lane[gap], 0, reason: 'silent gap after step $step');
+      }
+    });
+
+    test('minLen pads the lane to the loop length for gapless looping', () {
+      final src = Float32List.fromList(List.filled(2205, 0.5));
+      final pad = (stepsForBars(2) * spStep).round();
+      final lane = bounceVocalClips(
+          [VocalClip(path: 'a.wav', startStep: 0)], 2, bpm, {'a.wav': (pcm: src, sampleRate: sr)},
+          minLen: pad);
+      expect(lane.length, pad); // padded out to one full loop
+      expect(lane[2205 + 100], 0); // silence after the short take
+    });
+
+    test('bounceVocalClips trims, places, and gains clips into one lane', () {
+      // 0.1s of constant 1.0 at 44100
+      final src = Float32List.fromList(List.filled(4410, 1.0));
+      final clips = [
+        VocalClip(path: 'a.wav', startStep: 0, gain: 0.5),
+        VocalClip(path: 'b.wav', startStep: 8, trimStart: 0, trimEnd: 2205), // half length
+      ];
+      final lane = bounceVocalClips(clips, 1, bpm, {
+        'a.wav': (pcm: src, sampleRate: sr),
+        'b.wav': (pcm: src, sampleRate: sr),
+      });
+      // clip A at 0 with gain 0.5 → ~0.5
+      expect(lane[0], closeTo(0.5, 1e-5));
+      // gap between A (ends at 4410) and B is silent
+      expect(lane[10000], 0);
+      // clip B starts at step 8, gain 1.0
+      final bStart = (8 * spStep).round();
+      expect(lane[bStart], closeTo(1.0, 1e-5));
+      // B was trimmed to 2205 source samples → the lane ends right after it
+      expect(lane.length, bStart + 2205);
+    });
+  });
 }

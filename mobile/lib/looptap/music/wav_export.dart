@@ -1,7 +1,7 @@
 // HumTrack — on-device WAV / Stems render via dart_melty_soundfont.
 //
 // Unlike the old oscillator render, this plays the song's MIDI (buildMidi) back
-// through the SAME TimGM6mb.sf2 used for live playback — so the exported WAV
+// through the SAME GeneralUser-GS.sf2 used for live playback — so the exported WAV
 // matches the timbre you hear in the editor (FluidSynth vs MeltySynth differ
 // only subtly). buildMidi already covers all five lanes (melody/bass/melodyDec/
 // drums/beatDec), so stems and the full mix include the decoration tracks too.
@@ -36,7 +36,7 @@ import 'theory.dart';
 import 'wav_codec.dart';
 
 const int _sr = 44100;
-const String _sfAsset = 'assets/sounds/TimGM6mb.sf2';
+const String _sfAsset = 'assets/sounds/GeneralUser-GS.sf2';
 const String _sf808Asset = 'assets/sounds/808.sf2';
 const String _sfHipHopAsset = 'assets/sounds/hiphop_kit.sf2';
 // Render past the last note-off so reverb/release tails aren't cut.
@@ -72,25 +72,49 @@ List<Uint8List> _renderIso(Map<String, dynamic> a) {
   final sampleRate = a['sampleRate'] as int;
   final tailSec = a['tail'] as double;
   final mix = a['mix'] as bool;
-  // decode each take once (mix only) — see _vocalJobs
-  final vocalPcm = <String, Float32List>{};
+  // decode each take once to SOURCE pcm + sr (mix only) — see _vocalJobs. Trim/
+  // fade are non-destructive and clip-specific, so they're applied per scheduled
+  // occurrence below (in source samples) before resampling to the render rate.
+  final vocalSrc = <String, WavData>{};
   for (final e in ((a['vocalBytes'] as Map?) ?? const {}).entries) {
     final wav = parseWav(e.value as Uint8List);
     if (wav == null) continue; // corrupt take — drop from the mix
-    vocalPcm[e.key as String] =
-        resampleLinear(wav.samples, wav.sampleRate, sampleRate);
+    vocalSrc[e.key as String] = wav;
   }
+  // Memoize the no-edit resample (a take repeated across sections is common).
+  final resampledPlain = <String, Float32List>{};
+  Float32List plain(String name, WavData src) => resampledPlain[name] ??=
+      resampleLinear(src.samples, src.sampleRate, sampleRate);
   // scheduled vocal occurrences (mix only) — see scheduleVocalMixes
-  final vocals = [
-    for (final v in (a['vocals'] as List?) ?? const [])
-      if (vocalPcm.containsKey((v as Map)['name']))
-        VocalMix(
-          pcm: vocalPcm[v['name']]!,
-          start: v['start'] as int,
-          len: v['len'] as int,
-          gain: v['gain'] as double,
-        ),
-  ];
+  final vocals = <VocalMix>[];
+  for (final v in (a['vocals'] as List?) ?? const []) {
+    final m = v as Map;
+    final src = vocalSrc[m['name']];
+    if (src == null) continue;
+    final trimStart = (m['trimStart'] as int?) ?? 0;
+    final trimEnd = (m['trimEnd'] as int?) ?? -1;
+    final fadeInMs = (m['fadeInMs'] as int?) ?? 0;
+    final fadeOutMs = (m['fadeOutMs'] as int?) ?? 0;
+    final Float32List pcm;
+    if (trimStart == 0 && trimEnd == -1 && fadeInMs == 0 && fadeOutMs == 0) {
+      pcm = plain(m['name'] as String, src); // legacy/whole take — shared buffer
+    } else {
+      var p = (trimStart == 0 && trimEnd == -1)
+          ? src.samples
+          : trimPcm(src.samples, trimStart, trimEnd == -1 ? src.samples.length : trimEnd);
+      if (fadeInMs != 0 || fadeOutMs != 0) {
+        p = fadePcm(p, (fadeInMs / 1000 * src.sampleRate).round(),
+            (fadeOutMs / 1000 * src.sampleRate).round());
+      }
+      pcm = resampleLinear(p, src.sampleRate, sampleRate);
+    }
+    vocals.add(VocalMix(
+      pcm: pcm,
+      start: m['start'] as int,
+      len: m['len'] as int,
+      gain: m['gain'] as double,
+    ));
+  }
 
   final lefts = <Float32List>[];
   final rights = <Float32List>[];
@@ -178,11 +202,14 @@ Future<({Map<String, Uint8List> bytes, List<Map<String, Object>> schedule, int s
   var skipped = 0;
   if (gain > 0) {
     for (final sec in sections) {
-      final name = sec.tracks['vocal']?.vocalPath;
-      if (name == null || bytesByName.containsKey(name)) continue;
-      final bytes = await _loadVocalBytes(name);
-      bytesByName[name] = bytes; // null memoizes the failure
-      if (bytes == null) skipped++;
+      for (final vid in vocalTrackIds(sec)) {
+        for (final c in sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[]) {
+          if (bytesByName.containsKey(c.path)) continue;
+          final bytes = await _loadVocalBytes(c.path);
+          bytesByName[c.path] = bytes; // null memoizes the failure
+          if (bytes == null) skipped++;
+        }
+      }
     }
   }
   final ok = <String, Uint8List>{
@@ -196,11 +223,15 @@ Future<({Map<String, Uint8List> bytes, List<Map<String, Object>> schedule, int s
   );
 }
 
-/// Pure schedule walk (testable): one entry per section INSTANCE whose vocal
-/// loaded ([names]), at `cumulative steps × samples-per-step`. Section
-/// boundaries are multiples of 16 steps, so swing (odd 16ths only) never
-/// shifts them. `len` is the section-instance boundary; mixVocalsInto
-/// truncates to the decoded take's length.
+/// Pure schedule walk (testable): one entry per CLIP per section INSTANCE whose
+/// take loaded ([names]), at `(cumulative + clip.startStep) × samples-per-step`.
+/// Section boundaries are multiples of 16 steps, so swing (odd 16ths only) never
+/// shifts them. `len` is the room left in the section instance after the clip's
+/// start; mixVocalsInto truncates to the decoded take's length. `trimStart`/
+/// `trimEnd` (source samples) and `fadeInMs`/`fadeOutMs` are the non-destructive
+/// edits the render isolate applies before resampling. A legacy single-take
+/// section resolves (via [TrackData.effectiveClips]) to one clip at step 0,
+/// gain 1, no edits — byte-identical to the old per-section schedule.
 @visibleForTesting
 List<Map<String, Object>> scheduleVocalMixes(
   List<Section> sections,
@@ -214,17 +245,115 @@ List<Map<String, Object>> scheduleVocalMixes(
   var offSteps = 0;
   for (final sec in sections) {
     final secSteps = stepsForBars(sec.bars);
-    final name = sec.tracks['vocal']?.vocalPath;
+    // every vocal lane in the section (base 'vocal' + any added vocal tracks)
+    // mixes down together — overlapping clips on separate lanes play at once.
+    final lanes = [
+      for (final vid in vocalTrackIds(sec)) sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[],
+    ];
     for (var r = 0; r < sec.repeats; r++) {
-      if (name != null && names.contains(name) && gain > 0) {
-        final start = (offSteps * spStep).round();
-        final len = (secSteps * spStep).round();
-        vocals.add({'name': name, 'start': start, 'len': len, 'gain': gain});
+      if (gain > 0) {
+        for (final clips in lanes) {
+          for (final c in clips) {
+            if (!names.contains(c.path) || c.gain <= 0) continue;
+            if (c.startStep < 0 || c.startStep >= secSteps) continue; // out of loop
+            final start = ((offSteps + c.startStep) * spStep).round();
+            final len = ((secSteps - c.startStep) * spStep).round();
+            vocals.add({
+              'name': c.path,
+              'start': start,
+              'len': len,
+              'gain': gain * c.gain,
+              'trimStart': c.trimStart,
+              'trimEnd': c.trimEnd,
+              'fadeInMs': c.fadeInMs,
+              'fadeOutMs': c.fadeOutMs,
+            });
+          }
+        }
       }
       offSteps += secSteps;
     }
   }
   return vocals;
+}
+
+/// The vocal-kind track ids in [s]: the base 'vocal' lane plus any added vocal
+/// track instances (so overlapping takes can live on separate lanes and play
+/// simultaneously, like a multitrack). Order is stable (base first).
+List<String> vocalTrackIds(Section s) {
+  final ids = <String>['vocal'];
+  for (final e in s.extras) {
+    if (trackById(e.type).kind == TrackKind.vocal) ids.add(e.id);
+  }
+  return ids;
+}
+
+/// Pre-bounce a vocal lane's [clips] (one section loop, [bars] long) into a
+/// single mono buffer at [sampleRate], applying each clip's trim/fade/gain at
+/// its [startStep] offset. [sources] maps clip path → decoded mono PCM at its
+/// own source rate. Pure (no IO) — backs both on-device pre-bounce playback and
+/// the editor's A/B preview, and reuses the same trim/fade/mix math as export.
+Float32List bounceVocalClips(
+  List<VocalClip> clips,
+  int bars,
+  int bpm,
+  Map<String, ({Float32List pcm, int sampleRate})> sources, {
+  int sampleRate = _sr,
+  double laneGain = 1.0,
+  int minLen = 0,
+}) {
+  final spStep = 60 / bpm / kStepsPerBeat * sampleRate;
+  final secSteps = stepsForBars(bars);
+  final mixes = <VocalMix>[];
+  for (final c in clips) {
+    final src = sources[c.path];
+    if (src == null || c.gain <= 0) continue;
+    if (c.startStep < 0 || c.startStep >= secSteps) continue;
+    var p = (c.trimStart == 0 && c.trimEnd == -1)
+        ? src.pcm
+        : trimPcm(src.pcm, c.trimStart, c.trimEnd == -1 ? src.pcm.length : c.trimEnd);
+    if (c.fadeInMs != 0 || c.fadeOutMs != 0) {
+      p = fadePcm(p, (c.fadeInMs / 1000 * src.sampleRate).round(),
+          (c.fadeOutMs / 1000 * src.sampleRate).round());
+    }
+    final res = resampleLinear(p, src.sampleRate, sampleRate);
+    mixes.add(VocalMix(
+      pcm: res,
+      start: (c.startStep * spStep).round(),
+      len: ((secSteps - c.startStep) * spStep).round(),
+      gain: laneGain * c.gain,
+    ));
+  }
+  final n = math.max(vocalMixEnd(mixes), minLen); // pad to the loop for looping
+  final left = Float32List(n), right = Float32List(n);
+  mixVocalsInto(left, right, mixes); // writes the mono sum equally to L/R
+  return left;
+}
+
+/// Bounce all of [sec]'s vocal-kind lanes (base Vocal + Audio lanes, skipping
+/// any whose [vol] is 0) into one mono WAV at the export rate — the vocal STEM,
+/// reflecting every take's position/trim/fade/gain. Returns null when nothing
+/// loads. Reuses [_loadVocalBytes] (legacy-opus aware) and [bounceVocalClips].
+Future<Uint8List?> bounceSectionVocalWav(
+    Section sec, int bpm, Map<String, double> vol) async {
+  final clips = <VocalClip>[];
+  for (final vid in vocalTrackIds(sec)) {
+    if ((vol[vid] ?? 0.85) <= 0) continue; // muted lane → excluded
+    clips.addAll(sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[]);
+  }
+  if (clips.isEmpty) return null;
+  final sources = <String, ({Float32List pcm, int sampleRate})>{};
+  for (final c in clips) {
+    if (sources.containsKey(c.path)) continue;
+    final bytes = await _loadVocalBytes(c.path);
+    if (bytes == null) continue;
+    final wav = parseWav(bytes);
+    if (wav != null) sources[c.path] = (pcm: wav.samples, sampleRate: wav.sampleRate);
+  }
+  if (sources.isEmpty) return null;
+  final lane = bounceVocalClips(clips, sec.bars, bpm, sources, sampleRate: _sr);
+  if (lane.isEmpty) return null;
+  return encodeWavMono16(lane, _sr);
 }
 
 /// Read a stored vocal (basename) as raw WAV bytes, or null when it can't be
@@ -544,20 +673,16 @@ Future<List<File>> exportStems(
     }
   }
 
-  // vocal recordings — copied as-is (audio-only, no synth render); skipped
-  // when the vocal lane is muted (vol 0), matching the full mix.
-  if (audible('vocal')) {
-    for (var i = 0; i < sections.length; i++) {
-      final sec = sections[i];
-      final vp = sec.tracks['vocal']?.vocalPath;
-      if (vp == null) continue;
-      final path = LoopStorage.resolveVocal(vp);
-      final src = File(path);
-      if (!await src.exists()) continue;
-      final ext = path.contains('.') ? path.substring(path.lastIndexOf('.') + 1) : 'wav';
-      // index keeps same-named sections from overwriting each other's takes
-      out.add(await src.copy(await _exportPath('$title - vocal ${i + 1} ${sec.name}', ext)));
-    }
+  // vocal stem — a per-section MIX of every vocal-kind lane's takes (positions,
+  // trim/fade/gain applied), not just the first raw take. Muted lanes (vol 0)
+  // are excluded inside the bounce.
+  for (var i = 0; i < sections.length; i++) {
+    final sec = sections[i];
+    final bytes = await bounceSectionVocalWav(sec, bpm, vol);
+    if (bytes == null) continue;
+    final f = File(await _exportPath('$title - vocal ${i + 1} ${sec.name}', 'wav'));
+    await f.writeAsBytes(bytes);
+    out.add(f);
   }
   return out;
 }

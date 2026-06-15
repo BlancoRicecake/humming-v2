@@ -168,30 +168,30 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
           ),
         ),
         const SizedBox(height: 12),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 410),
-          child: GridView.count(
-            crossAxisCount: 2,
-            mainAxisSpacing: 6,
-            crossAxisSpacing: 6,
-            shrinkWrap: true,
-            physics: const ClampingScrollPhysics(),
-            childAspectRatio: 3.6,
-            children: [
-              for (final inst in category.instruments)
-                _PickButton(
-                  label: inst.label,
-                  favorite: _favorites.contains(inst.program),
-                  selected: inst.program == _program,
-                  onTap: () => _pick(inst.program),
-                  onFavorite: () => _toggleFavorite(inst.program),
-                  // cloud sounds: show download / downloading / ready state
-                  cloud: isDynamicSlot(inst.program),
-                  downloading: _downloading.contains(inst.program),
-                  downloaded: SoundfontCatalog.instance.isDownloaded(inst.program),
-                ),
-            ],
-          ),
+        // Non-scrolling grid: the modal's own SingleChildScrollView (lt_modal)
+        // handles scrolling, so every item in the category renders — otherwise
+        // a nested scroll clipped tall categories (16 items) in landscape.
+        GridView.count(
+          crossAxisCount: 2,
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 3.6,
+          children: [
+            for (final inst in category.instruments)
+              _PickButton(
+                label: inst.label,
+                favorite: _favorites.contains(inst.program),
+                selected: inst.program == _program,
+                onTap: () => _pick(inst.program),
+                onFavorite: () => _toggleFavorite(inst.program),
+                // cloud sounds: show download / downloading / ready state
+                cloud: isDynamicSlot(inst.program),
+                downloading: _downloading.contains(inst.program),
+                downloaded: SoundfontCatalog.instance.isDownloaded(inst.program),
+              ),
+          ],
         ),
       ],
     );

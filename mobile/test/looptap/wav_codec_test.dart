@@ -187,4 +187,70 @@ void main() {
     expect(left[40], 0); // len truncation honored
     expect(vocalMixEnd([VocalMix(pcm: pcm, start: 30, len: 10, gain: 1)]), 40);
   });
+
+  group('clip edits', () {
+    test('trimPcm slices [start,end) and clamps out-of-range bounds', () {
+      final s = Float32List.fromList([for (var i = 0; i < 10; i++) i.toDouble()]);
+      expect(trimPcm(s, 2, 5).toList(), [2, 3, 4]);
+      expect(trimPcm(s, -3, 4).toList(), [0, 1, 2, 3]); // start clamped to 0
+      expect(trimPcm(s, 8, 100).toList(), [8, 9]); // end clamped to length
+      expect(trimPcm(s, 5, 2), isEmpty); // inverted → empty
+    });
+
+    test('applyGain scales and clamps to [-1,1]', () {
+      final s = Float32List.fromList([0.5, -0.5, 0.8]);
+      expect(applyGain(s, 0.5).toList(), [closeTo(0.25, 1e-6), closeTo(-0.25, 1e-6), closeTo(0.4, 1e-6)]);
+      // boost beyond 1.0 is clamped, never wraps
+      expect(applyGain(s, 4.0).toList(), [1.0, -1.0, 1.0]);
+    });
+
+    test('fadePcm ramps both ends to 0 (smoothstep) and leaves the middle intact', () {
+      final s = Float32List.fromList(List.filled(100, 1.0));
+      final out = fadePcm(s, 10, 20);
+      expect(out.length, 100);
+      // smoothstep(0.1) = 0.1²·(3−0.2) = 0.028 — eased, below the linear 0.1
+      expect(out.first, closeTo(0.028, 1e-6));
+      expect(out[50], 1.0); // untouched middle
+      // smoothstep(0.05) = 0.05²·(3−0.1) = 0.00725
+      expect(out.last, closeTo(0.00725, 1e-6));
+      // monotonic rise through the in-ramp
+      expect(out[1] > out[0] && out[5] > out[1], isTrue);
+    });
+
+    test('fadePcm clamps overlapping fades to the clip length', () {
+      final s = Float32List.fromList(List.filled(10, 1.0));
+      final out = fadePcm(s, 8, 8); // 16 > 10 → split proportionally, no overlap
+      expect(out.length, 10);
+      expect(out.every((v) => v >= 0 && v <= 1), isTrue);
+    });
+
+    test('normalizePcm scales the loudest sample to the target peak', () {
+      final s = Float32List.fromList([0.1, -0.25, 0.2]);
+      final out = normalizePcm(s, targetPeak: 0.99);
+      var peak = 0.0;
+      for (final v in out) {
+        if (v.abs() > peak) peak = v.abs();
+      }
+      expect(peak, closeTo(0.99, 1e-6));
+      // silence is returned unchanged (no divide-by-zero blowup)
+      final silent = Float32List(50);
+      expect(normalizePcm(silent).every((v) => v == 0), isTrue);
+    });
+
+    test('concatPcm joins parts head-to-tail', () {
+      final a = Float32List.fromList([1, 2]);
+      final b = Float32List.fromList([3, 4, 5]);
+      expect(concatPcm([a, b]).toList(), [1, 2, 3, 4, 5]);
+      expect(concatPcm([]).length, 0);
+    });
+
+    test('trim → encode → parse roundtrips the sliced region', () {
+      final src = sine(440, 44100, 0.2);
+      final cut = trimPcm(src, 4410, 8820); // 0.1s..0.2s
+      final wav = parseWav(encodeWavMono16(cut, 44100));
+      expect(wav, isNotNull);
+      expect(wav!.samples.length, 4410);
+      expect(wav.samples[0], closeTo(src[4410], 1 / 32000));
+    });
+  });
 }

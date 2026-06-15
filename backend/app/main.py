@@ -279,6 +279,48 @@ async def process_vocal_ep(audio: UploadFile = File(...), denoise: str = Form("1
 _autotune_sem = asyncio.Semaphore(2)
 
 
+@app.post("/process_fx")
+async def process_fx_ep(
+    audio: UploadFile = File(...),
+    fx_type: str = Form(...),
+    params: str = Form("{}"),
+):
+    """보컬 사운드 가공 — eq/reverb/comp/delay/stretch/pitch 중 하나를 적용.
+    [params]는 이펙트별 파라미터 JSON. 반환 형식은 /process_vocal·/autotune 과
+    동일: 가공된 WAV(base64) + 표시용 peaks + duration. (CPU 작업은 WORLD 잡과
+    같은 세마포어로 직렬화해 메모리 폭주를 막는다.)"""
+    from .fx import apply_fx
+
+    raw = await audio.read()
+    if not raw:
+        raise HTTPException(400, "empty audio upload")
+    if len(raw) > _settings.max_body_bytes:
+        raise HTTPException(413, f"body too large (>{_settings.max_body_bytes} bytes)")
+    try:
+        p = json.loads(params or "{}")
+        if not isinstance(p, dict):
+            raise ValueError("params must be a JSON object")
+    except (ValueError, json.JSONDecodeError) as e:
+        raise HTTPException(400, f"invalid params: {e}")
+    try:
+        async with _autotune_sem:
+            wav, peaks, dur, sr = await anyio.to_thread.run_sync(
+                functools.partial(apply_fx, raw, fx_type, p))
+    except HTTPException:  # decode failures are already 4xx — don't mask as 500
+        raise
+    except ValueError as e:  # unknown fx_type / empty audio
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("process_fx failed")
+        raise HTTPException(500, f"process_fx failed: {e}")
+    return {
+        "duration": dur,
+        "sample_rate": sr,
+        "peaks": peaks,
+        "audio_b64": base64.b64encode(wav).decode("ascii"),
+    }
+
+
 @app.post("/autotune")
 @_apply(_analyze_decorators)
 async def autotune_ep(
@@ -453,8 +495,11 @@ async def audition_render(payload: dict):
     source = str(payload.get("source") or "gm")
     track_type = str(payload.get("track_type") or "melody")
     sample_rate = int(payload.get("sample_rate") or 44100)
+    piece = payload.get("piece")
     if track_type not in audition_palette_mod.ROLES:
         raise HTTPException(400, "track_type must be melody|bass|drums")
+    if piece is not None and piece not in ("kick", "snare", "hat"):
+        raise HTTPException(400, "piece must be kick|snare|hat")
     try:
         sf2_path, sf_bank, sf_program = _resolve_audition_source(source, payload)
     except KeyError as e:
@@ -465,7 +510,8 @@ async def audition_render(payload: dict):
         raise HTTPException(503, "global SoundFont unavailable")
     try:
         wav = render_mod.render_demo_through_sf2(
-            sf2_path, sf_bank, sf_program, track_type=track_type, sample_rate=sample_rate)
+            sf2_path, sf_bank, sf_program, track_type=track_type,
+            sample_rate=sample_rate, piece=piece)
     except FileNotFoundError as e:
         raise HTTPException(404, f"soundfont file missing: {e}")
     except Exception as e:

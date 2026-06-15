@@ -201,6 +201,84 @@ int vocalMixEnd(List<VocalMix> vocals) {
   return end;
 }
 
+// ── non-destructive clip edits (pure, isolate-safe) ───────────────────────
+// All take/return mono Float32List in [-1,1] at the source sample rate, so they
+// chain with parseWav → … → encodeWavMono16 and are unit-testable without
+// Flutter. Out-of-range / inverted args are clamped to a safe no-op rather than
+// throwing — callers pass sample indices derived from UI gestures.
+
+/// Slice [start, end) samples. Bounds are clamped; start>=end → empty.
+Float32List trimPcm(Float32List s, int start, int end) {
+  final a = start < 0 ? 0 : (start > s.length ? s.length : start);
+  final b = end < a ? a : (end > s.length ? s.length : end);
+  return Float32List.sublistView(s, a, b);
+}
+
+/// Multiply every sample by [gain] (linear). Result is clamped to [-1,1] so a
+/// boost never wraps on later int16 encoding.
+Float32List applyGain(Float32List s, double gain) {
+  final out = Float32List(s.length);
+  for (var i = 0; i < s.length; i++) {
+    out[i] = (s[i] * gain).clamp(-1.0, 1.0);
+  }
+  return out;
+}
+
+/// Fade-in over the first [fadeIn] samples and fade-out over the last [fadeOut]
+/// samples, using a smoothstep curve (3t²−2t³) so the ramp eases in/out for a
+/// more dramatic, musical fade than a straight line. Overlapping/oversized
+/// fades are clamped to the clip length so the two ramps never cross. Returns a
+/// new buffer.
+Float32List fadePcm(Float32List s, int fadeIn, int fadeOut) {
+  final n = s.length;
+  if (n == 0) return Float32List(0);
+  var fi = fadeIn < 0 ? 0 : (fadeIn > n ? n : fadeIn);
+  var fo = fadeOut < 0 ? 0 : (fadeOut > n ? n : fadeOut);
+  if (fi + fo > n) {
+    // Split the budget proportionally so the ramps meet but don't overlap.
+    final total = fi + fo;
+    fi = (fi * n / total).floor();
+    fo = n - fi;
+  }
+  double smooth(double t) => t * t * (3 - 2 * t); // smoothstep ease
+  final out = Float32List.fromList(s);
+  for (var i = 0; i < fi; i++) {
+    out[i] *= smooth((i + 1) / fi);
+  }
+  for (var i = 0; i < fo; i++) {
+    out[n - 1 - i] *= smooth((i + 1) / fo);
+  }
+  return out;
+}
+
+/// Scale so the loudest sample hits [targetPeak]. Silence (or a clip already at
+/// the target) is returned unchanged. [targetPeak] is clamped to (0, 1].
+Float32List normalizePcm(Float32List s, {double targetPeak = 0.99}) {
+  final t = targetPeak.clamp(1e-4, 1.0);
+  var peak = 0.0;
+  for (final v in s) {
+    final a = v.abs();
+    if (a > peak) peak = a;
+  }
+  if (peak <= 1e-6) return s;
+  return applyGain(s, t / peak);
+}
+
+/// Concatenate [parts] head-to-tail into one buffer (splice / "붙이기" base).
+Float32List concatPcm(List<Float32List> parts) {
+  var total = 0;
+  for (final p in parts) {
+    total += p.length;
+  }
+  final out = Float32List(total);
+  var off = 0;
+  for (final p in parts) {
+    out.setRange(off, off + p.length, p);
+    off += p.length;
+  }
+  return out;
+}
+
 /// Display peaks: bucketed max-abs, normalized so the loudest bucket → 1.0,
 /// floored at 0.05 (what the arrangement painter expects of `clip`).
 List<double> peaksFromPcm(Float32List pcm, {int buckets = 64}) {

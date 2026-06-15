@@ -1,12 +1,12 @@
-import type { AuditionItem } from "../../types";
+import type { AuditionItem, DrumPiece } from "../../types";
 import { AuditionRow } from "./AuditionRow";
 
 interface Props {
   items: AuditionItem[];
   selectedKeys: Set<string>;
-  loadingKey: string | null;
+  loadingId: string | null;
   disabled: boolean;
-  onPlay: (item: AuditionItem) => void;
+  onPlay: (item: AuditionItem, piece?: DrumPiece) => void;
   onToggle: (item: AuditionItem) => void;
 }
 
@@ -24,7 +24,7 @@ function groupByCategory(items: AuditionItem[]): { category: string; items: Audi
   return groups;
 }
 
-export function AuditionList({ items, selectedKeys, loadingKey, disabled, onPlay, onToggle }: Props) {
+export function AuditionList({ items, selectedKeys, loadingId, disabled, onPlay, onToggle }: Props) {
   const groups = groupByCategory(items);
   return (
     <div className="sp-list">
@@ -37,7 +37,7 @@ export function AuditionList({ items, selectedKeys, loadingKey, disabled, onPlay
                 key={it.key}
                 item={it}
                 selected={selectedKeys.has(it.key)}
-                loading={loadingKey === it.key}
+                loadingId={loadingId}
                 disabled={disabled}
                 onPlay={onPlay}
                 onToggle={onToggle}

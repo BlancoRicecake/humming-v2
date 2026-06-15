@@ -16,6 +16,7 @@ class VocalSurface extends StatelessWidget {
     required this.onClear,
     this.onAutotune,
     this.onRevert,
+    this.onEdit,
   });
 
   /// Peaks of the committed take (null when nothing is recorded).
@@ -27,6 +28,9 @@ class VocalSurface extends StatelessWidget {
   final VoidCallback? onAutotune;
   /// Swaps back to the pre-autotune take (shown when one exists).
   final VoidCallback? onRevert;
+  /// Opens the clip editor (trim/fade/gain + sound processing). Shown when a
+  /// clip exists.
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +101,10 @@ class VocalSurface extends StatelessWidget {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (onEdit != null) ...[
+                  IconBtn(icon: LtIcons.edit, tooltip: 'Edit', size: 40, onTap: onEdit!),
+                  const SizedBox(height: 8),
+                ],
                 if (onAutotune != null)
                   IconBtn(icon: LtIcons.autoFix, tooltip: 'Autotune', size: 40, onTap: onAutotune!),
                 if (onRevert != null) ...[

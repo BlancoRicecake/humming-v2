@@ -35,6 +35,7 @@ class Arrangement extends StatelessWidget {
     this.onSeek,
     this.onAddTrack,
     this.onReorder,
+    this.onMoveClip,
     this.playing = false,
   });
 
@@ -59,6 +60,11 @@ class Arrangement extends StatelessWidget {
   /// Long-press-drag reorder of the rows; null disables (song-preview).
   final void Function(int oldIndex, int newIndex)? onReorder;
 
+  /// Hold-and-drag a vocal/audio clip chunk along its lane to retime it
+  /// ([newStartStep]); null disables. The chunk snaps to other chunks' edges and
+  /// the playhead.
+  final void Function(String trackId, int clipIndex, int newStartStep)? onMoveClip;
+
   /// Whether the transport is playing — the reorder slow-mo is skipped while
   /// playing so the global timeDilation never dips the music tempo.
   final bool playing;
@@ -78,6 +84,8 @@ class Arrangement extends StatelessWidget {
       range: ranges[m.id],
       // long-press the label chip to drag-reorder (null = disabled).
       reorderIndex: onReorder == null ? null : i,
+      playStep: playStep,
+      onMoveClip: onMoveClip == null ? null : (ci, st) => onMoveClip!(m.id, ci, st),
     );
   }
 
@@ -169,6 +177,8 @@ class _Row extends StatelessWidget {
     required this.steps,
     required this.range,
     this.reorderIndex,
+    this.playStep = 0,
+    this.onMoveClip,
   });
 
   final TrackMeta meta;
@@ -183,6 +193,9 @@ class _Row extends StatelessWidget {
   /// Index in the reorderable list; non-null → the chip is a long-press drag
   /// handle for reordering.
   final int? reorderIndex;
+
+  final double playStep;
+  final void Function(int clipIndex, int newStartStep)? onMoveClip;
 
   @override
   Widget build(BuildContext context) {
@@ -238,9 +251,17 @@ class _Row extends StatelessWidget {
                 border: Border.all(color: selected ? meta.color.withValues(alpha: 0.4) : LT.border),
               ),
               clipBehavior: Clip.antiAlias,
-              child: CustomPaint(
-                painter: _LanePainter(meta: meta, data: data, steps: steps, range: range),
-              ),
+              child: (meta.kind == TrackKind.vocal && onMoveClip != null)
+                  ? _VocalLane(
+                      meta: meta,
+                      data: data,
+                      steps: steps,
+                      playStep: playStep,
+                      onMove: onMoveClip!,
+                    )
+                  : CustomPaint(
+                      painter: _LanePainter(meta: meta, data: data, steps: steps, range: range),
+                    ),
             ),
           ),
         ],
@@ -294,12 +315,151 @@ class _AddTrackRow extends StatelessWidget {
   }
 }
 
+/// Vocal/Audio lane with hold-and-drag chunk retiming. Long-press a chunk to
+/// grab it, then drag along the lane to move its startStep; it snaps to other
+/// chunks' edges and the playhead. (Long-press, not plain drag, so it never
+/// fights the playhead-scrub overlay above.)
+class _VocalLane extends StatefulWidget {
+  const _VocalLane({
+    required this.meta,
+    required this.data,
+    required this.steps,
+    required this.playStep,
+    required this.onMove,
+  });
+
+  final TrackMeta meta;
+  final TrackData data;
+  final int steps;
+  final double playStep;
+  final void Function(int clipIndex, int newStartStep) onMove;
+
+  @override
+  State<_VocalLane> createState() => _VocalLaneState();
+}
+
+class _VocalLaneState extends State<_VocalLane> {
+  int? _grabIdx; // clip being dragged
+  int _grabOffset = 0; // steps between the grab point and the chunk start
+  double _laneW = 1;
+
+  int _durOf(VocalClip c) => c.durSteps > 0 ? c.durSteps : (widget.steps - c.startStep);
+
+  void _onStart(LongPressStartDetails d) {
+    final clips = widget.data.effectiveClips;
+    final pressStep = (d.localPosition.dx / _laneW).clamp(0.0, 1.0) * widget.steps;
+    // topmost chunk under the finger (later clips draw on top)
+    for (var i = clips.length - 1; i >= 0; i--) {
+      final c = clips[i];
+      if (pressStep >= c.startStep && pressStep < c.startStep + _durOf(c)) {
+        setState(() {
+          _grabIdx = i;
+          _grabOffset = (pressStep - c.startStep).round();
+        });
+        return;
+      }
+    }
+    _grabIdx = null;
+  }
+
+  void _onMoveUpdate(LongPressMoveUpdateDetails d) {
+    final idx = _grabIdx;
+    if (idx == null) return;
+    final clips = widget.data.effectiveClips;
+    if (idx >= clips.length) return;
+    final dur = _durOf(clips[idx]);
+    final stepF = (d.localPosition.dx / _laneW).clamp(0.0, 1.0) * widget.steps;
+    var raw = (stepF - _grabOffset).round();
+    raw = _snap(raw, dur, clips, idx).clamp(0, widget.steps - 1);
+    widget.onMove(idx, raw);
+  }
+
+  int _snap(int raw, int dur, List<VocalClip> clips, int self) {
+    final thresh = (widget.steps * 0.03).ceil().clamp(1, 3);
+    final targets = <int>[0, widget.steps, widget.playStep.round()];
+    for (var i = 0; i < clips.length; i++) {
+      if (i == self) continue;
+      targets..add(clips[i].startStep)..add(clips[i].startStep + _durOf(clips[i]));
+    }
+    for (final t in targets) {
+      if ((raw - t).abs() <= thresh) return t; // snap the start edge
+    }
+    for (final t in targets) {
+      if ((raw + dur - t).abs() <= thresh) return t - dur; // snap the end edge
+    }
+    return raw;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      _laneW = c.maxWidth <= 0 ? 1 : c.maxWidth;
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onLongPressStart: _onStart,
+        onLongPressMoveUpdate: _onMoveUpdate,
+        onLongPressEnd: (_) => setState(() => _grabIdx = null),
+        child: CustomPaint(
+          painter: _LanePainter(
+            meta: widget.meta,
+            data: widget.data,
+            steps: widget.steps,
+            range: null,
+            grabbedClip: _grabIdx,
+          ),
+          child: const SizedBox.expand(),
+        ),
+      );
+    });
+  }
+}
+
 class _LanePainter extends CustomPainter {
-  _LanePainter({required this.meta, required this.data, required this.steps, required this.range});
+  _LanePainter(
+      {required this.meta,
+      required this.data,
+      required this.steps,
+      required this.range,
+      this.grabbedClip})
+      : _sig = _sigOf(data);
   final TrackMeta meta;
   final TrackData data;
   final int steps;
   final PitchRange? range;
+
+  /// Index of the chunk currently being hold-dragged (highlighted), or null.
+  final int? grabbedClip;
+
+  // Content signature FROZEN at construction. The old and new painter share the
+  // same TrackData object (notes mutate in place on record/clear/toggle), so a
+  // live read in shouldRepaint always sees identical state — capturing the
+  // signature when the painter is built lets us detect the change and redraw.
+  final int _sig;
+  static int _sigOf(TrackData d) {
+    var h = 17;
+    h = h * 31 + d.drumNotes.length;
+    h = h * 31 + d.pitchNotes.length;
+    for (final n in d.drumNotes) {
+      h = h * 31 + n.kind.hashCode;
+      h = h * 31 + n.step;
+    }
+    for (final n in d.pitchNotes) {
+      h = h * 31 + n.midi;
+      h = (h * 31 + n.step) * 31 + n.dur;
+    }
+    h = h * 31 + (d.clip?.length ?? 0);
+    // vocal chunks: position/size/identity so moving or editing a take redraws.
+    final clips = d.clips;
+    if (clips != null) {
+      h = h * 31 + clips.length;
+      for (final c in clips) {
+        h = h * 31 + c.path.hashCode;
+        h = (h * 31 + c.startStep) * 31 + c.durSteps;
+        h = h * 31 + c.peaks.length;
+      }
+    }
+    return h;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -307,9 +467,17 @@ class _LanePainter extends CustomPainter {
     final w = size.width, h = size.height;
 
     if (meta.kind == TrackKind.drums) {
-      // Use the track's own kit so the beat-fill lane (shaker/tambourine/clap)
-      // draws too — hardcoding the main kit hid beatDec notes in the strip.
-      final rows = meta.drumKinds ?? const ['hihat', 'snare', 'kick'];
+      // Lanes = the track's default kinds PLUS any kind actually present in the
+      // notes. Beat-Fill pads are user-assignable (cowbell/maracas/…), so the
+      // notes can carry kinds outside the const drumKinds — append them so every
+      // recorded hit draws instead of vanishing.
+      final base = meta.drumKinds ?? const ['hihat', 'snare', 'kick'];
+      final present = data.drumNotes.map((n) => n.kind).toSet();
+      final rows = <String>[
+        ...base,
+        for (final k in present)
+          if (!base.contains(k)) k,
+      ];
       for (var ri = 0; ri < rows.length; ri++) {
         final y = h * (ri + 0.5) / rows.length;
         for (final n in data.drumNotes.where((n) => n.kind == rows[ri])) {
@@ -320,20 +488,48 @@ class _LanePainter extends CustomPainter {
       return;
     }
     if (meta.kind == TrackKind.vocal) {
-      final wf = data.clip;
-      if (wf == null || wf.isEmpty) return;
-      final bw = (w - 12) / wf.length;
-      final vp = Paint()..color = meta.color.withValues(alpha: 0.8);
-      for (var i = 0; i < wf.length; i++) {
-        final bh = (wf[i] * 26).clamp(2, h);
-        final x = 6 + i * bw;
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(center: Offset(x, h / 2), width: bw * 0.8, height: bh.toDouble()),
-            const Radius.circular(1),
-          ),
-          vp,
+      // One rounded "chunk" per placed take, positioned at its startStep and
+      // sized by its measured durSteps (−1 → runs to the section end). The
+      // take's waveform is drawn inside the chunk so the user sees WHERE each
+      // recording sounds on the timeline.
+      final clips = data.effectiveClips;
+      if (clips.isEmpty) return;
+      for (var ci = 0; ci < clips.length; ci++) {
+        final c = clips[ci];
+        final grabbed = ci == grabbedClip;
+        final fill = Paint()..color = meta.color.withValues(alpha: grabbed ? 0.30 : 0.16);
+        final stroke = Paint()
+          ..color = meta.color.withValues(alpha: grabbed ? 0.95 : 0.55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = grabbed ? 2 : 1;
+        final vp = Paint()..color = meta.color.withValues(alpha: 0.85);
+        final x0 = (c.startStep / steps) * w;
+        final wSteps = c.durSteps > 0 ? c.durSteps : (steps - c.startStep);
+        final cw = ((wSteps / steps) * w).clamp(4.0, w - x0);
+        final rect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(x0 + 1, 3, (cw - 2).clamp(3.0, w), h - 6),
+          const Radius.circular(3),
         );
+        canvas.drawRRect(rect, fill);
+        canvas.drawRRect(rect, stroke);
+        final pk = c.peaks;
+        if (pk.isNotEmpty && cw > 8) {
+          final bw = (cw - 6) / pk.length;
+          for (var i = 0; i < pk.length; i++) {
+            final bh = (pk[i] * 22).clamp(2, h - 8);
+            final bx = x0 + 3 + i * bw;
+            canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                Rect.fromCenter(
+                    center: Offset(bx, h / 2),
+                    width: (bw * 0.7).clamp(0.6, 4),
+                    height: bh.toDouble()),
+                const Radius.circular(1),
+              ),
+              vp,
+            );
+          }
+        }
       }
       return;
     }
@@ -357,5 +553,9 @@ class _LanePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _LanePainter old) =>
-      old.data != data || old.steps != steps || old.range != range;
+      old._sig != _sig ||
+      old.data != data ||
+      old.steps != steps ||
+      old.range != range ||
+      old.grabbedClip != grabbedClip;
 }

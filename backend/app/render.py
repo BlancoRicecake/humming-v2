@@ -164,6 +164,15 @@ _DEMO_BASS: List[Tuple[float, float, int]] = [  # low-register walk: C2 G2 C3 C2
     (0.00, 0.45, 36), (0.50, 0.45, 43), (1.00, 0.45, 48), (1.50, 0.60, 36),
 ]
 
+# Single drum pieces (GM percussion map) — four even hits so each piece of a kit
+# can be auditioned on its own.
+_DRUM_PIECE_NOTES = {"kick": 36, "snare": 38, "hat": 42}
+
+
+def _drum_piece_phrase(piece: str) -> List[Tuple[float, float, int]]:
+    note = _DRUM_PIECE_NOTES[piece]
+    return [(i * 0.30, 0.22, note) for i in range(4)]
+
 
 def _phrase_for(track_type: str) -> List[Tuple[float, float, int]]:
     """Audition phrase per track type (the new audition path picks by role,
@@ -312,6 +321,7 @@ def render_demo_through_sf2(
     sf_program: int,
     track_type: str = "melody",
     sample_rate: int = 44100,
+    piece: Optional[str] = None,
 ) -> bytes:
     """Render the per-track-type audition phrase through an ARBITRARY .sf2.
 
@@ -320,7 +330,9 @@ def render_demo_through_sf2(
     throwaway Synth — it never touches ``_STATE.sf2_path``, so it is
     concurrent-safe and leaves the engine-experiment space (Space A) untouched.
 
-    Drums route to channel 9 (GM percussion); melody/bass to channel 0.
+    Drums route to channel 9 (GM percussion); melody/bass to channel 0. For
+    drums, ``piece`` ('kick' | 'snare' | 'hat') auditions just that one piece of
+    the kit instead of the full beat.
 
     Raises ``FileNotFoundError`` if ``sf2_path`` is missing and ``RuntimeError``
     if the soundfont fails to load.
@@ -340,7 +352,10 @@ def render_demo_through_sf2(
             raise RuntimeError(f"sfload failed for {sf2_path}")
         synth.program_select(channel, sfid, int(sf_bank), int(sf_program))
 
-        phrase = _phrase_for(track_type)
+        if track_type == "drums" and piece in _DRUM_PIECE_NOTES:
+            phrase = _drum_piece_phrase(piece)
+        else:
+            phrase = _phrase_for(track_type)
         events: List[Tuple[float, int, int, int]] = []  # (time, rank, pitch, vel)
         for start, dur, pitch in phrase:
             events.append((start, 1, pitch, 100))

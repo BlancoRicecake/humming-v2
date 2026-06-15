@@ -1,4 +1,4 @@
-import type { AnalyzeOptions, AnalyzeResponse, AssistResponse, AuditionItem, AuditionPaletteResponse, AuditionRenderRequest, Note, RenderCapabilities, SoundfontPreset, TrackType } from "../types";
+import type { AnalyzeOptions, AnalyzeResponse, AssistResponse, AuditionItem, AuditionPaletteResponse, AuditionRenderRequest, DrumPiece, Note, RenderCapabilities, SoundfontPreset, TrackType } from "../types";
 
 const BASE = "/api";
 
@@ -121,13 +121,15 @@ export async function auditionRender(req: AuditionRenderRequest): Promise<Blob> 
   return res.blob();
 }
 
-// Map a palette item to its render request (discriminated by source).
-export function toRenderRequest(it: AuditionItem): AuditionRenderRequest {
+// Map a palette item to its render request (discriminated by source). For
+// drums, an optional piece auditions just the kick/snare/hat.
+export function toRenderRequest(it: AuditionItem, piece?: DrumPiece): AuditionRenderRequest {
+  const extra = piece ? { piece } : {};
   if (it.source === "gm") {
-    return { source: "gm", bank: it.gm!.bank, program: it.gm!.program, track_type: it.track_type };
+    return { source: "gm", bank: it.gm!.bank, program: it.gm!.program, track_type: it.track_type, ...extra };
   }
   if (it.source === "catalog") {
-    return { source: "catalog", soundfont_id: it.soundfont_id!, track_type: it.track_type };
+    return { source: "catalog", soundfont_id: it.soundfont_id!, track_type: it.track_type, ...extra };
   }
-  return { source: "sentinel", sentinel_id: it.sentinel_id!, track_type: it.track_type };
+  return { source: "sentinel", sentinel_id: it.sentinel_id!, track_type: it.track_type, ...extra };
 }

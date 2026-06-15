@@ -12,7 +12,9 @@ import 'package:audioplayers/audioplayers.dart';
 import '../../audio/synth.dart';
 
 /// GM drum note numbers per kind. Main kit (kick/snare/hihat) + the beat-fill
-/// decoration kit (shaker/tambourine/clap) — both route to GM ch9.
+/// launchpad percussion (everything else) — both route to a GM bank-128 kit.
+/// MIRROR: keep in sync with `_drumNote` (midi_export.dart) and `kDrumSpecs`
+/// (drum_surface.dart). See [drum_mirror_test].
 const Map<String, int> kDrumNote = {
   'kick': 36,
   'snare': 38,
@@ -20,6 +22,15 @@ const Map<String, int> kDrumNote = {
   'shaker': 82,
   'tambourine': 54,
   'clap': 39,
+  'cowbell': 56,
+  'maracas': 70,
+  'claves': 75,
+  'rimshot': 37,
+  'woodhi': 76,
+  'woodlo': 77,
+  'ride': 51,
+  'crash': 57,
+  'triangle': 81,
 };
 
 class LoopAudio {
