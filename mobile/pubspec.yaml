@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.2+14
+version: 1.0.2+15
 
 environment:
   sdk: ^3.7.0
@@ -70,6 +70,17 @@ dependencies:
   flutter_markdown: ^0.7.4
   url_launcher: ^6.3.2
   dart_melty_soundfont: ^2.0.0
+
+dependency_overrides:
+  # iOS drum-kit fix. Upstream flutter_midi_pro's selectInstrument loads the
+  # percussion kit (bank MSB 120) but then sends a program change hardcoded to
+  # the melodic bank (MSB 121, LSB=128) — clobbering the kit, so drum kits play
+  # as melodic instruments on iOS (Android/FluidSynth is unaffected). Fork is
+  # 3.1.7-dev (identical Android source) + a one-line percussion-bank fix.
+  flutter_midi_pro:
+    git:
+      url: https://github.com/hjm181227/flutter_midi_pro.git
+      ref: 1d8fc682517e3e8398c3aba73abec7d39e5b0e40
 
 dev_dependencies:
   flutter_test:
