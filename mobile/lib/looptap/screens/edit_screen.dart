@@ -1586,6 +1586,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       );
       return false;
     }
+    _pushUndo();
     setState(() {
       _songVocalPath = persisted;
       _songVocalPeaks = peaks;
@@ -1593,6 +1594,19 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       _songVocalBars = _songTotalBars;
     });
     return true;
+  }
+
+  void _clearSongVocal() {
+    if (_songVocalPath == null) return;
+    if (_songVocalActive) _stopVocal();
+    _pushUndo();
+    setState(() {
+      _songVocalActive = false;
+      _songVocalPath = null;
+      _songVocalPeaks = null;
+      _songVocalBpm = null;
+      _songVocalBars = null;
+    });
   }
 
   // ── autotune (server-side WORLD vocoder; non-destructive) ─────────
@@ -2073,6 +2087,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       drumProgram: _instruments['drums'] ?? kDefaultDrumKit,
       extras: extras,
       instruments: Map.of(_instruments),
+      songVocalPath: _songVocalPath,
     );
   }
 
@@ -2734,6 +2749,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         onRecordSong: _sections.fold<int>(0, (a, s) => a + s.repeats) > 1
             ? _openSongVocalRecord
             : null,
+        onClearSong: _songVocalPath != null ? _clearSongVocal : null,
         onEdit: vt.effectiveClips.isNotEmpty ? _openVocalEditor : null,
         onAutotune: _openAutotune,
         onRevert: vt.vocalOrigPath != null ? _revertAutotune : null,
@@ -2802,6 +2818,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     mutes: Map.of(_mutes),
     instruments: Map.of(_instruments),
     title: _title,
+    songVocalPath: _songVocalPath,
+    songVocalPeaks: _songVocalPeaks,
+    songVocalBpm: _songVocalBpm,
+    songVocalBars: _songVocalBars,
   );
 
   /// Snapshot current state before a mutation. [coalesce] merges rapid bursts
@@ -2839,6 +2859,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         ..clear()
         ..addAll(s.instruments);
       _title = s.title;
+      _songVocalPath = s.songVocalPath;
+      _songVocalPeaks = s.songVocalPeaks;
+      _songVocalBpm = s.songVocalBpm;
+      _songVocalBars = s.songVocalBars;
       _playStep.value = 0;
     });
     // re-assert each drum track's kit — pitched programs ride along on every
@@ -2872,6 +2896,10 @@ class _EditSnapshot {
     required this.mutes,
     required this.instruments,
     required this.title,
+    this.songVocalPath,
+    this.songVocalPeaks,
+    this.songVocalBpm,
+    this.songVocalBars,
   });
   final List<Section> sections;
   final int activeIdx;
@@ -2881,4 +2909,8 @@ class _EditSnapshot {
   final Map<String, double> vol;
   final Map<String, bool> mutes;
   final Map<String, int> instruments;
+  final String? songVocalPath;
+  final List<double>? songVocalPeaks;
+  final int? songVocalBpm;
+  final int? songVocalBars;
 }
