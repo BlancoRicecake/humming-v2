@@ -74,6 +74,12 @@ class MeltyEngine {
   final Map<int, Synthesizer> _channelSynth = <int, Synthesizer>{};
   final Map<int, int> _channelProgram = <int, int>{};
 
+  // Channels the app has designated as drums via ensureDrumKitOn (plus the base
+  // drum channel 9). noteOn must NEVER re-bind these as melodic: kit and GM
+  // program numbers overlap (kit 0 == GM piano 0), so the channel — not the
+  // program value — is the only reliable disambiguator.
+  final Set<int> _drumChannels = <int>{drumChannel};
+
   // (channel, pitch) → scheduled release timer (for playNote auto note-off).
   final Map<int, Map<int, Timer>> _activeReleases = <int, Map<int, Timer>>{};
 
@@ -238,6 +244,7 @@ class MeltyEngine {
   /// SynthEngine.ensureDrumKitOn.
   Future<void> ensureDrumKitOn(int channel, int program) async {
     await ensureLoaded();
+    _drumChannels.add(channel); // remember: this channel plays drums, not melody
     final marker = 1000 + program;
     if (_channelProgram[channel] == marker) return;
     Synthesizer s;
@@ -258,9 +265,12 @@ class MeltyEngine {
       s = _main!;
       prog = program; // GM kit number
     }
-    // bank 128 makes MeltySynth resolve a percussion preset on ANY channel
-    // (it falls back to the Standard kit 128:0 if prog isn't present).
-    _selectProgram(s, channel, bank: 128, program: prog);
+    // Target an effective bankNumber of 128 (percussion). MeltySynth's setBank()
+    // ADDS 128 on the percussion channel (9) — so send 0 there (→128) and an
+    // explicit 128 on other drum channels (→128). bank 128 resolves a percussion
+    // preset on ANY channel, falling back to the Standard kit (128:0).
+    final bankSel = channel == drumChannel ? 0 : 128;
+    _selectProgram(s, channel, bank: bankSel, program: prog);
     _channelProgram[channel] = marker;
     _channelSynth[channel] = s;
   }
@@ -276,9 +286,10 @@ class MeltyEngine {
   }) async {
     await ensureLoaded();
     final Synthesizer s;
-    if (channel == drumChannel) {
-      if (program != null) await ensureDrumKit(program);
-      s = _channelSynth[drumChannel] ?? _main!;
+    if (_drumChannels.contains(channel)) {
+      // A drum channel: any non-null program is a KIT, not a GM melodic program.
+      if (program != null) await ensureDrumKitOn(channel, program);
+      s = _channelSynth[channel] ?? _main!;
     } else {
       s = await _bindMelodic(channel, program);
     }
