@@ -1,5 +1,5 @@
 // Instrument catalog — curated General MIDI programs for the melody & bass
-// tracks (all present in the bundled assets/sounds/TimGM6mb.sf2). The chosen
+// tracks (all present in the bundled assets/sounds/GeneralUser-GS.sf2). The chosen
 // program is stored per-song (Song.instruments) and drives both live playback
 // (LoopAudio.setPrograms) and MIDI export (midi_export buildMidi).
 //
@@ -29,7 +29,7 @@ const int kProgram808 = 128;
 const int kProgram808MidiFallback = 38; // GM Synth Bass 1 — nearest GM voice
 
 /// Melody (pitched lead / keys) — the FULL General MIDI set (128 programs) that
-/// ships in assets/sounds/TimGM6mb.sf2. Labels mirror the bundled font's own
+/// ships in assets/sounds/GeneralUser-GS.sf2. Labels mirror the bundled font's own
 /// preset names so what you read matches what you hear. The picker scrolls.
 const List<InstrumentDef> kMelodyInstruments = [
   InstrumentDef('gm_0', 'Piano 1', 0),
@@ -166,13 +166,13 @@ const List<InstrumentDef> kMelodyInstruments = [
 const InstrumentDef k808Bass = InstrumentDef('eight08', '808', kProgram808);
 
 /// Sentinel "drum kit" that routes the drum channel to a bundled CC0 soundfont
-/// (assets/sounds/hiphop_kit.sf2) instead of a GM bank-128 kit in TimGM6mb.
+/// (assets/sounds/hiphop_kit.sf2) instead of a GM bank-128 kit in GeneralUser-GS.
 /// Out of GM range (0–127) so it never collides; mirrors SynthEngine.kitHipHop.
 const int kProgramHipHopKit = 200;
 const int kProgramHipHopKitMidiFallback =
     25; // GM "TR-808" kit — nearest .mid voice
 
-/// Drum kits: the 8 GM kits present in TimGM6mb (bank 128) + the CC0 hip-hop kit.
+/// Drum kits: the 8 GM kits present in GeneralUser-GS (bank 128) + the CC0 hip-hop kit.
 /// Reuses InstrumentDef (program = GM kit number, or the hip-hop sentinel).
 const List<InstrumentDef> kDrumKits = [
   InstrumentDef('kit_standard', 'Standard', 0),
