@@ -1,11 +1,11 @@
-import type { AuditionItem } from "../../types";
+import type { AuditionItem, DrumPiece } from "../../types";
 
 interface Props {
   item: AuditionItem;
   selected: boolean;
-  loading: boolean;
+  loadingId: string | null; // composite: item.key (full) or `${item.key}#${piece}`
   disabled: boolean;
-  onPlay: (item: AuditionItem) => void;
+  onPlay: (item: AuditionItem, piece?: DrumPiece) => void;
   onToggle: (item: AuditionItem) => void;
 }
 
@@ -15,17 +15,42 @@ function sourceTag(it: AuditionItem): string {
   return "Catalog";
 }
 
-export function AuditionRow({ item, selected, loading, disabled, onPlay, onToggle }: Props) {
+const DRUM_PIECES: { piece: DrumPiece; label: string; title: string }[] = [
+  { piece: "kick", label: "K", title: "Kick" },
+  { piece: "snare", label: "S", title: "Snare" },
+  { piece: "hat", label: "H", title: "Hi-hat" },
+];
+
+export function AuditionRow({ item, selected, loadingId, disabled, onPlay, onToggle }: Props) {
+  const isDrum = item.track_type === "drums";
   return (
     <div className={"sp-row" + (selected ? " sp-row-sel" : "")}>
       <button
         className="sp-play"
-        disabled={disabled || loading}
+        disabled={disabled || loadingId === item.key}
         onClick={() => onPlay(item)}
-        title="Preview"
+        title={isDrum ? "Full beat" : "Preview"}
       >
-        {loading ? "…" : "▶"}
+        {loadingId === item.key ? "…" : "▶"}
       </button>
+      {isDrum && (
+        <div className="sp-pieces">
+          {DRUM_PIECES.map((p) => {
+            const id = `${item.key}#${p.piece}`;
+            return (
+              <button
+                key={p.piece}
+                className="sp-piece"
+                disabled={disabled || loadingId === id}
+                onClick={() => onPlay(item, p.piece)}
+                title={p.title}
+              >
+                {loadingId === id ? "…" : p.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <span className="sp-label">{item.label}</span>
       <span className="sp-src meta">{sourceTag(item)}</span>
       <button

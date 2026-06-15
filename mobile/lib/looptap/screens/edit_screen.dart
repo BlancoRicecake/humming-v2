@@ -24,6 +24,7 @@ import '../music/song_util.dart';
 import '../music/soundfont_catalog.dart';
 import '../music/theory.dart';
 import '../music/wav_codec.dart';
+import '../music/wav_export.dart' show bounceVocalClips, vocalTrackIds;
 import '../state/loop_prefs.dart';
 import '../state/loop_storage.dart';
 import '../state/loop_store.dart';
@@ -41,7 +42,9 @@ import '../widgets/sheets/lt_modal.dart';
 import '../../audio/headset.dart';
 import '../widgets/sheets/mixer_sheet.dart';
 import '../widgets/sheets/vocal_record_modal.dart';
+import '../widgets/sheets/vocal_editor.dart';
 import '../widgets/surfaces/drum_surface.dart';
+import '../widgets/surfaces/fill_launchpad.dart';
 import '../widgets/surfaces/live_pads.dart';
 import '../widgets/surfaces/step_grid.dart';
 import '../widgets/surfaces/vocal_surface.dart';
@@ -137,9 +140,17 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   // recorded-vocal playback state
   bool _vocalPlaying = false;
+  // True while the live vocal is a loop-length file looping natively in the
+  // player (a padded section mix, or an aligned single take) — the wrap-time
+  // re-sync in _onTick is then skipped (it would only add a glitch).
+  bool _vocalLoopNative = false;
   // Play song: section-instance start step -> that section's vocalPath (or null).
   // The current section's vocal switches in as the playhead crosses each boundary.
   Map<int, String?>? _songVocalSched;
+  // Per-section bounced vocal mix: all vocal-kind lanes' clips → one loop-length
+  // WAV basename, so multiple takes / Audio lanes / trims play live. Key = section
+  // id; '' = "computed, just use the raw single take". Cleared on record/edit.
+  final Map<String, String> _vocalMix = {};
 
   // undo / redo — snapshots of the editable song state
   final List<_EditSnapshot> _undo = [];
@@ -153,6 +164,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   Section get _sec => _sections[_activeIdx];
   Map<String, TrackData> get _tracks => _sec.tracks;
+  /// The Beat-Fill launchpad's 6 pad sounds for the rendered section (preview
+  /// section when previewing the song, else the editing section).
+  List<String> get _fillKinds => (_songSection ?? _sec).fillKinds;
   int get _bars => _sec.bars;
   int get _steps => _songSteps ?? stepsForBars(_bars);
 
@@ -178,6 +192,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // Each track — including every drum track (base drums, beat-fill, and added
   // instances) — owns its own instrument/kit, keyed by its own id.
   String get _instrumentTargetId => _activeId;
+
+  // The vocal-kind track currently being edited — the base 'vocal' lane or an
+  // added "Audio" lane. Vocal record/edit/autotune handlers operate on THIS id
+  // (they're only reachable while a vocal-kind surface is active); falls back to
+  // 'vocal' otherwise.
+  String get _vocalId => _meta.kind == TrackKind.vocal ? _activeId : 'vocal';
 
   /// Track metas in the section's display order (drag-reordered). Ids not listed
   /// in [Section.order] fall back to natural order at the end.
@@ -380,9 +400,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         // Aligned takes loop natively in the player (ReleaseMode.loop) — a
         // wrap-time seek would only add a glitch on top. Alignment is only
         // valid at the take's recorded bpm/bars (vocalIsAligned).
-        if (_songSection == null &&
-            _vocalPlaying &&
-            !_tracks['vocal']!.vocalIsAligned(_bpm, _bars)) {
+        if (_songSection == null && _vocalPlaying && !_vocalLoopNative) {
           _audio.seekVocalToStart();
         }
       }
@@ -402,8 +420,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     // Play song: switch the recorded vocal in at each section boundary
     final sched = _songVocalSched;
     if (sched != null && sched.containsKey(step)) {
+      // The scheduled file is the section's pre-bounced vocal mix (null when the
+      // section has no audible vocal lane) — muting was already applied at the
+      // bounce, so no live mute re-check here.
       final path = sched[step];
-      if (path != null && !(_mutes['vocal'] ?? false)) {
+      if (path != null) {
         _vocalPlaying = true;
         _audio.playVocal(
           LoopStorage.resolveVocal(path),
@@ -527,11 +548,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
-                  // vocal is a single audio-recording track, not a synth voice — no
-                  // instances of it.
-                  for (final t in kTracks.where(
-                    (t) => t.kind != TrackKind.vocal,
-                  ))
+                  // base instanceable tracks + the addable "Audio" lane (a
+                  // second vocal-kind lane for overlapping/layered takes).
+                  for (final t in kAddableTracks)
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () => Navigator.of(ctx).pop(t.id),
@@ -658,6 +677,17 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   String _nextSectionName() => String.fromCharCode(65 + _sections.length % 26);
 
+  // Re-letter auto-named sections by position so the chips read A, B, C… left to
+  // right after any add / duplicate / move / delete. Custom-renamed sections
+  // (autoName == false) keep their name; their position letter is just skipped.
+  void _relabelSections() {
+    for (var i = 0; i < _sections.length; i++) {
+      if (_sections[i].autoName) {
+        _sections[i].name = String.fromCharCode(65 + i % 26);
+      }
+    }
+  }
+
   // "+" → a brand-new EMPTY section (not a copy of the current one).
   void _addSection() {
     _pushUndo();
@@ -669,6 +699,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
     setState(() {
       _sections.add(ns);
+      _relabelSections();
       _activeIdx = _sections.length - 1;
       _playStep.value = 0;
     });
@@ -681,9 +712,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final copy =
         _sections[idx].deepCopy()
           ..id = 'sec${DateTime.now().millisecondsSinceEpoch}'
+          ..autoName = true // a duplicate gets a fresh position letter
           ..name = _nextSectionName();
     setState(() {
       _sections.insert(idx + 1, copy);
+      _relabelSections();
       _activeIdx = idx + 1;
       _playStep.value = 0;
     });
@@ -698,6 +731,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     setState(() {
       final s = _sections.removeAt(idx);
       _sections.insert(j, s);
+      _relabelSections();
       if (_activeIdx == idx) {
         _activeIdx = j;
       } else if (_activeIdx == j) {
@@ -713,6 +747,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     if (_playing) _stopAll();
     setState(() {
       _sections.removeAt(idx);
+      _relabelSections();
       _activeIdx = _activeIdx.clamp(0, _sections.length - 1);
       if (idx < _activeIdx || _activeIdx >= _sections.length) {
         _activeIdx = (_activeIdx - 1).clamp(0, _sections.length - 1);
@@ -721,7 +756,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _renameSection(int idx, String name) => _sections[idx].name = name;
+  // User typed a name → it's custom now, so _relabelSections leaves it alone.
+  void _renameSection(int idx, String name) {
+    _sections[idx]
+      ..name = name
+      ..autoName = false;
+  }
 
   // long-press a section chip → Duplicate / Move left / Move right
   Future<void> _openSectionMenu(int idx) async {
@@ -812,7 +852,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     setState(() => _sections[idx].repeats = r.clamp(1, 8));
   }
 
-  void _playSong() {
+  Future<void> _playSong() async {
     _audio.ensure();
     if (_songSection != null) {
       _stopAll();
@@ -825,14 +865,20 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     disp.tracks['bass'] = TrackData(notes: flat.bass);
     disp.tracks['drums'] = TrackData(drums: flat.drums);
     disp.tracks['beatDec'] = TrackData(drums: flat.beatDec);
-    // schedule each section instance's vocal at its flattened start step
+    // Bounce each section's vocal lanes once (cached), then schedule that mix at
+    // every section instance — so the full-song preview hears all takes/Audio
+    // lanes/trims, matching export (not just the first raw take).
+    final mixBySec = <String, String?>{};
+    for (final sec in _sections) {
+      mixBySec[sec.id] = await _sectionVocalFile(sec);
+    }
+    if (!mounted) return;
     final sched = <int, String?>{};
     var off = 0;
     for (final sec in _sections) {
       final st = stepsForBars(sec.bars);
-      final vp = sec.tracks['vocal']?.vocalPath;
       for (var r = 0; r < sec.repeats; r++) {
-        sched[off] = vp;
+        sched[off] = mixBySec[sec.id];
         off += st;
       }
     }
@@ -849,10 +895,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // ── editing ───────────────────────────────────────────────────────
   int _quantStep() => _playStep.value.round() % _steps;
 
-  // Re-assert every drum track's kit on its channel: base drums + beat-fill
-  // share ch9 (one kit); each added drum track owns its channel + kit. The drum
-  // kit is a sticky synth-side selection, so this runs on open / undo-restore /
-  // after adding a track.
+  // Re-assert every drum track's kit on its channel: base drums on ch9, beat-fill
+  // on ch10, and each added drum track on its own channel — every drum track owns
+  // an independent kit. The drum kit is a sticky synth-side selection, so this
+  // runs on open / undo-restore / after adding a track.
   void _applyDrumKits() {
     _audio.setDrumKitOn(LoopAudio.drumChannel, _instruments['drums'] ?? kDefaultDrumKit);
     for (final m in _editMetas) {
@@ -892,6 +938,42 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         dn.add(DrumNote(kind: kind, step: step));
         _audio.playDrum(kind, channel: _meta.channel, vol: _vol[_activeId] ?? 1);
       }
+    });
+  }
+
+  // Beat-Fill launchpad: open the percussion picker for pad [padIndex] and
+  // reassign its sound. Notes already recorded with the swapped-away sound are
+  // REMAPPED to the new sound, so the pattern keeps playing on the pad with its
+  // new timbre.
+  Future<void> _openFillPadPicker(int padIndex) async {
+    if (_songSection != null) return; // editing disabled while previewing
+    final current = _sec.fillKinds[padIndex];
+    final picked = await showLtModal<String>(
+      context,
+      child: FillPaletteSheet(
+        current: current,
+        onPreview: (k) =>
+            _audio.playDrum(k, channel: _meta.channel, vol: _vol[_activeId] ?? 1),
+      ),
+    );
+    if (picked == null || picked == current) return;
+    _pushUndo();
+    setState(() {
+      _sec.fillKinds[padIndex] = picked;
+      // Remap the swapped-away sound's notes → the new sound, deduping any
+      // (kind, step) collision with notes the new sound already had.
+      final track = _sec.tracks['beatDec']!;
+      final seen = <String>{};
+      final remapped = <DrumNote>[];
+      for (final n in track.drumNotes) {
+        final k = (n.kind == current) ? picked : n.kind;
+        if (seen.add('$k:${n.step}')) {
+          remapped.add(k == n.kind ? n : DrumNote(kind: k, step: n.step));
+        }
+      }
+      track.drumNotes
+        ..clear()
+        ..addAll(remapped);
     });
   }
 
@@ -1039,12 +1121,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       t.pitchNotes.clear();
       t.drumNotes.clear();
       t.clip = null;
-      if (_activeId == 'vocal') {
+      if (trackById(_activeType).kind == TrackKind.vocal) {
+        t.clips = null;
         t.vocalPath = null;
+        t.vocalOrigPath = null;
         t.vocalBpm = null;
         t.vocalBars = null;
-        _audio.stopVocal();
-        _vocalPlaying = false;
+        _stopVocal();
+        _vocalMix.remove(_sec.id);
       }
     });
   }
@@ -1079,52 +1163,153 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     }
     _pushUndo();
     setState(() {
-      final t = _tracks['vocal']!;
-      t.clip = wf;
-      t.vocalPath = persisted;
-      t.vocalOrigPath = null; // fresh take — no pre-autotune original
+      final t = _tracks[_vocalId]!;
+      // Multi-take: APPEND a new clip to the lane instead of replacing. The
+      // first recording seeds the lane (migrating any legacy single take).
+      final lane = t.clips ?? (t.vocalPath != null ? List.of(t.effectiveClips) : <VocalClip>[]);
+      // Place each new take to the RIGHT of the rightmost existing chunk so they
+      // never stack on top of each other (drag it on the strip to reposition).
+      final secSteps = stepsForBars(_bars);
+      var startStep = 0;
+      for (final c in lane) {
+        final dur = c.durSteps > 0 ? c.durSteps : secSteps;
+        final end = c.startStep + dur;
+        if (end > startStep) startStep = end;
+      }
+      startStep = startStep.clamp(0, secSteps - 1);
+      final clip = VocalClip(
+        path: persisted,
+        startStep: startStep,
+        durSteps: aligned ? secSteps : -1,
+        peaks: wf,
+      );
+      lane.add(clip);
+      t.clips = lane;
+      // legacy mirror = first clip (surface waveform + back-compat / export).
+      final first = lane.first;
+      t.clip = first.peaks.isNotEmpty ? first.peaks : wf;
+      t.vocalPath = first.path;
+      t.vocalOrigPath = first.origPath;
       t.vocalAligned = aligned;
-      // alignment only holds at the loop context it was recorded in
       t.vocalBpm = _bpm;
       t.vocalBars = _bars;
     });
+    _vocalMix.remove(_sec.id); // section mix is stale → rebounce on next play
     return true;
   }
 
-  /// Start the recorded vocal for single-section loop play. (Play song handles
-  /// per-section vocals via the schedule in _trigger, so skip here.)
-  void _startVocalIfAny() {
+  /// Start the recorded vocal for single-section loop play. Plays a per-section
+  /// MIX of every vocal-kind lane's clips (multiple takes / Audio lanes / trims
+  /// all audible), padded to the loop so it loops natively. A single untouched
+  /// take skips the mix and plays its own file. (Play song handles per-section
+  /// vocals via the schedule in _trigger.)
+  Future<void> _startVocalIfAny() async {
     if (_songSection != null) return;
-    final t = _tracks['vocal']!;
-    final path = t.vocalPath;
-    if (path != null && !(_mutes['vocal'] ?? false)) {
-      _vocalPlaying = true;
-      // aligned takes are exactly one loop long → native player loop, no
-      // wrap-time seek (see _onTick). Only valid at the recorded bpm/bars —
-      // after a tempo/length change fall back to seek-on-wrap playback.
-      _audio.playVocal(
-        LoopStorage.resolveVocal(path),
-        vol: _vol['vocal'] ?? 0.85,
-        loop: t.vocalIsAligned(_bpm, _bars),
-      );
+    final sec = _sec;
+    final file = await _sectionVocalFile(sec);
+    if (!mounted || !identical(_sec, sec) || file == null) return;
+    // A padded section mix (name prefixed '_mix_') always loops natively; a raw
+    // single take loops only when it's loop-aligned at this bpm/bars.
+    _vocalLoopNative =
+        file.startsWith('_mix_') || (_tracks['vocal']?.vocalIsAligned(_bpm, _bars) ?? false);
+    _vocalPlaying = true;
+    _audio.playVocal(
+      LoopStorage.resolveVocal(file),
+      vol: _vol['vocal'] ?? 0.85,
+      loop: _vocalLoopNative,
+    );
+  }
+
+  /// The cached playable vocal basename for [sec] (the lane mix, or a raw single
+  /// take). '' is cached for "nothing to play". Cleared on record/edit/mute.
+  Future<String?> _sectionVocalFile(Section sec) async {
+    final cached = _vocalMix[sec.id];
+    if (cached != null) return cached.isEmpty ? null : cached;
+    final f = (await _bounceSectionVocal(sec)) ?? '';
+    _vocalMix[sec.id] = f;
+    return f.isEmpty ? null : f;
+  }
+
+  /// Bounce all of [sec]'s vocal-kind lanes (base Vocal + added Audio lanes,
+  /// skipping muted ones) into one loop-length WAV and return its basename, so
+  /// multiple takes / lanes / trims play live. Returns null when there's nothing
+  /// to play; a single untouched take returns its own path (no mix written).
+  Future<String?> _bounceSectionVocal(Section sec) async {
+    final clips = <VocalClip>[];
+    for (final vid in vocalTrackIds(sec)) {
+      if (_mutes[vid] ?? false) continue;
+      clips.addAll(sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[]);
     }
+    if (clips.isEmpty) return null;
+    if (clips.length == 1) {
+      final c = clips.first;
+      final untouched = c.startStep == 0 &&
+          c.trimStart == 0 &&
+          c.trimEnd == -1 &&
+          c.fadeInMs == 0 &&
+          c.fadeOutMs == 0 &&
+          c.gain == 1.0;
+      if (untouched) return c.path; // play the raw take directly
+    }
+    final sources = <String, ({Float32List pcm, int sampleRate})>{};
+    for (final c in clips) {
+      if (sources.containsKey(c.path)) continue;
+      try {
+        final wav = parseWav(await File(LoopStorage.resolveVocal(c.path)).readAsBytes());
+        if (wav != null) sources[c.path] = (pcm: wav.samples, sampleRate: wav.sampleRate);
+      } catch (_) {}
+    }
+    if (sources.isEmpty) return null;
+    final minLen = (stepsForBars(sec.bars) * 60 / _bpm / kStepsPerBeat * 44100).round();
+    final lane = bounceVocalClips(clips, sec.bars, _bpm, sources, minLen: minLen);
+    if (lane.isEmpty) return null;
+    // fixed name per section → overwrites in place (no file accumulation).
+    final name = '_mix_${widget.song.id}_${sec.id}.wav';
+    await File(LoopStorage.resolveVocal(name)).writeAsBytes(encodeWavMono16(lane, 44100));
+    return name;
   }
 
   void _stopVocal() {
     _vocalPlaying = false;
+    _vocalLoopNative = false;
     _audio.stopVocal();
   }
 
   // mute/volume go through here so the live vocal player follows the mixer
   void _toggleMute(String id) {
     setState(() => _mutes[id] = !(_mutes[id] ?? false));
-    if (id == 'vocal') {
-      if (_mutes['vocal'] == true) {
-        _stopVocal();
-      } else if (_playing) {
-        _startVocalIfAny();
-      }
+    // Muting any vocal-kind lane (base Vocal or an Audio lane) changes the
+    // section mix, so invalidate it and restart the blended playback.
+    if (trackById(_typeOf(id)).kind == TrackKind.vocal) {
+      _vocalMix.remove(_sec.id);
+      _stopVocal();
+      if (_playing) _startVocalIfAny();
     }
+  }
+
+  // The base track type backing a track id (extra ids resolve via the section's
+  // TrackRefs; base ids are their own type).
+  String _typeOf(String id) {
+    for (final e in _sec.extras) {
+      if (e.id == id) return e.type;
+    }
+    return id;
+  }
+
+  // Hold-and-drag retime of a vocal/audio chunk on the arrangement strip. Moving
+  // a legacy single take materializes the clip lane first.
+  void _moveVocalClip(String trackId, int clipIndex, int newStartStep) {
+    final t = _tracks[trackId];
+    if (t == null) return;
+    final lane = t.clips ?? List.of(t.effectiveClips);
+    if (clipIndex < 0 || clipIndex >= lane.length) return;
+    if (lane[clipIndex].startStep == newStartStep) return;
+    _pushUndo(coalesce: true); // one undo entry per drag gesture
+    setState(() {
+      lane[clipIndex].startStep = newStartStep;
+      t.clips = lane;
+    });
+    _vocalMix.remove(_sec.id); // position changed → rebounce on next play
   }
 
   void _setVol(String id, double v) {
@@ -1325,7 +1510,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     required double strength,
     required double retuneMs,
   }) async {
-    final t = _tracks['vocal']!;
+    final vid = _vocalId;
+    final t = _tracks[vid]!;
     final name = t.vocalPath;
     if (name == null) return;
     // blocking progress dialog for the server round-trip. Capture the root
@@ -1381,7 +1567,15 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         t.vocalOrigPath ??= name; // keep the dry take for "Original"
         t.vocalPath = persisted;
         t.clip = peaksFromPcm(pcm);
+        // keep the multi-take lane's first clip in sync with the tuned take.
+        final lane = t.clips;
+        if (lane != null && lane.isNotEmpty) {
+          lane.first.origPath ??= name;
+          lane.first.path = persisted;
+          lane.first.peaks = t.clip ?? lane.first.peaks;
+        }
       });
+      _vocalMix.remove(_sec.id);
       _audio.prepareVocal(LoopStorage.resolveVocal(persisted));
     } catch (e) {
       debugPrint('[autotune] failed: $e');
@@ -1405,8 +1599,31 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     }
   }
 
+  // Open the clip editor (trim/fade/gain + sound processing). Returns the
+  // edited vocal TrackData; we swap it in, push undo, and re-prepare playback.
+  Future<void> _openVocalEditor() async {
+    final vid = _vocalId;
+    final t = _tracks[vid]!;
+    if (t.effectiveClips.isEmpty) return;
+    final edited = await openVocalEditor(
+      context,
+      vocal: t,
+      bpm: _bpm,
+      bars: _sec.bars,
+      songId: widget.song.id,
+      sectionId: _sec.id,
+    );
+    if (edited == null || !mounted) return;
+    _pushUndo();
+    _stopVocal();
+    setState(() => _tracks[vid] = edited);
+    _vocalMix.remove(_sec.id); // edits change the lane → rebounce
+    final first = edited.vocalPath;
+    if (first != null) _audio.prepareVocal(LoopStorage.resolveVocal(first));
+  }
+
   Future<void> _revertAutotune() async {
-    final t = _tracks['vocal']!;
+    final t = _tracks[_vocalId]!;
     final orig = t.vocalOrigPath;
     if (orig == null) return;
     List<double>? peaks;
@@ -1422,7 +1639,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       t.vocalPath = orig;
       t.vocalOrigPath = null;
       if (peaks != null) t.clip = peaks;
+      final lane = t.clips;
+      if (lane != null && lane.isNotEmpty) {
+        lane.first.path = orig;
+        lane.first.origPath = null;
+        if (peaks != null) lane.first.peaks = peaks;
+      }
     });
+    _vocalMix.remove(_sec.id);
     _audio.prepareVocal(LoopStorage.resolveVocal(orig));
   }
 
@@ -1728,6 +1952,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                                 _songSection == null ? _openAddTrack : null,
                             onReorder:
                                 _songSection == null ? _reorderTracks : null,
+                            onMoveClip: _songSection == null ? _moveVocalClip : null,
                             playing: _playing,
                             playStep: ps,
                             steps: _steps,
@@ -1787,7 +2012,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                     onSwing: (v) => setState(() => _swing = v),
                     bars: _bars,
                     onBars: _setBars,
-                    showRecord: _activeId != 'vocal',
+                    showRecord: trackById(_activeType).kind != TrackKind.vocal,
                   ),
                 ),
               ],
@@ -2052,7 +2277,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         // pitched pads: current swipe-able note range (melody/fill/bass).
         if (pitched && _inputMode == 'pads') _rangeReadout(),
         if (pitched) _octaveStepper(),
-        if (_activeId != 'vocal') ...[
+        if (trackById(_activeType).kind != TrackKind.vocal) ...[
           const SizedBox(width: 8),
           Pill(label: 'Hum to MIDI', icon: LtIcons.graphicEq, onTap: _openHum),
         ],
@@ -2226,7 +2451,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final kind = _meta.kind;
     final src = (_songSection ?? _sec).tracks[_activeId]!;
     if (kind == TrackKind.drums) {
-      final specs = drumSpecsFor(_meta.drumKinds);
+      // Beat-Fill's pad sounds are user-assignable (per section); the main drums
+      // use their fixed kinds.
+      final isFill = _activeId == 'beatDec';
+      final kinds = isFill ? _fillKinds : _meta.drumKinds;
+      final specs = drumSpecsFor(kinds);
       final map = <String, Set<int>>{};
       for (final n in src.drumNotes) {
         (map[n.kind] ??= <int>{}).add(n.step);
@@ -2243,6 +2472,21 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                 bars: _bars,
                 specs: specs,
               ),
+        );
+      }
+      // Pads mode: Beat-Fill gets the launchpad (6 square pads, no beat grid);
+      // the main drums keep the two-thumb + center-grid DrumSurface.
+      if (isFill) {
+        return ValueListenableBuilder<double>(
+          valueListenable: _playStep,
+          builder: (_, ps, __) => FillLaunchpad(
+            kinds: _fillKinds,
+            notes: map,
+            playStep: ps,
+            steps: _steps,
+            onHit: _hitDrum,
+            onSwap: _openFillPadPicker,
+          ),
         );
       }
       return ValueListenableBuilder<double>(
@@ -2297,25 +2541,28 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       );
     }
     if (kind == TrackKind.vocal) {
+      // Base 'vocal' OR an added 'Audio' lane — the surface edits the ACTIVE id.
+      final vt = _tracks[_activeId]!;
       return VocalSurface(
-        clip: _tracks['vocal']!.clip,
+        clip: vt.clip,
         onRecord: _openVocalRecord,
+        onEdit: vt.effectiveClips.isNotEmpty ? _openVocalEditor : null,
         onAutotune: _openAutotune,
-        onRevert:
-            _tracks['vocal']!.vocalOrigPath != null ? _revertAutotune : null,
+        onRevert: vt.vocalOrigPath != null ? _revertAutotune : null,
         onClear: () {
           _pushUndo();
-          _audio.stopVocal();
-          _vocalPlaying = false;
+          _stopVocal();
           setState(() {
-            final t = _tracks['vocal']!;
+            final t = _tracks[_activeId]!;
             t.clip = null;
+            t.clips = null;
             t.vocalPath = null;
             t.vocalOrigPath = null;
             t.vocalAligned = false;
             t.vocalBpm = null;
             t.vocalBars = null;
           });
+          _vocalMix.remove(_sec.id);
         },
       );
     }

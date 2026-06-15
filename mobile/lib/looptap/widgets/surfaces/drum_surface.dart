@@ -22,6 +22,8 @@ class DrumSpec {
 /// beat-fill decoration kit (shaker/tambourine/clap). A track renders the subset
 /// named by its `drumKinds` (TrackMeta), so the surface UI is identical and only
 /// the three components differ.
+// MIRROR of kDrumNote (loop_audio.dart): every kind here must have a note there
+// (and in midi_export _drumNote). See [drum_mirror_test].
 const Map<String, DrumSpec> kDrumSpecs = {
   'hihat': DrumSpec('hihat', 'HI-HAT', 'HH', LT.blue),
   'snare': DrumSpec('snare', 'SNARE', 'SN', LT.lime),
@@ -29,6 +31,15 @@ const Map<String, DrumSpec> kDrumSpecs = {
   'shaker': DrumSpec('shaker', 'SHAKER', 'SH', LT.blue),
   'tambourine': DrumSpec('tambourine', 'TAMB', 'TB', LT.lime),
   'clap': DrumSpec('clap', 'CLAP', 'CL', LT.amber),
+  'cowbell': DrumSpec('cowbell', 'COWBELL', 'CB', LT.amber),
+  'maracas': DrumSpec('maracas', 'MARACAS', 'MA', LT.blue),
+  'claves': DrumSpec('claves', 'CLAVES', 'CV', LT.lime),
+  'rimshot': DrumSpec('rimshot', 'RIMSHOT', 'RS', LT.pink),
+  'woodhi': DrumSpec('woodhi', 'WOODBLK+', 'WH', LT.lime),
+  'woodlo': DrumSpec('woodlo', 'WOODBLK-', 'WL', LT.amber),
+  'ride': DrumSpec('ride', 'RIDE', 'RD', LT.blue),
+  'crash': DrumSpec('crash', 'CRASH', 'CR', LT.pink),
+  'triangle': DrumSpec('triangle', 'TRIANGLE', 'TR', LT.lime),
 };
 
 /// Default main kit (top→bottom = HH/SN/KK).
@@ -273,54 +284,84 @@ class DrumGrid extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          for (final d in specs)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
+          // Rows fill the height when they fit (3-lane main drums); once there
+          // are too many lanes to stay legible (6-lane Beat Fill), they take a
+          // min height and the grid scrolls instead of squishing the labels.
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, c) {
+                const minRow = 40.0;
+                final fits = specs.length * minRow <= c.maxHeight;
+                final rows = [for (final d in specs) _row(d, cur)];
+                if (fits) {
+                  return Column(
+                    children: [for (final r in rows) Expanded(child: r)],
+                  );
+                }
+                return ListView(
+                  padding: EdgeInsets.zero,
+                  physics: const ClampingScrollPhysics(),
                   children: [
-                    SizedBox(
-                      width: 52,
-                      child: LayoutBuilder(
-                        builder: (context, c) {
-                          // 행 높이의 70% 를 폰트 크기로, 시안 기준 18pt 상한.
-                          final size = (c.maxHeight * 0.7).clamp(10.0, 18.0);
-                          return Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(d.short,
-                                style: LTType.inter(size: size, weight: FontWeight.w900, color: d.color)),
-                          );
-                        },
-                      ),
-                    ),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          for (var s = 0; s < steps; s++)
-                            Expanded(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () => onToggle(d.kind, s),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                                  child: _Cell(
-                                    on: notes[d.kind]?.contains(s) ?? false,
-                                    beat: s % 4 == 0,
-                                    current: s == cur,
-                                    color: d.color,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
+                    for (final r in rows) SizedBox(height: minRow, child: r),
                   ],
-                ),
-              ),
+                );
+              },
             ),
+          ),
         ],
       ),
     );
   }
+
+  // One lane: a short label + the step cells. Used both height-filled (Expanded)
+  // and at a fixed min height (scrolling). The label is wrapped in a FittedBox
+  // so it never clips when the lane is short.
+  Widget _row(DrumSpec d, int cur) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 52,
+              child: LayoutBuilder(
+                builder: (context, c) {
+                  final size = (c.maxHeight * 0.7).clamp(10.0, 18.0);
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        d.short,
+                        style: LTType.inter(size: size, weight: FontWeight.w900, color: d.color),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Expanded(
+              child: Row(
+                children: [
+                  for (var s = 0; s < steps; s++)
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onToggle(d.kind, s),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: _Cell(
+                            on: notes[d.kind]?.contains(s) ?? false,
+                            beat: s % 4 == 0,
+                            current: s == cur,
+                            color: d.color,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
 }

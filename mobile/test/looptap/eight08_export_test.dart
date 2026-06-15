@@ -1,7 +1,7 @@
 // Validates the 808 WAV-export render path without a device: build the bass-only
 // MIDI the way exportWavSong does for the 808 (bassProgram 0, tracks:{'bass'}),
 // render it through 808.sf2, and assert it's non-silent. Also renders a melody
-// lane through TimGM6mb so we know the GM path still works alongside.
+// lane through GeneralUser-GS.sf2 so we know the GM path still works alongside.
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -57,10 +57,10 @@ void main() {
     expect(b.sec, greaterThan(1.0));
   });
 
-  test('melody lane still renders through TimGM6mb', () {
-    final timgm = File('assets/sounds/TimGM6mb.sf2').readAsBytesSync();
+  test('melody lane still renders through GeneralUser-GS', () {
+    final gm = File('assets/sounds/GeneralUser-GS.sf2').readAsBytesSync();
     final midi = buildMidi(flat, 90, tracks: const {'melody'});
-    final m = _render(timgm, midi);
+    final m = _render(gm, midi);
     // ignore: avoid_print
     print('[808] melody/GM: ${m.sec.toStringAsFixed(2)}s peak=${(m.peak * 100).toStringAsFixed(1)}% '
         'rms=${(m.rms * 100).toStringAsFixed(1)}%');
@@ -75,8 +75,8 @@ void main() {
         });
     final midi = buildMidi(exFlat, 90,
         extras: const [TrackRef(exId, 'melody')], extraInstruments: const {exId: 24});
-    final timgm = File('assets/sounds/TimGM6mb.sf2').readAsBytesSync();
-    final r = _render(timgm, midi);
+    final gm = File('assets/sounds/GeneralUser-GS.sf2').readAsBytesSync();
+    final r = _render(gm, midi);
     // ignore: avoid_print
     print('[808] extra instance: ${r.sec.toStringAsFixed(2)}s peak=${(r.peak * 100).toStringAsFixed(1)}%');
     expect(r.peak, greaterThan(0.02), reason: 'added instance should render audibly');

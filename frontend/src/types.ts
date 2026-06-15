@@ -159,10 +159,13 @@ export interface AuditionPaletteResponse {
   items: AuditionItem[];
 }
 
+// For drums, audition a single piece of the kit instead of the full beat.
+export type DrumPiece = "kick" | "snare" | "hat";
+
 export type AuditionRenderRequest =
-  | { source: "gm"; bank: number; program: number; track_type: TrackType; sample_rate?: number }
-  | { source: "catalog"; soundfont_id: string; track_type: TrackType; sample_rate?: number }
-  | { source: "sentinel"; sentinel_id: string; track_type: TrackType; sample_rate?: number };
+  | { source: "gm"; bank: number; program: number; track_type: TrackType; sample_rate?: number; piece?: DrumPiece }
+  | { source: "catalog"; soundfont_id: string; track_type: TrackType; sample_rate?: number; piece?: DrumPiece }
+  | { source: "sentinel"; sentinel_id: string; track_type: TrackType; sample_rate?: number; piece?: DrumPiece };
 
 // A starred sound — self-contained so the export can be re-rendered without
 // re-fetching the palette.

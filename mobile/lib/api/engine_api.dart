@@ -167,6 +167,36 @@ class EngineApi {
     );
   }
 
+  /// 보컬 사운드 가공 — eq/reverb/comp/delay/stretch/pitch 한 가지를 적용
+  /// (백엔드 /process_fx). [fxType]은 이펙트 이름, [params]는 이펙트별 파라미터.
+  /// 반환 형식은 [processVocal]·[autotuneVocal] 과 동일.
+  Future<({Uint8List wav, List<double> peaks, double duration})> processFx(
+    String path, {
+    required String fxType,
+    Map<String, dynamic> params = const {},
+  }) async {
+    final form = FormData.fromMap({
+      'audio': await MultipartFile.fromFile(path, filename: 'vocal.wav'),
+      'fx_type': fxType,
+      'params': jsonEncode(params),
+    });
+    late final Response<Map<String, dynamic>> r;
+    try {
+      r = await _dio.post<Map<String, dynamic>>('/process_fx', data: form);
+    } on DioException catch (e) {
+      throw EngineApiException(_errorDetail(e) ?? 'Sound processing failed');
+    }
+    final j = r.data!;
+    return (
+      wav: base64Decode(j['audio_b64'] as String),
+      peaks:
+          ((j['peaks'] ?? []) as List)
+              .map((e) => (e as num).toDouble())
+              .toList(),
+      duration: (j['duration'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
   String? _errorDetail(DioException e) {
     final data = e.response?.data;
     if (data is Map && data['detail'] != null) return '${data['detail']}';

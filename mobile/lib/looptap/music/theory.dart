@@ -182,12 +182,41 @@ const List<TrackMeta> kTracks = [
   TrackMeta('vocal', 'Vocal', LtIcons.mic, LT.pink, TrackKind.vocal, group: 'vocal'),
 ];
 
+/// Audio lane — behaves EXACTLY like the base Vocal track (records, edits, and
+/// plays an audio clip via the same VocalClip model), but it is user-ADDABLE and
+/// named "Audio" with a distinct violet so several can coexist for overlapping
+/// takes / layered parts. Not one of the fixed base [kTracks]; added as an extra
+/// instance, and picked up by vocal-kind logic (export/bounce) like any vocal.
+const TrackMeta kAudioTrack = TrackMeta(
+    'audio', 'Audio', LtIcons.audiotrack, Color(0xFFA78BFA), TrackKind.vocal,
+    group: 'vocal');
+
+/// The track TYPES the add-track picker offers: every base track (Vocal too —
+/// it can now be instanced for layered/overlapping takes) plus the Audio lane.
+List<TrackMeta> get kAddableTracks => [...kTracks, kAudioTrack];
+
+/// Beat-fill launchpad percussion palette — the sounds a Fill pad can play.
+/// Each must exist in kDrumNote (audio), _drumNote (midi_export) and kDrumSpecs
+/// (drum_surface) — the three maps are a documented mirror. kick/snare/hihat are
+/// main-kit only and intentionally NOT here.
+const List<String> kFillPalette = [
+  'clap', 'shaker', 'tambourine', 'cowbell', 'maracas', 'claves',
+  'rimshot', 'woodhi', 'woodlo', 'ride', 'crash', 'triangle',
+];
+
+/// Default 6 Fill pad assignments (one per launchpad pad). Includes the legacy
+/// shaker/tambourine/clap so old songs' Fill notes still land on a pad.
+const List<String> kFillKindsDefault = [
+  'clap', 'shaker', 'tambourine', 'cowbell', 'maracas', 'claves',
+];
+
 /// The pitched/bass tracks (melody, melody-fill, bass) — used wherever code
 /// needs to iterate the instrument-bearing voices.
 List<TrackMeta> get kPitchedTracks =>
     kTracks.where((t) => t.kind == TrackKind.pitched || t.kind == TrackKind.bass).toList();
 
-TrackMeta trackById(String id) => kTracks.firstWhere((t) => t.id == id);
+TrackMeta trackById(String id) =>
+    id == kAudioTrack.id ? kAudioTrack : kTracks.firstWhere((t) => t.id == id);
 
 /// MIDI channels free after the base tracks claim 0,1,2 (melody, bass,
 /// melody-fill), 9 (drums) and 15 (metronome click). Added track instances —

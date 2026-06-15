@@ -12,6 +12,7 @@ import 'song_util.dart';
 import 'soundfont_catalog.dart';
 import 'theory.dart';
 
+// MIRROR of kDrumNote (loop_audio.dart) — keep in sync. See [drum_mirror_test].
 const Map<String, int> _drumNote = {
   'kick': 36,
   'snare': 38,
@@ -19,7 +20,20 @@ const Map<String, int> _drumNote = {
   'shaker': 82,
   'tambourine': 54,
   'clap': 39,
+  'cowbell': 56,
+  'maracas': 70,
+  'claves': 75,
+  'rimshot': 37,
+  'woodhi': 76,
+  'woodlo': 77,
+  'ride': 51,
+  'crash': 57,
+  'triangle': 81,
 };
+
+/// The drum kinds this exporter knows — exposed so a mirror test can assert it
+/// matches kDrumNote (loop_audio.dart).
+Set<String> get midiDrumKinds => _drumNote.keys.toSet();
 
 class _Ev {
   _Ev(this.t, this.data);

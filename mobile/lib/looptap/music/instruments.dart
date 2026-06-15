@@ -162,18 +162,8 @@ const List<InstrumentDef> kMelodyInstruments = [
   InstrumentDef('gm_127', 'Gun Shot', 127),
 ];
 
-/// Bass — 8 voices.
-const List<InstrumentDef> kBassInstruments = [
-  InstrumentDef('acoustic_bass', 'Acoustic Bass', 32),
-  InstrumentDef('fingered_bass', 'Fingered Bass', 33),
-  InstrumentDef('picked_bass', 'Picked Bass', 34),
-  InstrumentDef('fretless_bass', 'Fretless Bass', 35),
-  InstrumentDef('slap_bass', 'Slap Bass', 36),
-  InstrumentDef('synth_bass', 'Synth Bass', 38),
-  InstrumentDef('sub_bass', 'Sub Bass', 39), // round GM sub (Synth Bass 2)
-  // Real 808 sub-bass (CC0 sample, in C). Routes to assets/sounds/808.sf2.
-  InstrumentDef('eight08', '808', kProgram808),
-];
+/// Real 808 sub-bass (CC0 sample, in C). Routes to assets/sounds/808.sf2.
+const InstrumentDef k808Bass = InstrumentDef('eight08', '808', kProgram808);
 
 /// Sentinel "drum kit" that routes the drum channel to a bundled CC0 soundfont
 /// (assets/sounds/hiphop_kit.sf2) instead of a GM bank-128 kit in TimGM6mb.
@@ -209,22 +199,6 @@ InstrumentDef _gm(int program) =>
     kMelodyInstruments.firstWhere((i) => i.program == program);
 
 final List<InstrumentCategory> kMelodyInstrumentCategories = [
-  InstrumentCategory('Recommended', [
-    _gm(0),
-    _gm(4),
-    _gm(24),
-    _gm(27),
-    _gm(33),
-    _gm(40),
-    _gm(48),
-    _gm(56),
-    _gm(65),
-    _gm(73),
-    _gm(80),
-    _gm(81),
-    _gm(88),
-    _gm(90),
-  ]),
   InstrumentCategory('Piano & Keys', _gmRange(0, 7)),
   InstrumentCategory('Bells & Mallets', _gmRange(8, 15)),
   InstrumentCategory('Organs & Reeds', _gmRange(16, 23)),
@@ -239,9 +213,10 @@ final List<InstrumentCategory> kMelodyInstrumentCategories = [
   InstrumentCategory('Percussion & SFX', _gmRange(112, 127)),
 ];
 
+/// Bass — mirrors the SoundLab bass space: the GM bass family (32–39) +
+/// Contrabass (43) + the 808 sentinel. 10 voices, deliberately no full-GM list.
 final List<InstrumentCategory> kBassInstrumentCategories = [
-  InstrumentCategory('Bass Essentials', kBassInstruments),
-  InstrumentCategory('Deep Alternatives', [
+  InstrumentCategory('Bass', [
     _gm(32),
     _gm(33),
     _gm(34),
@@ -251,11 +226,8 @@ final List<InstrumentCategory> kBassInstrumentCategories = [
     _gm(38),
     _gm(39),
     _gm(43),
-    _gm(58),
-    _gm(70),
-    _gm(87),
+    k808Bass,
   ]),
-  InstrumentCategory('All GM Sounds', kMelodyInstruments),
 ];
 
 final List<InstrumentCategory> kDrumKitCategories = [

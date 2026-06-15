@@ -3,6 +3,7 @@ import type {
   AuditionItem,
   CuratedSound,
   CurationMap,
+  DrumPiece,
   RenderCapabilities,
   TrackType,
 } from "../../types";
@@ -100,20 +101,21 @@ export function SoundPicker({ caps }: Props) {
   }, [role]);
 
   const onPlay = useCallback(
-    async (item: AuditionItem) => {
+    async (item: AuditionItem, piece?: DrumPiece) => {
       if (!engineOk) return;
       if (playingRef.current) {
         playingRef.current.pause();
         playingRef.current = null;
       }
-      setLoadingKey(item.key);
+      const id = piece ? `${item.key}#${piece}` : item.key;
+      setLoadingKey(id);
       try {
-        const blob = await auditionRender(toRenderRequest(item));
+        const blob = await auditionRender(toRenderRequest(item, piece));
         playingRef.current = await playAudioBlob(blob);
       } catch (e) {
         console.error("audition render failed", e);
       } finally {
-        setLoadingKey((k) => (k === item.key ? null : k));
+        setLoadingKey((k) => (k === id ? null : k));
       }
     },
     [engineOk],
@@ -223,7 +225,7 @@ export function SoundPicker({ caps }: Props) {
         <AuditionList
           items={items}
           selectedKeys={selectedKeys}
-          loadingKey={loadingKey}
+          loadingId={loadingKey}
           disabled={!engineOk}
           onPlay={onPlay}
           onToggle={onToggle}
