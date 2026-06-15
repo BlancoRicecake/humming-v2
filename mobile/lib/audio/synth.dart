@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_midi_pro/flutter_midi_pro.dart';
 
 import '../looptap/music/soundfont_catalog.dart';
+import 'melty_synth_backend.dart';
 
 /// 싱글톤 합성 엔진. SoundFont 1회 로딩 후 재사용.
 ///
@@ -51,6 +52,13 @@ class SynthEngine {
   static const int clickChannel = 15;
 
   final MidiPro _midi = MidiPro();
+
+  // iOS routes through MeltySynth instead of flutter_midi_pro's AVAudioUnitSampler
+  // (which could not reliably select instruments — everything fell back to piano).
+  // Android keeps flutter_midi_pro/FluidSynth. Each public method below forwards
+  // to [_melty] when [_useMelty] is set; the flutter_midi_pro code runs otherwise.
+  static final bool _useMelty = Platform.isIOS;
+  final MeltyEngine _melty = MeltyEngine();
   int? _sfId;
   Future<int>? _loading;
   // The 808 sub-bass lives in a second soundfont (no GM slot for it).
@@ -73,10 +81,11 @@ class SynthEngine {
   // 재생 중인 (channel, pitch) → 예약된 release 타이머. stopAll 시 모두 취소.
   final Map<int, Map<int, Timer>> _activeReleases = <int, Map<int, Timer>>{};
 
-  bool get isLoaded => _sfId != null;
+  bool get isLoaded => _useMelty ? _melty.isLoaded : _sfId != null;
 
   /// SoundFont 자산을 1회 로드. 중복 호출은 동일 Future 공유.
   Future<int> ensureLoaded() {
+    if (_useMelty) return _melty.ensureLoaded().then((_) => 0);
     if (_sfId != null) return Future.value(_sfId);
     return _loading ??= _midi
         .loadSoundfontAsset(assetPath: _sfAsset, bank: 0, program: 0)
@@ -201,6 +210,10 @@ class SynthEngine {
     int program = 0,
     Duration release = const Duration(milliseconds: 600),
   }) async {
+    if (_useMelty) {
+      return _melty.playNote(
+          channel: channel, pitch: pitch, velocity: velocity, program: program, release: release);
+    }
     final sfId = await _bindChannel(channel, program);
 
     // 동일 키 중첩 방지.
@@ -238,6 +251,7 @@ class SynthEngine {
   /// 수 있다. 캐시는 `_channelProgram[channel]` 의 `1000+program` 마커로 같은
   /// 킷 재선택을 회피.
   Future<void> ensureDrumKitOn(int channel, int program) async {
+    if (_useMelty) return _melty.ensureDrumKitOn(channel, program);
     final marker = 1000 + program;
     if (_channelProgram[channel] == marker) return;
     // The hip-hop kit lives in its own soundfont; GM kits are bank 128 of the
@@ -281,6 +295,7 @@ class SynthEngine {
   /// 메트로놈 클릭 — 드럼 채널(ch9)과 분리된 전용 채널에서 GM 우드블록(prog 115)을
   /// 멜로딕 노트로 울린다. 사용자가 고른 드럼 킷을 절대 건드리지 않는다.
   Future<void> playClick(bool accent) async {
+    if (_useMelty) return _melty.playClick(accent);
     final pitch = accent ? 84 : 79;
     try {
       final sfId = await ensureLoaded();
@@ -302,6 +317,9 @@ class SynthEngine {
     int velocity = 100,
     int? program,
   }) async {
+    if (_useMelty) {
+      return _melty.noteOn(channel: channel, pitch: pitch, velocity: velocity, program: program);
+    }
     final mainId = await ensureLoaded();
     int sfId = mainId;
     if (channel == drumChannel) {
@@ -324,6 +342,7 @@ class SynthEngine {
   }
 
   Future<void> noteOff({required int channel, required int pitch}) async {
+    if (_useMelty) return _melty.noteOff(channel: channel, pitch: pitch);
     // 채널이 808 로 바인딩됐으면 그 sfId 로 stop 해야 음이 꺼진다.
     final sfId = _channelSf[channel] ?? _sfId;
     if (sfId == null) return;
@@ -334,6 +353,7 @@ class SynthEngine {
 
   /// 모든 release 타이머 취소 + sfId 의 전 채널 음 정지.
   Future<void> stopAll() async {
+    if (_useMelty) return _melty.stopAll();
     for (final m in _activeReleases.values) {
       for (final t in m.values) {
         t.cancel();

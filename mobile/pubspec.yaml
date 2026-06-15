@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.2+16
+version: 1.0.2+17
 
 environment:
   sdk: ^3.7.0
@@ -47,6 +47,10 @@ dependencies:
   provider: ^6.1.5+1
   audioplayers: ^6.6.0
   flutter_midi_pro: ^3.1.6
+  # iOS-only live synth output: MeltySynth (dart_melty_soundfont) renders audio
+  # blocks that we stream to the speaker via flutter_pcm_sound. Android keeps
+  # flutter_midi_pro (FluidSynth). See lib/audio/melty_synth_backend.dart.
+  flutter_pcm_sound: ^3.0.0
   flutter_svg: ^2.0.10+1
   # ── 외부 SDK (신규: 2026-06-02) ──
   # 인증/DB: Supabase. IAP: in_app_purchase.
