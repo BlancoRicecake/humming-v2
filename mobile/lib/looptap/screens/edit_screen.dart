@@ -895,6 +895,47 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // ── editing ───────────────────────────────────────────────────────
   int _quantStep() => _playStep.value.round() % _steps;
 
+  // ── overdub while playing the whole song ──────────────────────────────
+  // The full-song playhead step (0.._songSteps) maps back to ONE real section
+  // instance + the local step inside it. Repeats of a section share its data,
+  // so recording into the section affects every repeat (consistent with play).
+  ({Section section, int localStep})? _songStepToSection(int globalStep) {
+    var off = 0;
+    for (final sec in _sections) {
+      final st = stepsForBars(sec.bars);
+      for (var r = 0; r < sec.repeats; r++) {
+        if (globalStep >= off && globalStep < off + st) {
+          return (section: sec, localStep: globalStep - off);
+        }
+        off += st;
+      }
+    }
+    return null;
+  }
+
+  // Where a just-played note should be recorded. Single-section mode: the active
+  // section at the (already local) step. Song mode: the section under the
+  // playhead at the local step — null if the playhead/active track can't resolve.
+  ({Map<String, TrackData> tracks, int step})? _recTarget(int globalStep) {
+    if (_songSection == null) return (tracks: _tracks, step: globalStep);
+    final m = _songStepToSection(globalStep);
+    if (m == null || m.section.tracks[_activeId] == null) return null;
+    return (tracks: m.section.tracks, step: m.localStep);
+  }
+
+  // Rebuild the flattened SONG display from the real sections so an overdubbed
+  // note plays on the next loop pass. Mirrors the track assignment in _playSong.
+  void _reflattenSong() {
+    final s = _songSection;
+    if (s == null) return;
+    final flat = flattenSong(_sections);
+    s.tracks['melody'] = TrackData(notes: flat.melody);
+    s.tracks['melodyDec'] = TrackData(notes: flat.melodyDec);
+    s.tracks['bass'] = TrackData(notes: flat.bass);
+    s.tracks['drums'] = TrackData(drums: flat.drums);
+    s.tracks['beatDec'] = TrackData(drums: flat.beatDec);
+  }
+
   // Re-assert every drum track's kit on its channel: base drums on ch9, beat-fill
   // on ch10, and each added drum track on its own channel — every drum track owns
   // an independent kit. The drum kit is a sticky synth-side selection, so this
@@ -910,16 +951,19 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   void _hitDrum(String kind) {
     _audio.playDrum(kind, channel: _meta.channel, vol: _vol[_activeId] ?? 1);
-    if (_recording && _playing && _songSection == null) {
-      _pushUndo(coalesce: true);
-      final s = _quantStep();
-      final dn = _tracks[_activeId]!.drumNotes;
-      if (!dn.any((x) => x.kind == kind && x.step == s)) {
-        setState(() => dn.add(DrumNote(kind: kind, step: s)));
-      }
-      // heard live now → don't let the clock replay it this loop pass
-      _freshThisLoop.add('$_activeId:$kind:$s');
+    if (!(_recording && _playing)) return;
+    final g = _quantStep(); // global step in song mode, local step otherwise
+    final tgt = _recTarget(g);
+    if (tgt == null) return;
+    _pushUndo(coalesce: true);
+    final dn = tgt.tracks[_activeId]!.drumNotes;
+    if (!dn.any((x) => x.kind == kind && x.step == tgt.step)) {
+      setState(() => dn.add(DrumNote(kind: kind, step: tgt.step)));
     }
+    // heard live now → don't let the clock replay it this loop pass. The clock
+    // checks the PLAYED step (global in song mode), so key fresh on `g`.
+    _freshThisLoop.add('$_activeId:$kind:$g');
+    if (_songSection != null) _reflattenSong(); // so it plays on the next pass
   }
 
   // drums Grid mode: tap a cell to toggle a hit at (kind, step) on the active
@@ -1010,7 +1054,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     for (final m in _chordMidis(n.midi)) {
       _audio.noteOnLive(ch, m, program: prog, vol: _vol[_activeId] ?? 0.85);
     }
-    if (_recording && _playing && _songSection == null) {
+    if (_recording && _playing) {
+      // Song-mode overdub records the global step; _pitchUp maps it to the
+      // section under the playhead. Single-section mode records the local step.
       _pending[n.midi] = (
         step: _quantStep(),
         t: DateTime.now().millisecondsSinceEpoch,
@@ -1026,22 +1072,28 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     }
     final p = _pending.remove(n.midi);
     if (p == null) return;
-    _pushUndo(coalesce: true);
     final dur = _durFromHold(DateTime.now().millisecondsSinceEpoch - p.t);
+    final tgt = _recTarget(p.step); // p.step is the played step (global in song mode)
+    if (tgt == null) return; // song-mode playhead/active track didn't resolve
+    _pushUndo(coalesce: true);
     for (final m in midis) {
-      _placePitched(_activeId, _rungFor(m, n), p.step, p.step + dur - 1);
-      // heard live now → don't let the clock replay it this loop pass
+      _placePitched(tgt.tracks, _activeId, _rungFor(m, n), tgt.step, tgt.step + dur - 1);
+      // heard live now → don't let the clock replay it this loop pass (the clock
+      // checks the played/global step).
       _freshThisLoop.add('$_activeId:$m:${p.step}');
     }
+    if (_songSection != null) _reflattenSong(); // so it plays on the next pass
   }
 
-  /// Place a pitched note spanning [a,b], merging overlapping same-pitch notes.
-  void _placePitched(String id, Rung n, int a, int b) {
+  /// Place a pitched note spanning [a,b] in [tracks], merging overlapping
+  /// same-pitch notes. [tracks] is the active section normally, or the section
+  /// under the playhead for a song-mode overdub.
+  void _placePitched(Map<String, TrackData> tracks, String id, Rung n, int a, int b) {
     setState(() {
       var lo = a < b ? a : b;
       var hi = a < b ? b : a;
       final kept = <PitchNote>[];
-      for (final x in _tracks[id]!.pitchNotes) {
+      for (final x in tracks[id]!.pitchNotes) {
         if (x.midi == n.midi) {
           final xs = x.step, xe = x.step + x.dur - 1;
           if (xs <= hi && xe >= lo) {
@@ -1057,7 +1109,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       kept.add(
         PitchNote(midi: n.midi, freq: n.freq, step: lo, dur: hi - lo + 1),
       );
-      _tracks[id]!.pitchNotes
+      tracks[id]!.pitchNotes
         ..clear()
         ..addAll(kept);
     });
@@ -1076,7 +1128,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       vol: _vol[_activeId] ?? 0.85,
       durSec: durSec,
     );
-    _placePitched(_activeId, n, a, b);
+    _placePitched(_tracks, _activeId, n, a, b);
     _freshThisLoop.add('$_activeId:${n.midi}:${a < b ? a : b}');
   }
 
