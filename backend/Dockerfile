@@ -23,6 +23,7 @@ RUN apt-get update \
         ffmpeg \
         libsndfile1 \
         libgomp1 \
+        libstdc++6 \
         ca-certificates \
         curl \
  && apt-get clean \
@@ -31,10 +32,20 @@ RUN apt-get update \
 WORKDIR /app
 
 # --- python deps (cached layer) -------------------------------------------
+# build-essential (g++/gcc/make) is needed to compile C/C++ extensions that
+# ship sdist-only — notably pyworld (WORLD vocoder, used by app/autotune.py).
+# Installed only for this layer and purged after the wheels are built so the
+# runtime image stays lean. libstdc++6 (linked by pyworld at runtime) is kept
+# via the explicit install in the system-deps layer above.
 COPY requirements.txt ./
-RUN pip install --upgrade pip \
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential \
+ && pip install --upgrade pip \
  && pip install -r requirements.txt \
- && pip install "gunicorn>=21.2"
+ && pip install "gunicorn>=21.2" \
+ && apt-get purge -y --auto-remove build-essential \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
 
 # --- app source ------------------------------------------------------------
 COPY app ./app
