@@ -328,7 +328,7 @@ class L10nEn extends L10n {
 
   @override
   String get withdrawHint =>
-      'Deleting your account removes all local projects and Cloud data.\nIf subscribed, please cancel separately in App Store / Google Play.';
+      'Deleting your account removes all local projects and Cloud data.\nIf subscribed, please cancel separately in the app marketplace.';
 
   @override
   String get withdrawCta => 'Delete account';
@@ -853,7 +853,7 @@ class L10nEn extends L10n {
 
   @override
   String get faq5A =>
-      'Payments follow App Store · Google Play policy. Please request refunds through the store directly.';
+      'Payments follow the app marketplace policy. Please request refunds through the store directly.';
 
   @override
   String get contactTitle => 'Contact us';

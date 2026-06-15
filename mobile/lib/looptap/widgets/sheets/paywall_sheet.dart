@@ -202,6 +202,41 @@ class _PaywallSheetState extends State<_PaywallSheet> {
           onTap: () => setState(() => _selected = kProductMonthly),
         ),
         const SizedBox(height: 16),
+        // Billed amount is the most prominent pricing element (App Store
+        // Guideline 3.1.2(c)); free-trial wording is kept subordinate to it —
+        // smaller, dimmer, and below the total. Apple rejected the prior layout
+        // where the lime CTA promoted only "Start free trial" with no billed
+        // amount or auto-renewal disclosure.
+        () {
+          final isYearly = _selected == kProductYearly;
+          final billed = isYearly ? IapPricing.yearlyLabel() : IapPricing.monthlyLabel();
+          final period = isYearly ? 'year' : 'month';
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                    text: billed,
+                    style: LTType.inter(size: 22, weight: FontWeight.w800, color: LT.t1),
+                  ),
+                  TextSpan(
+                    text: ' / $period',
+                    style: LTType.inter(size: 13, weight: FontWeight.w600, color: LT.t2),
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${IapPricing.trialDays}-day free trial, then $billed billed per $period. '
+                'Auto-renews until canceled. Cancel anytime in Settings at least '
+                '24 hours before renewal.',
+                style: LTType.inter(size: 11, color: LT.t3, height: 1.45),
+              ),
+            ],
+          );
+        }(),
+        const SizedBox(height: 14),
         GestureDetector(
           onTap: disabled || _busy ? null : () => _buy(store, _selected),
           child: Opacity(
@@ -219,7 +254,7 @@ class _PaywallSheetState extends State<_PaywallSheet> {
                       child: CircularProgressIndicator(strokeWidth: 2.5, color: LT.bg),
                     )
                   : Text(
-                      'Start ${IapPricing.trialDays}-day free trial',
+                      'Subscribe',
                       style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg),
                     ),
             ),

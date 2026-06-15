@@ -324,7 +324,7 @@ class L10nKo extends L10n {
 
   @override
   String get withdrawHint =>
-      '회원 탈퇴 시 모든 로컬 프로젝트와 클라우드 데이터가 삭제됩니다.\n구독 중인 경우 App Store / Google Play 에서 별도로 해지해 주세요.';
+      '회원 탈퇴 시 모든 로컬 프로젝트와 클라우드 데이터가 삭제됩니다.\n구독 중인 경우 앱 마켓에서 별도로 해지해 주세요.';
 
   @override
   String get withdrawCta => '회원 탈퇴';
@@ -838,8 +838,7 @@ class L10nKo extends L10n {
   String get faq5Q => '환불은 가능한가요?';
 
   @override
-  String get faq5A =>
-      '결제는 App Store · Google Play 정책을 따릅니다. 결제 페이지에서 직접 요청해 주세요.';
+  String get faq5A => '결제는 앱 마켓 정책을 따릅니다. 결제 페이지에서 직접 요청해 주세요.';
 
   @override
   String get contactTitle => '문의하기';

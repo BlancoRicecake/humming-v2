@@ -664,7 +664,7 @@ abstract class L10n {
   /// No description provided for @withdrawHint.
   ///
   /// In ko, this message translates to:
-  /// **'회원 탈퇴 시 모든 로컬 프로젝트와 클라우드 데이터가 삭제됩니다.\n구독 중인 경우 App Store / Google Play 에서 별도로 해지해 주세요.'**
+  /// **'회원 탈퇴 시 모든 로컬 프로젝트와 클라우드 데이터가 삭제됩니다.\n구독 중인 경우 앱 마켓에서 별도로 해지해 주세요.'**
   String get withdrawHint;
 
   /// No description provided for @withdrawCta.
@@ -1576,7 +1576,7 @@ abstract class L10n {
   /// No description provided for @faq5A.
   ///
   /// In ko, this message translates to:
-  /// **'결제는 App Store · Google Play 정책을 따릅니다. 결제 페이지에서 직접 요청해 주세요.'**
+  /// **'결제는 앱 마켓 정책을 따릅니다. 결제 페이지에서 직접 요청해 주세요.'**
   String get faq5A;
 
   /// No description provided for @contactTitle.

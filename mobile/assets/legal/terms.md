@@ -30,7 +30,7 @@
 2. Apple Sign In 의 "Hide my email" 기능을 사용하는 경우, 회사는 Apple 이 제공하는 relay 이메일 주소(@privaterelay.appleid.com)를 정상 연락처로 취급합니다. Apple 측에서 relay 가 revoke 된 경우 회사는 더 이상 회원에게 직접 연락이 불가능할 수 있습니다.
 3. 회원은 자신의 계정 정보 보안에 대한 책임을 부담합니다. 다만 회원의 고의·과실이 없는 무단 사용에 대해서는 회사가 관련 법령상 책임을 부담합니다.
 4. 만 14세 미만은 회원가입 및 서비스 이용이 불가합니다 (한국 PIPA, 미국 COPPA 13세 기준을 통합 적용한 보수적 운영).
-5. 미성년자(만 19세 미만)의 결제는 법정대리인의 동의 없이는 취소될 수 있습니다. 결제 후 법정대리인이 취소를 요청하는 경우, 회사는 관련 법령에 따라 처리합니다 (실제 환불 처리는 Apple App Store / Google Play 의 환불 절차를 따릅니다).
+5. 미성년자(만 19세 미만)의 결제는 법정대리인의 동의 없이는 취소될 수 있습니다. 결제 후 법정대리인이 취소를 요청하는 경우, 회사는 관련 법령에 따라 처리합니다 (실제 환불 처리는 앱 마켓의 환불 절차를 따릅니다).
 
 ### 제5조 (서비스의 제공)
 1. **무료 플랜(Free)**:
@@ -48,21 +48,21 @@
 4. 회사는 서비스의 일부 기능을 신설·변경·중단할 수 있으며, 중대한 변경 시 사전 공지합니다.
 
 ### 제6조 (유료 구독 및 자동 결제)
-1. HumTrack Pro 구독은 **Apple App Store 인앱결제 또는 Google Play 인앱결제(IAP)를 통해서만** 제공됩니다. 회사는 자체 결제 수단(신용카드, 계좌이체 등)을 직접 제공하지 않으며, 회원의 결제 카드 정보를 직접 보유·처리하지 않습니다.
-2. **가격 (참고 예시)**: 시점 2026-06 기준 한국 스토어 등록 가격은 월 ₩5,500 / 연 ₩55,000 (모두 부가세 포함, 연 구독은 월 환산 시 약 20% 할인). 다른 국가의 가격은 Apple App Store / Google Play 가 환율 및 현지 정책에 따라 자동 책정합니다.
-3. **실제 청구 가격 확인**: 정기 구독 상품의 가격은 사용자의 국가 또는 지역, Apple App Store / Google Play 계정 설정, 세금 및 각 스토어의 가격 정책에 따라 달라질 수 있습니다. 사용자는 구매 전 **Apple App Store / Google Play 결제 화면**에서 실제 청구 금액, 통화, 결제 주기 및 무료 체험 여부를 반드시 확인할 수 있으며, **실제 청구 및 결제는 결제 화면에 표시된 금액과 통화를 기준으로 처리됩니다.**
+1. HumTrack Pro 구독은 **앱 마켓의 인앱결제(IAP)를 통해서만** 제공됩니다. 회사는 자체 결제 수단(신용카드, 계좌이체 등)을 직접 제공하지 않으며, 회원의 결제 카드 정보를 직접 보유·처리하지 않습니다.
+2. **가격 (참고 예시)**: 시점 2026-06 기준 한국 스토어 등록 가격은 월 ₩5,500 / 연 ₩55,000 (모두 부가세 포함, 연 구독은 월 환산 시 약 20% 할인). 다른 국가의 가격은 앱 마켓이 환율 및 현지 정책에 따라 자동 책정합니다.
+3. **실제 청구 가격 확인**: 정기 구독 상품의 가격은 사용자의 국가 또는 지역, 앱 마켓 계정 설정, 세금 및 각 스토어의 가격 정책에 따라 달라질 수 있습니다. 사용자는 구매 전 **앱 마켓 결제 화면**에서 실제 청구 금액, 통화, 결제 주기 및 무료 체험 여부를 반드시 확인할 수 있으며, **실제 청구 및 결제는 결제 화면에 표시된 금액과 통화를 기준으로 처리됩니다.**
 4. **7일 무료 체험 (Introductory Offer)**:
-   - 신규 회원에게 1회 한정 제공됩니다 (Apple / Google 계정 기준).
+   - 신규 회원에게 1회 한정 제공됩니다 (앱 마켓 계정 기준).
    - 체험 기간 종료 24시간 전까지 해지하지 않으면 자동으로 첫 결제가 발생합니다.
 5. **자동 갱신**:
    - 월간 구독은 매월, 연간 구독은 매년 자동으로 갱신됩니다.
-   - 갱신 결제는 만료 시점 24시간 이내에 Apple / Google 이 등록된 결제수단으로 자동 청구합니다.
+   - 갱신 결제는 만료 시점 24시간 이내에 앱 마켓이 등록된 결제수단으로 자동 청구합니다.
    - **연간 자동 갱신의 경우 회사는 「전자상거래법 시행령」 (2022 개정)에 따라 갱신 결제 발생 7일 전까지 회원의 등록 이메일 또는 앱 푸시로 갱신 예정 통지를 발송합니다.**
 6. **해지 방법**:
    - iOS: 설정 → [사용자 이름] → 구독 → HumTrack
-   - Android: Play 스토어 → 프로필 → 결제 및 정기결제 → 정기결제
+   - 기타 앱 마켓: 구매하신 마켓의 구독 관리 화면에서 해지
    - 갱신을 원치 않는 회원은 **만료 24시간 전까지** 위 경로에서 직접 해지해야 합니다. 해지 후에도 이미 결제한 기간 말까지는 Pro 기능을 계속 사용할 수 있습니다.
-7. **환불**: 별도 [환불정책](./refund-policy.md) 및 각 스토어 환불 정책을 따릅니다. 회사는 자체 환불 처리 권한을 보유하지 않으며, 모든 결제 환불은 Apple / Google 이 1차로 처리합니다.
+7. **환불**: 별도 [환불정책](./refund-policy.md) 및 각 스토어 환불 정책을 따릅니다. 회사는 자체 환불 처리 권한을 보유하지 않으며, 모든 결제 환불은 앱 마켓이 1차로 처리합니다.
 
 ### 제7조 (콘텐츠 및 권리)
 1. **회원이 서비스를 통해 생성한 음악·MIDI·분석 결과의 저작권 및 모든 권리는 100% 회원 본인에게 귀속됩니다.**
@@ -102,7 +102,7 @@
 
 ### 제11조 (이용계약 해지)
 1. 회원은 언제든 앱 내 "설정 → 계정 삭제"를 통해 회원 탈퇴할 수 있습니다.
-2. 회원 탈퇴 시 진행 중인 유료 구독은 자동으로 해지되지 않습니다. 구독 해지는 별도로 Apple / Google 의 구독 설정에서 진행해야 합니다.
+2. 회원 탈퇴 시 진행 중인 유료 구독은 자동으로 해지되지 않습니다. 구독 해지는 별도로 앱 마켓의 구독 설정에서 진행해야 합니다.
 3. 회사는 회원이 본 약관 제9조를 위반한 경우, 사전 통지(긴급 시 사후 통지) 후 이용계약을 해지할 수 있습니다.
 
 ### 제12조 (분쟁 해결 및 준거법)
@@ -143,21 +143,21 @@ We may revise these Terms in compliance with applicable law. We will provide not
 - Sign-up is via Apple Sign In or Google Sign In OAuth.
 - If you use Apple "Hide my email," we will treat the @privaterelay.appleid.com address as your contact. If Apple revokes the relay, we may lose the ability to contact you.
 - You must be at least 14 years of age. We do not knowingly accept Users under 14 (or 13 under U.S. COPPA).
-- Purchases by minors may be voidable under applicable law. Refunds in such cases are processed through Apple / Google.
+- Purchases by minors may be voidable under applicable law. Refunds in such cases are processed through the app marketplace's refund process.
 
 ### Article 5. The Service
 - **Free**: humming recording, AI analysis, local storage, basic editing. No MIDI/WAV export, no cloud sync.
 - **HumTrack Pro**: everything in Free, plus unlimited MIDI/WAV export, 5 GB cloud sync (Cloudflare R2 + Supabase), permanent vocal cloud storage (subject to Article 8 retention), and priority analysis.
 
 ### Article 6. Subscription and Auto-Renewal
-- Pro is sold **exclusively** via Apple App Store or Google Play in-app purchase. We do not collect, store, or process your payment card data; Apple and Google do.
-- **Price (reference)**: as of June 2026, the Korean store price is ₩5,500/month or ₩55,000/year (~20% annual discount), inclusive of VAT. Prices in other countries are set automatically by Apple App Store / Google Play based on exchange rate and local policy.
-- **Actual charge**: the subscription price may vary by country/region, Apple App Store / Google Play account settings, tax, and each store's pricing policy. Before purchase, you can review the actual charge amount, currency, billing cycle, and free trial eligibility on the **Apple App Store / Google Play checkout screen**, and **the amount and currency shown on that checkout screen will govern the actual charge**.
-- **7-day free trial** (Introductory Offer): one per Apple/Google account. Cancel at least 24 hours before the trial ends to avoid the first charge.
-- **Auto-renewal**: subscriptions renew automatically each period. Apple/Google bill your saved payment method within 24 hours before renewal.
+- Pro is sold **exclusively** via the app marketplace in-app purchase. We do not collect, store, or process your payment card data; the app marketplace does.
+- **Price (reference)**: as of June 2026, the Korean store price is ₩5,500/month or ₩55,000/year (~20% annual discount), inclusive of VAT. Prices in other countries are set automatically by the app marketplace based on exchange rate and local policy.
+- **Actual charge**: the subscription price may vary by country/region, app marketplace account settings, tax, and each store's pricing policy. Before purchase, you can review the actual charge amount, currency, billing cycle, and free trial eligibility on the **app marketplace checkout screen**, and **the amount and currency shown on that checkout screen will govern the actual charge**.
+- **7-day free trial** (Introductory Offer): one per app marketplace account. Cancel at least 24 hours before the trial ends to avoid the first charge.
+- **Auto-renewal**: subscriptions renew automatically each period. The app marketplace bills your saved payment method within 24 hours before renewal.
 - **Annual renewal notice**: for annual subscriptions, we send a renewal reminder email or push notification at least 7 days prior, per the 2022 amendment to the Korean Electronic Commerce Act Enforcement Decree.
-- **Cancel**: iOS → Settings → [your name] → Subscriptions → HumTrack; Android → Play Store → Profile → Payments & subscriptions. Cancel at least **24 hours before renewal**. You keep Pro until the paid period ends.
-- **Refunds**: governed by the [Refund Policy](./refund-policy.md) and the store's refund policy. We do not process refunds directly; Apple and Google do.
+- **Cancel**: iOS → Settings → [your name] → Subscriptions → HumTrack; other app marketplaces → cancel from your store's subscription management screen. Cancel at least **24 hours before renewal**. You keep Pro until the paid period ends.
+- **Refunds**: governed by the [Refund Policy](./refund-policy.md) and the store's refund policy. We do not process refunds directly; the app marketplace does.
 
 ### Article 7. Content and Rights
 - **You own 100% of the copyright and all rights in the music and MIDI you create.**
@@ -182,7 +182,7 @@ You may not: upload infringing content; interfere with the Service (DDoS, automa
 To the maximum extent permitted by law, our aggregate liability shall not exceed the subscription fees you paid us in the 12 months preceding the claim. We are not liable for force majeure, third-party outages (Apple, Google, Supabase, Cloudflare, Fly.io), or local-device data loss. Nothing in these Terms limits liability that cannot be limited by mandatory law (including gross negligence and willful misconduct).
 
 ### Article 11. Termination
-You may close your account anytime via Settings → Delete Account. Closing the account does **not** automatically cancel your IAP subscription; cancel separately via Apple/Google. We may terminate for material breach with notice (or immediately for urgent cases, with later notice).
+You may close your account anytime via Settings → Delete Account. Closing the account does **not** automatically cancel your IAP subscription; cancel separately via the app marketplace. We may terminate for material breach with notice (or immediately for urgent cases, with later notice).
 
 ### Article 12. Governing Law and Disputes
 - **Korea residents**: Korean law; Seoul Central District Court as court of first instance absent agreement otherwise.
