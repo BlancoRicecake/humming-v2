@@ -2017,7 +2017,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                 ),
               ],
             ),
-            if (_countDown > 0) _countInOverlay(),
+            // Hide the overlay on the final "1" beat (not at 0) so the input
+            // surface is already exposed one beat before recording starts —
+            // the user can see the pads and play right on the downbeat.
+            if (_countDown > 1) _countInOverlay(),
           ],
         ),
       ),
