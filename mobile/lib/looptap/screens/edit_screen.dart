@@ -961,8 +961,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     setState(() {
       _sec.fillKinds[padIndex] = picked;
       // Remap the swapped-away sound's notes → the new sound, deduping any
-      // (kind, step) collision with notes the new sound already had.
-      final track = _sec.tracks['beatDec']!;
+      // (kind, step) collision with notes the new sound already had. Operate on
+      // the ACTIVE beat-fill track (could be an added instance, not 'beatDec').
+      final track = _sec.tracks[_activeId]!;
       final seen = <String>{};
       final remapped = <DrumNote>[];
       for (final n in track.drumNotes) {
@@ -2455,8 +2456,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final src = (_songSection ?? _sec).tracks[_activeId]!;
     if (kind == TrackKind.drums) {
       // Beat-Fill's pad sounds are user-assignable (per section); the main drums
-      // use their fixed kinds.
-      final isFill = _activeId == 'beatDec';
+      // use their fixed kinds. Match by TYPE, not id, so ADDED beat-fill
+      // instances (TrackRef type 'beatDec', a distinct id) also get the
+      // launchpad UI instead of falling back to the plain drum surface.
+      final isFill = _activeType == 'beatDec';
       final kinds = isFill ? _fillKinds : _meta.drumKinds;
       final specs = drumSpecsFor(kinds);
       final map = <String, Set<int>>{};
