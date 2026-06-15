@@ -197,7 +197,7 @@ class MeltyEngine {
     if (program == program808) {
       final s = await _ensure808();
       if (_channelProgram[channel] != program808) {
-        _selectProgram(s, channel, bank: 0, program: 0); // 808's single preset
+        _programChange(s, channel, 0); // 808's single preset (default bank 0)
         _channelProgram[channel] = program808;
       }
       _channelSynth[channel] = s;
@@ -209,7 +209,7 @@ class MeltyEngine {
         final entry = SoundfontCatalog.instance.bySlot(program);
         final marker = 100000 + program;
         if (_channelProgram[channel] != marker) {
-          _selectProgram(s, channel,
+          _selectWithBank(s, channel,
               bank: entry?.sfBank ?? 0, program: entry?.sfProgram ?? 0);
           _channelProgram[channel] = marker;
         }
@@ -228,15 +228,22 @@ class MeltyEngine {
 
   void _selectGm(Synthesizer s, int channel, int program) {
     if (_channelSynth[channel] == s && _channelProgram[channel] == program) return;
-    _selectProgram(s, channel, bank: 0, program: program);
+    _programChange(s, channel, program); // melodic: default bank 0 (matches buildMidi)
     _channelProgram[channel] = program;
   }
 
-  // Bank select (CC0) then program change — standard MIDI, reliable in MeltySynth.
-  void _selectProgram(Synthesizer s, int channel,
-      {required int bank, required int program}) {
+  // The WAV export (buildMidi) drives MeltySynth with program changes ONLY and
+  // relies on each channel's default bank (0 melodic / 128 on percussion ch9) —
+  // and it renders correctly. Mirror that: _programChange for the default-bank
+  // cases, _selectWithBank only where the bank truly differs (catalog
+  // soundfonts, or forcing 128 on a NON-percussion drum channel).
+  void _programChange(Synthesizer s, int channel, int program) {
+    s.processMidiMessage(channel: channel, command: 0xC0, data1: program & 0x7f, data2: 0);
+  }
+
+  void _selectWithBank(Synthesizer s, int channel, {required int bank, required int program}) {
     s.processMidiMessage(channel: channel, command: 0xB0, data1: 0x00, data2: bank);
-    s.processMidiMessage(channel: channel, command: 0xC0, data1: program, data2: 0);
+    s.processMidiMessage(channel: channel, command: 0xC0, data1: program & 0x7f, data2: 0);
   }
 
   /// Bind a (drum) channel to a kit. GM kits live in bank 128 of the main SF2;
@@ -265,12 +272,15 @@ class MeltyEngine {
       s = _main!;
       prog = program; // GM kit number
     }
-    // Target an effective bankNumber of 128 (percussion). MeltySynth's setBank()
-    // ADDS 128 on the percussion channel (9) — so send 0 there (→128) and an
-    // explicit 128 on other drum channels (→128). bank 128 resolves a percussion
-    // preset on ANY channel, falling back to the Standard kit (128:0).
-    final bankSel = channel == drumChannel ? 0 : 128;
-    _selectProgram(s, channel, bank: bankSel, program: prog);
+    // ch9 is already percussion (default bank 128) — just send the kit program,
+    // exactly like buildMidi (the working export path). A NON-percussion drum
+    // channel (beat-fill / added drum track) needs bank 128 forced so MeltySynth
+    // resolves a percussion preset there (falls back to Standard kit 128:0).
+    if (channel == drumChannel) {
+      _programChange(s, channel, prog);
+    } else {
+      _selectWithBank(s, channel, bank: 128, program: prog);
+    }
     _channelProgram[channel] = marker;
     _channelSynth[channel] = s;
   }
