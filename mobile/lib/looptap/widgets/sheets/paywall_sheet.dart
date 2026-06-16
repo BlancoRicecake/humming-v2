@@ -211,6 +211,17 @@ class _PaywallSheetState extends State<_PaywallSheet> {
           final isYearly = _selected == kProductYearly;
           final billed = isYearly ? IapPricing.yearlyLabel() : IapPricing.monthlyLabel();
           final period = isYearly ? 'year' : 'month';
+          // Only advertise the free trial when the store actually offers it to
+          // this user. On Android, Google Play drops the trial offer once it's
+          // been used, so a returning user sees plain billing terms instead —
+          // the purchase flow bills them immediately to match (see IapService).
+          final hasTrial = IapPricing.hasFreeTrial(_selected);
+          final disclosure = hasTrial
+              ? '${IapPricing.trialDays}-day free trial, then $billed billed per '
+                  '$period. Auto-renews until canceled. Cancel anytime in Settings '
+                  'at least 24 hours before renewal.'
+              : '$billed per $period. Auto-renews until canceled. Cancel anytime '
+                  'in Settings at least 24 hours before renewal.';
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -228,9 +239,7 @@ class _PaywallSheetState extends State<_PaywallSheet> {
               ),
               const SizedBox(height: 4),
               Text(
-                '${IapPricing.trialDays}-day free trial, then $billed billed per $period. '
-                'Auto-renews until canceled. Cancel anytime in Settings at least '
-                '24 hours before renewal.',
+                disclosure,
                 style: LTType.inter(size: 11, color: LT.t3, height: 1.45),
               ),
             ],

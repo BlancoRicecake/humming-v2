@@ -73,6 +73,24 @@ class IapPricing {
     return '₩${_fmt(monthly)}';
   }
 
+  /// 현재 사용자에게 [productId] 무료 체험이 제공되는지.
+  /// Android: Google Play 가 subscriptionOfferDetails 를 *자격 기준으로 필터링* 하므로,
+  ///   free($0) phase 가 있는 offer 가 보이면 아직 체험 가능 — 이미 쓴 유저에겐 사라진다.
+  /// iOS: StoreKit 이 결제 시점에 intro offer 자격을 자동 판정하므로 상품이 있으면 표시하고
+  ///   적용 여부는 StoreKit 에 맡긴다.
+  /// 상품 미로드(시뮬레이터/네트워크 오류) 시 false → 체험 문구를 띄우지 않아 오도 방지.
+  static bool hasFreeTrial(String productId) {
+    final p = _find(productId);
+    if (p == null) return false;
+    if (p is GooglePlayProductDetails) {
+      final offers = p.productDetails.subscriptionOfferDetails ?? const [];
+      return offers.any(
+        (o) => o.pricingPhases.any((ph) => ph.priceAmountMicros == 0),
+      );
+    }
+    return true; // iOS — StoreKit handles intro-offer eligibility at checkout.
+  }
+
   // ─── 스토어 base plan 가격 추출 ─────────────────────────────────────
 
   /// 스토어 ProductDetails 에서 base plan 의 recurring 가격(formatted)을 추출.

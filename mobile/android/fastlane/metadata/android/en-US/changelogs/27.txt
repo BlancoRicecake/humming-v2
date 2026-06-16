@@ -1,0 +1,9 @@
+What's new ✨
+
+- Vocal recording — record one continuous vocal take across the whole song, and overdub notes/pads while it plays
+- Vocals now included in WAV export
+- More accurate instrument sound — melody, bass, and drums play the intended timbre
+- Drum kit fixes — each kit plays its correct sound
+- Input stays active during the count-in; beat-fill tracks now use the launchpad UI
+- Cleaner subscription screen and improved contrast/readability
+- Various bug fixes
