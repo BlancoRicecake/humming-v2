@@ -5,11 +5,30 @@
 //  - any headset → safe to play the backing loop while recording (no bleed)
 //  - WIRED only → low enough round-trip latency for live autotune monitoring
 //    (Bluetooth adds 150-300ms each way — disorienting to sing against)
+import 'dart:io' show Platform;
+
 import 'package:flutter/services.dart';
 
 enum HeadsetRoute { wired, bluetooth, none }
 
 const _channel = MethodChannel('humming/audio');
+
+/// Force the iOS AVAudioSession back to `.playback`.
+///
+/// The `record` package switches the shared session to `.playAndRecord`
+/// while the mic is open and does NOT restore the resting category on stop.
+/// If synth output (flutter_pcm_sound) resumes while the session is still in
+/// record mode, the route/sample-rate is wrong and playback comes out muddy
+/// for the rest of the app session. Call this right after the recorder stops,
+/// before playback resumes. No-op on Android (no global session category).
+Future<void> restorePlaybackSession() async {
+  if (!Platform.isIOS) return;
+  try {
+    await _channel.invokeMethod<void>('restorePlaybackSession');
+  } catch (_) {
+    // older native side without the handler → MissingPluginException; ignore
+  }
+}
 
 /// Current audio output route. Errors (simulator, missing impl) → none.
 Future<HeadsetRoute> headsetRoute() async {

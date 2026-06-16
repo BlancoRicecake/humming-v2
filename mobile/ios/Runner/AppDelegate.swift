@@ -44,6 +44,11 @@ import UIKit
           result(AppDelegate.headsetRoute() != "none")
         case "headsetRoute":
           result(AppDelegate.headsetRoute())
+        case "restorePlaybackSession":
+          // The record package leaves the shared session in .playAndRecord
+          // after the mic closes; force it back so synth playback isn't muddy.
+          AppDelegate.configurePlaybackSession()
+          result(true)
         default:
           result(FlutterMethodNotImplemented)
         }

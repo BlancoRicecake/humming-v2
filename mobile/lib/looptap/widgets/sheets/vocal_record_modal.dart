@@ -315,6 +315,9 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     } catch (_) {}
     // recorder is fully stopped — safe to let go of the iOS audio session
     unawaited(releaseAutotuneMonitorSession());
+    // ...and force the resting .playback category back (record leaves it in
+    // .playAndRecord, which muddies subsequent synth playback on iOS).
+    await restorePlaybackSession();
     if (path == null) {
       _fail('No audio captured');
       return;
@@ -430,6 +433,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
       await _rec.stop();
     } catch (_) {}
     unawaited(releaseAutotuneMonitorSession());
+    await restorePlaybackSession();
     if (mounted) Navigator.of(context).pop();
   }
 

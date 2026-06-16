@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../../audio/container.dart';
+import '../../../audio/headset.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import 'lt_modal.dart';
@@ -205,6 +206,9 @@ class _HumModalState extends State<_HumModal> {
     try {
       path = await _rec.stop();
     } catch (_) {}
+    // record left the iOS session in .playAndRecord — restore .playback
+    // before synth playback resumes, else output is muddy (iOS only).
+    await restorePlaybackSession();
     if (path == null) {
       _fail('No audio captured');
       return;
@@ -228,6 +232,7 @@ class _HumModalState extends State<_HumModal> {
     try {
       await _rec.stop();
     } catch (_) {}
+    await restorePlaybackSession();
     if (mounted) Navigator.of(context).pop();
   }
 
