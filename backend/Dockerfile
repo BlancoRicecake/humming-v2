@@ -47,6 +47,14 @@ RUN apt-get update \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
+# --- downloadable catalog soundfonts --------------------------------------
+# Large CC0 .sf2 the backend renders with (guitar_lab / audition FluidSynth)
+# AND the app downloads on demand via /soundfonts. gitignored (>100MB each, too
+# big for GitHub) but present locally, so the Docker build context bakes them
+# in. Kept as its own layer BEFORE the app source so app-only deploys reuse the
+# cached ~1GB layer instead of rebuilding it.
+COPY soundfonts ./soundfonts
+
 # --- app source ------------------------------------------------------------
 COPY app ./app
 COPY migrations ./migrations
