@@ -1,1 +1,1 @@
-Turn your humming into a song. Multi-track music maker built for beginners — auto pitch, chord, and beat detection. MIDI/WAV export. 7-day Pro trial.
+Hum anywhere and watch it turn into a real song. No theory, no instruments — pitch, chords, and beats detected automatically. Start free for 7 days.

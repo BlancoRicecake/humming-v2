@@ -1,4 +1,4 @@
-What's new ✨
+What's new
 
 - Multitrack — stack the same instrument across tracks and drag to reorder
 - 808 sub-bass for a deeper low end
