@@ -262,8 +262,15 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     return math.min(padCountForWidth(w), _activeFullLadder.length);
   }
 
+  /// Active pitched track's program + whether it's a guitar (drives guitar
+  /// chord voicing, strum and the lower guitar register).
+  int get _activeProgram => _instruments[_activeId] ?? _meta.defaultProgram;
+  bool get _activeIsGuitar => isGuitarProgram(_activeProgram);
+
+  // Guitars sit an octave lower than the generic melody register so the pads
+  // land in a real guitar's playing range (≈E2–E6).
   List<Rung> get _melodyFullLadder =>
-      buildLadder(_keyRoot, _scale, 3 + _melodyOctave, 22);
+      buildLadder(_keyRoot, _scale, (_activeIsGuitar ? 2 : 3) + _melodyOctave, 22);
   List<Rung> get _bassFullLadder =>
       buildLadder(_keyRoot, _scale, 1 + _bassOctave, 22);
   List<Rung> get _activeFullLadder =>
@@ -373,6 +380,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void dispose() {
     _autosaveTimer?.cancel();
     _flashTimer?.cancel();
+    for (final t in _strumTimers) {
+      t.cancel();
+    }
     _ticker?.dispose();
     _playStep.dispose();
     _audio.stopAll();
@@ -468,18 +478,37 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       if (data == null) continue;
       if (tk.kind == TrackKind.pitched || tk.kind == TrackKind.bass) {
         final prog = _instruments[tk.id] ?? tk.defaultProgram;
-        for (final n in data.pitchNotes.where((n) => n.step == step)) {
-          if (_freshThisLoop.contains('${tk.id}:${n.midi}:$step')) continue;
-          _audio.playPitch(
-            tk.channel,
-            n.midi,
-            program: prog,
-            vol: _vol[tk.id] ?? 0.85,
-            durSec: dsec(n.dur),
-          );
-          // glow only the ACTIVE track's pads — otherwise a melody note would
-          // light a same-pitch pad on melody-fill/bass while they're showing.
-          if (tk.id == _activeId) litM.add(n.midi);
+        final vol = _vol[tk.id] ?? 0.85;
+        final due = [
+          for (final n in data.pitchNotes.where((n) => n.step == step))
+            if (!_freshThisLoop.contains('${tk.id}:${n.midi}:$step')) n,
+        ];
+        if (isGuitarProgram(prog) && due.length > 1) {
+          // strum the chord on playback the same way the live pad does
+          final byMidi = {for (final n in due) n.midi: n};
+          for (final s in strumPlan([for (final n in due) n.midi])) {
+            final note = byMidi[s.midi]!;
+            void hit() => _audio.playPitch(tk.channel, s.midi,
+                program: prog, vol: vol * s.velScale, durSec: dsec(note.dur));
+            // fire-and-forget: the strum sweep is a few ms, no cancellation
+            if (s.delayMs <= 0) {
+              hit();
+            } else {
+              Timer(Duration(milliseconds: s.delayMs), hit);
+            }
+          }
+        } else {
+          for (final n in due) {
+            _audio.playPitch(tk.channel, n.midi,
+                program: prog, vol: vol, durSec: dsec(n.dur));
+          }
+        }
+        // glow only the ACTIVE track's pads — otherwise a melody note would
+        // light a same-pitch pad on melody-fill/bass while they're showing.
+        if (tk.id == _activeId) {
+          for (final n in due) {
+            litM.add(n.midi);
+          }
         }
       } else if (tk.kind == TrackKind.drums) {
         for (final n in data.drumNotes.where((n) => n.step == step)) {
@@ -1070,10 +1099,15 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   /// The midis a pad press produces: a diatonic triad in melody chord mode,
   /// otherwise just the pressed note.
-  List<int> _chordMidis(int rootMidi) =>
-      (_meta.group == 'melody' && _chordOn)
-          ? diatonicTriad(rootMidi, _keyRoot, _scale)
-          : [rootMidi];
+  List<int> _chordMidis(int rootMidi) {
+    if (_meta.group != 'melody' || !_chordOn) return [rootMidi];
+    // Guitar gets a spread barre/open voicing in the guitar register; other
+    // melody instruments keep the close diatonic triad. Either way the voiced
+    // notes are what gets stored on release, so playback/export stay in sync.
+    return _activeIsGuitar
+        ? guitarVoicing(rootMidi, _keyRoot, _scale)
+        : diatonicTriad(rootMidi, _keyRoot, _scale);
+  }
 
   /// A Rung for an arbitrary chord-member midi (the root reuses the real Rung).
   Rung _rungFor(int midi, Rung root) =>
@@ -1087,12 +1121,30 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
             index: root.index,
           );
 
+  // Pending strum note-ons (a guitar chord sweeps over a few ms); cancelled on
+  // release so a quick tap never leaves a late string ringing.
+  final List<Timer> _strumTimers = [];
+
   void _pitchDown(Rung n) {
     // held note(s): they sound while pressed, so what you hear == what's recorded
     final ch = _meta.channel;
     final prog = _instruments[_activeId] ?? _meta.defaultProgram;
-    for (final m in _chordMidis(n.midi)) {
-      _audio.noteOnLive(ch, m, program: prog, vol: _vol[_activeId] ?? 0.85);
+    final vol = _vol[_activeId] ?? 0.85;
+    final midis = _chordMidis(n.midi);
+    if (_activeIsGuitar && midis.length > 1) {
+      // strum the chord: each string a little after the previous, slightly softer
+      for (final s in strumPlan(midis)) {
+        void hit() => _audio.noteOnLive(ch, s.midi, program: prog, vol: vol * s.velScale);
+        if (s.delayMs <= 0) {
+          hit();
+        } else {
+          _strumTimers.add(Timer(Duration(milliseconds: s.delayMs), hit));
+        }
+      }
+    } else {
+      for (final m in midis) {
+        _audio.noteOnLive(ch, m, program: prog, vol: vol);
+      }
     }
     if (_recording && _playing) {
       // Song-mode overdub records the global step; _pitchUp maps it to the
@@ -1107,6 +1159,13 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void _pitchUp(Rung n) {
     final ch = _meta.channel;
     final midis = _chordMidis(n.midi);
+    // drop any not-yet-struck strum strings so a fast tap doesn't leave one on
+    if (_strumTimers.isNotEmpty) {
+      for (final t in _strumTimers) {
+        t.cancel();
+      }
+      _strumTimers.clear();
+    }
     for (final m in midis) {
       _audio.noteOffLive(ch, m);
     }

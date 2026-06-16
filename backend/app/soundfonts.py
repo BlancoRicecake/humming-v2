@@ -48,12 +48,28 @@ _REQUIRED = {"id", "slot", "label", "role", "file"}
 _ROLES = {"melody", "bass", "drums"}
 
 
+# Hashing a soundfont is O(file size); the guitar-lab fonts are hundreds of MB
+# and load_catalog() runs on every audition/render request. Cache by
+# (path, size, mtime_ns) so a file is only re-hashed when it actually changes.
+_HASH_CACHE: Dict[str, str] = {}
+
+
 def _sha256(path: Path) -> str:
+    try:
+        st = path.stat()
+        key = f"{path}:{st.st_size}:{st.st_mtime_ns}"
+    except OSError:
+        key = None
+    if key is not None and key in _HASH_CACHE:
+        return _HASH_CACHE[key]
     h = hashlib.sha256()
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
-    return h.hexdigest()
+    digest = h.hexdigest()
+    if key is not None:
+        _HASH_CACHE[key] = digest
+    return digest
 
 
 def _read_catalog_file() -> List[dict]:

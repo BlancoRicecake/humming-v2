@@ -1,1 +1,50 @@
-[]
+[
+  {
+    "id": "freepats_nylon",
+    "slot": 1001,
+    "label": "Nylon Acoustic Guitar (FreePats)",
+    "role": "melody",
+    "category": "Guitar",
+    "file": "freepats_nylon.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 24,
+    "license": "CC0"
+  },
+  {
+    "id": "freepats_clean_direct",
+    "slot": 1002,
+    "label": "Clean Electric Guitar DI (FreePats)",
+    "role": "melody",
+    "category": "Guitar",
+    "file": "freepats_clean_direct.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 27,
+    "license": "CC0"
+  },
+  {
+    "id": "freepats_clean",
+    "slot": 1003,
+    "label": "Clean Electric Guitar (FreePats)",
+    "role": "melody",
+    "category": "Guitar",
+    "file": "freepats_clean.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 27,
+    "license": "CC0"
+  },
+  {
+    "id": "freepats_dist2",
+    "slot": 1004,
+    "label": "Distortion Electric Guitar (FreePats)",
+    "role": "melody",
+    "category": "Guitar",
+    "file": "freepats_dist2.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 30,
+    "license": "CC0"
+  }
+]

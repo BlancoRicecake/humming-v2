@@ -90,6 +90,73 @@ List<int> diatonicTriad(int rootMidi, String tonic, String scale) {
   return [root, third, fifth];
 }
 
+// ── Guitar voicing + strum (validated in SoundLab "기타 연구소") ──────
+/// Real 6-string guitar range, standard tuning: open low E (E2=40) to the
+/// 24th fret of the high E (E6=88). Guitar voicings are clamped here.
+const int kGuitarLo = 40; // E2
+const int kGuitarHi = 88; // E6
+
+/// A guitar-style spread voicing for chord-mode pad input. Takes the diatonic
+/// root/3rd/5th and re-voices it like a strummed barre/open 6-string shape: the
+/// bass root drops to the low guitar register (~E2) with the 5th, octave, 3rd,
+/// 5th and high octave stacked above (the open-E / barre shape), clamped to the
+/// real guitar range. Intervals stay diatonic (so e.g. vii° keeps its dim 5th).
+List<int> guitarVoicing(int rootMidi, String tonic, String scale) {
+  final triad = diatonicTriad(rootMidi, tonic, scale);
+  final rootPc = ((triad[0] % 12) + 12) % 12;
+  final thirdInterval = ((triad[1] - triad[0]) % 12 + 12) % 12; // 3 (min) or 4 (maj)
+  final fifthInterval = ((triad[2] - triad[0]) % 12 + 12) % 12; // 6 / 7 / 8
+  // Lowest instance of the root's pitch class at/above E2 — the 6th/5th-string
+  // bass position a guitarist would fret the chord from.
+  final bass = kGuitarLo + ((rootPc - kGuitarLo) % 12 + 12) % 12;
+  final offsets = [0, fifthInterval, 12, 12 + thirdInterval, 12 + fifthInterval, 24];
+  final out = <int>{};
+  for (final o in offsets) {
+    final m = bass + o;
+    if (m >= kGuitarLo && m <= kGuitarHi) out.add(m);
+  }
+  final list = out.toList()..sort();
+  return list.isEmpty ? triad : list;
+}
+
+/// Guitar strum profile — the lab-confirmed defaults. [strumMs] is the gap
+/// between successive strings; [velocityFalloff] is the fraction the
+/// last-struck string is quieter than the first (humanizes the pick sweep).
+class GuitarStrum {
+  const GuitarStrum({this.strumMs = 28, this.velocityFalloff = 0.18, this.down = true});
+  final int strumMs;
+  final double velocityFalloff;
+  final bool down; // true = down-stroke (low→high), false = up-stroke (high→low)
+}
+
+const GuitarStrum kGuitarStrum = GuitarStrum();
+
+/// Per-note strum schedule for a set of simultaneous chord notes: ordered by
+/// the stroke direction, each note gets an onset delay (ms) and a velocity
+/// scale. Shared by live play, sequencer playback and MIDI export so the strum
+/// is identical everywhere.
+List<({int midi, int delayMs, double velScale})> strumPlan(
+  List<int> midis, {
+  GuitarStrum profile = kGuitarStrum,
+}) {
+  final ordered = [...midis]..sort();
+  if (!profile.down) {
+    final r = ordered.reversed.toList();
+    ordered
+      ..clear()
+      ..addAll(r);
+  }
+  final n = ordered.length;
+  return [
+    for (var i = 0; i < n; i++)
+      (
+        midi: ordered[i],
+        delayMs: i * profile.strumMs,
+        velScale: 1.0 - profile.velocityFalloff * (n > 1 ? i / (n - 1) : 0.0),
+      ),
+  ];
+}
+
 // ── Transport constants (16th grid) ─────────────────────────────────
 const int kBeatsPerBar = 4;
 const int kStepsPerBeat = 4;

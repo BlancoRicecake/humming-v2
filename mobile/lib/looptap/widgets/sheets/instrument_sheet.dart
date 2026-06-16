@@ -94,10 +94,34 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
     widget.onPick(program); // host swaps the live program + previews a note
   }
 
+  // Catalog `category` values that fold into an existing GM picker group, so a
+  // downloaded sound shows up next to its GM siblings (e.g. the FreePats
+  // guitars land in the "Guitars" tab) instead of a generic bucket.
+  static const Map<String, String> _catalogToGmCategory = {'Guitar': 'Guitars'};
+
   List<InstrumentCategory> _categories() {
-    final base = [
-      ...instrumentCategoriesForTrack(widget.trackId),
-      ..._catalogCategories(),
+    final gm = instrumentCategoriesForTrack(widget.trackId);
+    final gmNames = {for (final c in gm) c.label};
+    // Group catalog instruments: those whose category maps onto a GM group name
+    // merge into it; the rest collect into a single "Cloud sounds" group.
+    final merged = <String, List<InstrumentDef>>{};
+    final cloud = <InstrumentDef>[];
+    for (final inst in _catalogInstruments()) {
+      final e = SoundfontCatalog.instance.bySlot(inst.program);
+      final target = _catalogToGmCategory[e?.category] ?? e?.category ?? '';
+      if (gmNames.contains(target)) {
+        (merged[target] ??= <InstrumentDef>[]).add(inst);
+      } else {
+        cloud.add(inst);
+      }
+    }
+    final base = <InstrumentCategory>[
+      for (final c in gm)
+        if (merged.containsKey(c.label))
+          InstrumentCategory(c.label, [...c.instruments, ...merged[c.label]!])
+        else
+          c,
+      if (cloud.isNotEmpty) InstrumentCategory('Cloud sounds', cloud),
     ];
     if (_favorites.isEmpty) return base;
     final favorites = [
@@ -110,19 +134,13 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
     return [InstrumentCategory('Favorites', favorites), ...base];
   }
 
-  // Runtime-catalog instruments matching this track's role, as a single
-  // "Cloud sounds" category (empty when the catalog has none for the role).
+  // Runtime-catalog instruments matching this track's role.
   List<InstrumentDef> _catalogInstruments() {
     final role = instrumentFavoriteKeyForTrack(widget.trackId); // melody|bass|drums
     return [
       for (final e in SoundfontCatalog.instance.all)
         if (e.role == role) InstrumentDef(e.id, e.label, e.slot),
     ];
-  }
-
-  List<InstrumentCategory> _catalogCategories() {
-    final list = _catalogInstruments();
-    return list.isEmpty ? const [] : [InstrumentCategory('Cloud sounds', list)];
   }
 
   void _toggleFavorite(int program) {

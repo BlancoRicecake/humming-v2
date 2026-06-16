@@ -121,6 +121,58 @@ export async function auditionRender(req: AuditionRenderRequest): Promise<Blob> 
   return res.blob();
 }
 
+// --- guitar lab (기타 연구소) ------------------------------------------------
+export interface GuitarSound {
+  key: string;
+  source: "gm" | "catalog";
+  label: string;
+  category: string;
+  bank: number;
+  program: number;
+  soundfont_id: string | null;
+}
+
+export interface GuitarLabParams {
+  root: number;
+  voicing: string;
+  strum_ms: number;
+  direction: "down" | "up";
+  velocity: number;
+  velocity_falloff: number;
+  velocity_jitter: number;
+  timing_jitter_ms: number;
+  ring_ms: number;
+  palm_mute: boolean;
+  let_ring: boolean;
+  pattern: string;
+  bpm: number;
+  repeats: number;
+  reverb: number;
+}
+
+export async function getGuitarLabSounds(): Promise<GuitarSound[]> {
+  const res = await fetch(`${BASE}/guitar_lab_sounds`);
+  if (!res.ok) throw new Error(`guitar_lab_sounds failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  return data.items as GuitarSound[];
+}
+
+// Render a strummed chord. `sound` selects the SF2 (gm bank/program or catalog
+// id); `params` are the articulation knobs.
+export async function guitarLabRender(sound: GuitarSound, params: GuitarLabParams): Promise<Blob> {
+  const sourceFields =
+    sound.source === "gm"
+      ? { source: "gm", bank: sound.bank, program: sound.program }
+      : { source: "catalog", soundfont_id: sound.soundfont_id };
+  const res = await fetch(`${BASE}/guitar_lab_render`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...sourceFields, ...params }),
+  });
+  if (!res.ok) throw new Error(`guitar_lab_render failed: ${res.status} ${await res.text()}`);
+  return res.blob();
+}
+
 // Map a palette item to its render request (discriminated by source). For
 // drums, an optional piece auditions just the kick/snare/hat.
 export function toRenderRequest(it: AuditionItem, piece?: DrumPiece): AuditionRenderRequest {

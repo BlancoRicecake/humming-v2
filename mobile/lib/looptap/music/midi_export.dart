@@ -65,9 +65,12 @@ Uint8List buildMidi(FlatSong flat, int bpm,
     Set<String>? tracks,
     Map<String, double>? vol,
     List<TrackRef> extras = const [],
-    Map<String, int> extraInstruments = const {}}) {
+    Map<String, int> extraInstruments = const {},
+    bool strumGuitar = false}) {
   const tpq = 96;
   final tps = tpq / kStepsPerBeat;
+  // ms → ticks for guitar strum offsets (tpq ticks per quarter at this bpm).
+  double msToTicks(int ms) => ms * tpq * bpm / 60000.0;
   final evs = <_Ev>[];
   final mpq = (60000000 / bpm).round();
   // A Standard MIDI File can only carry GM programs (0–127); the 808 sentinel
@@ -96,17 +99,45 @@ Uint8List buildMidi(FlatSong flat, int bpm,
   double onTick(int step) => (step + (step.isOdd ? swing * 0.5 : 0)) * tps;
   bool want(String t) => tracks == null || tracks.contains(t);
 
-  void addPitched(List<PitchNote> notes, int ch) {
+  void emit(int ch, int midi, double on, int dur, int vel) {
+    evs.add(_Ev(on.round(), [0x90 | ch, midi, vel]));
+    evs.add(_Ev((on + dur * tps).round(), [0x80 | ch, midi, 0]));
+  }
+
+  // [program] decides guitar (strum); [strumGuitar] forces it on (used by the
+  // WAV exporter's dynamic-soundfont guitar lanes, whose program arg is the
+  // SF2's internal preset, not a GM guitar number).
+  void addPitched(List<PitchNote> notes, int ch, int program) {
+    if (!(strumGuitar || isGuitarProgram(program))) {
+      for (final n in notes) {
+        emit(ch, n.midi, onTick(n.step), n.dur, 100);
+      }
+      return;
+    }
+    // Guitar: strum simultaneous notes — order by pitch, offset each string a
+    // few ms and soften it, matching live + sequencer playback.
+    final byStep = <int, List<PitchNote>>{};
     for (final n in notes) {
-      final on = onTick(n.step);
-      evs.add(_Ev(on.round(), [0x90 | ch, n.midi, 100]));
-      evs.add(_Ev((on + n.dur * tps).round(), [0x80 | ch, n.midi, 0]));
+      (byStep[n.step] ??= <PitchNote>[]).add(n);
+    }
+    for (final group in byStep.values) {
+      if (group.length < 2) {
+        final n = group.first;
+        emit(ch, n.midi, onTick(n.step), n.dur, 100);
+        continue;
+      }
+      final byMidi = {for (final n in group) n.midi: n};
+      for (final s in strumPlan([for (final n in group) n.midi])) {
+        final n = byMidi[s.midi]!;
+        emit(ch, s.midi, onTick(n.step) + msToTicks(s.delayMs), n.dur,
+            (100 * s.velScale).round().clamp(1, 127));
+      }
     }
   }
 
-  if (want('melody')) addPitched(flat.melody, 0);
-  if (want('bass')) addPitched(flat.bass, 1);
-  if (want('melodyDec')) addPitched(flat.melodyDec, 2);
+  if (want('melody')) addPitched(flat.melody, 0, melodyProgram);
+  if (want('bass')) addPitched(flat.bass, 1, bassProgram);
+  if (want('melodyDec')) addPitched(flat.melodyDec, 2, melodyDecProgram);
 
   // both percussion tracks (main drums + beat-fill) → GM ch9
   void addDrums(List<DrumNote> notes) {
@@ -137,7 +168,7 @@ Uint8List buildMidi(FlatSong flat, int bpm,
         final prog = extraInstruments[ref.id] ?? base.defaultProgram;
         evs.add(_Ev(0, [0xC0 | ch, gm(prog) & 0x7f]));
         if (vol != null) evs.add(_Ev(0, [0xB0 | ch, 0x07, cc(vol[ref.id])]));
-        addPitched(flat.extraPitched[ref.id] ?? const [], ch);
+        addPitched(flat.extraPitched[ref.id] ?? const [], ch, prog);
       }
     }
   }

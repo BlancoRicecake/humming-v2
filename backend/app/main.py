@@ -29,6 +29,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .analyze import analyze_audio, process_vocal
 from . import soundfonts as soundfonts_mod
 from . import audition_palette as audition_palette_mod
+from . import guitar_lab as guitar_lab_mod
 from .assistant import run_key_and_assistant
 from .midi_build import notes_to_midi_bytes, tracks_to_midi_bytes
 from . import render as render_mod
@@ -517,6 +518,59 @@ async def audition_render(payload: dict):
     except Exception as e:
         logger.exception("audition_render failed")
         raise HTTPException(500, f"audition_render failed: {e}")
+    return Response(content=wav, media_type="audio/wav")
+
+
+# --- guitar lab (기타 연구소): strummed-guitar audition ----------------------
+@app.get("/guitar_lab_sounds")
+def guitar_lab_sounds():
+    """Guitar sounds available in the lab: GM programs 24-31 + catalog fonts."""
+    if not render_mod.is_engine_available():
+        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+    return {"items": guitar_lab_mod.list_guitar_sounds()}
+
+
+@app.post("/guitar_lab_render")
+async def guitar_lab_render(payload: dict):
+    """Render a strummed guitar chord with the lab's articulation params → WAV.
+
+    Body: ``{source, bank/program | soundfont_id, ...articulation params}``.
+    Articulation params (all optional, see guitar_lab.DEFAULT_PARAMS): root,
+    voicing, strum_ms, direction, velocity, velocity_falloff, velocity_jitter,
+    timing_jitter_ms, ring_ms, palm_mute, let_ring, pattern, bpm, repeats, reverb.
+    """
+    if not render_mod.is_engine_available():
+        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+    source = str(payload.get("source") or "gm")
+    sample_rate = int(payload.get("sample_rate") or 44100)
+    seed = payload.get("seed")
+    # reuse the sound-picker source resolution (gm / catalog / sentinel -> sf2)
+    try:
+        sf2_path, sf_bank, sf_program = _resolve_audition_source(source, payload)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not sf2_path:
+        raise HTTPException(503, "global SoundFont unavailable")
+    keys = (
+        "root", "voicing", "strum_ms", "direction", "velocity", "velocity_falloff",
+        "velocity_jitter", "timing_jitter_ms", "ring_ms", "palm_mute", "let_ring",
+        "pattern", "bpm", "repeats", "reverb",
+    )
+    art = {k: payload[k] for k in keys if k in payload}
+    try:
+        wav = guitar_lab_mod.render_guitar_strum(
+            sf2_path, sf_bank, sf_program,
+            sample_rate=sample_rate,
+            seed=int(seed) if seed is not None else None,
+            **art,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(404, f"soundfont file missing: {e}")
+    except Exception as e:
+        logger.exception("guitar_lab_render failed")
+        raise HTTPException(500, f"guitar_lab_render failed: {e}")
     return Response(content=wav, media_type="audio/wav")
 
 

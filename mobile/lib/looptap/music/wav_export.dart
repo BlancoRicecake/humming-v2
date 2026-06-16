@@ -488,7 +488,10 @@ Future<({File file, int skippedVocals})> exportWavSong(
           bassProgram: lane == 'bass' ? e.sfProgram : bassProgram,
           swing: swing,
           vol: vol,
-          tracks: {lane}),
+          tracks: {lane},
+          // the lane's real program is a catalog slot here; force strum when
+          // that slot is a guitar (buildMidi only sees the SF2's preset = 0).
+          strumGuitar: isGuitarProgram(program)),
     });
   }
 

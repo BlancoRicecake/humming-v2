@@ -26,6 +26,7 @@ import { NoteTable } from "./components/NoteTable";
 import { SamplePicker } from "./components/SamplePicker";
 import { CandidatePicker } from "./components/CandidatePicker";
 import { SoundPicker } from "./components/soundpicker/SoundPicker";
+import { GuitarLab } from "./components/guitarlab/GuitarLab";
 import { buildInstrumentPalette, instrumentKey } from "./lib/instruments";
 import { expandChords } from "./lib/chords";
 import type { AnalyzeOptions, AnalyzeResponse, Scale } from "./types";
@@ -70,7 +71,7 @@ export default function App() {
   const [osc, setOsc] = useState<OscType>("triangle");
   const [showEnvelope, setShowEnvelope] = useState(true);
   const [caps, setCaps] = useState<RenderCapabilities | null>(null);
-  const [mode, setMode] = useState<"engine" | "picker">("engine");
+  const [mode, setMode] = useState<"engine" | "picker" | "guitarlab">("engine");
   const [instKey, setInstKey] = useState<string>("");
   const [chordMode, setChordMode] = useState(false);
   const [rendering, setRendering] = useState(false);
@@ -381,6 +382,9 @@ export default function App() {
           <button className={mode === "picker" ? "active" : ""} onClick={() => setMode("picker")}>
             Sound Picker
           </button>
+          <button className={mode === "guitarlab" ? "active" : ""} onClick={() => setMode("guitarlab")}>
+            기타 연구소
+          </button>
         </nav>
       </header>
 
@@ -613,6 +617,8 @@ export default function App() {
       )}
 
       {mode === "picker" && <SoundPicker caps={caps} />}
+
+      {mode === "guitarlab" && <GuitarLab caps={caps} />}
 
       <footer>
         <small>

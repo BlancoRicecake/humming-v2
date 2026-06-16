@@ -191,6 +191,17 @@ const int kDefaultMelodyProgram = 0; // Grand Piano
 const int kDefaultBassProgram = 33; // Fingered Bass
 const int kDefaultDrumKit = 0; // Standard
 
+/// True when [program] is a guitar voice — a GM guitar (24–31) or a downloaded
+/// catalog soundfont tagged category "Guitar". Drives guitar-specific chord
+/// voicing + strum on the melody track.
+bool isGuitarProgram(int program) {
+  if (program >= 24 && program <= 31) return true;
+  if (isDynamicSlot(program)) {
+    return SoundfontCatalog.instance.bySlot(program)?.category == 'Guitar';
+  }
+  return false;
+}
+
 List<InstrumentDef> _gmRange(int start, int end) => kMelodyInstruments
     .where((i) => i.program >= start && i.program <= end)
     .toList(growable: false);
@@ -202,7 +213,11 @@ final List<InstrumentCategory> kMelodyInstrumentCategories = [
   InstrumentCategory('Piano & Keys', _gmRange(0, 7)),
   InstrumentCategory('Bells & Mallets', _gmRange(8, 15)),
   InstrumentCategory('Organs & Reeds', _gmRange(16, 23)),
-  InstrumentCategory('Guitars', _gmRange(24, 31)),
+  // GM Nylon(24)/Steel(25)/Clean(27) are dropped from the picker in favour of
+  // the higher-quality FreePats guitars (catalog, merged into this same tab).
+  // kMelodyInstruments still lists them so a legacy song that stored one keeps
+  // a sensible label; it just isn't selectable here.
+  InstrumentCategory('Guitars', [_gm(26), _gm(28), _gm(29), _gm(30), _gm(31)]),
   InstrumentCategory('Bass', _gmRange(32, 39)),
   InstrumentCategory('Strings & Orchestra', _gmRange(40, 55)),
   InstrumentCategory('Brass', _gmRange(56, 63)),
