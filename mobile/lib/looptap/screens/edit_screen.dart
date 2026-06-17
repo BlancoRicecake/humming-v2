@@ -1494,31 +1494,57 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       trackLabel: _meta.label, // instance label (e.g. "Bass 2")
       currentProgram: _instruments[id] ?? _meta.defaultProgram,
       onPick: (program) {
-        _pushUndo(coalesce: true);
-        // every track stores its own instrument/kit under its own id.
-        setState(() => _instruments[id] = program);
-        // Drums pick a KIT (bank-128 program / kit soundfont) on the track's own
-        // channel, so each drum track sounds independently.
+        // A not-yet-downloaded catalog sound (200–400MB): keep the current
+        // instrument, download in the BACKGROUND (progress shows in the picker,
+        // which can be closed), and apply only when ready — so the user is never
+        // blocked nor hears the piano fallback. GM / already-downloaded / drums
+        // apply immediately as before.
+        if (_meta.kind != TrackKind.drums &&
+            isDynamicSlot(program) &&
+            !SoundfontCatalog.instance.isDownloaded(program)) {
+          SoundfontCatalog.instance.ensureDownloaded(program).then((path) {
+            if (!mounted) return;
+            if (path == null) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('사운드를 받지 못했어요 — 연결을 확인해주세요'),
+                  duration: Duration(milliseconds: 1800)));
+              return;
+            }
+            _applyInstrument(id, ch, program);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('악기 준비 완료'), duration: Duration(milliseconds: 1300)));
+          });
+          return;
+        }
         if (_meta.kind == TrackKind.drums) {
+          // Drums pick a KIT (bank-128 program / kit soundfont) on the track's
+          // own channel, so each drum track sounds independently.
+          _pushUndo(coalesce: true);
+          setState(() => _instruments[id] = program);
           _audio.setDrumKitOn(ch, program);
           _audio.playDrum('kick', channel: ch, vol: _vol[_activeId] ?? 1);
           return;
         }
-        _audio.setProgram(ch, program);
-        // preview the new timbre on an in-key note in that track's own register
-        // (bass uses the low bass ladder root; melody/fill an in-key mid note).
-        final isBass = _isBass;
-        final ladder = isBass ? _bassLadder : _ladder;
-        final preview = ladder.isNotEmpty ? ladder[isBass ? 0 : 2].midi : 60;
-        _audio.playPitch(
-          ch,
-          preview,
-          program: program,
-          vol: _vol[id] ?? 0.85,
-          durSec: 0.5,
-        );
+        _applyInstrument(id, ch, program);
       },
     );
+  }
+
+  /// Apply a pitched instrument to track [id] on [ch] + preview it. Used both
+  /// for immediate picks and when a background catalog download completes.
+  void _applyInstrument(String id, int ch, int program) {
+    _pushUndo(coalesce: true);
+    setState(() => _instruments[id] = program); // each track stores its own
+    _audio.setProgram(ch, program);
+    // preview the new timbre — only when the picked track is still the target,
+    // in its own register (bass uses the low ladder root, melody an in-key mid).
+    if (id == _instrumentTargetId) {
+      final isBass = _isBass;
+      final ladder = isBass ? _bassLadder : _ladder;
+      final preview = ladder.isNotEmpty ? ladder[isBass ? 0 : 2].midi : 60;
+      _audio.playPitch(ch, preview,
+          program: program, vol: _vol[id] ?? 0.85, durSec: 0.5);
+    }
   }
 
   void _openMixer() {

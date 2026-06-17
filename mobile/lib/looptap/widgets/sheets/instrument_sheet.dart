@@ -70,28 +70,13 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
     return i < 0 ? 0 : i;
   }
 
-  // catalog slots currently downloading (spinner in the grid)
-  final Set<int> _downloading = {};
-
-  Future<void> _pick(int program) async {
-    // Runtime-catalog sound: fetch the SF2 first so the preview + playback use
-    // the real instrument (not the piano fallback). Offline → toast, no select.
-    if (isDynamicSlot(program) && !SoundfontCatalog.instance.isDownloaded(program)) {
-      setState(() => _downloading.add(program));
-      final path = await SoundfontCatalog.instance.ensureDownloaded(program);
-      if (!mounted) return;
-      setState(() => _downloading.remove(program));
-      if (path == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Couldn\'t download that sound — check your connection'),
-              duration: Duration(milliseconds: 1600)),
-        );
-        return;
-      }
-    }
+  void _pick(int program) {
+    // Non-blocking: the host applies immediately for GM / already-downloaded
+    // sounds, or kicks off a background download and applies when ready for a
+    // not-yet-downloaded catalog sound (progress shows on the cell; the sheet
+    // can be closed meanwhile). See edit_screen onPick.
     setState(() => _program = program);
-    widget.onPick(program); // host swaps the live program + previews a note
+    widget.onPick(program);
   }
 
   // Catalog `category` values that fold into an existing GM picker group, so a
@@ -189,27 +174,30 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
         // Non-scrolling grid: the modal's own SingleChildScrollView (lt_modal)
         // handles scrolling, so every item in the category renders — otherwise
         // a nested scroll clipped tall categories (16 items) in landscape.
-        GridView.count(
-          crossAxisCount: 2,
-          mainAxisSpacing: 6,
-          crossAxisSpacing: 6,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 3.6,
-          children: [
-            for (final inst in category.instruments)
-              _PickButton(
-                label: inst.label,
-                favorite: _favorites.contains(inst.program),
-                selected: inst.program == _program,
-                onTap: () => _pick(inst.program),
-                onFavorite: () => _toggleFavorite(inst.program),
-                // cloud sounds: show download / downloading / ready state
-                cloud: isDynamicSlot(inst.program),
-                downloading: _downloading.contains(inst.program),
-                downloaded: SoundfontCatalog.instance.isDownloaded(inst.program),
-              ),
-          ],
+        ValueListenableBuilder<Map<int, double>>(
+          valueListenable: SoundfontCatalog.instance.downloadProgress,
+          builder: (context, prog, _) => GridView.count(
+            crossAxisCount: 2,
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 3.6,
+            children: [
+              for (final inst in category.instruments)
+                _PickButton(
+                  label: inst.label,
+                  favorite: _favorites.contains(inst.program),
+                  selected: inst.program == _program,
+                  onTap: () => _pick(inst.program),
+                  onFavorite: () => _toggleFavorite(inst.program),
+                  // cloud sounds: download icon / progress ring / ready check
+                  cloud: isDynamicSlot(inst.program),
+                  progress: prog[inst.program],
+                  downloaded: SoundfontCatalog.instance.isDownloaded(inst.program),
+                ),
+            ],
+          ),
         ),
       ],
     );
@@ -260,7 +248,7 @@ class _PickButton extends StatelessWidget {
     required this.onTap,
     required this.onFavorite,
     this.cloud = false,
-    this.downloading = false,
+    this.progress,
     this.downloaded = false,
   });
   final String label;
@@ -270,7 +258,8 @@ class _PickButton extends StatelessWidget {
   final VoidCallback onFavorite;
   // Runtime-catalog ("cloud") sound state for the leading status glyph.
   final bool cloud;
-  final bool downloading;
+  // 0..1 while downloading (progress ring), null otherwise.
+  final double? progress;
   final bool downloaded;
 
   @override
@@ -290,12 +279,17 @@ class _PickButton extends StatelessWidget {
         child: Row(
           children: [
             if (cloud) ...[
-              downloading
+              progress != null
                   ? SizedBox(
                       width: 14,
                       height: 14,
+                      // determinate ring so a 200–400MB download reads as real
+                      // progress, not a stuck spinner
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: selected ? LT.bg : LT.t3))
+                          value: progress,
+                          strokeWidth: 2,
+                          color: selected ? LT.bg : LT.t3),
+                    )
                   : Ms(
                       downloaded ? LtIcons.checkCircle : LtIcons.download,
                       size: 15,

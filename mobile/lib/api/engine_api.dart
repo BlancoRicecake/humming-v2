@@ -86,13 +86,21 @@ class EngineApi {
   Future<List<T>> soundfontCatalogMapped<T>(T Function(Map<String, dynamic>) fromJson) =>
       _catalogRaw(fromJson);
 
-  /// 사운드폰트 SF2 파일 다운로드 (bytes).
-  Future<Uint8List> downloadSoundfont(String id) async {
-    final r = await _dio.get<List<int>>(
+  /// 사운드폰트 SF2 파일을 [savePath] 로 **스트리밍 다운로드**(디스크로 직접 흘려보내
+  /// 메모리에 통째로 올리지 않음 — 수백 MB 폰트 OOM 방지). [onProgress] 는
+  /// (받은 바이트, 전체 바이트); 전체를 모르면 total <= 0. 대용량 대비 receiveTimeout
+  /// 을 이 호출만 길게 잡는다.
+  Future<void> downloadSoundfontToFile(
+    String id,
+    String savePath, {
+    void Function(int received, int total)? onProgress,
+  }) async {
+    await _dio.download(
       '/soundfonts/$id',
-      options: Options(responseType: ResponseType.bytes),
+      savePath,
+      onReceiveProgress: onProgress,
+      options: Options(receiveTimeout: const Duration(minutes: 20)),
     );
-    return Uint8List.fromList(r.data!);
   }
 
   /// 녹음 파일 경로 → 분석 결과(notes, 추천 key, 보정 개수 …).

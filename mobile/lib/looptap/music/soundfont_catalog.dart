@@ -82,6 +82,25 @@ class SoundfontCatalog {
   Directory? _dir;
   bool _manifestLoaded = false;
 
+  /// In-progress downloads as slot -> 0..1 (entries removed on completion).
+  /// The instrument picker watches this to show a progress ring.
+  final ValueNotifier<Map<int, double>> downloadProgress =
+      ValueNotifier<Map<int, double>>(const {});
+
+  /// De-dupe concurrent downloads of the same slot (re-opening the picker and
+  /// tapping again reuses the in-flight future instead of downloading twice).
+  final Map<int, Future<String?>> _inFlight = {};
+
+  void _setProgress(int slot, double? v) {
+    final m = Map<int, double>.from(downloadProgress.value);
+    if (v == null) {
+      m.remove(slot);
+    } else {
+      m[slot] = v;
+    }
+    downloadProgress.value = m;
+  }
+
   List<SoundfontEntry> get all => _bySlot.values.toList(growable: false);
   SoundfontEntry? bySlot(int slot) => _bySlot[slot];
 
@@ -156,28 +175,51 @@ class SoundfontCatalog {
   /// Ensure the slot's SF2 is downloaded + verified; returns its local path or
   /// null (offline / unknown slot / verification failed). Idempotent: a present
   /// correctly-sized file short-circuits.
-  Future<String?> ensureDownloaded(int slot) async {
+  Future<String?> ensureDownloaded(int slot) {
+    return _inFlight.putIfAbsent(
+      slot,
+      () => _doDownload(slot).whenComplete(() => _inFlight.remove(slot)),
+    );
+  }
+
+  Future<String?> _doDownload(int slot) async {
     final e = _bySlot[slot];
     if (e == null) return null;
     await _folder();
     final f = _fileFor(e);
     if (await f.exists() && await f.length() == e.bytes) return f.path;
+    // Stream to a .part file so an interrupted download is never mistaken for a
+    // complete one; only rename in once the size is verified.
+    final part = File('${f.path}.part');
+    _setProgress(slot, 0);
     try {
-      final bytes = await EngineApi().downloadSoundfont(e.id);
-      if (e.bytes > 0 && bytes.length != e.bytes) {
-        debugPrint('[soundfont] ${e.id} size mismatch ${bytes.length}/${e.bytes}');
+      await EngineApi().downloadSoundfontToFile(
+        e.id,
+        part.path,
+        onProgress: (recv, total) {
+          final t = total > 0 ? total : e.bytes;
+          if (t > 0) _setProgress(slot, (recv / t).clamp(0.0, 1.0));
+        },
+      );
+      final len = await part.length();
+      if (e.bytes > 0 && len != e.bytes) {
+        debugPrint('[soundfont] ${e.id} size mismatch $len/${e.bytes}');
+        if (await part.exists()) await part.delete();
         return null;
       }
-      await f.writeAsBytes(bytes, flush: true);
+      if (await f.exists()) await f.delete();
+      await part.rename(f.path);
       return f.path;
     } catch (err) {
       debugPrint('[soundfont] download ${e.id} failed: $err');
-      if (await f.exists()) {
+      if (await part.exists()) {
         try {
-          await f.delete();
+          await part.delete();
         } catch (_) {}
       }
       return null;
+    } finally {
+      _setProgress(slot, null);
     }
   }
 }
