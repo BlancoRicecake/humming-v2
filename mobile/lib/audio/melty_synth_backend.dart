@@ -146,13 +146,45 @@ class MeltyEngine {
   // ── real-time output (flutter_pcm_sound) ──────────────────────────────
   // All package-specific calls live here; adjust only this block if the
   // installed flutter_pcm_sound version exposes a different API.
+  // iOS AVAudioSession category flutter_pcm_sound binds its output engine to.
+  // .playback for normal listening (best music quality); switched to
+  // .playAndRecord around a mic recording so the engine survives the session
+  // change instead of breaking (see restartOutput / headset.dart).
+  IosAudioCategory _iosCategory = IosAudioCategory.playback;
+
   Future<void> _startOutput() async {
     if (_outputStarted) return;
     _outputStarted = true;
-    await FlutterPcmSound.setup(sampleRate: _sampleRate, channelCount: 1);
+    await FlutterPcmSound.setup(
+      sampleRate: _sampleRate,
+      channelCount: 1,
+      iosAudioCategory: _iosCategory,
+    );
     FlutterPcmSound.setFeedThreshold(_frames);
     FlutterPcmSound.setFeedCallback(_onFeed);
     FlutterPcmSound.start(); // returns bool (not a Future) in this version
+  }
+
+  /// Tear down and re-create the PCM output so it re-binds to the *current*
+  /// AVAudioSession, optionally switching its iOS category. The mic recorder
+  /// switches the shared iOS session to .playAndRecord; flutter_pcm_sound is set
+  /// up once and never otherwise re-syncs, so without this its engine breaks the
+  /// moment recording changes the session — backing playback garbles during the
+  /// take and pad taps go muddy/silent afterward. Re-bind the engine to the
+  /// session that's actually active: pass [category] = playAndRecord just before
+  /// opening the mic, and playback right after the session is restored.
+  /// No-op if output was never started (category is still remembered for the
+  /// first _startOutput).
+  Future<void> restartOutput({IosAudioCategory? category}) async {
+    if (category != null) _iosCategory = category;
+    if (!_outputStarted) return;
+    _outputStarted = false;
+    try {
+      await FlutterPcmSound.release();
+    } catch (_) {
+      // best-effort teardown; re-setup below re-establishes the engine anyway
+    }
+    await _startOutput();
   }
 
   // Called by flutter_pcm_sound whenever its buffer drops below the threshold.

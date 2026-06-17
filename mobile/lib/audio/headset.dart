@@ -8,19 +8,41 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/services.dart';
+import 'package:flutter_pcm_sound/flutter_pcm_sound.dart' show IosAudioCategory;
+
+import 'melty_synth_backend.dart';
 
 enum HeadsetRoute { wired, bluetooth, none }
 
 const _channel = MethodChannel('humming/audio');
 
-/// Force the iOS AVAudioSession back to `.playback`.
+/// Prepare the iOS audio stack for a mic recording *before* opening the mic.
 ///
-/// The `record` package switches the shared session to `.playAndRecord`
-/// while the mic is open and does NOT restore the resting category on stop.
-/// If synth output (flutter_pcm_sound) resumes while the session is still in
-/// record mode, the route/sample-rate is wrong and playback comes out muddy
-/// for the rest of the app session. Call this right after the recorder stops,
-/// before playback resumes. No-op on Android (no global session category).
+/// The recorder switches the shared session to `.playAndRecord`. If
+/// flutter_pcm_sound's output engine is still bound to `.playback` when that
+/// happens, the session change breaks it — the backing loop garbles during the
+/// take and pad taps go muddy/silent afterward. So we bind the output engine to
+/// `.playAndRecord` up front (and set the native session to .playAndRecord on
+/// speaker at 44.1 kHz); the recorder then re-applies its own good options
+/// (defaultToSpeaker/mixWithOthers) as a mere route change the live engine
+/// survives. Call right before `recorder.start()`. No-op on Android.
+Future<void> prepareRecordingSession() async {
+  if (!Platform.isIOS) return;
+  // Re-create the output engine bound to .playAndRecord first…
+  await MeltyEngine().restartOutput(category: IosAudioCategory.playAndRecord);
+  // …then re-assert the session with speaker routing + 44.1 kHz (the
+  // flutter_pcm_sound setup above only sets a bare category).
+  try {
+    await _channel.invokeMethod<void>('configureRecordingSession');
+  } catch (_) {
+    // older native side without the handler → MissingPluginException; ignore
+  }
+}
+
+/// Restore the resting `.playback` session after a recording and re-bind the
+/// synth output to it. The recorder leaves the session in `.playAndRecord`; if
+/// flutter_pcm_sound keeps running against that, playback comes out muddy/
+/// silent. Call right after the recorder stops. No-op on Android.
 Future<void> restorePlaybackSession() async {
   if (!Platform.isIOS) return;
   try {
@@ -28,6 +50,8 @@ Future<void> restorePlaybackSession() async {
   } catch (_) {
     // older native side without the handler → MissingPluginException; ignore
   }
+  // Re-create the PCM output bound to the just-restored .playback session.
+  await MeltyEngine().restartOutput(category: IosAudioCategory.playback);
 }
 
 /// Current audio output route. Errors (simulator, missing impl) → none.

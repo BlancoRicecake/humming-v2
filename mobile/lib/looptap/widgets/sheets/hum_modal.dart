@@ -145,6 +145,9 @@ class _HumModalState extends State<_HumModal> {
       // finalize 가 안 끝나 partial file 로 업로드되던 회귀 fix.
       final path =
           '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${opusContainerExt()}';
+      // iOS: bind the synth output engine to .playAndRecord BEFORE opening the
+      // mic so the session change doesn't break it (muddy backing / silent pads).
+      await prepareRecordingSession();
       await _rec.start(
         const RecordConfig(
           encoder: AudioEncoder.opus,
@@ -153,6 +156,14 @@ class _HumModalState extends State<_HumModal> {
           // see vocal_record_modal: keep the recorder off Bluetooth SCO so it
           // doesn't disconnect the synth's Oboe output stream on Android.
           androidConfig: AndroidRecordConfig(manageBluetooth: false),
+          // iOS: route the backing to the main speaker and mix with the synth's
+          // own output engine so playback stays full-quality while the mic is open.
+          iosConfig: IosRecordConfig(categoryOptions: [
+            IosAudioCategoryOption.defaultToSpeaker,
+            IosAudioCategoryOption.mixWithOthers,
+            IosAudioCategoryOption.allowBluetooth,
+            IosAudioCategoryOption.allowBluetoothA2DP,
+          ]),
         ),
         path: path,
       );
