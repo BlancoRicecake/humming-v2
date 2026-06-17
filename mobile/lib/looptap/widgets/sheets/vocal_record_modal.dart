@@ -222,9 +222,6 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
       if (_closed || !mounted) return;
       final path =
           '${dir.path}/humtrack_vocal_${DateTime.now().millisecondsSinceEpoch}.wav';
-      // iOS: bind the synth output engine to .playAndRecord BEFORE opening the
-      // mic so the session change doesn't break it (muddy backing / silent pads).
-      await prepareRecordingSession();
       await _rec.start(
         const RecordConfig(
           encoder: AudioEncoder.wav,
@@ -235,14 +232,6 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
           // and it doesn't recover, so synth sound (instrument preview, loop,
           // drums) goes dead after the first recording.
           androidConfig: AndroidRecordConfig(manageBluetooth: false),
-          // iOS: route the backing to the main speaker and mix with the synth's
-          // own output engine so playback stays full-quality while the mic is open.
-          iosConfig: IosRecordConfig(categoryOptions: [
-            IosAudioCategoryOption.defaultToSpeaker,
-            IosAudioCategoryOption.mixWithOthers,
-            IosAudioCategoryOption.allowBluetooth,
-            IosAudioCategoryOption.allowBluetoothA2DP,
-          ]),
         ),
         path: path,
       );
@@ -326,9 +315,6 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     } catch (_) {}
     // recorder is fully stopped — safe to let go of the iOS audio session
     unawaited(releaseAutotuneMonitorSession());
-    // ...and force the resting .playback category back (record leaves it in
-    // .playAndRecord, which muddies subsequent synth playback on iOS).
-    await restorePlaybackSession();
     if (path == null) {
       _fail('No audio captured');
       return;
@@ -444,7 +430,6 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
       await _rec.stop();
     } catch (_) {}
     unawaited(releaseAutotuneMonitorSession());
-    await restorePlaybackSession();
     if (mounted) Navigator.of(context).pop();
   }
 

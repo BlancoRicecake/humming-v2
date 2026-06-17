@@ -24,32 +24,9 @@ import UIKit
     let session = AVAudioSession.sharedInstance()
     do {
       try session.setCategory(.playback, options: [])
-      // The recorder leaves the shared session at its capture rate (16 kHz);
-      // pull it back to the synth's 44.1 kHz so flutter_pcm_sound output isn't
-      // downsampled to a muddy low rate.
-      try session.setPreferredSampleRate(44100)
       try session.setActive(true)
     } catch {
       NSLog("[audio] playback session setup failed: \(error)")
-    }
-  }
-
-  /// Stable .playAndRecord session for a mic recording: route output to the main
-  /// speaker (not the earpiece), mix with the synth's own output engine, and pin
-  /// 44.1 kHz so flutter_pcm_sound's backing playback stays full-quality while
-  /// the mic is open. Re-asserted after flutter_pcm_sound binds its engine so the
-  /// good options survive its bare setCategory.
-  static func configureRecordingSession() {
-    let session = AVAudioSession.sharedInstance()
-    do {
-      try session.setCategory(
-        .playAndRecord,
-        mode: .default,
-        options: [.defaultToSpeaker, .allowBluetoothA2DP, .mixWithOthers])
-      try session.setPreferredSampleRate(44100)
-      try session.setActive(true)
-    } catch {
-      NSLog("[audio] record session setup failed: \(error)")
     }
   }
 
@@ -67,16 +44,6 @@ import UIKit
           result(AppDelegate.headsetRoute() != "none")
         case "headsetRoute":
           result(AppDelegate.headsetRoute())
-        case "configureRecordingSession":
-          // Before opening the mic: pin a speaker-routed .playAndRecord session
-          // so the synth's backing output stays full-quality during the take.
-          AppDelegate.configureRecordingSession()
-          result(true)
-        case "restorePlaybackSession":
-          // The record package leaves the shared session in .playAndRecord
-          // after the mic closes; force it back so synth playback isn't muddy.
-          AppDelegate.configurePlaybackSession()
-          result(true)
         default:
           result(FlutterMethodNotImplemented)
         }
