@@ -34,6 +34,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_pcm_sound/flutter_pcm_sound.dart';
 
+import 'headset.dart'; // resetToPlaybackSession (full session reset after recording)
 import '../looptap/music/soundfont_catalog.dart'; // isDynamicSlot, SoundfontCatalog
 
 class MeltyEngine {
@@ -57,8 +58,29 @@ class MeltyEngine {
   static const int clickChannel = 15;
 
   static const int _sampleRate = 44100;
-  // PCM block fed per callback. ~23ms @44.1k. Lower = less latency, more CPU.
+  // PCM render block. ~23ms @44.1k. Render granularity + pad-tap latency floor.
   static const int _frames = 1024;
+
+  // How deep to keep flutter_pcm_sound's native ring buffer, in frames.
+  //
+  // The native output pulls on the REAL-TIME audio thread but is refilled via a
+  // MAIN-THREAD method-channel round-trip (RenderCallback → OnFeedSamples →
+  // _onFeed → feed). If the main thread stalls longer than the buffer holds, it
+  // underruns and emits silence mid-waveform = the crackle. At idle this is
+  // inaudible (the buffer holds silence anyway), which is why pre-recording
+  // sounds clean; while RECORDING the refill slips (the session flips to
+  // .playAndRecord → smaller hardware IO buffer pulled more often, plus extra
+  // platform-thread traffic from the capture pipeline) so a thin buffer starves
+  // → audible crackle. A deep cushion absorbs the slip whatever its exact cause.
+  //
+  // Idle/normal: shallow, so live pad taps stay responsive.
+  // Recording window: deep cushion — no live taps happen, so the latency the
+  // depth adds is irrelevant, and it survives multi-block main-thread stalls.
+  static const int _idleThreshold = 1024;
+  static const int _idleTarget = 2048; // ~46ms
+  static const int _recThreshold = 4096; // signal refill with ~93ms still buffered
+  static const int _recTarget = 8192; // ~186ms cushion against main-thread stalls
+  int _targetFrames = _idleTarget;
 
   Synthesizer? _main;
   Synthesizer? _s808;
@@ -149,17 +171,84 @@ class MeltyEngine {
   Future<void> _startOutput() async {
     if (_outputStarted) return;
     _outputStarted = true;
+    await FlutterPcmSound.setLogLevel(LogLevel.none); // silence per-feed [PCM] spam
     await FlutterPcmSound.setup(sampleRate: _sampleRate, channelCount: 1);
-    FlutterPcmSound.setFeedThreshold(_frames);
+    _targetFrames = _idleTarget;
+    FlutterPcmSound.setFeedThreshold(_idleThreshold);
     FlutterPcmSound.setFeedCallback(_onFeed);
     FlutterPcmSound.start(); // returns bool (not a Future) in this version
   }
 
+  /// Rebuild the PCM output unit under the CURRENT shared audio session.
+  ///
+  /// WHY: starting/stopping recording flips the process-wide AVAudioSession
+  /// (.playback ↔ .playAndRecord), which renegotiates the hardware IO underneath
+  /// our already-running RemoteIO unit and corrupts it (crackle during AND after
+  /// recording). flutter_pcm_sound has no route-change observer to re-sync, so we
+  /// tear the unit down and recreate it against the new session at the record
+  /// lifecycle boundaries (driven from hum_modal). The synths themselves are
+  /// untouched — only the output pipe is rebuilt.
+  ///
+  /// [forRecording] picks the category the new unit is born under:
+  ///   true  → .playAndRecord — rebuild WHILE recording (keeps capture alive)
+  ///   false → .playback      — rebuild AFTER recording (restores normal output)
+  ///
+  /// We deliberately do NOT call FlutterPcmSound.start() to resume: its second
+  /// call is a no-op because of a stale internal _needsStart flag (this is why
+  /// earlier restart attempts went silent). Instead we prime the loop directly
+  /// with one render block — that feed kicks AudioOutputUnitStart inside the
+  /// native feed handler, which is what start() was supposed to do.
+  Future<void> rebuildOutput({required bool forRecording}) async {
+    if (!_outputStarted) {
+      debugPrint('[rebuild] SKIP — output not started');
+      return; // output never started — nothing to rebuild
+    }
+    debugPrint('[rebuild] start forRecording=$forRecording '
+        'hwRate(before)=${await outputSampleRate()}');
+    await FlutterPcmSound.release();
+    if (!forRecording) {
+      // Output unit is released; now force a clean session reset. Flipping the
+      // category alone leaves recording's duplex hardware IO in place (output
+      // keeps crackling after); a full deactivate→.playback→reactivate
+      // renegotiates the IO from scratch. (.playAndRecord case skips this — it
+      // must stay active to keep recording alive.)
+      await resetToPlaybackSession();
+      debugPrint('[rebuild] after session reset hwRate=${await outputSampleRate()}');
+    }
+    await FlutterPcmSound.setup(
+      sampleRate: _sampleRate,
+      channelCount: 1,
+      iosAudioCategory: forRecording
+          ? IosAudioCategory.playAndRecord
+          : IosAudioCategory.playback,
+    );
+    // Deep buffer while recording (survives main-thread stalls = no crackle),
+    // shallow again after (responsive pad taps).
+    _targetFrames = forRecording ? _recTarget : _idleTarget;
+    FlutterPcmSound.setFeedThreshold(forRecording ? _recThreshold : _idleThreshold);
+    FlutterPcmSound.setFeedCallback(_onFeed);
+    _onFeed(0); // manual prime — bypasses the _needsStart no-op in start()
+    debugPrint('[rebuild] done forRecording=$forRecording '
+        'hwRate(after)=${await outputSampleRate()}');
+  }
+
   // Called by flutter_pcm_sound whenever its buffer drops below the threshold.
-  // Render one block from every loaded synth, sum to mono, feed as Int16.
+  // Top the native ring buffer back up to _targetFrames — feeding SEVERAL blocks
+  // per callback when deep — so a main-thread stall between refills can't drain
+  // it to silence (that underrun is the crackle). At idle this feeds one block.
   void _onFeed(int remainingFrames) {
-    final main = _main;
-    if (main == null) return;
+    if (_main == null) return;
+    var depth = remainingFrames;
+    do {
+      _renderBlock();
+      FlutterPcmSound.feed(PcmArrayInt16.fromList(_out)); // fromList copies _out
+      depth += _frames;
+    } while (depth < _targetFrames);
+  }
+
+  // Render one _frames block: sum every loaded synth to mono Int16 in _out.
+  void _renderBlock() {
+    final main = _main!;
     for (var i = 0; i < _frames; i++) {
       _acc[i] = 0.0;
     }
@@ -178,7 +267,6 @@ class MeltyEngine {
       }
       _out[i] = (v < 0 ? v * 32768 : v * 32767).round();
     }
-    FlutterPcmSound.feed(PcmArrayInt16.fromList(_out));
   }
 
   void _mixSynth(Synthesizer s) {

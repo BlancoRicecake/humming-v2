@@ -94,6 +94,14 @@ class SynthEngine {
     });
   }
 
+  /// iOS: rebuild MeltyEngine's PCM output pipe under the current audio session
+  /// (see MeltyEngine.rebuildOutput). Call at recording start/stop boundaries so
+  /// the synth output survives the AVAudioSession category flip that recording
+  /// forces. No-op on Android — its output stream is independent of recording.
+  Future<void> rebuildOutput({required bool forRecording}) async {
+    if (_useMelty) await _melty.rebuildOutput(forRecording: forRecording);
+  }
+
   /// 채널에 GM program 선택 — 캐시 hit 시 no-op.
   Future<void> _ensureProgram(int sfId, int channel, int program) async {
     if (_channelProgram[channel] == program) return;

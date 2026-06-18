@@ -11,6 +11,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../../audio/container.dart';
+import '../../../audio/headset.dart';
+import '../../../audio/synth.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import 'lt_modal.dart';
@@ -79,6 +81,10 @@ class _HumModalState extends State<_HumModal> {
   int _ms = 0;
   int _count = 0; // count-in beats remaining (overlay)
   bool _backingOn = false;
+  // True once _rec.start() flipped the session to .playAndRecord (and we rebuilt
+  // the synth output under it). Gates the restore-to-.playback rebuild on stop so
+  // we don't reconfigure output when recording never actually started.
+  bool _recStarted = false;
   // waveform driven by REAL mic amplitude — bars only move when you actually
   // make sound (silence stays flat), so it reflects the input.
   List<double> _levels = List.filled(40, 0.04);
@@ -144,17 +150,32 @@ class _HumModalState extends State<_HumModal> {
       // finalize 가 안 끝나 partial file 로 업로드되던 회귀 fix.
       final path =
           '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${opusContainerExt()}';
+      // Record at the device's CURRENT output rate (iOS), not a fixed 16k. On
+      // iOS record_ios pins the shared session to config.sampleRate and never
+      // restores it; a lower rate (16k) drags the hardware down and the synth
+      // output keeps crackling AFTER recording. Matching the live rate = no drag,
+      // so output stays clean once recording stops. Fallback 16000 off iOS.
+      final deviceRate = await outputSampleRate() ?? 16000;
+      debugPrint('[hum] >>> rec start, recordRate=$deviceRate');
       await _rec.start(
-        const RecordConfig(
+        RecordConfig(
           encoder: AudioEncoder.opus,
-          sampleRate: 16000,
+          sampleRate: deviceRate,
           numChannels: 1,
           // see vocal_record_modal: keep the recorder off Bluetooth SCO so it
           // doesn't disconnect the synth's Oboe output stream on Android.
-          androidConfig: AndroidRecordConfig(manageBluetooth: false),
+          androidConfig: const AndroidRecordConfig(manageBluetooth: false),
         ),
         path: path,
       );
+      _recStarted = true;
+      // _rec.start just flipped the shared AVAudioSession to .playAndRecord,
+      // which corrupts the synth's already-running output pipe (RemoteIO) →
+      // crackle. Rebuild that pipe under .playAndRecord so the backing plays
+      // cleanly during the hum, then force output back to the speaker (the
+      // rebuild's setCategory drops .defaultToSpeaker). iOS-only; no-op elsewhere.
+      await SynthEngine().rebuildOutput(forRecording: true);
+      await overrideOutputToSpeaker();
       // Start the loop backing on the downbeat, right after recording opens, so
       // audio t≈0 lines up with loop step 0 (the engine absorbs the small
       // constant latency via its grid-phase estimate).
@@ -205,6 +226,12 @@ class _HumModalState extends State<_HumModal> {
     try {
       path = await _rec.stop();
     } catch (_) {}
+    if (_recStarted) {
+      // record left the session in .playAndRecord; restore .playback and rebuild
+      // the output pipe so pad taps / playback are clean after the hum.
+      _recStarted = false;
+      await SynthEngine().rebuildOutput(forRecording: false);
+    }
     if (path == null) {
       _fail('No audio captured');
       return;
@@ -228,6 +255,10 @@ class _HumModalState extends State<_HumModal> {
     try {
       await _rec.stop();
     } catch (_) {}
+    if (_recStarted) {
+      _recStarted = false;
+      await SynthEngine().rebuildOutput(forRecording: false);
+    }
     if (mounted) Navigator.of(context).pop();
   }
 

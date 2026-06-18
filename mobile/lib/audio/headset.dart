@@ -48,3 +48,39 @@ Future<HeadsetRoute> _presenceFallback() async {
 /// Any headset (wired/BT/USB) on the output — safe to monitor the backing
 /// loop while the mic is open.
 Future<bool> hasHeadset() async => (await headsetRoute()) != HeadsetRoute.none;
+
+/// Current shared AVAudioSession hardware sample rate (iOS), or null if
+/// unavailable. Record at this exact rate so recording doesn't drag the hardware
+/// to a lower rate and leave it there (the synth output then crackles after).
+Future<int?> outputSampleRate() async {
+  try {
+    final r = await _channel.invokeMethod<double>('outputSampleRate');
+    if (r == null || r <= 0) return null;
+    return r.round();
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Full session reset to .playback (iOS): deactivate → .playback → reactivate.
+///
+/// Recording configures the shared session for duplex IO; flipping the category
+/// back on an active session doesn't undo that, so the synth output stays
+/// crackly after. This forces a clean hardware-IO renegotiation. Call with the
+/// PCM output unit already released (nothing rendering across the reset).
+Future<void> resetToPlaybackSession() async {
+  try {
+    await _channel.invokeMethod<bool>('resetToPlaybackSession');
+  } catch (_) {/* Android / simulator / older native side */}
+}
+
+/// Force output to the built-in speaker (iOS, only while .playAndRecord).
+///
+/// Used after rebuilding the synth output under .playAndRecord during recording:
+/// flutter_pcm_sound's setCategory drops the .defaultToSpeaker option, so without
+/// this the backing would play out the quiet receiver. No-op off iOS / on error.
+Future<void> overrideOutputToSpeaker() async {
+  try {
+    await _channel.invokeMethod<bool>('overrideOutputToSpeaker');
+  } catch (_) {/* simulator / Android / older native side */}
+}

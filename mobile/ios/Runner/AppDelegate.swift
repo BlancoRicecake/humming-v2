@@ -44,6 +44,39 @@ import UIKit
           result(AppDelegate.headsetRoute() != "none")
         case "headsetRoute":
           result(AppDelegate.headsetRoute())
+        case "outputSampleRate":
+          // Current shared-session hardware rate. Recording at exactly this rate
+          // keeps record_ios from dragging the hardware to a lower rate and
+          // leaving it there (which crackles the synth output AFTER recording).
+          result(AVAudioSession.sharedInstance().sampleRate)
+        case "resetToPlaybackSession":
+          // Recording leaves the shared session configured for duplex IO. Just
+          // flipping the category back to .playback on a STILL-ACTIVE session does
+          // not renegotiate the hardware IO, so the synth output keeps crackling
+          // after recording. A full deactivate → .playback → reactivate forces a
+          // clean IO renegotiation (call with the output unit already released).
+          do {
+            let s = AVAudioSession.sharedInstance()
+            try s.setActive(false, options: .notifyOthersOnDeactivation)
+            try s.setCategory(.playback, options: [])
+            try s.setActive(true)
+            result(true)
+          } catch {
+            NSLog("[audio] resetToPlaybackSession failed: \(error)")
+            result(false)
+          }
+        case "overrideOutputToSpeaker":
+          // After the synth output is rebuilt under .playAndRecord (recording
+          // window), flutter_pcm_sound's setCategory carries no .defaultToSpeaker
+          // option, so output would fall back to the receiver. Force it to the
+          // built-in speaker. Only valid while the category is .playAndRecord.
+          do {
+            try AVAudioSession.sharedInstance().overrideOutputAudioPort(.speaker)
+            result(true)
+          } catch {
+            NSLog("[audio] overrideOutputToSpeaker failed: \(error)")
+            result(false)
+          }
         default:
           result(FlutterMethodNotImplemented)
         }

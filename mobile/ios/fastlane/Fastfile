@@ -80,9 +80,19 @@ platform :ios do
       export_method: EXPORT_METHOD,
       clean: false,
     )
+    # "What to Test" note. Attaching a changelog requires the build to finish
+    # processing, so we wait (skip_waiting_for_build_processing: false).
+    # Override per-run with TF_CHANGELOG.
+    changelog = ENV["TF_CHANGELOG"] || <<~NOTE.strip
+      iOS: fixed crackling/distorted synth audio during and after hum recording
+      (output buffer underrun). Please verify the backing and pad sounds stay
+      clean while recording a hum and right after it stops.
+    NOTE
     upload_to_testflight(
       api_key: api_key,
-      skip_waiting_for_build_processing: true,
+      changelog: changelog,
+      skip_waiting_for_build_processing: false,
+      distribute_external: false,
       skip_submission: true,
     )
   end
