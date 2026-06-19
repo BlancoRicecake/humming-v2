@@ -26,6 +26,7 @@
 //    installed package version's API differs, only those need adjusting.
 import 'dart:async';
 import 'dart:io' show File;
+import 'dart:math' as math;
 
 // Float32List/Int16List/ByteData/Uint8List come via dart_melty_soundfont's
 // re-export of dart:typed_data.
@@ -81,6 +82,12 @@ class MeltyEngine {
   static const int _recThreshold = 4096; // signal refill with ~93ms still buffered
   static const int _recTarget = 8192; // ~186ms cushion against main-thread stalls
   int _targetFrames = _idleTarget;
+
+  // Master makeup gain applied before the soft limiter. MeltySynth renders well
+  // below full scale (a single track peaks ~0.2-0.3), so the raw mono mix was
+  // noticeably quiet on iOS. ~1.5× (+3.5dB) lifts the body; the tanh limiter
+  // below keeps peaks from clipping when several tracks/synths sum past 1.0.
+  static const double _masterGain = 1.5;
 
   Synthesizer? _main;
   Synthesizer? _s808;
@@ -259,14 +266,22 @@ class MeltyEngine {
       _mixSynth(s);
     }
     for (var i = 0; i < _frames; i++) {
-      var v = _acc[i];
-      if (v > 1.0) {
-        v = 1.0;
-      } else if (v < -1.0) {
-        v = -1.0;
-      }
+      // Boost, then soft-limit with tanh: small signals stay ~linear (×gain, so
+      // louder), peaks saturate smoothly toward ±1 instead of clipping hard.
+      // This also makes overall loudness more consistent — loud passes are gently
+      // compressed rather than jumping in level. Output can never exceed ±1.
+      final v = _tanh(_acc[i] * _masterGain);
       _out[i] = (v < 0 ? v * 32768 : v * 32767).round();
     }
+  }
+
+  // tanh soft clipper. dart:math has no tanh, so compute it from exp; clamp the
+  // argument to avoid exp overflow (tanh(±4) ≈ ±0.9993, already at the rail).
+  static double _tanh(double x) {
+    if (x > 4.0) return 1.0;
+    if (x < -4.0) return -1.0;
+    final e = math.exp(2.0 * x);
+    return (e - 1.0) / (e + 1.0);
   }
 
   void _mixSynth(Synthesizer s) {

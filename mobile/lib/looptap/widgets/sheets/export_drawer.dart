@@ -94,6 +94,21 @@ class _ExportDrawerState extends State<_ExportDrawer> {
   String? _status;
   bool _statusOk = true;
   String? _busy; // 'wav' | 'stems' while rendering (shows a spinner, blocks taps)
+  // null = whole song; otherwise the index of the single section (loop) to export.
+  int? _selectedSection;
+
+  // The sections that the current export targets: the whole song, or just the
+  // one selected loop. The render functions already flatten any list (with each
+  // section's repeats), so a single-element list exports only that loop.
+  List<Section> get _scopeSections => _selectedSection == null
+      ? widget.sections
+      : [widget.sections[_selectedSection!]];
+
+  // The export title: the song title, plus the section name when a single loop
+  // is selected so files don't collide and are easy to tell apart.
+  String get _scopeTitle => _selectedSection == null
+      ? widget.title
+      : '${widget.title} - ${widget.sections[_selectedSection!].name}';
 
   void _note(String m, {bool ok = true}) {
     setState(() {
@@ -105,9 +120,19 @@ class _ExportDrawerState extends State<_ExportDrawer> {
     });
   }
 
+  // iPad presents the share sheet as a popover anchored to a rect; share_plus
+  // throws without one there. Anchor it to this drawer panel.
+  Rect? _shareOrigin() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
   Future<void> _share(List<XFile> files, String text) async {
     try {
-      await SharePlus.instance.share(ShareParams(files: files, text: text));
+      await SharePlus.instance.share(
+        ShareParams(files: files, text: text, sharePositionOrigin: _shareOrigin()),
+      );
     } catch (e) {
       debugPrint('[export] share failed: $e');
     }
@@ -117,7 +142,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
     if (_busy != null) return;
     setState(() => _busy = 'wav');
     try {
-      final res = await exportWavSong(widget.sections, widget.bpm, widget.swing, widget.vol, widget.title,
+      final res = await exportWavSong(_scopeSections, widget.bpm, widget.swing, widget.vol, _scopeTitle,
           melodyProgram: widget.melodyProgram,
           bassProgram: widget.bassProgram,
           melodyDecProgram: widget.melodyDecProgram,
@@ -126,7 +151,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
           instruments: widget.instruments,
           songVocalPath: widget.songVocalPath);
       final file = res.file;
-      await _share([XFile(file.path, mimeType: 'audio/wav')], '${widget.title}.wav');
+      await _share([XFile(file.path, mimeType: 'audio/wav')], '$_scopeTitle.wav');
       if (mounted) {
         _note(res.skippedVocals > 0
             ? L10n.of(context).ltExportVocalSkipped(res.skippedVocals)
@@ -143,7 +168,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
     if (_busy != null) return;
     setState(() => _busy = 'stems');
     try {
-      final files = await exportStems(widget.sections, widget.bpm, widget.swing, widget.vol, widget.title,
+      final files = await exportStems(_scopeSections, widget.bpm, widget.swing, widget.vol, _scopeTitle,
           melodyProgram: widget.melodyProgram,
           bassProgram: widget.bassProgram,
           melodyDecProgram: widget.melodyDecProgram,
@@ -171,9 +196,9 @@ class _ExportDrawerState extends State<_ExportDrawer> {
     debugPrint('[export] _doMidi start title=${widget.title}');
     try {
       final file = await exportMidiSong(
-        widget.sections,
+        _scopeSections,
         widget.bpm,
-        widget.title,
+        _scopeTitle,
         melodyProgram: widget.melodyProgram,
         bassProgram: widget.bassProgram,
         melodyDecProgram: widget.melodyDecProgram,
@@ -186,7 +211,8 @@ class _ExportDrawerState extends State<_ExportDrawer> {
       // sandboxed 라 share 없이는 사용자가 꺼낼 수 없음.
       final params = ShareParams(
         files: [XFile(file.path, mimeType: 'audio/midi')],
-        text: '${widget.title}.mid',
+        text: '$_scopeTitle.mid',
+        sharePositionOrigin: _shareOrigin(),
       );
       try {
         final r = await SharePlus.instance.share(params);
@@ -246,6 +272,30 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Export scope: whole song, or a single loop (section).
+                      if (secCount > 1) ...[
+                        Text(l.ltExportScopeLabel,
+                            style: LTType.inter(size: 11, weight: FontWeight.w700, color: LT.t2)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _ScopeChip(
+                              label: l.ltExportScopeAll,
+                              selected: _selectedSection == null,
+                              onTap: _busy != null ? null : () => setState(() => _selectedSection = null),
+                            ),
+                            for (var i = 0; i < widget.sections.length; i++)
+                              _ScopeChip(
+                                label: widget.sections[i].name,
+                                selected: _selectedSection == i,
+                                onTap: _busy != null ? null : () => setState(() => _selectedSection = i),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       _Row(icon: LtIcons.piano, title: l.ltExportMidiTitle, sub: l.ltExportMidiSub, color: LT.lime, onTap: _doMidi),
                       const SizedBox(height: 12),
                       // WAV / Stems — on-device SF2 render (instrumental mix;
@@ -296,6 +346,42 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// A pill chip for picking the export scope (whole song vs a single loop).
+class _ScopeChip extends StatelessWidget {
+  const _ScopeChip({required this.label, required this.selected, this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.5 : 1,
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? LT.lime : LT.surface2,
+            borderRadius: BorderRadius.circular(LTRadius.pill),
+            border: Border.all(color: selected ? LT.lime : LT.border),
+          ),
+          child: Text(
+            label,
+            style: LTType.inter(
+              size: 12,
+              weight: FontWeight.w700,
+              color: selected ? LT.bg : LT.t2,
+            ),
           ),
         ),
       ),

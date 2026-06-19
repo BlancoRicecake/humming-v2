@@ -113,11 +113,17 @@ Uint8List encodeWavMono16(Float32List samples, int sr) {
 }
 
 /// Mono WAV from L/R render buffers, averaging the two (legacy _encodeWav).
+///
+/// [normalize] peak-normalizes the whole buffer UP to the headroom ceiling so a
+/// quiet render exports at a full, consistent level (use for the final mix).
+/// Left false for stems, where boosting each lane independently would wreck the
+/// inter-stem balance — there it only attenuates lanes that exceed the ceiling.
 Uint8List encodeWavMono16FromStereo(
   Float32List left,
   Float32List right,
-  int sr,
-) {
+  int sr, {
+  bool normalize = false,
+}) {
   final len = left.length;
   final data = ByteData(44 + len * 2);
   _writeWavHeader(data, len, sr);
@@ -126,7 +132,13 @@ Uint8List encodeWavMono16FromStereo(
     final a = ((left[i] + right[i]) * 0.5).abs();
     if (a > peak) peak = a;
   }
-  final gain = peak > _wavHeadroomPeak ? _wavHeadroomPeak / peak : 1.0;
+  // Normalize: scale to the headroom peak in both directions (louder + uniform).
+  // Otherwise only pull down a hot mix; a quiet one is left as-is.
+  final gain = peak <= 0
+      ? 1.0
+      : (normalize || peak > _wavHeadroomPeak)
+          ? _wavHeadroomPeak / peak
+          : 1.0;
   var off = 44;
   for (var i = 0; i < len; i++) {
     final s = (((left[i] + right[i]) * 0.5) * gain).clamp(-1.0, 1.0);

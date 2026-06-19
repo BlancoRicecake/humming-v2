@@ -110,6 +110,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // single note. Available on the melody group (melody + melody-fill).
   final Map<String, bool> _chordMode = {};
   bool get _chordOn => _chordMode[_activeId] ?? false;
+  // power-chord mode per track id: a pad tap places a root + 5th + octave power
+  // chord (no third). Mutually exclusive with chord mode — enabling one clears
+  // the other. Also melody-group pads only.
+  final Map<String, bool> _powerMode = {};
+  bool get _powerOn => _powerMode[_activeId] ?? false;
   // per-track GM instrument (program number) — drives live sound + MIDI export
   late final Map<String, int> _instruments = Map.of(widget.song.instruments);
   int _countDown = 0; // count-in overlay (0 = none)
@@ -1100,7 +1105,15 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   /// The midis a pad press produces: a diatonic triad in melody chord mode,
   /// otherwise just the pressed note.
   List<int> _chordMidis(int rootMidi) {
-    if (_meta.group != 'melody' || !_chordOn) return [rootMidi];
+    if (_meta.group != 'melody') return [rootMidi];
+    // Power chord (root + 5th + octave, no third). Guitar gets a low-register
+    // voicing; other melody instruments get the plain power chord.
+    if (_powerOn) {
+      return _activeIsGuitar
+          ? guitarPowerVoicing(rootMidi)
+          : powerChord(rootMidi);
+    }
+    if (!_chordOn) return [rootMidi];
     // Guitar gets a spread barre/open voicing in the guitar register; other
     // melody instruments keep the close diatonic triad. Either way the voiced
     // notes are what gets stored on release, so playback/export stay in sync.
@@ -1283,6 +1296,17 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         _vocalMix.remove(_sec.id);
       }
     });
+    // Offer an immediate undo — clearing has no confirm dialog (keeps the flow
+    // fast), so a one-tap recovery path catches accidental clears.
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('Track cleared'),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(label: 'Undo', onPressed: _undoAction),
+        ),
+      );
   }
 
   // ── vocal playback (item 7) ───────────────────────────────────────
@@ -1429,6 +1453,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   // mute/volume go through here so the live vocal player follows the mixer
   void _toggleMute(String id) {
+    _pushUndo();
     setState(() => _mutes[id] = !(_mutes[id] ?? false));
     // Muting any vocal-kind lane (base Vocal or an Audio lane) changes the
     // section mix, so invalidate it and restart the blended playback.
@@ -1465,6 +1490,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   void _setVol(String id, double v) {
+    // Coalesce the drag stream into one undo entry per gesture (500ms window).
+    _pushUndo(coalesce: true);
     setState(() => _vol[id] = v);
     if (id == 'vocal' && _vocalPlaying) _audio.setVocalVolume(v);
   }
@@ -2502,6 +2529,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         if (_meta.group == 'melody' && _inputMode == 'pads') ...[
           const SizedBox(width: 6),
           _chordToggle(),
+          const SizedBox(width: 6),
+          _powerToggle(),
         ],
       ],
     );
@@ -2653,11 +2682,37 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   // Chord-mode toggle (melody-group pads only): pad tap places a diatonic triad.
-  // Independent per track so melody and melody-fill can differ.
-  Widget _chordToggle() {
-    final on = _chordOn;
+  // Independent per track so melody and melody-fill can differ. Enabling chord
+  // mode clears power mode (the two are mutually exclusive).
+  Widget _chordToggle() => _chordKindToggle(
+    label: 'Chord',
+    on: _chordOn,
+    onTap: () => setState(() {
+      final next = !_chordOn;
+      _chordMode[_activeId] = next;
+      if (next) _powerMode[_activeId] = false;
+    }),
+  );
+
+  // Power-chord toggle (root + 5th + octave, no third). Mutually exclusive with
+  // the chord toggle — enabling it clears chord mode.
+  Widget _powerToggle() => _chordKindToggle(
+    label: 'Power',
+    on: _powerOn,
+    onTap: () => setState(() {
+      final next = !_powerOn;
+      _powerMode[_activeId] = next;
+      if (next) _chordMode[_activeId] = false;
+    }),
+  );
+
+  Widget _chordKindToggle({
+    required String label,
+    required bool on,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
-      onTap: () => setState(() => _chordMode[_activeId] = !on),
+      onTap: onTap,
       child: Container(
         height: 32,
         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -2668,7 +2723,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           border: Border.all(color: on ? LT.lime : LT.border),
         ),
         child: Text(
-          'Chord',
+          label,
           style: LTType.inter(
             size: 11,
             weight: FontWeight.w700,
@@ -2924,7 +2979,13 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   void _restore(_EditSnapshot s) {
-    if (_playing || _songSection != null) _stopAll();
+    // When the undo/redo only changes note content (same arrangement shape) and
+    // we're mid-playback, keep the clock running and the playhead where it is —
+    // so undo/redo while recording feels seamless instead of jolting to a stop.
+    // A structural change (section added/removed, bars/repeats changed) shifts
+    // the timeline, so fall back to the safe full stop there.
+    final keepPlaying = _playing && _sameArrangement(s);
+    if (!keepPlaying && (_playing || _songSection != null)) _stopAll();
     setState(() {
       _sections
         ..clear()
@@ -2948,11 +3009,28 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       _songVocalPeaks = s.songVocalPeaks;
       _songVocalBpm = s.songVocalBpm;
       _songVocalBars = s.songVocalBars;
-      _playStep.value = 0;
+      if (!keepPlaying) _playStep.value = 0;
     });
+    // Play-song preview reads from the flattened display section — rebuild it
+    // from the restored arrangement so the running clock plays the right notes.
+    if (keepPlaying && _songSection != null) _reflattenSong();
     // re-assert each drum track's kit — pitched programs ride along on every
     // playPitch call, but the drum kit is a sticky synth-side setting.
     _applyDrumKits();
+  }
+
+  // True when [s] has the same section/bars/repeats layout as the live song —
+  // i.e. only note content differs. Used to decide whether undo/redo can keep
+  // playing from the current spot or must stop and reset.
+  bool _sameArrangement(_EditSnapshot s) {
+    if (s.sections.length != _sections.length) return false;
+    for (var i = 0; i < _sections.length; i++) {
+      if (s.sections[i].bars != _sections[i].bars ||
+          s.sections[i].repeats != _sections[i].repeats) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _undoAction() {

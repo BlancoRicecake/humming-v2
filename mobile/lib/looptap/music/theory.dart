@@ -119,6 +119,28 @@ List<int> guitarVoicing(int rootMidi, String tonic, String scale) {
   return list.isEmpty ? triad : list;
 }
 
+/// A power chord (5th) for chord-mode pad input: root + perfect 5th + octave.
+/// No third, so it's key/scale-agnostic (sounds the same in major or minor) —
+/// exactly how a guitarist plays a power chord.
+List<int> powerChord(int rootMidi) => [rootMidi, rootMidi + 7, rootMidi + 12];
+
+/// A guitar-register power chord: drops the root to the low guitar register
+/// (~E2) and stacks the 5th + octave above, clamped to the real guitar range.
+/// Reuses [guitarVoicing]'s bass-position logic; only the offsets differ (the
+/// root/5th/octave power-chord shape instead of the full triad voicing).
+List<int> guitarPowerVoicing(int rootMidi) {
+  final rootPc = ((rootMidi % 12) + 12) % 12;
+  final bass = kGuitarLo + ((rootPc - kGuitarLo) % 12 + 12) % 12;
+  const offsets = [0, 7, 12]; // root, perfect 5th, octave
+  final out = <int>{};
+  for (final o in offsets) {
+    final m = bass + o;
+    if (m >= kGuitarLo && m <= kGuitarHi) out.add(m);
+  }
+  final list = out.toList()..sort();
+  return list.isEmpty ? powerChord(rootMidi) : list;
+}
+
 /// Guitar strum profile — the lab-confirmed defaults. [strumMs] is the gap
 /// between successive strings; [velocityFalloff] is the fraction the
 /// last-struck string is quieter than the first (humanizes the pick sweep).

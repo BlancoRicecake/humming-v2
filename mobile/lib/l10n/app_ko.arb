@@ -564,6 +564,8 @@
   "ltExportStemsSub": "트랙별 WAV 분리",
   "ltExportShareTitle": "공유",
   "ltExportShareSub": "다른 앱으로 보내기",
+  "ltExportScopeLabel": "내보낼 범위",
+  "ltExportScopeAll": "전체 곡",
   "ltExportSaved": "{filename} 저장됨",
   "@ltExportSaved": {"placeholders": {"filename": {"type": "String"}}},
   "ltExportVocalSkipped": "이전 형식 보컬 {count}개는 믹스에 포함되지 않았어요",

@@ -152,7 +152,9 @@ List<Uint8List> _renderIso(Map<String, dynamic> a) {
     }
   }
   mixVocalsInto(left, right, vocals);
-  return [encodeWavMono16FromStereo(left, right, sampleRate)];
+  // Final mix: normalize up to the headroom so exports are full-level and
+  // consistent (stems above keep their relative balance — no upward boost).
+  return [encodeWavMono16FromStereo(left, right, sampleRate, normalize: true)];
 }
 
 // Debug-only: report duration + level so an export can be sanity-checked from
