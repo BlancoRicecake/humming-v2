@@ -1,0 +1,9 @@
+What's new
+
+- Multitrack — stack the same instrument across tracks and drag to reorder
+- 808 sub-bass for a deeper low end
+- WAV & stem export — rendered on device, per track, with the same sound as playback
+- Faster BPM control — hold to ramp, tap to type an exact value
+- Adaptive pads that auto-size to fill the screen
+- Octave, loop, and grid fixes
+- More accurate hum input

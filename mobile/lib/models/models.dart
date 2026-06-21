@@ -341,7 +341,7 @@ class InstrumentFamily {
   final List<Instrument> instruments;
 }
 
-/// 역할별 선택 가능한 악기 — 웹 instruments.ts 규칙을 번들 SF2(TimGM6mb.sf2)에 적용해
+/// 역할별 선택 가능한 악기 — 웹 instruments.ts 규칙을 번들 SF2(GeneralUser-GS.sf2)에 적용해
 /// 산출한 결과를 하드코딩(번들 SF2 고정이라 런타임 파서 불필요).
 /// 재현법: backend/app/render.py:list_presets() 의 phdr 파싱 + instruments.ts CATEGORIES.
 /// 코드는 카테고리별 (bank,program) 정렬 순 P01.., AG01.., LG01.., SM01.., BG01.., SB01.., D01...

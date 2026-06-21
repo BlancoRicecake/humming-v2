@@ -6,7 +6,9 @@
 // M1: shell + clock + sections + transport wired. Track surfaces land in M2–M4
 // (a placeholder fills the surface area for now).
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -19,7 +21,10 @@ import '../models/loop_models.dart';
 import '../music/hum_map.dart';
 import '../music/instruments.dart';
 import '../music/song_util.dart';
+import '../music/soundfont_catalog.dart';
 import '../music/theory.dart';
+import '../music/wav_codec.dart';
+import '../music/wav_export.dart' show bounceVocalClips, vocalTrackIds;
 import '../state/loop_prefs.dart';
 import '../state/loop_storage.dart';
 import '../state/loop_store.dart';
@@ -34,8 +39,12 @@ import '../widgets/sheets/export_drawer.dart';
 import '../widgets/sheets/instrument_sheet.dart';
 import '../widgets/sheets/key_sheet.dart';
 import '../widgets/sheets/lt_modal.dart';
+import '../../audio/headset.dart';
 import '../widgets/sheets/mixer_sheet.dart';
+import '../widgets/sheets/vocal_record_modal.dart';
+import '../widgets/sheets/vocal_editor.dart';
 import '../widgets/surfaces/drum_surface.dart';
+import '../widgets/surfaces/fill_launchpad.dart';
 import '../widgets/surfaces/live_pads.dart';
 import '../widgets/surfaces/step_grid.dart';
 import '../widgets/surfaces/vocal_surface.dart';
@@ -65,7 +74,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   late final Map<String, bool> _mutes = Map.of(widget.song.mutes);
 
   // ── sections (each an independent loop × repeats) ──
-  late final List<Section> _sections = widget.song.sections.map((s) => s.deepCopy()).toList();
+  late final List<Section> _sections =
+      widget.song.sections.map((s) => s.deepCopy()).toList();
   int _activeIdx = 0;
 
   // ── editor runtime ──
@@ -74,7 +84,21 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   bool _recording = false;
   bool _metro = LoopPrefs.instance.metro.value; // shared with Settings sheet
   bool _countIn = true; // count-in on by default
-  int _octave = 0;
+  // Octave shift, tracked PER REGISTER (melody group + bass) — mirrors the
+  // per-register windows below. A single global octave made changing one track's
+  // octave move every other pitched track; scoping it per register fixes that.
+  // melody + melody-fill share the melody register (same ladder/window/octave).
+  int _melodyOctave = 0;
+  int _bassOctave = 0;
+  int get _octave => _isBass ? _bassOctave : _melodyOctave; // active-track view
+  void _setOctave(int v) => setState(() {
+    final c = v.clamp(-2, 2);
+    if (_isBass) {
+      _bassOctave = c;
+    } else {
+      _melodyOctave = c;
+    }
+  });
   // Pitched pads (melody / fill / bass): an 8-pad window that slides across a
   // wider in-key ladder via a horizontal swipe. The offset (in scale degrees)
   // is tracked per register — melody group and bass have separate ladders.
@@ -86,6 +110,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // single note. Available on the melody group (melody + melody-fill).
   final Map<String, bool> _chordMode = {};
   bool get _chordOn => _chordMode[_activeId] ?? false;
+  // power-chord mode per track id: a pad tap places a root + 5th + octave power
+  // chord (no third). Mutually exclusive with chord mode — enabling one clears
+  // the other. Also melody-group pads only.
+  final Map<String, bool> _powerMode = {};
+  bool get _powerOn => _powerMode[_activeId] ?? false;
   // per-track GM instrument (program number) — drives live sound + MIDI export
   late final Map<String, int> _instruments = Map.of(widget.song.instruments);
   int _countDown = 0; // count-in overlay (0 = none)
@@ -96,7 +125,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   // Active-track kind helpers.
   bool get _isBass => _meta.kind == TrackKind.bass;
-  bool get _isPitched => _meta.kind == TrackKind.pitched || _meta.kind == TrackKind.bass;
+  bool get _isPitched =>
+      _meta.kind == TrackKind.pitched || _meta.kind == TrackKind.bass;
 
   // glow: currently-sounding pitched notes (drums use press-only feedback)
   Set<int> _litMidis = {};
@@ -115,9 +145,26 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   // recorded-vocal playback state
   bool _vocalPlaying = false;
+  // True while the live vocal is a loop-length file looping natively in the
+  // player (a padded section mix, or an aligned single take) — the wrap-time
+  // re-sync in _onTick is then skipped (it would only add a glitch).
+  bool _vocalLoopNative = false;
   // Play song: section-instance start step -> that section's vocalPath (or null).
   // The current section's vocal switches in as the playhead crosses each boundary.
   Map<int, String?>? _songVocalSched;
+  // Per-section bounced vocal mix: all vocal-kind lanes' clips → one loop-length
+  // WAV basename, so multiple takes / Audio lanes / trims play live. Key = section
+  // id; '' = "computed, just use the raw single take". Cleared on record/edit.
+  final Map<String, String> _vocalMix = {};
+
+  // ── song-level continuous vocal take (recorded over the WHOLE song) ──
+  // Local mirror of widget.song.songVocal*; written back in _snapshot. Plays
+  // from step 0 during Play Song, replacing the per-section vocal schedule.
+  late String? _songVocalPath = widget.song.songVocalPath;
+  late List<double>? _songVocalPeaks = widget.song.songVocalPeaks;
+  late int? _songVocalBpm = widget.song.songVocalBpm;
+  late int? _songVocalBars = widget.song.songVocalBars;
+  bool _songVocalActive = false; // the live vocal currently IS the song-level take
 
   // undo / redo — snapshots of the editable song state
   final List<_EditSnapshot> _undo = [];
@@ -131,11 +178,82 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   Section get _sec => _sections[_activeIdx];
   Map<String, TrackData> get _tracks => _sec.tracks;
+  /// The Beat-Fill launchpad's 6 pad sounds for the rendered section (preview
+  /// section when previewing the song, else the editing section).
+  List<String> get _fillKinds => (_songSection ?? _sec).fillKinds;
   int get _bars => _sec.bars;
   int get _steps => _songSteps ?? stepsForBars(_bars);
-  TrackMeta get _meta => trackById(_activeId);
 
-  List<Rung> get _ladder => buildLadder(_keyRoot, _scale, 4 + _octave, 8);
+  // Total bars across the whole arrangement (every section instance) — the
+  // song-level vocal is recorded as one continuous "loop" this long.
+  int get _songTotalBars {
+    var b = 0;
+    for (final sec in _sections) {
+      b += sec.bars * sec.repeats;
+    }
+    return b;
+  }
+
+  // The full track-meta list (base 6 + added instances) for a section, and for
+  // the active editing section. _meta resolves the active track from it so added
+  // instances get their own channel/label/instrument like the base tracks.
+  List<TrackMeta> _metasFor(Section s) => sectionTrackMetas(s.extras);
+  List<TrackMeta> get _editMetas => _metasFor(_sec);
+  TrackMeta get _meta => _editMetas.firstWhere(
+    (t) => t.id == _activeId,
+    orElse: () => _editMetas.first,
+  );
+
+  /// Base track type of the active track — an added instance's type, or the id
+  /// itself for a base track. Used for type-keyed lookups (instrument list etc.).
+  String get _activeType {
+    for (final e in _sec.extras) {
+      if (e.id == _activeId) return e.type;
+    }
+    return _activeId;
+  }
+
+  // Each track — including every drum track (base drums, beat-fill, and added
+  // instances) — owns its own instrument/kit, keyed by its own id.
+  String get _instrumentTargetId => _activeId;
+
+  // The vocal-kind track currently being edited — the base 'vocal' lane or an
+  // added "Audio" lane. Vocal record/edit/autotune handlers operate on THIS id
+  // (they're only reachable while a vocal-kind surface is active); falls back to
+  // 'vocal' otherwise.
+  String get _vocalId => _meta.kind == TrackKind.vocal ? _activeId : 'vocal';
+
+  /// Track metas in the section's display order (drag-reordered). Ids not listed
+  /// in [Section.order] fall back to natural order at the end.
+  List<TrackMeta> _orderedMetas(Section s) {
+    final byId = {for (final m in sectionTrackMetas(s.extras)) m.id: m};
+    final out = <TrackMeta>[];
+    for (final id in s.order) {
+      final m = byId.remove(id);
+      if (m != null) out.add(m);
+    }
+    out.addAll(byId.values);
+    return out;
+  }
+
+  /// Apply a drag-reorder of the arrangement rows. Display-only; written to every
+  /// section so the order stays consistent across the song.
+  void _reorderTracks(int oldIndex, int newIndex) {
+    final ids = _orderedMetas(_sec).map((m) => m.id).toList();
+    if (oldIndex < 0 || oldIndex >= ids.length) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+    final id = ids.removeAt(oldIndex);
+    ids.insert(newIndex.clamp(0, ids.length), id);
+    setState(() {
+      for (final s in _sections) {
+        s.order
+          ..clear()
+          ..addAll(ids);
+      }
+    });
+  }
+
+  List<Rung> get _ladder => buildLadder(_keyRoot, _scale, 4 + _melodyOctave, 8);
 
   // Wide in-key ladders (~3 octaves) the pad window slides across — melody
   // group sits mid-register, bass low.
@@ -143,14 +261,28 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // fan out to up to 12 so each pad stays a comfortable size (PadScale band).
   // Clamped to the ladder length as a safety bound.
   int get _padCount {
-    final w = (MediaQuery.maybeOf(context)?.size.width ?? 0) - 32; // surface h-padding
+    final w =
+        (MediaQuery.maybeOf(context)?.size.width ?? 0) -
+        32; // surface h-padding
     return math.min(padCountForWidth(w), _activeFullLadder.length);
   }
-  List<Rung> get _melodyFullLadder => buildLadder(_keyRoot, _scale, 3 + _octave, 22);
-  List<Rung> get _bassFullLadder => buildLadder(_keyRoot, _scale, 1 + _octave, 22);
-  List<Rung> get _activeFullLadder => _isBass ? _bassFullLadder : _melodyFullLadder;
+
+  /// Active pitched track's program + whether it's a guitar (drives guitar
+  /// chord voicing, strum and the lower guitar register).
+  int get _activeProgram => _instruments[_activeId] ?? _meta.defaultProgram;
+  bool get _activeIsGuitar => isGuitarProgram(_activeProgram);
+
+  // Guitars sit an octave lower than the generic melody register so the pads
+  // land in a real guitar's playing range (≈E2–E6).
+  List<Rung> get _melodyFullLadder =>
+      buildLadder(_keyRoot, _scale, (_activeIsGuitar ? 2 : 3) + _melodyOctave, 22);
+  List<Rung> get _bassFullLadder =>
+      buildLadder(_keyRoot, _scale, 1 + _bassOctave, 22);
+  List<Rung> get _activeFullLadder =>
+      _isBass ? _bassFullLadder : _melodyFullLadder;
   int get _windowOffset => _isBass ? _bassWindow : _melodyWindow;
-  int get _maxWindow => (_activeFullLadder.length - _padCount).clamp(0, _activeFullLadder.length);
+  int get _maxWindow =>
+      (_activeFullLadder.length - _padCount).clamp(0, _activeFullLadder.length);
 
   /// The 8 pads currently shown for the active pitched track.
   List<Rung> get _padWindow {
@@ -174,22 +306,39 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     return const [0, 3, 4, 5, 7].map((i) => full[i]).toList();
   }
 
-  // full 8-row in-key bass ladder (one octave down) for the bass Grid
-  List<Rung> get _bassGridLadder => buildLadder(_keyRoot, _scale, 2 + _octave, 8);
+  /// active pitched ladder for the Grid surface — the SAME windowed slice the
+  /// pads show, so the grid covers the full slide range too (drag the row
+  /// labels vertically to move the window).
+  List<Rung> get _gridLadder => _padWindow;
 
-  /// active pitched ladder for the Grid surface (melody high / bass low)
-  List<Rung> get _gridLadder => _activeId == 'bass' ? _bassGridLadder : _ladder;
+  /// Move the pitched pad/grid window (shared by pads + grid). Clamped.
+  void _setWindowOffset(int o) {
+    final c = o.clamp(0, _maxWindow);
+    setState(() {
+      if (_isBass) {
+        _bassWindow = c;
+      } else {
+        _melodyWindow = c;
+      }
+    });
+  }
 
   Map<String, PitchRange> get _ranges {
     final mfull = _melodyFullLadder, bfull = _bassFullLadder;
     // ranges span the whole slide ladders so the arrangement preview shows notes
     // placed anywhere in the window.
     final mel = PitchRange(mfull.first.midi - 2, mfull.last.midi + 2);
-    return {
+    final bass = PitchRange(bfull.first.midi - 2, bfull.last.midi + 2);
+    final r = {
       'melody': mel,
       'melodyDec': mel, // melody-fill shares the melody register
-      'bass': PitchRange(bfull.first.midi - 2, bfull.last.midi + 2),
+      'bass': bass,
     };
+    // added pitched instances reuse their base type's range for the lane preview.
+    for (final e in _sec.extras) {
+      r[e.id] = e.type == 'bass' ? bass : mel;
+    }
+    return r;
   }
 
   // ── auto-save 상태 ────────────────────────────────────────────────
@@ -210,17 +359,35 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     super.initState();
     // apply this song's chosen instruments (per pitched channel), then warm the synth
     _audio.setPrograms({
-      for (final t in kPitchedTracks) t.channel: _instruments[t.id] ?? t.defaultProgram,
+      for (final t in kPitchedTracks)
+        t.channel: _instruments[t.id] ?? t.defaultProgram,
     });
+    _applyDrumKits();
     _audio.prewarm();
+    // Pre-download any runtime-catalog instruments this song uses so live
+    // playback + export resolve the real SF2 (else they fall back to GM until
+    // fetched). Fire-and-forget; _bindChannel re-checks at play time.
+    for (final p in _instruments.values) {
+      if (isDynamicSlot(p)) SoundfontCatalog.instance.ensureDownloaded(p);
+    }
+    // pre-load the section's vocal so the first ▶ starts it without the
+    // source-load latency
+    final vp = _tracks['vocal']?.vocalPath;
+    if (vp != null) _audio.prepareVocal(LoopStorage.resolveVocal(vp));
     // 12초마다 dirty 면 silent autosave — 사용자 명시적 Save 와 충돌 없음.
-    _autosaveTimer = Timer.periodic(const Duration(seconds: 12), (_) => _autoSaveTick());
+    _autosaveTimer = Timer.periodic(
+      const Duration(seconds: 12),
+      (_) => _autoSaveTick(),
+    );
   }
 
   @override
   void dispose() {
     _autosaveTimer?.cancel();
     _flashTimer?.cancel();
+    for (final t in _strumTimers) {
+      t.cancel();
+    }
     _ticker?.dispose();
     _playStep.dispose();
     _audio.stopAll();
@@ -264,7 +431,16 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         _freshThisLoop.clear();
         // single-section loop re-aligns its one vocal; song mode handles vocals
         // per-section in _trigger (the step-0 boundary restarts the first one).
-        if (_songSection == null && _vocalPlaying) _audio.seekVocalToStart();
+        // Aligned takes loop natively in the player (ReleaseMode.loop) — a
+        // wrap-time seek would only add a glitch on top. Alignment is only
+        // valid at the take's recorded bpm/bars (vocalIsAligned).
+        // Re-sync a non-natively-looping vocal at the loop start: the single
+        // section take, or the song-level take during Play Song.
+        if (_vocalPlaying &&
+            !_vocalLoopNative &&
+            (_songSection == null || _songVocalActive)) {
+          _audio.seekVocalToStart();
+        }
       }
       _trigger(st);
       _nextAbs++;
@@ -282,10 +458,16 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     // Play song: switch the recorded vocal in at each section boundary
     final sched = _songVocalSched;
     if (sched != null && sched.containsKey(step)) {
+      // The scheduled file is the section's pre-bounced vocal mix (null when the
+      // section has no audible vocal lane) — muting was already applied at the
+      // bounce, so no live mute re-check here.
       final path = sched[step];
-      if (path != null && !(_mutes['vocal'] ?? false)) {
+      if (path != null) {
         _vocalPlaying = true;
-        _audio.playVocal(path, vol: _vol['vocal'] ?? 0.85);
+        _audio.playVocal(
+          LoopStorage.resolveVocal(path),
+          vol: _vol['vocal'] ?? 0.85,
+        );
       } else {
         _vocalPlaying = false;
         _audio.stopVocal();
@@ -295,21 +477,48 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     // MIDI channel/program; percussion tracks (drums + beat-fill) share ch9 but
     // keep independent mute/volume. Drums don't drive pad lighting.
     final litM = <int>{};
-    for (final tk in kTracks) {
+    for (final tk in _metasFor(_songSection ?? _sec)) {
       if (_mutes[tk.id] ?? false) continue;
       final data = T[tk.id];
       if (data == null) continue;
       if (tk.kind == TrackKind.pitched || tk.kind == TrackKind.bass) {
         final prog = _instruments[tk.id] ?? tk.defaultProgram;
-        for (final n in data.pitchNotes.where((n) => n.step == step)) {
-          if (_freshThisLoop.contains('${tk.id}:${n.midi}:$step')) continue;
-          _audio.playPitch(tk.channel, n.midi, program: prog, vol: _vol[tk.id] ?? 0.85, durSec: dsec(n.dur));
-          litM.add(n.midi);
+        final vol = _vol[tk.id] ?? 0.85;
+        final due = [
+          for (final n in data.pitchNotes.where((n) => n.step == step))
+            if (!_freshThisLoop.contains('${tk.id}:${n.midi}:$step')) n,
+        ];
+        if (isGuitarProgram(prog) && due.length > 1) {
+          // strum the chord on playback the same way the live pad does
+          final byMidi = {for (final n in due) n.midi: n};
+          for (final s in strumPlan([for (final n in due) n.midi])) {
+            final note = byMidi[s.midi]!;
+            void hit() => _audio.playPitch(tk.channel, s.midi,
+                program: prog, vol: vol * s.velScale, durSec: dsec(note.dur));
+            // fire-and-forget: the strum sweep is a few ms, no cancellation
+            if (s.delayMs <= 0) {
+              hit();
+            } else {
+              Timer(Duration(milliseconds: s.delayMs), hit);
+            }
+          }
+        } else {
+          for (final n in due) {
+            _audio.playPitch(tk.channel, n.midi,
+                program: prog, vol: vol, durSec: dsec(n.dur));
+          }
+        }
+        // glow only the ACTIVE track's pads — otherwise a melody note would
+        // light a same-pitch pad on melody-fill/bass while they're showing.
+        if (tk.id == _activeId) {
+          for (final n in due) {
+            litM.add(n.midi);
+          }
         }
       } else if (tk.kind == TrackKind.drums) {
         for (final n in data.drumNotes.where((n) => n.step == step)) {
           if (_freshThisLoop.contains('${tk.id}:${n.kind}:$step')) continue;
-          _audio.playDrum(n.kind, vol: _vol[tk.id] ?? 1);
+          _audio.playDrum(n.kind, channel: tk.channel, vol: _vol[tk.id] ?? 1);
         }
       }
     }
@@ -334,6 +543,104 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     _ticker = null;
   }
 
+  /// Scrub the playhead to [step] (arrangement drag). While playing, rebase the
+  /// clock so playback continues from the new position; song-preview is read-only.
+  void _seekTo(double step) {
+    if (_songSection != null) return;
+    final s = step.clamp(0.0, _steps.toDouble());
+    _playStep.value = s;
+    if (_playing) {
+      _freshThisLoop.clear();
+      _startClock(); // rebase elapsed to the new position
+    }
+  }
+
+  // ── add-track ─────────────────────────────────────────────────────
+  /// Append a new instance of [type] (one of the base track ids) to EVERY
+  /// section so the track set stays consistent across the song, then select it.
+  void _addTrack(String type) {
+    _pushUndo();
+    final id = '${type}_x${DateTime.now().microsecondsSinceEpoch}';
+    setState(() {
+      for (final s in _sections) {
+        s.extras.add(TrackRef(id, type));
+        s.tracks[id] = TrackData();
+      }
+      _instruments[id] = trackById(type).defaultProgram;
+      _activeId = id;
+      _inputModes[id] = 'pads';
+    });
+    // a new drum track needs its kit selected on its freshly-allocated channel
+    if (trackById(type).kind == TrackKind.drums) {
+      final m = _editMetas.firstWhere((t) => t.id == id);
+      _audio.setDrumKitOn(m.channel, _instruments[id] ?? kDefaultDrumKit);
+    }
+  }
+
+  Future<void> _openAddTrack() async {
+    final type = await showDialog<String>(
+      context: context,
+      builder:
+          (ctx) => Dialog(
+            backgroundColor: LT.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Add track',
+                        style: LTType.inter(
+                          size: 16,
+                          weight: FontWeight.w800,
+                          color: LT.t1,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // base instanceable tracks + the addable "Audio" lane (a
+                  // second vocal-kind lane for overlapping/layered takes).
+                  for (final t in kAddableTracks)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => Navigator.of(ctx).pop(t.id),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          children: [
+                            Ms(t.icon, size: 18, color: t.color),
+                            const SizedBox(width: 12),
+                            Text(
+                              t.label,
+                              style: LTType.inter(
+                                size: 14,
+                                weight: FontWeight.w700,
+                                color: LT.t1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+    );
+    if (type != null) _addTrack(type);
+  }
+
   // ── transport actions ─────────────────────────────────────────────
   void _togglePlay() {
     _audio.ensure();
@@ -353,6 +660,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     _stopClock();
     _audio.stopAll();
     _vocalPlaying = false;
+    _songVocalActive = false;
     _playStep.value = 0;
     setState(() {
       _playing = false;
@@ -427,6 +735,17 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   String _nextSectionName() => String.fromCharCode(65 + _sections.length % 26);
 
+  // Re-letter auto-named sections by position so the chips read A, B, C… left to
+  // right after any add / duplicate / move / delete. Custom-renamed sections
+  // (autoName == false) keep their name; their position letter is just skipped.
+  void _relabelSections() {
+    for (var i = 0; i < _sections.length; i++) {
+      if (_sections[i].autoName) {
+        _sections[i].name = String.fromCharCode(65 + i % 26);
+      }
+    }
+  }
+
   // "+" → a brand-new EMPTY section (not a copy of the current one).
   void _addSection() {
     _pushUndo();
@@ -438,6 +757,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
     setState(() {
       _sections.add(ns);
+      _relabelSections();
       _activeIdx = _sections.length - 1;
       _playStep.value = 0;
     });
@@ -447,11 +767,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void _duplicateSection(int idx) {
     _pushUndo();
     if (_playing) _stopAll();
-    final copy = _sections[idx].deepCopy()
-      ..id = 'sec${DateTime.now().millisecondsSinceEpoch}'
-      ..name = _nextSectionName();
+    final copy =
+        _sections[idx].deepCopy()
+          ..id = 'sec${DateTime.now().millisecondsSinceEpoch}'
+          ..autoName = true // a duplicate gets a fresh position letter
+          ..name = _nextSectionName();
     setState(() {
       _sections.insert(idx + 1, copy);
+      _relabelSections();
       _activeIdx = idx + 1;
       _playStep.value = 0;
     });
@@ -466,6 +789,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     setState(() {
       final s = _sections.removeAt(idx);
       _sections.insert(j, s);
+      _relabelSections();
       if (_activeIdx == idx) {
         _activeIdx = j;
       } else if (_activeIdx == j) {
@@ -481,6 +805,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     if (_playing) _stopAll();
     setState(() {
       _sections.removeAt(idx);
+      _relabelSections();
       _activeIdx = _activeIdx.clamp(0, _sections.length - 1);
       if (idx < _activeIdx || _activeIdx >= _sections.length) {
         _activeIdx = (_activeIdx - 1).clamp(0, _sections.length - 1);
@@ -489,7 +814,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _renameSection(int idx, String name) => _sections[idx].name = name;
+  // User typed a name → it's custom now, so _relabelSections leaves it alone.
+  void _renameSection(int idx, String name) {
+    _sections[idx]
+      ..name = name
+      ..autoName = false;
+  }
 
   // long-press a section chip → Duplicate / Move left / Move right
   Future<void> _openSectionMenu(int idx) async {
@@ -497,31 +827,46 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       context,
       width: 300,
       child: StatefulBuilder(
-        builder: (context, _) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Section ${_sections[idx].name}',
-                style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1)),
-            const SizedBox(height: 14),
-            _menuRow(LtIcons.layers, 'Duplicate', () {
-              Navigator.of(context).pop();
-              _duplicateSection(idx);
-            }),
-            _menuRow(LtIcons.arrowBack, 'Move left', idx > 0
-                ? () {
-                    Navigator.of(context).pop();
-                    _moveSection(idx, -1);
-                  }
-                : null),
-            _menuRow(LtIcons.playArrow, 'Move right', idx < _sections.length - 1
-                ? () {
-                    Navigator.of(context).pop();
-                    _moveSection(idx, 1);
-                  }
-                : null),
-          ],
-        ),
+        builder:
+            (context, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Section ${_sections[idx].name}',
+                  style: LTType.inter(
+                    size: 15,
+                    weight: FontWeight.w800,
+                    color: LT.t1,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _menuRow(LtIcons.layers, 'Duplicate', () {
+                  Navigator.of(context).pop();
+                  _duplicateSection(idx);
+                }),
+                _menuRow(
+                  LtIcons.arrowBack,
+                  'Move left',
+                  idx > 0
+                      ? () {
+                        Navigator.of(context).pop();
+                        _moveSection(idx, -1);
+                      }
+                      : null,
+                ),
+                _menuRow(
+                  LtIcons.playArrow,
+                  'Move right',
+                  idx < _sections.length - 1
+                      ? () {
+                        Navigator.of(context).pop();
+                        _moveSection(idx, 1);
+                      }
+                      : null,
+                ),
+              ],
+            ),
       ),
     );
   }
@@ -545,7 +890,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
             children: [
               Ms(icon, size: 18, color: LT.t2),
               const SizedBox(width: 12),
-              Text(label, style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t1)),
+              Text(
+                label,
+                style: LTType.inter(
+                  size: 13,
+                  weight: FontWeight.w700,
+                  color: LT.t1,
+                ),
+              ),
             ],
           ),
         ),
@@ -558,7 +910,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     setState(() => _sections[idx].repeats = r.clamp(1, 8));
   }
 
-  void _playSong() {
+  Future<void> _playSong() async {
     _audio.ensure();
     if (_songSection != null) {
       _stopAll();
@@ -571,48 +923,129 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     disp.tracks['bass'] = TrackData(notes: flat.bass);
     disp.tracks['drums'] = TrackData(drums: flat.drums);
     disp.tracks['beatDec'] = TrackData(drums: flat.beatDec);
-    // schedule each section instance's vocal at its flattened start step
+    // Bounce each section's vocal lanes once (cached), then schedule that mix at
+    // every section instance — so the full-song preview hears all takes/Audio
+    // lanes/trims, matching export (not just the first raw take).
+    final mixBySec = <String, String?>{};
+    for (final sec in _sections) {
+      mixBySec[sec.id] = await _sectionVocalFile(sec);
+    }
+    if (!mounted) return;
     final sched = <int, String?>{};
     var off = 0;
     for (final sec in _sections) {
       final st = stepsForBars(sec.bars);
-      final vp = sec.tracks['vocal']?.vocalPath;
       for (var r = 0; r < sec.repeats; r++) {
-        sched[off] = vp;
+        sched[off] = mixBySec[sec.id];
         off += st;
       }
     }
     setState(() {
       _songSection = disp;
       _songSteps = flat.steps;
-      _songVocalSched = sched;
       _playStep.value = 0;
       _playing = true;
-      _startClock();
     });
+    // A song-level take plays from step 0 and REPLACES the per-section vocals;
+    // otherwise fall back to the per-section schedule.
+    if (_songVocalPath != null) {
+      _songVocalSched = null;
+      final native = _songVocalBpm == _bpm && _songVocalBars == _songTotalBars;
+      _vocalLoopNative = native;
+      _vocalPlaying = true;
+      _songVocalActive = true;
+      _audio.playVocal(
+        LoopStorage.resolveVocal(_songVocalPath!),
+        vol: _vol['vocal'] ?? 0.85,
+        loop: native,
+      );
+    } else {
+      _songVocalSched = sched;
+      _songVocalActive = false;
+    }
+    _startClock();
   }
 
   // ── editing ───────────────────────────────────────────────────────
   int _quantStep() => _playStep.value.round() % _steps;
 
-  void _hitDrum(String kind) {
-    _audio.playDrum(kind, vol: _vol[_activeId] ?? 1);
-    if (_recording && _playing && _songSection == null) {
-      _pushUndo(coalesce: true);
-      final s = _quantStep();
-      final dn = _tracks[_activeId]!.drumNotes;
-      if (!dn.any((x) => x.kind == kind && x.step == s)) {
-        setState(() => dn.add(DrumNote(kind: kind, step: s)));
+  // ── overdub while playing the whole song ──────────────────────────────
+  // The full-song playhead step (0.._songSteps) maps back to ONE real section
+  // instance + the local step inside it. Repeats of a section share its data,
+  // so recording into the section affects every repeat (consistent with play).
+  ({Section section, int localStep})? _songStepToSection(int globalStep) {
+    var off = 0;
+    for (final sec in _sections) {
+      final st = stepsForBars(sec.bars);
+      for (var r = 0; r < sec.repeats; r++) {
+        if (globalStep >= off && globalStep < off + st) {
+          return (section: sec, localStep: globalStep - off);
+        }
+        off += st;
       }
-      // heard live now → don't let the clock replay it this loop pass
-      _freshThisLoop.add('$_activeId:$kind:$s');
     }
+    return null;
+  }
+
+  // Where a just-played note should be recorded. Single-section mode: the active
+  // section at the (already local) step. Song mode: the section under the
+  // playhead at the local step — null if the playhead/active track can't resolve.
+  ({Map<String, TrackData> tracks, int step})? _recTarget(int globalStep) {
+    if (_songSection == null) return (tracks: _tracks, step: globalStep);
+    final m = _songStepToSection(globalStep);
+    if (m == null || m.section.tracks[_activeId] == null) return null;
+    return (tracks: m.section.tracks, step: m.localStep);
+  }
+
+  // Rebuild the flattened SONG display from the real sections so an overdubbed
+  // note plays on the next loop pass. Mirrors the track assignment in _playSong.
+  void _reflattenSong() {
+    final s = _songSection;
+    if (s == null) return;
+    final flat = flattenSong(_sections);
+    s.tracks['melody'] = TrackData(notes: flat.melody);
+    s.tracks['melodyDec'] = TrackData(notes: flat.melodyDec);
+    s.tracks['bass'] = TrackData(notes: flat.bass);
+    s.tracks['drums'] = TrackData(drums: flat.drums);
+    s.tracks['beatDec'] = TrackData(drums: flat.beatDec);
+  }
+
+  // Re-assert every drum track's kit on its channel: base drums on ch9, beat-fill
+  // on ch10, and each added drum track on its own channel — every drum track owns
+  // an independent kit. The drum kit is a sticky synth-side selection, so this
+  // runs on open / undo-restore / after adding a track.
+  void _applyDrumKits() {
+    _audio.setDrumKitOn(LoopAudio.drumChannel, _instruments['drums'] ?? kDefaultDrumKit);
+    for (final m in _editMetas) {
+      if (m.kind == TrackKind.drums && m.channel != LoopAudio.drumChannel) {
+        _audio.setDrumKitOn(m.channel, _instruments[m.id] ?? kDefaultDrumKit);
+      }
+    }
+  }
+
+  void _hitDrum(String kind) {
+    _audio.playDrum(kind, channel: _meta.channel, vol: _vol[_activeId] ?? 1);
+    if (!(_recording && _playing)) return;
+    final g = _quantStep(); // global step in song mode, local step otherwise
+    final tgt = _recTarget(g);
+    if (tgt == null) return;
+    _pushUndo(coalesce: true);
+    final dn = tgt.tracks[_activeId]!.drumNotes;
+    if (!dn.any((x) => x.kind == kind && x.step == tgt.step)) {
+      setState(() => dn.add(DrumNote(kind: kind, step: tgt.step)));
+    }
+    // heard live now → don't let the clock replay it this loop pass. The clock
+    // checks the PLAYED step (global in song mode), so key fresh on `g`.
+    _freshThisLoop.add('$_activeId:$kind:$g');
+    if (_songSection != null) _reflattenSong(); // so it plays on the next pass
   }
 
   // drums Grid mode: tap a cell to toggle a hit at (kind, step) on the active
   // percussion track (main drums or beat-fill).
   void _toggleDrumCell(String kind, int step) {
-    if (_songSection != null) return; // editing disabled while previewing the song
+    if (_songSection != null) {
+      return; // editing disabled while previewing the song
+    }
     _pushUndo(coalesce: true);
     final dn = _tracks[_activeId]!.drumNotes;
     final i = dn.indexWhere((x) => x.kind == kind && x.step == step);
@@ -621,8 +1054,45 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         dn.removeAt(i);
       } else {
         dn.add(DrumNote(kind: kind, step: step));
-        _audio.playDrum(kind, vol: _vol[_activeId] ?? 1);
+        _audio.playDrum(kind, channel: _meta.channel, vol: _vol[_activeId] ?? 1);
       }
+    });
+  }
+
+  // Beat-Fill launchpad: open the percussion picker for pad [padIndex] and
+  // reassign its sound. Notes already recorded with the swapped-away sound are
+  // REMAPPED to the new sound, so the pattern keeps playing on the pad with its
+  // new timbre.
+  Future<void> _openFillPadPicker(int padIndex) async {
+    if (_songSection != null) return; // editing disabled while previewing
+    final current = _sec.fillKinds[padIndex];
+    final picked = await showLtModal<String>(
+      context,
+      child: FillPaletteSheet(
+        current: current,
+        onPreview: (k) =>
+            _audio.playDrum(k, channel: _meta.channel, vol: _vol[_activeId] ?? 1),
+      ),
+    );
+    if (picked == null || picked == current) return;
+    _pushUndo();
+    setState(() {
+      _sec.fillKinds[padIndex] = picked;
+      // Remap the swapped-away sound's notes → the new sound, deduping any
+      // (kind, step) collision with notes the new sound already had. Operate on
+      // the ACTIVE beat-fill track (could be an added instance, not 'beatDec').
+      final track = _sec.tracks[_activeId]!;
+      final seen = <String>{};
+      final remapped = <DrumNote>[];
+      for (final n in track.drumNotes) {
+        final k = (n.kind == current) ? picked : n.kind;
+        if (seen.add('$k:${n.step}')) {
+          remapped.add(k == n.kind ? n : DrumNote(kind: k, step: n.step));
+        }
+      }
+      track.drumNotes
+        ..clear()
+        ..addAll(remapped);
     });
   }
 
@@ -634,57 +1104,108 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   /// The midis a pad press produces: a diatonic triad in melody chord mode,
   /// otherwise just the pressed note.
-  List<int> _chordMidis(int rootMidi) => (_meta.group == 'melody' && _chordOn)
-      ? diatonicTriad(rootMidi, _keyRoot, _scale)
-      : [rootMidi];
+  List<int> _chordMidis(int rootMidi) {
+    if (_meta.group != 'melody') return [rootMidi];
+    // Power chord (root + 5th + octave, no third). Guitar gets a low-register
+    // voicing; other melody instruments get the plain power chord.
+    if (_powerOn) {
+      return _activeIsGuitar
+          ? guitarPowerVoicing(rootMidi)
+          : powerChord(rootMidi);
+    }
+    if (!_chordOn) return [rootMidi];
+    // Guitar gets a spread barre/open voicing in the guitar register; other
+    // melody instruments keep the close diatonic triad. Either way the voiced
+    // notes are what gets stored on release, so playback/export stay in sync.
+    return _activeIsGuitar
+        ? guitarVoicing(rootMidi, _keyRoot, _scale)
+        : diatonicTriad(rootMidi, _keyRoot, _scale);
+  }
 
   /// A Rung for an arbitrary chord-member midi (the root reuses the real Rung).
-  Rung _rungFor(int midi, Rung root) => midi == root.midi
-      ? root
-      : Rung(
-          midi: midi,
-          name: kNoteNames[((midi % 12) + 12) % 12],
-          degree: root.degree,
-          freq: midiToFreq(midi),
-          index: root.index,
-        );
+  Rung _rungFor(int midi, Rung root) =>
+      midi == root.midi
+          ? root
+          : Rung(
+            midi: midi,
+            name: kNoteNames[((midi % 12) + 12) % 12],
+            degree: root.degree,
+            freq: midiToFreq(midi),
+            index: root.index,
+          );
+
+  // Pending strum note-ons (a guitar chord sweeps over a few ms); cancelled on
+  // release so a quick tap never leaves a late string ringing.
+  final List<Timer> _strumTimers = [];
 
   void _pitchDown(Rung n) {
     // held note(s): they sound while pressed, so what you hear == what's recorded
     final ch = _meta.channel;
     final prog = _instruments[_activeId] ?? _meta.defaultProgram;
-    for (final m in _chordMidis(n.midi)) {
-      _audio.noteOnLive(ch, m, program: prog, vol: _vol[_activeId] ?? 0.85);
+    final vol = _vol[_activeId] ?? 0.85;
+    final midis = _chordMidis(n.midi);
+    if (_activeIsGuitar && midis.length > 1) {
+      // strum the chord: each string a little after the previous, slightly softer
+      for (final s in strumPlan(midis)) {
+        void hit() => _audio.noteOnLive(ch, s.midi, program: prog, vol: vol * s.velScale);
+        if (s.delayMs <= 0) {
+          hit();
+        } else {
+          _strumTimers.add(Timer(Duration(milliseconds: s.delayMs), hit));
+        }
+      }
+    } else {
+      for (final m in midis) {
+        _audio.noteOnLive(ch, m, program: prog, vol: vol);
+      }
     }
-    if (_recording && _playing && _songSection == null) {
-      _pending[n.midi] = (step: _quantStep(), t: DateTime.now().millisecondsSinceEpoch);
+    if (_recording && _playing) {
+      // Song-mode overdub records the global step; _pitchUp maps it to the
+      // section under the playhead. Single-section mode records the local step.
+      _pending[n.midi] = (
+        step: _quantStep(),
+        t: DateTime.now().millisecondsSinceEpoch,
+      );
     }
   }
 
   void _pitchUp(Rung n) {
     final ch = _meta.channel;
     final midis = _chordMidis(n.midi);
+    // drop any not-yet-struck strum strings so a fast tap doesn't leave one on
+    if (_strumTimers.isNotEmpty) {
+      for (final t in _strumTimers) {
+        t.cancel();
+      }
+      _strumTimers.clear();
+    }
     for (final m in midis) {
       _audio.noteOffLive(ch, m);
     }
     final p = _pending.remove(n.midi);
     if (p == null) return;
-    _pushUndo(coalesce: true);
     final dur = _durFromHold(DateTime.now().millisecondsSinceEpoch - p.t);
+    final tgt = _recTarget(p.step); // p.step is the played step (global in song mode)
+    if (tgt == null) return; // song-mode playhead/active track didn't resolve
+    _pushUndo(coalesce: true);
     for (final m in midis) {
-      _placePitched(_activeId, _rungFor(m, n), p.step, p.step + dur - 1);
-      // heard live now → don't let the clock replay it this loop pass
+      _placePitched(tgt.tracks, _activeId, _rungFor(m, n), tgt.step, tgt.step + dur - 1);
+      // heard live now → don't let the clock replay it this loop pass (the clock
+      // checks the played/global step).
       _freshThisLoop.add('$_activeId:$m:${p.step}');
     }
+    if (_songSection != null) _reflattenSong(); // so it plays on the next pass
   }
 
-  /// Place a pitched note spanning [a,b], merging overlapping same-pitch notes.
-  void _placePitched(String id, Rung n, int a, int b) {
+  /// Place a pitched note spanning [a,b] in [tracks], merging overlapping
+  /// same-pitch notes. [tracks] is the active section normally, or the section
+  /// under the playhead for a song-mode overdub.
+  void _placePitched(Map<String, TrackData> tracks, String id, Rung n, int a, int b) {
     setState(() {
       var lo = a < b ? a : b;
       var hi = a < b ? b : a;
       final kept = <PitchNote>[];
-      for (final x in _tracks[id]!.pitchNotes) {
+      for (final x in tracks[id]!.pitchNotes) {
         if (x.midi == n.midi) {
           final xs = x.step, xe = x.step + x.dur - 1;
           if (xs <= hi && xe >= lo) {
@@ -697,8 +1218,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           kept.add(x);
         }
       }
-      kept.add(PitchNote(midi: n.midi, freq: n.freq, step: lo, dur: hi - lo + 1));
-      _tracks[id]!.pitchNotes
+      kept.add(
+        PitchNote(midi: n.midi, freq: n.freq, step: lo, dur: hi - lo + 1),
+      );
+      tracks[id]!.pitchNotes
         ..clear()
         ..addAll(kept);
     });
@@ -710,9 +1233,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     // preview sound length matches the drawn note length
     final sps = 60 / _bpm / kStepsPerBeat;
     final durSec = (((a - b).abs() + 1) * sps * 0.95).clamp(0.12, 8.0);
-    _audio.playPitch(_meta.channel, n.midi,
-        program: _instruments[_activeId] ?? _meta.defaultProgram, vol: _vol[_activeId] ?? 0.85, durSec: durSec);
-    _placePitched(_activeId, n, a, b);
+    _audio.playPitch(
+      _meta.channel,
+      n.midi,
+      program: _instruments[_activeId] ?? _meta.defaultProgram,
+      vol: _vol[_activeId] ?? 0.85,
+      durSec: durSec,
+    );
+    _placePitched(_tracks, _activeId, n, a, b);
     _freshThisLoop.add('$_activeId:${n.midi}:${a < b ? a : b}');
   }
 
@@ -722,15 +1250,31 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     _pushUndo(coalesce: true);
     setState(() {
       final notes = _tracks[_activeId]!.pitchNotes;
-      final i = notes.indexWhere((x) => x.midi == n.midi && step >= x.step && step < x.step + x.dur);
+      final i = notes.indexWhere(
+        (x) => x.midi == n.midi && step >= x.step && step < x.step + x.dur,
+      );
       if (i < 0) return;
       final note = notes.removeAt(i);
       final end = note.step + note.dur; // exclusive
       if (step > note.step) {
-        notes.add(PitchNote(midi: note.midi, freq: note.freq, step: note.step, dur: step - note.step));
+        notes.add(
+          PitchNote(
+            midi: note.midi,
+            freq: note.freq,
+            step: note.step,
+            dur: step - note.step,
+          ),
+        );
       }
       if (step + 1 < end) {
-        notes.add(PitchNote(midi: note.midi, freq: note.freq, step: step + 1, dur: end - (step + 1)));
+        notes.add(
+          PitchNote(
+            midi: note.midi,
+            freq: note.freq,
+            step: step + 1,
+            dur: end - (step + 1),
+          ),
+        );
       }
     });
   }
@@ -742,57 +1286,212 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       t.pitchNotes.clear();
       t.drumNotes.clear();
       t.clip = null;
-      if (_activeId == 'vocal') {
+      if (trackById(_activeType).kind == TrackKind.vocal) {
+        t.clips = null;
         t.vocalPath = null;
-        _audio.stopVocal();
-        _vocalPlaying = false;
+        t.vocalOrigPath = null;
+        t.vocalBpm = null;
+        t.vocalBars = null;
+        _stopVocal();
+        _vocalMix.remove(_sec.id);
       }
     });
+    // Offer an immediate undo — clearing has no confirm dialog (keeps the flow
+    // fast), so a one-tap recovery path catches accidental clears.
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('Track cleared'),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(label: 'Undo', onPressed: _undoAction),
+        ),
+      );
   }
 
   // ── vocal playback (item 7) ───────────────────────────────────────
-  Future<void> _commitVocal(List<double> wf, String? path) async {
-    _pushUndo();
-    String? persisted = path;
-    if (path != null) {
-      persisted = await LoopStorage.copyVocal(path, widget.song.id, _sec.id) ?? path;
+  /// Returns true when the take was persisted and committed to the track.
+  Future<bool> _commitVocal(
+    List<double> wf,
+    String? path, {
+    bool aligned = false,
+  }) async {
+    if (path == null) return false;
+    // persisted is a BASENAME under Documents/looptap/vocals (durable across
+    // iOS container moves). No temp-path fallback: the OS reclaims temp files,
+    // so a failed copy must surface instead of silently rotting.
+    // Copy FIRST — only a successful copy snapshots undo + mutates state, so a
+    // failure can't pop someone else's undo entry or clear the redo stack.
+    final persisted = await LoopStorage.copyVocal(
+      path,
+      widget.song.id,
+      _sec.id,
+    );
+    if (!mounted) return false;
+    if (persisted == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Couldn\'t save the recording'),
+          duration: Duration(milliseconds: 1600),
+        ),
+      );
+      return false;
     }
-    if (!mounted) return;
+    _pushUndo();
     setState(() {
-      _tracks['vocal']!.clip = wf;
-      _tracks['vocal']!.vocalPath = persisted;
+      final t = _tracks[_vocalId]!;
+      // Multi-take: APPEND a new clip to the lane instead of replacing. The
+      // first recording seeds the lane (migrating any legacy single take).
+      final lane = t.clips ?? (t.vocalPath != null ? List.of(t.effectiveClips) : <VocalClip>[]);
+      // Place each new take to the RIGHT of the rightmost existing chunk so they
+      // never stack on top of each other (drag it on the strip to reposition).
+      final secSteps = stepsForBars(_bars);
+      var startStep = 0;
+      for (final c in lane) {
+        final dur = c.durSteps > 0 ? c.durSteps : secSteps;
+        final end = c.startStep + dur;
+        if (end > startStep) startStep = end;
+      }
+      startStep = startStep.clamp(0, secSteps - 1);
+      final clip = VocalClip(
+        path: persisted,
+        startStep: startStep,
+        durSteps: aligned ? secSteps : -1,
+        peaks: wf,
+      );
+      lane.add(clip);
+      t.clips = lane;
+      // legacy mirror = first clip (surface waveform + back-compat / export).
+      final first = lane.first;
+      t.clip = first.peaks.isNotEmpty ? first.peaks : wf;
+      t.vocalPath = first.path;
+      t.vocalOrigPath = first.origPath;
+      t.vocalAligned = aligned;
+      t.vocalBpm = _bpm;
+      t.vocalBars = _bars;
     });
+    _vocalMix.remove(_sec.id); // section mix is stale → rebounce on next play
+    return true;
   }
 
-  /// Start the recorded vocal for single-section loop play. (Play song handles
-  /// per-section vocals via the schedule in _trigger, so skip here.)
-  void _startVocalIfAny() {
+  /// Start the recorded vocal for single-section loop play. Plays a per-section
+  /// MIX of every vocal-kind lane's clips (multiple takes / Audio lanes / trims
+  /// all audible), padded to the loop so it loops natively. A single untouched
+  /// take skips the mix and plays its own file. (Play song handles per-section
+  /// vocals via the schedule in _trigger.)
+  Future<void> _startVocalIfAny() async {
     if (_songSection != null) return;
-    final path = _tracks['vocal']!.vocalPath;
-    if (path != null && !(_mutes['vocal'] ?? false)) {
-      _vocalPlaying = true;
-      _audio.playVocal(path, vol: _vol['vocal'] ?? 0.85);
+    final sec = _sec;
+    final file = await _sectionVocalFile(sec);
+    if (!mounted || !identical(_sec, sec) || file == null) return;
+    // A padded section mix (name prefixed '_mix_') always loops natively; a raw
+    // single take loops only when it's loop-aligned at this bpm/bars.
+    _vocalLoopNative =
+        file.startsWith('_mix_') || (_tracks['vocal']?.vocalIsAligned(_bpm, _bars) ?? false);
+    _vocalPlaying = true;
+    _audio.playVocal(
+      LoopStorage.resolveVocal(file),
+      vol: _vol['vocal'] ?? 0.85,
+      loop: _vocalLoopNative,
+    );
+  }
+
+  /// The cached playable vocal basename for [sec] (the lane mix, or a raw single
+  /// take). '' is cached for "nothing to play". Cleared on record/edit/mute.
+  Future<String?> _sectionVocalFile(Section sec) async {
+    final cached = _vocalMix[sec.id];
+    if (cached != null) return cached.isEmpty ? null : cached;
+    final f = (await _bounceSectionVocal(sec)) ?? '';
+    _vocalMix[sec.id] = f;
+    return f.isEmpty ? null : f;
+  }
+
+  /// Bounce all of [sec]'s vocal-kind lanes (base Vocal + added Audio lanes,
+  /// skipping muted ones) into one loop-length WAV and return its basename, so
+  /// multiple takes / lanes / trims play live. Returns null when there's nothing
+  /// to play; a single untouched take returns its own path (no mix written).
+  Future<String?> _bounceSectionVocal(Section sec) async {
+    final clips = <VocalClip>[];
+    for (final vid in vocalTrackIds(sec)) {
+      if (_mutes[vid] ?? false) continue;
+      clips.addAll(sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[]);
     }
+    if (clips.isEmpty) return null;
+    if (clips.length == 1) {
+      final c = clips.first;
+      final untouched = c.startStep == 0 &&
+          c.trimStart == 0 &&
+          c.trimEnd == -1 &&
+          c.fadeInMs == 0 &&
+          c.fadeOutMs == 0 &&
+          c.gain == 1.0;
+      if (untouched) return c.path; // play the raw take directly
+    }
+    final sources = <String, ({Float32List pcm, int sampleRate})>{};
+    for (final c in clips) {
+      if (sources.containsKey(c.path)) continue;
+      try {
+        final wav = parseWav(await File(LoopStorage.resolveVocal(c.path)).readAsBytes());
+        if (wav != null) sources[c.path] = (pcm: wav.samples, sampleRate: wav.sampleRate);
+      } catch (_) {}
+    }
+    if (sources.isEmpty) return null;
+    final minLen = (stepsForBars(sec.bars) * 60 / _bpm / kStepsPerBeat * 44100).round();
+    final lane = bounceVocalClips(clips, sec.bars, _bpm, sources, minLen: minLen);
+    if (lane.isEmpty) return null;
+    // fixed name per section → overwrites in place (no file accumulation).
+    final name = '_mix_${widget.song.id}_${sec.id}.wav';
+    await File(LoopStorage.resolveVocal(name)).writeAsBytes(encodeWavMono16(lane, 44100));
+    return name;
   }
 
   void _stopVocal() {
     _vocalPlaying = false;
+    _vocalLoopNative = false;
     _audio.stopVocal();
   }
 
   // mute/volume go through here so the live vocal player follows the mixer
   void _toggleMute(String id) {
+    _pushUndo();
     setState(() => _mutes[id] = !(_mutes[id] ?? false));
-    if (id == 'vocal') {
-      if (_mutes['vocal'] == true) {
-        _stopVocal();
-      } else if (_playing) {
-        _startVocalIfAny();
-      }
+    // Muting any vocal-kind lane (base Vocal or an Audio lane) changes the
+    // section mix, so invalidate it and restart the blended playback.
+    if (trackById(_typeOf(id)).kind == TrackKind.vocal) {
+      _vocalMix.remove(_sec.id);
+      _stopVocal();
+      if (_playing) _startVocalIfAny();
     }
   }
 
+  // The base track type backing a track id (extra ids resolve via the section's
+  // TrackRefs; base ids are their own type).
+  String _typeOf(String id) {
+    for (final e in _sec.extras) {
+      if (e.id == id) return e.type;
+    }
+    return id;
+  }
+
+  // Hold-and-drag retime of a vocal/audio chunk on the arrangement strip. Moving
+  // a legacy single take materializes the clip lane first.
+  void _moveVocalClip(String trackId, int clipIndex, int newStartStep) {
+    final t = _tracks[trackId];
+    if (t == null) return;
+    final lane = t.clips ?? List.of(t.effectiveClips);
+    if (clipIndex < 0 || clipIndex >= lane.length) return;
+    if (lane[clipIndex].startStep == newStartStep) return;
+    _pushUndo(coalesce: true); // one undo entry per drag gesture
+    setState(() {
+      lane[clipIndex].startStep = newStartStep;
+      t.clips = lane;
+    });
+    _vocalMix.remove(_sec.id); // position changed → rebounce on next play
+  }
+
   void _setVol(String id, double v) {
+    // Coalesce the drag stream into one undo entry per gesture (500ms window).
+    _pushUndo(coalesce: true);
     setState(() => _vol[id] = v);
     if (id == 'vocal' && _vocalPlaying) _audio.setVocalVolume(v);
   }
@@ -814,30 +1513,71 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   void _openInstrument() {
-    final id = _activeId; // any pitched track: melody / melodyDec / bass
+    final id = _instrumentTargetId;
     final ch = _meta.channel;
     showInstrumentSheet(
       context,
-      trackId: id,
-      trackLabel: trackById(id).label,
+      trackId: _activeType, // base type drives the instrument list
+      trackLabel: _meta.label, // instance label (e.g. "Bass 2")
       currentProgram: _instruments[id] ?? _meta.defaultProgram,
       onPick: (program) {
-        _pushUndo(coalesce: true);
-        setState(() => _instruments[id] = program);
-        _audio.setProgram(ch, program);
-        // preview the new timbre on an in-key note in that track's own register
-        // (bass uses the low bass ladder root; melody/fill an in-key mid note).
-        final isBass = _isBass;
-        final ladder = isBass ? _bassLadder : _ladder;
-        final preview = ladder.isNotEmpty ? ladder[isBass ? 0 : 2].midi : 60;
-        _audio.playPitch(ch, preview, program: program, vol: _vol[id] ?? 0.85, durSec: 0.5);
+        // A not-yet-downloaded catalog sound (200–400MB): keep the current
+        // instrument, download in the BACKGROUND (progress shows in the picker,
+        // which can be closed), and apply only when ready — so the user is never
+        // blocked nor hears the piano fallback. GM / already-downloaded / drums
+        // apply immediately as before.
+        if (_meta.kind != TrackKind.drums &&
+            isDynamicSlot(program) &&
+            !SoundfontCatalog.instance.isDownloaded(program)) {
+          SoundfontCatalog.instance.ensureDownloaded(program).then((path) {
+            if (!mounted) return;
+            if (path == null) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('사운드를 받지 못했어요 — 연결을 확인해주세요'),
+                  duration: Duration(milliseconds: 1800)));
+              return;
+            }
+            _applyInstrument(id, ch, program);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('악기 준비 완료'), duration: Duration(milliseconds: 1300)));
+          });
+          return;
+        }
+        if (_meta.kind == TrackKind.drums) {
+          // Drums pick a KIT (bank-128 program / kit soundfont) on the track's
+          // own channel, so each drum track sounds independently.
+          _pushUndo(coalesce: true);
+          setState(() => _instruments[id] = program);
+          _audio.setDrumKitOn(ch, program);
+          _audio.playDrum('kick', channel: ch, vol: _vol[_activeId] ?? 1);
+          return;
+        }
+        _applyInstrument(id, ch, program);
       },
     );
+  }
+
+  /// Apply a pitched instrument to track [id] on [ch] + preview it. Used both
+  /// for immediate picks and when a background catalog download completes.
+  void _applyInstrument(String id, int ch, int program) {
+    _pushUndo(coalesce: true);
+    setState(() => _instruments[id] = program); // each track stores its own
+    _audio.setProgram(ch, program);
+    // preview the new timbre — only when the picked track is still the target,
+    // in its own register (bass uses the low ladder root, melody an in-key mid).
+    if (id == _instrumentTargetId) {
+      final isBass = _isBass;
+      final ladder = isBass ? _bassLadder : _ladder;
+      final preview = ladder.isNotEmpty ? ladder[isBass ? 0 : 2].midi : 60;
+      _audio.playPitch(ch, preview,
+          program: program, vol: _vol[id] ?? 0.85, durSec: 0.5);
+    }
   }
 
   void _openMixer() {
     showMixerSheet(
       context,
+      tracks: _editMetas,
       vol: _vol,
       mutes: _mutes,
       onVol: _setVol,
@@ -860,6 +1600,355 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       startBacking: _startHumBacking,
       stopBacking: _stopHumBacking,
     );
+  }
+
+  // ── loop-aligned vocal recording ──────────────────────────────────
+  Future<void> _openVocalRecord() async {
+    _audio.ensure();
+    if (_playing) _stopAll();
+    final route = await headsetRoute();
+    final canMonitorBacking = route != HeadsetRoute.none;
+    if (!mounted) return;
+    showVocalRecordModal(
+      context,
+      accent: _meta.color,
+      bpm: _bpm,
+      bars: _bars,
+      headset: route,
+      keyTonic: _keyRoot,
+      scale: _engineScale[_scale] ?? _scale,
+      latencyMs: LoopPrefs.instance.vocalLatencyMs.value,
+      onClick: canMonitorBacking ? (accent) => _audio.click(accent) : null,
+      startBacking: canMonitorBacking ? _startHumBacking : null,
+      stopBacking: canMonitorBacking ? _stopHumBacking : null,
+      onDone: (peaks, path) => _commitVocal(peaks, path, aligned: true),
+    );
+  }
+
+  // ── song-level vocal: one continuous take over the WHOLE song ─────────
+  Future<void> _openSongVocalRecord() async {
+    _audio.ensure();
+    if (_playing) _stopAll();
+    final route = await headsetRoute();
+    final canMonitorBacking = route != HeadsetRoute.none;
+    if (!mounted) return;
+    showVocalRecordModal(
+      context,
+      accent: LT.pink,
+      bpm: _bpm,
+      bars: _songTotalBars, // record the whole arrangement as one long "loop"
+      headset: route,
+      keyTonic: _keyRoot,
+      scale: _engineScale[_scale] ?? _scale,
+      latencyMs: LoopPrefs.instance.vocalLatencyMs.value,
+      onClick: canMonitorBacking ? (accent) => _audio.click(accent) : null,
+      startBacking: canMonitorBacking ? _startSongBacking : null,
+      stopBacking: canMonitorBacking ? _stopSongBacking : null,
+      onDone: _commitSongVocal,
+    );
+  }
+
+  // Full-song backing while recording the song vocal: play every section's
+  // instrument lanes from step 0 (no vocals — they'd bleed into the take).
+  void _startSongBacking() {
+    _audio.ensure();
+    _stopClock();
+    final flat = flattenSong(_sections);
+    final disp = Section(id: 'song', name: 'SONG', bars: _bars);
+    disp.tracks['melody'] = TrackData(notes: flat.melody);
+    disp.tracks['melodyDec'] = TrackData(notes: flat.melodyDec);
+    disp.tracks['bass'] = TrackData(notes: flat.bass);
+    disp.tracks['drums'] = TrackData(drums: flat.drums);
+    disp.tracks['beatDec'] = TrackData(drums: flat.beatDec);
+    _playStep.value = 0;
+    _freshThisLoop.clear();
+    setState(() {
+      _songSection = disp;
+      _songSteps = flat.steps;
+      _songVocalSched = null;
+      _playing = true;
+    });
+    _startClock();
+  }
+
+  void _stopSongBacking() {
+    _stopClock();
+    _audio.stopAll();
+    _playStep.value = 0;
+    if (mounted) {
+      setState(() {
+        _playing = false;
+        _songSection = null;
+        _songSteps = null;
+        _litMidis = {};
+      });
+    }
+  }
+
+  Future<bool> _commitSongVocal(List<double> peaks, String? path) async {
+    if (path == null) return false;
+    final persisted = await LoopStorage.copyVocal(path, widget.song.id, 'song');
+    if (!mounted) return false;
+    if (persisted == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't save the recording"),
+          duration: Duration(milliseconds: 1600),
+        ),
+      );
+      return false;
+    }
+    _pushUndo();
+    setState(() {
+      _songVocalPath = persisted;
+      _songVocalPeaks = peaks;
+      _songVocalBpm = _bpm;
+      _songVocalBars = _songTotalBars;
+    });
+    return true;
+  }
+
+  void _clearSongVocal() {
+    if (_songVocalPath == null) return;
+    if (_songVocalActive) _stopVocal();
+    _pushUndo();
+    setState(() {
+      _songVocalActive = false;
+      _songVocalPath = null;
+      _songVocalPeaks = null;
+      _songVocalBpm = null;
+      _songVocalBars = null;
+    });
+  }
+
+  // ── autotune (server-side WORLD vocoder; non-destructive) ─────────
+  void _openAutotune() {
+    if (_playing) _stopAll();
+    showLtModal(
+      context,
+      width: 400,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Ms(LtIcons.autoFix, size: 18, color: LT.pink),
+              const SizedBox(width: 8),
+              Text(
+                'Autotune',
+                style: LTType.inter(
+                  size: 16,
+                  weight: FontWeight.w800,
+                  color: LT.t1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Snaps your vocal to $_keyRoot $_scale. The original take is kept.',
+            textAlign: TextAlign.center,
+            style: LTType.inter(size: 12, color: LT.t2),
+          ),
+          const SizedBox(height: 18),
+          _autotunePresetRow(
+            'Natural',
+            'Gentle correction, keeps your style',
+            () => _applyAutotune(strength: 0.7, retuneMs: 120),
+          ),
+          const SizedBox(height: 10),
+          _autotunePresetRow(
+            'Strong',
+            'Hard snap — the classic effect',
+            () => _applyAutotune(strength: 1.0, retuneMs: 40),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _autotunePresetRow(String title, String sub, VoidCallback onTap) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        Navigator.of(context).pop();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: LT.surface2,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: LT.border),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: LTType.inter(
+                      size: 14,
+                      weight: FontWeight.w700,
+                      color: LT.t1,
+                    ),
+                  ),
+                  Text(sub, style: LTType.inter(size: 11, color: LT.t2)),
+                ],
+              ),
+            ),
+            const Ms(LtIcons.chevronRight, size: 18, color: LT.t3),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyAutotune({
+    required double strength,
+    required double retuneMs,
+  }) async {
+    final vid = _vocalId;
+    final t = _tracks[vid]!;
+    final name = t.vocalPath;
+    if (name == null) return;
+    // blocking progress dialog for the server round-trip. Capture the root
+    // navigator BEFORE any await — if this State unmounts mid-flight the
+    // barrier dialog must still be popped or the app stays blocked forever.
+    final nav = Navigator.of(context, rootNavigator: true);
+    var dialogOpen = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (_) => const Center(child: CircularProgressIndicator(color: LT.pink)),
+    );
+    try {
+      final res = await EngineApi().autotuneVocal(
+        LoopStorage.resolveVocal(name),
+        keyTonic: _keyRoot,
+        scale: _engineScale[_scale] ?? _scale,
+        strength: strength,
+        retuneMs: retuneMs,
+      );
+      final wav = parseWav(res.wav);
+      if (wav == null) throw Exception('bad audio from server');
+      var pcm =
+          wav.sampleRate == 44100
+              ? wav.samples
+              : resampleLinear(wav.samples, wav.sampleRate, 44100);
+      // aligned takes must keep their exact loop length for gapless looping —
+      // WORLD resynthesis can drift by a few ms, so trim/pad back to the
+      // original take's sample count.
+      if (t.vocalAligned) {
+        final orig = parseWav(
+          await File(LoopStorage.resolveVocal(name)).readAsBytes(),
+        );
+        if (orig != null && orig.samples.length != pcm.length) {
+          final fixed = Float32List(orig.samples.length);
+          for (var i = 0; i < fixed.length && i < pcm.length; i++) {
+            fixed[i] = pcm[i];
+          }
+          pcm = fixed;
+        }
+      }
+      final persisted = await LoopStorage.saveVocalBytes(
+        encodeWavMono16(pcm, 44100),
+        widget.song.id,
+        _sec.id,
+        suffix: '_tuned',
+      );
+      if (persisted == null) throw Exception('save failed');
+      if (!mounted) return;
+      _pushUndo();
+      setState(() {
+        t.vocalOrigPath ??= name; // keep the dry take for "Original"
+        t.vocalPath = persisted;
+        t.clip = peaksFromPcm(pcm);
+        // keep the multi-take lane's first clip in sync with the tuned take.
+        final lane = t.clips;
+        if (lane != null && lane.isNotEmpty) {
+          lane.first.origPath ??= name;
+          lane.first.path = persisted;
+          lane.first.peaks = t.clip ?? lane.first.peaks;
+        }
+      });
+      _vocalMix.remove(_sec.id);
+      _audio.prepareVocal(LoopStorage.resolveVocal(persisted));
+    } catch (e) {
+      debugPrint('[autotune] failed: $e');
+      if (mounted) {
+        final message =
+            e is EngineApiException ? e.message : 'Autotune needs a connection';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            duration: Duration(milliseconds: 1600),
+          ),
+        );
+      }
+    } finally {
+      // pop unconditionally via the captured navigator — the `!mounted` early
+      // return above also exits through here, so the dialog always closes.
+      if (dialogOpen) {
+        dialogOpen = false;
+        nav.pop(); // progress dialog
+      }
+    }
+  }
+
+  // Open the clip editor (trim/fade/gain + sound processing). Returns the
+  // edited vocal TrackData; we swap it in, push undo, and re-prepare playback.
+  Future<void> _openVocalEditor() async {
+    final vid = _vocalId;
+    final t = _tracks[vid]!;
+    if (t.effectiveClips.isEmpty) return;
+    final edited = await openVocalEditor(
+      context,
+      vocal: t,
+      bpm: _bpm,
+      bars: _sec.bars,
+      songId: widget.song.id,
+      sectionId: _sec.id,
+    );
+    if (edited == null || !mounted) return;
+    _pushUndo();
+    _stopVocal();
+    setState(() => _tracks[vid] = edited);
+    _vocalMix.remove(_sec.id); // edits change the lane → rebounce
+    final first = edited.vocalPath;
+    if (first != null) _audio.prepareVocal(LoopStorage.resolveVocal(first));
+  }
+
+  Future<void> _revertAutotune() async {
+    final t = _tracks[_vocalId]!;
+    final orig = t.vocalOrigPath;
+    if (orig == null) return;
+    List<double>? peaks;
+    try {
+      final wav = parseWav(
+        await File(LoopStorage.resolveVocal(orig)).readAsBytes(),
+      );
+      if (wav != null) peaks = peaksFromPcm(wav.samples);
+    } catch (_) {}
+    if (!mounted) return;
+    _pushUndo();
+    setState(() {
+      t.vocalPath = orig;
+      t.vocalOrigPath = null;
+      if (peaks != null) t.clip = peaks;
+      final lane = t.clips;
+      if (lane != null && lane.isNotEmpty) {
+        lane.first.path = orig;
+        lane.first.origPath = null;
+        if (peaks != null) lane.first.peaks = peaks;
+      }
+    });
+    _vocalMix.remove(_sec.id);
+    _audio.prepareVocal(LoopStorage.resolveVocal(orig));
   }
 
   // Play the loop (clock + clicks) from the downbeat so the user hums in time.
@@ -926,7 +2015,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           if (step < 0 || step >= steps) continue;
           final kind = _drumKind(n);
           if (kind == null) continue;
-          if (t.drumNotes.any((x) => x.kind == kind && x.step == step)) continue;
+          if (t.drumNotes.any((x) => x.kind == kind && x.step == step)) {
+            continue;
+          }
           if (out.any((x) => x.kind == kind && x.step == step)) continue;
           out.add(DrumNote(kind: kind, step: step));
         }
@@ -985,11 +2076,17 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       if (kind == TrackKind.drums) {
         // main kit → the canonical beat; decoration kit → a light fill on its
         // own kinds (first kind every 2 steps).
-        final gen = _meta.decoration
-            ? [for (var s = 0; s < _steps; s += 2) DrumNote(kind: _meta.drumKinds!.first, step: s)]
-            : genDrums(_steps);
+        final gen =
+            _meta.decoration
+                ? [
+                  for (var s = 0; s < _steps; s += 2)
+                    DrumNote(kind: _meta.drumKinds!.first, step: s),
+                ]
+                : genDrums(_steps);
         for (final n in gen) {
-          if (!t.drumNotes.any((x) => x.kind == n.kind && x.step == n.step)) t.drumNotes.add(n);
+          if (!t.drumNotes.any((x) => x.kind == n.kind && x.step == n.step)) {
+            t.drumNotes.add(n);
+          }
         }
       } else if (kind == TrackKind.bass) {
         t.pitchNotes.addAll(genBass(_bassLadder, _bars));
@@ -1002,7 +2099,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(milliseconds: 1400)),
+      SnackBar(
+        content: Text(msg),
+        duration: const Duration(milliseconds: 1400),
+      ),
     );
   }
 
@@ -1029,6 +2129,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       sections: _sections.map((s) => s.deepCopy()).toList(),
       updatedAt: DateTime.now(),
       wave: buildWave(flat),
+      songVocalPath: _songVocalPath,
+      songVocalPeaks: _songVocalPeaks,
+      songVocalBpm: _songVocalBpm,
+      songVocalBars: _songVocalBars,
     );
   }
 
@@ -1047,7 +2151,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _backWithSave() async {
-    await context.read<LoopStore>().upsert(_snapshot());
+    final store = context.read<LoopStore>();
+    await store.upsert(_snapshot());
+    // editor session over → undo stack (the last holder of replaced takes) is
+    // gone, so unreferenced vocal files are safe to drop.
+    await store.sweepVocals();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -1063,16 +2171,35 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     }
     if (!mounted) return;
     debugPrint('[export] opening drawer');
+    // union of added instances across sections (kept consistent by _addTrack).
+    final extras = <TrackRef>[];
+    final seen = <String>{};
+    for (final s in _sections) {
+      for (final e in s.extras) {
+        if (seen.add(e.id)) extras.add(e);
+      }
+    }
+    // Fold mutes into the export volume map — the render's only per-lane level
+    // control is CC7 from this map (buildMidi has no mute concept), and the
+    // vocal mix gain comes from vol['vocal'] too. Muted = volume 0.
+    final exportVol = Map.of(_vol);
+    for (final e in _mutes.entries) {
+      if (e.value) exportVol[e.key] = 0.0;
+    }
     await showExportDrawer(
       context,
       title: _title,
       sections: _sections,
       bpm: _bpm,
       swing: _swing,
-      vol: Map.of(_vol),
+      vol: exportVol,
       melodyProgram: _instruments['melody'] ?? 0,
       bassProgram: _instruments['bass'] ?? 33,
       melodyDecProgram: _instruments['melodyDec'] ?? 48,
+      drumProgram: _instruments['drums'] ?? kDefaultDrumKit,
+      extras: extras,
+      instruments: Map.of(_instruments),
+      songVocalPath: _songVocalPath,
     );
   }
 
@@ -1118,16 +2245,27 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
                     child: ValueListenableBuilder<double>(
                       valueListenable: _playStep,
-                      builder: (_, ps, __) => Arrangement(
-                        section: _songSection ?? _sec,
-                        activeId: _activeId,
-                        mutes: _mutes,
-                        onSelect: (id) => setState(() => _activeId = id),
-                        onToggleMute: _toggleMute,
-                        playStep: ps,
-                        steps: _steps,
-                        ranges: _ranges,
-                      ),
+                      builder:
+                          (_, ps, __) => Arrangement(
+                            section: _songSection ?? _sec,
+                            tracks: _orderedMetas(_songSection ?? _sec),
+                            activeId: _activeId,
+                            mutes: _mutes,
+                            onSelect: (id) => setState(() => _activeId = id),
+                            onToggleMute: _toggleMute,
+                            // editing only (song-preview is read-only)
+                            onAddTrack:
+                                _songSection == null ? _openAddTrack : null,
+                            onReorder:
+                                _songSection == null ? _reorderTracks : null,
+                            onMoveClip: _songSection == null ? _moveVocalClip : null,
+                            playing: _playing,
+                            playStep: ps,
+                            steps: _steps,
+                            ranges: _ranges,
+                            // song-preview is read-only → no scrubbing there
+                            onSeek: _songSection == null ? _seekTo : null,
+                          ),
                     ),
                   ),
                 ),
@@ -1142,7 +2280,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                         gradient: RadialGradient(
                           center: const Alignment(0, 1.3),
                           radius: 1.0,
-                          colors: [_meta.color.withValues(alpha: 0.08), Colors.transparent],
+                          colors: [
+                            _meta.color.withValues(alpha: 0.08),
+                            Colors.transparent,
+                          ],
                           stops: const [0, 0.6],
                         ),
                       ),
@@ -1152,7 +2293,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                 ),
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  decoration: const BoxDecoration(border: Border(top: BorderSide(color: LT.border))),
+                  decoration: const BoxDecoration(
+                    border: Border(top: BorderSide(color: LT.border)),
+                  ),
                   child: TransportBar(
                     playing: _playing,
                     recording: _recording,
@@ -1164,7 +2307,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                     metro: _metro,
                     onMetro: (v) {
                       setState(() => _metro = v);
-                      LoopPrefs.instance.setMetro(v); // keep Settings in sync + persist
+                      LoopPrefs.instance.setMetro(
+                        v,
+                      ); // keep Settings in sync + persist
                     },
                     countIn: _countIn,
                     onCountIn: (v) => setState(() => _countIn = v),
@@ -1173,12 +2318,15 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                     onSwing: (v) => setState(() => _swing = v),
                     bars: _bars,
                     onBars: _setBars,
-                    showRecord: _activeId != 'vocal',
+                    showRecord: trackById(_activeType).kind != TrackKind.vocal,
                   ),
                 ),
               ],
             ),
-            if (_countDown > 0) _countInOverlay(),
+            // Hide the overlay on the final "1" beat (not at 0) so the input
+            // surface is already exposed one beat before recording starts —
+            // the user can see the pads and play right on the downbeat.
+            if (_countDown > 1) _countInOverlay(),
           ],
         ),
       ),
@@ -1199,7 +2347,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final leftGroup = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconBtn(icon: LtIcons.arrowBack, size: btnSize, tooltip: 'Back', onTap: _backWithSave),
+        IconBtn(
+          icon: LtIcons.arrowBack,
+          size: btnSize,
+          tooltip: 'Back',
+          onTap: _backWithSave,
+        ),
         const SizedBox(width: 8),
         const Ms(LtIcons.edit, size: 14, color: LT.t3),
         const SizedBox(width: 6),
@@ -1211,7 +2364,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                 ..selection = TextSelection.collapsed(offset: _title.length),
               onChanged: (v) => _title = v,
               cursorColor: LT.lime,
-              style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t1),
+              style: LTType.inter(
+                size: 14,
+                weight: FontWeight.w700,
+                color: LT.t1,
+              ),
               decoration: const InputDecoration(
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(vertical: 2),
@@ -1253,9 +2410,19 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         const SizedBox(width: 6),
         _undoRedoBtn(LtIcons.redo, 'Redo', _redo.isNotEmpty, _redoAction),
         const SizedBox(width: 8),
-        IconBtn(icon: LtIcons.save, size: btnSize, tooltip: 'Save', onTap: _saveNow),
+        IconBtn(
+          icon: LtIcons.save,
+          size: btnSize,
+          tooltip: 'Save',
+          onTap: _saveNow,
+        ),
         const SizedBox(width: 8),
-        IconBtn(icon: LtIcons.tune, size: btnSize, tooltip: 'Mixer', onTap: _openMixer),
+        IconBtn(
+          icon: LtIcons.tune,
+          size: btnSize,
+          tooltip: 'Mixer',
+          onTap: _openMixer,
+        ),
         const SizedBox(width: 8),
         Pill(
           label: '$_keyRoot ${kScales[_scale]!.label}',
@@ -1280,7 +2447,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: LT.border))),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: LT.border)),
+      ),
       // 우측 그룹은 자연 크기 유지(라벨이 등장해도 버튼 사이즈 그대로). 좌측만
       // 남은 공간(= 부모 폭 − 우측 자연 폭) 안에서 자연 크기를 쓰되, 그게 부족하면
       // FittedBox(scaleDown) 으로 비율 유지하며 축소. Expanded 가 남은 폭 전부를
@@ -1303,16 +2472,29 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _undoRedoBtn(IconData icon, String tip, bool enabled, VoidCallback onTap) {
+  Widget _undoRedoBtn(
+    IconData icon,
+    String tip,
+    bool enabled,
+    VoidCallback onTap,
+  ) {
     return Opacity(
       opacity: enabled ? 1 : 0.35,
       // _topBar 내부 컴팩트 사이즈 (기본 36 → 30).
-      child: IconBtn(icon: icon, size: 30, tooltip: tip, onTap: enabled ? onTap : null),
+      child: IconBtn(
+        icon: icon,
+        size: 30,
+        tooltip: tip,
+        onTap: enabled ? onTap : null,
+      ),
     );
   }
 
   Widget _surfaceHeader(bool pitched) {
-    final hasInstrument = _activeId == 'melody' || _activeId == 'bass';
+    final hasInstrument =
+        _meta.kind == TrackKind.pitched ||
+        _meta.kind == TrackKind.bass ||
+        _meta.kind == TrackKind.drums;
 
     final leftGroup = Row(
       mainAxisSize: MainAxisSize.min,
@@ -1322,7 +2504,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         // 아이콘 + 라벨.
         if (hasInstrument)
           Pill(
-            label: instrumentLabel(_activeId, _instruments[_activeId] ?? (_activeId == 'bass' ? 33 : 0)),
+            label: instrumentLabel(
+              _activeType,
+              _instruments[_instrumentTargetId] ?? _meta.defaultProgram,
+            ),
             icon: _meta.icon,
             iconColor: _meta.color,
             onTap: _openInstrument,
@@ -1330,16 +2515,22 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         else ...[
           Ms(_meta.icon, size: 18, color: _meta.color),
           const SizedBox(width: 8),
-          Text(_meta.label, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.t1)),
+          Text(
+            _meta.label,
+            style: LTType.inter(
+              size: 14,
+              weight: FontWeight.w800,
+              color: LT.t1,
+            ),
+          ),
         ],
-        if (_hasInputToggle) ...[
-          const SizedBox(width: 6),
-          _inputToggle(),
-        ],
+        if (_hasInputToggle) ...[const SizedBox(width: 6), _inputToggle()],
         // chord mode (melody-group pads: melody + melody-fill): pad tap = triad
         if (_meta.group == 'melody' && _inputMode == 'pads') ...[
           const SizedBox(width: 6),
           _chordToggle(),
+          const SizedBox(width: 6),
+          _powerToggle(),
         ],
       ],
     );
@@ -1380,7 +2571,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
             return SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               reverse: true,
-              child: Text(upper, maxLines: 1, style: baseStyle.copyWith(fontSize: minFont)),
+              child: Text(
+                upper,
+                maxLines: 1,
+                style: baseStyle.copyWith(fontSize: minFont),
+              ),
             );
           },
         ),
@@ -1393,12 +2588,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         // pitched pads: current swipe-able note range (melody/fill/bass).
         if (pitched && _inputMode == 'pads') _rangeReadout(),
         if (pitched) _octaveStepper(),
-        if (_activeId != 'vocal') ...[
+        if (trackById(_activeType).kind != TrackKind.vocal) ...[
           const SizedBox(width: 8),
           Pill(label: 'Hum to MIDI', icon: LtIcons.graphicEq, onTap: _openHum),
         ],
         const SizedBox(width: 8),
-        if (_inputMode == 'grid' && _activeId == 'drums')
+        if (_inputMode == 'grid' && _meta.kind == TrackKind.drums)
           hintSlot('tap cells to toggle')
         else if (_inputMode == 'grid' && pitched)
           hintSlot('tap · drag to lengthen · auto-merge')
@@ -1408,7 +2603,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 7, height: 7, decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle)),
+              Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                  color: LT.danger,
+                  shape: BoxShape.circle,
+                ),
+              ),
               const SizedBox(width: 5),
               const LtLabel('rec, then tap', color: LT.t3),
             ],
@@ -1464,8 +2666,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                   color: _inputMode == v ? LT.lime : Colors.transparent,
                   borderRadius: BorderRadius.circular(LTRadius.pill),
                 ),
-                child: Text(v == 'pads' ? 'Pads' : 'Grid',
-                    style: LTType.inter(size: 11, weight: FontWeight.w700, color: _inputMode == v ? LT.bg : LT.t2)),
+                child: Text(
+                  v == 'pads' ? 'Pads' : 'Grid',
+                  style: LTType.inter(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    color: _inputMode == v ? LT.bg : LT.t2,
+                  ),
+                ),
               ),
             ),
         ],
@@ -1474,11 +2682,37 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   // Chord-mode toggle (melody-group pads only): pad tap places a diatonic triad.
-  // Independent per track so melody and melody-fill can differ.
-  Widget _chordToggle() {
-    final on = _chordOn;
+  // Independent per track so melody and melody-fill can differ. Enabling chord
+  // mode clears power mode (the two are mutually exclusive).
+  Widget _chordToggle() => _chordKindToggle(
+    label: 'Chord',
+    on: _chordOn,
+    onTap: () => setState(() {
+      final next = !_chordOn;
+      _chordMode[_activeId] = next;
+      if (next) _powerMode[_activeId] = false;
+    }),
+  );
+
+  // Power-chord toggle (root + 5th + octave, no third). Mutually exclusive with
+  // the chord toggle — enabling it clears chord mode.
+  Widget _powerToggle() => _chordKindToggle(
+    label: 'Power',
+    on: _powerOn,
+    onTap: () => setState(() {
+      final next = !_powerOn;
+      _powerMode[_activeId] = next;
+      if (next) _chordMode[_activeId] = false;
+    }),
+  );
+
+  Widget _chordKindToggle({
+    required String label,
+    required bool on,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
-      onTap: () => setState(() => _chordMode[_activeId] = !on),
+      onTap: onTap,
       child: Container(
         height: 32,
         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1488,8 +2722,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           borderRadius: BorderRadius.circular(LTRadius.pill),
           border: Border.all(color: on ? LT.lime : LT.border),
         ),
-        child: Text('Chord',
-            style: LTType.inter(size: 11, weight: FontWeight.w700, color: on ? LT.bg : LT.t2)),
+        child: Text(
+          label,
+          style: LTType.inter(
+            size: 11,
+            weight: FontWeight.w700,
+            color: on ? LT.bg : LT.t2,
+          ),
+        ),
       ),
     );
   }
@@ -1498,13 +2738,26 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconBtn(icon: LtIcons.remove, size: 30, tooltip: 'Octave down', onTap: () => setState(() => _octave = (_octave - 1).clamp(-2, 2))),
+        IconBtn(
+          icon: LtIcons.remove,
+          size: 30,
+          tooltip: 'Octave down',
+          onTap: () => _setOctave(_octave - 1),
+        ),
         SizedBox(
           width: 46,
-          child: Text('Oct ${_octave > 0 ? '+' : ''}$_octave',
-              textAlign: TextAlign.center, style: LTType.mono(size: 11, color: LT.t2)),
+          child: Text(
+            'Oct ${_octave > 0 ? '+' : ''}$_octave',
+            textAlign: TextAlign.center,
+            style: LTType.mono(size: 11, color: LT.t2),
+          ),
         ),
-        IconBtn(icon: LtIcons.add, size: 30, tooltip: 'Octave up', onTap: () => setState(() => _octave = (_octave + 1).clamp(-2, 2))),
+        IconBtn(
+          icon: LtIcons.add,
+          size: 30,
+          tooltip: 'Octave up',
+          onTap: () => _setOctave(_octave + 1),
+        ),
       ],
     );
   }
@@ -1523,8 +2776,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           borderRadius: BorderRadius.circular(LTRadius.pill),
           border: Border.all(color: LT.border),
         ),
-        child: Text('${w.first.name}–${w.last.name}',
-            style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.t2)),
+        child: Text(
+          '${w.first.name}–${w.last.name}',
+          style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.t2),
+        ),
       ),
     );
   }
@@ -1533,7 +2788,13 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final kind = _meta.kind;
     final src = (_songSection ?? _sec).tracks[_activeId]!;
     if (kind == TrackKind.drums) {
-      final specs = drumSpecsFor(_meta.drumKinds);
+      // Beat-Fill's pad sounds are user-assignable (per section); the main drums
+      // use their fixed kinds. Match by TYPE, not id, so ADDED beat-fill
+      // instances (TrackRef type 'beatDec', a distinct id) also get the
+      // launchpad UI instead of falling back to the plain drum surface.
+      final isFill = _activeType == 'beatDec';
+      final kinds = isFill ? _fillKinds : _meta.drumKinds;
+      final specs = drumSpecsFor(kinds);
       final map = <String, Set<int>>{};
       for (final n in src.drumNotes) {
         (map[n.kind] ??= <int>{}).add(n.step);
@@ -1541,26 +2802,43 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       if (_inputMode == 'grid') {
         return ValueListenableBuilder<double>(
           valueListenable: _playStep,
-          builder: (_, ps, __) => DrumGrid(
+          builder:
+              (_, ps, __) => DrumGrid(
+                notes: map,
+                onToggle: _toggleDrumCell,
+                playStep: ps,
+                steps: _steps,
+                bars: _bars,
+                specs: specs,
+              ),
+        );
+      }
+      // Pads mode: Beat-Fill gets the launchpad (6 square pads, no beat grid);
+      // the main drums keep the two-thumb + center-grid DrumSurface.
+      if (isFill) {
+        return ValueListenableBuilder<double>(
+          valueListenable: _playStep,
+          builder: (_, ps, __) => FillLaunchpad(
+            kinds: _fillKinds,
             notes: map,
-            onToggle: _toggleDrumCell,
             playStep: ps,
             steps: _steps,
-            bars: _bars,
-            specs: specs,
+            onHit: _hitDrum,
+            onSwap: _openFillPadPicker,
           ),
         );
       }
       return ValueListenableBuilder<double>(
         valueListenable: _playStep,
-        builder: (_, ps, __) => DrumSurface(
-          notes: map,
-          onHit: _hitDrum,
-          playStep: ps,
-          steps: _steps,
-          bars: _bars,
-          specs: specs,
-        ),
+        builder:
+            (_, ps, __) => DrumSurface(
+              notes: map,
+              onHit: _hitDrum,
+              playStep: ps,
+              steps: _steps,
+              bars: _bars,
+              specs: specs,
+            ),
       );
     }
     if (kind == TrackKind.pitched || kind == TrackKind.bass) {
@@ -1568,16 +2846,22 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       if (_inputMode == 'grid') {
         return ValueListenableBuilder<double>(
           valueListenable: _playStep,
-          builder: (_, ps, __) => StepGrid(
-            ladder: _gridLadder,
-            notes: notes,
-            onPlace: _gridPlace,
-            onErase: _gridErase,
-            playStep: ps,
-            accent: _meta.color,
-            steps: _steps,
-            bars: _bars,
-          ),
+          builder:
+              (_, ps, __) => StepGrid(
+                ladder: _gridLadder,
+                notes: notes,
+                onPlace: _gridPlace,
+                onErase: _gridErase,
+                playStep: ps,
+                accent: _meta.color,
+                steps: _steps,
+                bars: _bars,
+                // vertical drag on the row labels moves the pitch window (same
+                // window the pads slide), so the grid reaches the full range.
+                windowOffset: _windowOffset.clamp(0, _maxWindow),
+                maxOffset: _maxWindow,
+                onWindowChanged: _setWindowOffset,
+              ),
         );
       }
       // melody / melody-fill / bass: a horizontal strip of the whole in-key
@@ -1592,27 +2876,37 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         onDown: _pitchDown,
         onUp: _pitchUp,
         onSlideStart: _padSlideStart,
-        onOffsetChanged: (o) => setState(() {
-          if (_isBass) {
-            _bassWindow = o;
-          } else {
-            _melodyWindow = o;
-          }
-        }),
+        onOffsetChanged: _setWindowOffset,
       );
     }
     if (kind == TrackKind.vocal) {
+      // Base 'vocal' OR an added 'Audio' lane — the surface edits the ACTIVE id.
+      final vt = _tracks[_activeId]!;
       return VocalSurface(
-        clip: _tracks['vocal']!.clip,
-        onCommit: _commitVocal,
+        clip: vt.clip,
+        onRecord: _openVocalRecord,
+        // "Rec over song" only when the arrangement spans >1 section instance.
+        onRecordSong: _sections.fold<int>(0, (a, s) => a + s.repeats) > 1
+            ? _openSongVocalRecord
+            : null,
+        onClearSong: _songVocalPath != null ? _clearSongVocal : null,
+        onEdit: vt.effectiveClips.isNotEmpty ? _openVocalEditor : null,
+        onAutotune: _openAutotune,
+        onRevert: vt.vocalOrigPath != null ? _revertAutotune : null,
         onClear: () {
           _pushUndo();
-          _audio.stopVocal();
-          _vocalPlaying = false;
+          _stopVocal();
           setState(() {
-            _tracks['vocal']!.clip = null;
-            _tracks['vocal']!.vocalPath = null;
+            final t = _tracks[_activeId]!;
+            t.clip = null;
+            t.clips = null;
+            t.vocalPath = null;
+            t.vocalOrigPath = null;
+            t.vocalAligned = false;
+            t.vocalBpm = null;
+            t.vocalBars = null;
           });
+          _vocalMix.remove(_sec.id);
         },
       );
     }
@@ -1627,7 +2921,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         border: Border.all(color: LT.border),
       ),
       child: Center(
-        child: Text('${_meta.label} surface — M3–M4', style: LTType.inter(size: 13, color: LT.t3)),
+        child: Text(
+          '${_meta.label} surface — M3–M4',
+          style: LTType.inter(size: 13, color: LT.t3),
+        ),
       ),
     );
   }
@@ -1637,24 +2934,35 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       child: Container(
         color: Colors.black.withValues(alpha: 0.6),
         alignment: Alignment.center,
-        child: Text('$_countDown',
-            style: LTType.inter(size: 96, weight: FontWeight.w900, color: LT.lime)),
+        child: Text(
+          '$_countDown',
+          style: LTType.inter(
+            size: 96,
+            weight: FontWeight.w900,
+            color: LT.lime,
+          ),
+        ),
       ),
     );
   }
 
   // ── undo / redo ───────────────────────────────────────────────────
   _EditSnapshot _capture() => _EditSnapshot(
-        sections: _sections.map((s) => s.deepCopy()).toList(),
-        activeIdx: _activeIdx,
-        keyRoot: _keyRoot,
-        scale: _scale,
-        bpm: _bpm,
-        swing: _swing,
-        vol: Map.of(_vol),
-        mutes: Map.of(_mutes),
-        title: _title,
-      );
+    sections: _sections.map((s) => s.deepCopy()).toList(),
+    activeIdx: _activeIdx,
+    keyRoot: _keyRoot,
+    scale: _scale,
+    bpm: _bpm,
+    swing: _swing,
+    vol: Map.of(_vol),
+    mutes: Map.of(_mutes),
+    instruments: Map.of(_instruments),
+    title: _title,
+    songVocalPath: _songVocalPath,
+    songVocalPeaks: _songVocalPeaks,
+    songVocalBpm: _songVocalBpm,
+    songVocalBars: _songVocalBars,
+  );
 
   /// Snapshot current state before a mutation. [coalesce] merges rapid bursts
   /// (drag-erase, live recording taps) into a single undo step.
@@ -1671,7 +2979,13 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   void _restore(_EditSnapshot s) {
-    if (_playing || _songSection != null) _stopAll();
+    // When the undo/redo only changes note content (same arrangement shape) and
+    // we're mid-playback, keep the clock running and the playhead where it is —
+    // so undo/redo while recording feels seamless instead of jolting to a stop.
+    // A structural change (section added/removed, bars/repeats changed) shifts
+    // the timeline, so fall back to the safe full stop there.
+    final keepPlaying = _playing && _sameArrangement(s);
+    if (!keepPlaying && (_playing || _songSection != null)) _stopAll();
     setState(() {
       _sections
         ..clear()
@@ -1687,9 +3001,36 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       _mutes
         ..clear()
         ..addAll(s.mutes);
+      _instruments
+        ..clear()
+        ..addAll(s.instruments);
       _title = s.title;
-      _playStep.value = 0;
+      _songVocalPath = s.songVocalPath;
+      _songVocalPeaks = s.songVocalPeaks;
+      _songVocalBpm = s.songVocalBpm;
+      _songVocalBars = s.songVocalBars;
+      if (!keepPlaying) _playStep.value = 0;
     });
+    // Play-song preview reads from the flattened display section — rebuild it
+    // from the restored arrangement so the running clock plays the right notes.
+    if (keepPlaying && _songSection != null) _reflattenSong();
+    // re-assert each drum track's kit — pitched programs ride along on every
+    // playPitch call, but the drum kit is a sticky synth-side setting.
+    _applyDrumKits();
+  }
+
+  // True when [s] has the same section/bars/repeats layout as the live song —
+  // i.e. only note content differs. Used to decide whether undo/redo can keep
+  // playing from the current spot or must stop and reset.
+  bool _sameArrangement(_EditSnapshot s) {
+    if (s.sections.length != _sections.length) return false;
+    for (var i = 0; i < _sections.length; i++) {
+      if (s.sections[i].bars != _sections[i].bars ||
+          s.sections[i].repeats != _sections[i].repeats) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _undoAction() {
@@ -1716,7 +3057,12 @@ class _EditSnapshot {
     required this.swing,
     required this.vol,
     required this.mutes,
+    required this.instruments,
     required this.title,
+    this.songVocalPath,
+    this.songVocalPeaks,
+    this.songVocalBpm,
+    this.songVocalBars,
   });
   final List<Section> sections;
   final int activeIdx;
@@ -1725,4 +3071,9 @@ class _EditSnapshot {
   final double swing;
   final Map<String, double> vol;
   final Map<String, bool> mutes;
+  final Map<String, int> instruments;
+  final String? songVocalPath;
+  final List<double>? songVocalPeaks;
+  final int? songVocalBpm;
+  final int? songVocalBars;
 }

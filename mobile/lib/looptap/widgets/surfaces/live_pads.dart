@@ -116,9 +116,17 @@ class _NotePadsState extends State<NotePads> with SingleTickerProviderStateMixin
   double _padW = 1;
   bool _dragging = false;
 
-  late final AnimationController _snap =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 260));
+  // Created in initState (not a lazy `late` field): otherwise disposing the pads
+  // without ever swiping would trigger first-init inside dispose() — an unsafe
+  // TickerMode lookup that throws.
+  late final AnimationController _snap;
   Animation<double>? _snapAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _snap = AnimationController(vsync: this, duration: const Duration(milliseconds: 260));
+  }
 
   double get _maxScroll =>
       (widget.ladder.length - widget.visibleCount).toDouble().clamp(0, double.infinity);

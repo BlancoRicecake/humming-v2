@@ -54,6 +54,9 @@ class SectionBar extends StatelessWidget {
                     return _AddChip(onTap: onAdd);
                   }
                   return _Chip(
+                    // key by id so each chip's edit state follows its section
+                    // across reorder/duplicate (not the stale list position).
+                    key: ValueKey(sections[i].id),
                     section: sections[i],
                     active: i == activeIdx,
                     canDelete: sections.length > 1,
@@ -77,6 +80,7 @@ class SectionBar extends StatelessWidget {
 
 class _Chip extends StatefulWidget {
   const _Chip({
+    super.key,
     required this.section,
     required this.active,
     required this.canDelete,
@@ -106,7 +110,12 @@ class _ChipState extends State<_Chip> {
   @override
   void didUpdateWidget(_Chip old) {
     super.didUpdateWidget(old);
-    if (_ctl.text != widget.section.name && !widget.active) {
+    // Sync the field to the section name when it's not being typed into: any
+    // inactive chip, or an active chip still on its auto position-letter (which
+    // relabel changes on reorder). A custom (autoName == false) active chip is
+    // left alone so the user's typing isn't clobbered.
+    if (_ctl.text != widget.section.name &&
+        (!widget.active || widget.section.autoName)) {
       _ctl.text = widget.section.name;
     }
   }

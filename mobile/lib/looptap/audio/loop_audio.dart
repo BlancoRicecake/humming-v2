@@ -12,7 +12,9 @@ import 'package:audioplayers/audioplayers.dart';
 import '../../audio/synth.dart';
 
 /// GM drum note numbers per kind. Main kit (kick/snare/hihat) + the beat-fill
-/// decoration kit (shaker/tambourine/clap) — both route to GM ch9.
+/// launchpad percussion (everything else) — both route to a GM bank-128 kit.
+/// MIRROR: keep in sync with `_drumNote` (midi_export.dart) and `kDrumSpecs`
+/// (drum_surface.dart). See [drum_mirror_test].
 const Map<String, int> kDrumNote = {
   'kick': 36,
   'snare': 38,
@@ -20,6 +22,15 @@ const Map<String, int> kDrumNote = {
   'shaker': 82,
   'tambourine': 54,
   'clap': 39,
+  'cowbell': 56,
+  'maracas': 70,
+  'claves': 75,
+  'rimshot': 37,
+  'woodhi': 76,
+  'woodlo': 77,
+  'ride': 51,
+  'crash': 57,
+  'triangle': 81,
 };
 
 class LoopAudio {
@@ -32,6 +43,28 @@ class LoopAudio {
   // Current GM program per pitched channel — set per-song via [setPrograms].
   // ch0 melody, ch1 bass, ch2 melody-fill (see kTracks in theory.dart).
   final Map<int, int> _programs = {0: 0, 1: 33, 2: 48};
+
+  /// The default (base drums + beat-fill) percussion channel.
+  static const int drumChannel = SynthEngine.drumChannel;
+
+  // Per-channel drum kit (channel -> GM bank-128 program / hip-hop / catalog
+  // slot). ch9 is the base drums+beat-fill kit; added drum tracks each have
+  // their own channel + kit. Re-asserted in prewarm so the metronome/count-in
+  // can't leave any of them wrong.
+  final Map<int, int> _drumKits = {drumChannel: 0};
+
+  /// Choose the drum kit for a specific channel (base drums use [drumChannel];
+  /// added drum tracks use their allocated channel).
+  Future<void> setDrumKitOn(int channel, int program) async {
+    _drumKits[channel] = program;
+    if (!_ready) return;
+    try {
+      await _engine.ensureDrumKitOn(channel, program);
+    } catch (_) {/* graceful */}
+  }
+
+  /// Base drum channel convenience.
+  Future<void> setDrumKit(int program) => setDrumKitOn(drumChannel, program);
 
   /// Switch a channel's instrument (GM program). Pre-selects the new program
   /// with a silent note so the next audible note doesn't stall on the swap.
@@ -66,7 +99,10 @@ class LoopAudio {
     await ensure();
     if (!_ready) return;
     try {
-      await _engine.ensureDrumKit(0);
+      // re-assert every drum channel's kit (base ch9 + any added drum tracks)
+      for (final e in _drumKits.entries) {
+        await _engine.ensureDrumKitOn(e.key, e.value);
+      }
       // pre-select every pitched channel's program (silent notes) so the first
       // live note on each voice is instant.
       for (final e in _programs.entries) {
@@ -122,41 +158,39 @@ class LoopAudio {
     fire();
   }
 
-  /// Drum hit (tap feedback + loop playback). Fire-and-forget on the hot path:
-  /// once warm, dispatch noteOn immediately without awaiting the continuation.
-  void playDrum(String kind, {double vol = 1}) {
+  /// Drum hit (tap feedback + loop playback) on [channel] — base drums use
+  /// [drumChannel]; an added drum track passes its own channel so it sounds
+  /// through that track's kit. Fire-and-forget on the hot path.
+  void playDrum(String kind, {int channel = drumChannel, double vol = 1}) {
     final pitch = kDrumNote[kind];
     if (pitch == null) return;
     if (!_ready) {
       // cold path: warm up then hit (first tap only)
-      prewarm().then((_) => _fireDrum(pitch, vol));
+      prewarm().then((_) => _fireDrum(channel, pitch, vol));
       return;
     }
-    _fireDrum(pitch, vol);
+    _fireDrum(channel, pitch, vol);
   }
 
-  void _fireDrum(int pitch, double vol) {
-    _engine.noteOn(channel: SynthEngine.drumChannel, pitch: pitch, velocity: _vel(vol));
+  void _fireDrum(int channel, int pitch, double vol) {
+    _engine.noteOn(channel: channel, pitch: pitch, velocity: _vel(vol));
     // GM percussion samples are one-shot; schedule a tidy note-off.
     Timer(const Duration(milliseconds: 220), () {
-      _engine.noteOff(channel: SynthEngine.drumChannel, pitch: pitch);
+      _engine.noteOff(channel: channel, pitch: pitch);
     });
   }
 
-  /// Metronome click — accent on bar 1 (wood block 76), else 77.
+  /// Metronome click — plays on a dedicated channel (GM wood block) so it never
+  /// disturbs the user's selected drum kit on ch9. Accent on bar 1.
   Future<void> click(bool accent) async {
     await ensure();
-    final pitch = accent ? 76 : 77;
-    await _engine.ensureDrumKit(0);
-    await _engine.noteOn(channel: SynthEngine.drumChannel, pitch: pitch, velocity: accent ? 90 : 64);
-    Timer(const Duration(milliseconds: 120), () {
-      _engine.noteOff(channel: SynthEngine.drumChannel, pitch: pitch);
-    });
+    await _engine.playClick(accent);
   }
 
   // ── recorded vocal playback (audioplayers, plays alongside the SF2 synth) ──
   final AudioPlayer _vocalPlayer = AudioPlayer();
   bool _vocalConfigured = false;
+  String? _preparedPath; // source already loaded — start is just seek+resume
 
   Future<void> _configVocal() async {
     if (_vocalConfigured) return;
@@ -176,12 +210,33 @@ class LoopAudio {
     ));
   }
 
-  /// Start playing the recorded vocal file from its start.
-  Future<void> playVocal(String path, {double vol = 0.85}) async {
+  /// Pre-load the vocal source so [playVocal] starts without the source-load
+  /// latency (call when the section becomes active / the editor opens).
+  Future<void> prepareVocal(String path) async {
     await _configVocal();
     try {
+      await _vocalPlayer.setSource(DeviceFileSource(path));
+      _preparedPath = path;
+    } catch (_) {
+      _preparedPath = null;
+    }
+  }
+
+  /// Start the recorded vocal from t=0. With [loop] (a take trimmed to exactly
+  /// one loop) the player loops natively — no wrap-time seek needed; unaligned
+  /// takes keep ReleaseMode.stop and the caller re-aligns on loop wrap.
+  Future<void> playVocal(String path, {double vol = 0.85, bool loop = false}) async {
+    await _configVocal();
+    try {
+      await _vocalPlayer.setReleaseMode(loop ? ReleaseMode.loop : ReleaseMode.stop);
       await _vocalPlayer.setVolume(vol.clamp(0.0, 1.0));
-      await _vocalPlayer.play(DeviceFileSource(path), volume: vol.clamp(0.0, 1.0));
+      if (_preparedPath == path) {
+        await _vocalPlayer.seek(Duration.zero);
+        await _vocalPlayer.resume();
+      } else {
+        await _vocalPlayer.play(DeviceFileSource(path), volume: vol.clamp(0.0, 1.0));
+        _preparedPath = path;
+      }
     } catch (_) {/* file missing / unsupported — stay silent */}
   }
 

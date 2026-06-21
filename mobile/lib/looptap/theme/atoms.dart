@@ -12,11 +12,18 @@ import 'tokens.dart';
 /// `Icon(Symbols.x, size:, color:)` form renders reliably. The [fill] param is
 /// kept for source-compat but intentionally ignored.
 class Ms extends StatelessWidget {
-  const Ms(this.icon, {super.key, this.size = 20, this.color = LT.t2, this.fill = 0});
+  const Ms(
+    this.icon, {
+    super.key,
+    this.size = 20,
+    this.color = LT.t2,
+    this.fill = 0,
+  });
 
   final IconData icon;
   final double size;
   final Color color;
+
   /// Kept for call-site compat; not forwarded (see class doc).
   final double fill;
 
@@ -61,10 +68,12 @@ class IconBtn extends StatelessWidget {
           border: Border.all(color: active ? Colors.transparent : LT.border),
         ),
         child: Center(
-          child: Ms(icon,
-              size: (size * 0.52).roundToDouble(),
-              color: active ? LT.bg : (color ?? LT.t1),
-              fill: fill),
+          child: Ms(
+            icon,
+            size: (size * 0.52).roundToDouble(),
+            color: active ? LT.bg : (color ?? LT.t1),
+            fill: fill,
+          ),
         ),
       ),
     );
@@ -90,6 +99,7 @@ class Pill extends StatelessWidget {
 
   final String label;
   final IconData? icon;
+
   /// 아이콘 색을 라벨(fg) 과 따로 지정하고 싶을 때. null 이면 fg 와 동색.
   final Color? iconColor;
   final VoidCallback? onTap;
@@ -132,8 +142,14 @@ class Pill extends StatelessWidget {
               Ms(icon!, size: 15, color: iconColor ?? fg),
               const SizedBox(width: 6),
             ],
-            Text(label,
-                style: LTType.inter(size: fontSize, weight: FontWeight.w700, color: fg)),
+            Text(
+              label,
+              style: LTType.inter(
+                size: fontSize,
+                weight: FontWeight.w700,
+                color: fg,
+              ),
+            ),
           ],
         ),
       ),
@@ -204,4 +220,7 @@ class LtIcons {
   static const mail = Symbols.mail; // contact
   static const expandLess = Symbols.expand_less; // collapse header
   static const expandMore = Symbols.expand_more; // expand header
+  static const autoFix = Symbols.auto_fix_high; // vocal autotune
+  static const star = Symbols.star;
+  static const starBorder = Symbols.star_border;
 }

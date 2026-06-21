@@ -23,6 +23,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 
 import 'auth_service.dart';
 
@@ -111,7 +112,21 @@ class IapService {
       return false;
     }
     try {
-      final param = PurchaseParam(productDetails: pd);
+      final PurchaseParam param;
+      if (pd is GooglePlayProductDetails) {
+        // Subscriptions expose multiple offers (base plan + a "freetrial"
+        // offer). A plain PurchaseParam defaults to the base plan = immediate
+        // charge, which made the Play checkout say "Starting today" while the
+        // paywall advertised a 7-day free trial — Google rejected that as a
+        // mismatched purchase experience. Pass the trial offer's token so the
+        // checkout actually applies the trial.
+        param = GooglePlayPurchaseParam(
+          productDetails: pd,
+          offerToken: _androidOfferToken(pd),
+        );
+      } else {
+        param = PurchaseParam(productDetails: pd);
+      }
       final ok = await _iap.buyNonConsumable(purchaseParam: param);
       debugPrint('[iap] buyNonConsumable returned=$ok for $productId');
       return ok;
@@ -119,6 +134,27 @@ class IapService {
       debugPrint('[iap] buy failed: $e');
       return false;
     }
+  }
+
+  /// Picks which Play offer to launch billing with. Prefers an offer that
+  /// contains a free ($0) phase (the 7-day trial) so eligible users actually
+  /// get it; falls back to the base plan. Google Play only returns offers the
+  /// user is eligible for, so a returning user (trial already used) has no free
+  /// phase here and is billed immediately — matching the paywall, which hides
+  /// the trial line in the same case (see IapPricing.hasFreeTrial).
+  String? _androidOfferToken(GooglePlayProductDetails pd) {
+    final offers = pd.productDetails.subscriptionOfferDetails ?? const [];
+    if (offers.isEmpty) return null;
+    for (final o in offers) {
+      if (o.pricingPhases.any((ph) => ph.priceAmountMicros == 0)) {
+        return o.offerIdToken;
+      }
+    }
+    final base = offers.firstWhere(
+      (o) => o.offerId == null,
+      orElse: () => offers.first,
+    );
+    return base.offerIdToken;
   }
 
   Future<void> restore() async {

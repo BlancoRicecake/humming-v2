@@ -9,20 +9,27 @@ Endpoints (one per pipeline boundary):
 """
 from __future__ import annotations
 
+import asyncio
 import base64
+import functools
 import json
 import logging
+import math
 import os
 import re
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+import anyio
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .analyze import analyze_audio, process_vocal
+from . import soundfonts as soundfonts_mod
+from . import audition_palette as audition_palette_mod
+from . import guitar_lab as guitar_lab_mod
 from .assistant import run_key_and_assistant
 from .midi_build import notes_to_midi_bytes, tracks_to_midi_bytes
 from . import render as render_mod
@@ -181,6 +188,26 @@ def get_sample(slug: str):
     )
 
 
+# --- runtime soundfont catalog ----------------------------------------------
+# Instruments the app downloads on demand (no app release to add a sound). See
+# app/soundfonts.py for the catalog.json schema + the add-a-sound recipe.
+@app.get("/soundfonts")
+def list_soundfonts() -> List[dict]:
+    return soundfonts_mod.load_catalog()
+
+
+@app.get("/soundfonts/{entry_id}")
+def get_soundfont(entry_id: str):
+    path = soundfonts_mod.entry_file(entry_id)
+    if path is None:
+        raise HTTPException(404, f"unknown soundfont: {entry_id}")
+    return FileResponse(
+        str(path),
+        media_type="audio/x-soundfont",
+        filename=path.name,
+    )
+
+
 # --- analysis + export ------------------------------------------------------
 _analyze_decorators = []
 if limiter is not None:
@@ -240,6 +267,102 @@ async def process_vocal_ep(audio: UploadFile = File(...), denoise: str = Form("1
     except Exception as e:
         logger.exception("process_vocal failed")
         raise HTTPException(500, f"process_vocal failed: {e}")
+    return {
+        "duration": dur,
+        "sample_rate": sr,
+        "peaks": peaks,
+        "audio_b64": base64.b64encode(wav).decode("ascii"),
+    }
+
+
+# Cap concurrent WORLD jobs — each is multi-second CPU-bound work peaking at
+# ~200MB of float64 buffers, run off the event loop via anyio.to_thread.
+_autotune_sem = asyncio.Semaphore(2)
+
+
+@app.post("/process_fx")
+async def process_fx_ep(
+    audio: UploadFile = File(...),
+    fx_type: str = Form(...),
+    params: str = Form("{}"),
+):
+    """보컬 사운드 가공 — eq/reverb/comp/delay/stretch/pitch 중 하나를 적용.
+    [params]는 이펙트별 파라미터 JSON. 반환 형식은 /process_vocal·/autotune 과
+    동일: 가공된 WAV(base64) + 표시용 peaks + duration. (CPU 작업은 WORLD 잡과
+    같은 세마포어로 직렬화해 메모리 폭주를 막는다.)"""
+    from .fx import apply_fx
+
+    raw = await audio.read()
+    if not raw:
+        raise HTTPException(400, "empty audio upload")
+    if len(raw) > _settings.max_body_bytes:
+        raise HTTPException(413, f"body too large (>{_settings.max_body_bytes} bytes)")
+    try:
+        p = json.loads(params or "{}")
+        if not isinstance(p, dict):
+            raise ValueError("params must be a JSON object")
+    except (ValueError, json.JSONDecodeError) as e:
+        raise HTTPException(400, f"invalid params: {e}")
+    try:
+        async with _autotune_sem:
+            wav, peaks, dur, sr = await anyio.to_thread.run_sync(
+                functools.partial(apply_fx, raw, fx_type, p))
+    except HTTPException:  # decode failures are already 4xx — don't mask as 500
+        raise
+    except ValueError as e:  # unknown fx_type / empty audio
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("process_fx failed")
+        raise HTTPException(500, f"process_fx failed: {e}")
+    return {
+        "duration": dur,
+        "sample_rate": sr,
+        "peaks": peaks,
+        "audio_b64": base64.b64encode(wav).decode("ascii"),
+    }
+
+
+@app.post("/autotune")
+@_apply(_analyze_decorators)
+async def autotune_ep(
+    request: Request,
+    audio: UploadFile = File(...),
+    key: str = Form(...),
+    scale: str = Form(...),
+    strength: str = Form("1.0"),
+    retune_ms: str = Form("80"),
+    denoise: str = Form("1"),
+):
+    """보컬 오토튠 — WORLD 보코더로 곡의 키/스케일에 피치 보정 (포먼트 보존).
+    strength 0..1 (보정 강도), retune_ms (보정 속도 시정수). 반환 형식은
+    /process_vocal 과 동일: 보정된 WAV(base64) + 표시용 peaks + duration."""
+    from .autotune import autotune_vocal
+
+    raw = await audio.read()
+    if not raw:
+        raise HTTPException(400, "empty audio upload")
+    # chunked uploads carry no Content-Length, so the middleware can't cap them
+    if len(raw) > _settings.max_body_bytes:
+        raise HTTPException(413, f"body too large (>{_settings.max_body_bytes} bytes)")
+    try:
+        s = min(max(float(strength), 0.0), 1.0)
+        r = min(max(float(retune_ms), 1.0), 1000.0)
+    except ValueError:
+        raise HTTPException(400, "invalid strength/retune_ms")
+    if not math.isfinite(s) or not math.isfinite(r):  # NaN survives min/max clamping
+        raise HTTPException(400, "invalid strength/retune_ms")
+    try:
+        async with _autotune_sem:
+            wav, peaks, dur, sr = await anyio.to_thread.run_sync(functools.partial(
+                autotune_vocal, raw, key, scale,
+                strength=s, retune_ms=r, denoise=(denoise != "0")))
+    except HTTPException:  # decode failures are already 4xx — don't mask as 500
+        raise
+    except ValueError as e:  # unknown tonic/scale, over-long input
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("autotune failed")
+        raise HTTPException(500, f"autotune failed: {e}")
     return {
         "duration": dur,
         "sample_rate": sr,
@@ -317,6 +440,137 @@ async def render_demo(payload: dict):
     except Exception as e:
         logger.exception("render_demo failed")
         raise HTTPException(500, f"render_demo failed: {e}")
+    return Response(content=wav, media_type="audio/wav")
+
+
+# --- sound picker (Space B): per-track-type audition ------------------------
+@app.get("/audition_palette")
+def audition_palette(role: str):
+    """Ordered, categorized audition items for a track type (melody|bass|drums).
+
+    Unifies GM programs, downloaded catalog soundfonts, and the 808/hip-hop
+    sentinels. See app/audition_palette.py for the item shape.
+    """
+    if role not in audition_palette_mod.ROLES:
+        raise HTTPException(400, "role must be melody|bass|drums")
+    if not render_mod.is_engine_available():
+        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+    return {"role": role, "items": audition_palette_mod.build_palette(role)}
+
+
+def _resolve_audition_source(source: str, payload: dict) -> Tuple[str, int, int]:
+    """(sf2_path, sf_bank, sf_program) for an audition render request.
+
+    Raises ValueError on a bad request shape and KeyError on an unknown id /
+    missing file (mapped to 400 / 404 by the endpoint).
+    """
+    if source == "gm":
+        return (render_mod.get_state().sf2_path,
+                int(payload.get("bank") or 0), int(payload.get("program") or 0))
+    if source == "catalog":
+        sid = str(payload.get("soundfont_id") or "")
+        path = soundfonts_mod.entry_file(sid)
+        if path is None:
+            raise KeyError(f"unknown soundfont: {sid}")
+        entry = next((e for e in soundfonts_mod.load_catalog() if e["id"] == sid), None)
+        if entry is None:
+            raise KeyError(f"unknown soundfont: {sid}")
+        return (str(path), int(entry.get("sf_bank", 0)), int(entry.get("sf_program", 0)))
+    if source == "sentinel":
+        sid = str(payload.get("sentinel_id") or "")
+        path = audition_palette_mod.sentinel_sf2_path(sid)
+        meta = audition_palette_mod.SENTINELS.get(sid)
+        if path is None or meta is None:
+            raise KeyError(f"unknown or missing sentinel: {sid}")
+        return (str(path), int(meta["sf_bank"]), int(meta["sf_program"]))
+    raise ValueError(f"unknown source: {source}")
+
+
+@app.post("/audition_render")
+async def audition_render(payload: dict):
+    """Render the per-track-type audition phrase through a GM / catalog /
+    sentinel sound → WAV. The sound is selected by ``source``; see
+    _resolve_audition_source."""
+    if not render_mod.is_engine_available():
+        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+    source = str(payload.get("source") or "gm")
+    track_type = str(payload.get("track_type") or "melody")
+    sample_rate = int(payload.get("sample_rate") or 44100)
+    piece = payload.get("piece")
+    if track_type not in audition_palette_mod.ROLES:
+        raise HTTPException(400, "track_type must be melody|bass|drums")
+    if piece is not None and piece not in ("kick", "snare", "hat"):
+        raise HTTPException(400, "piece must be kick|snare|hat")
+    try:
+        sf2_path, sf_bank, sf_program = _resolve_audition_source(source, payload)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not sf2_path:
+        raise HTTPException(503, "global SoundFont unavailable")
+    try:
+        wav = render_mod.render_demo_through_sf2(
+            sf2_path, sf_bank, sf_program, track_type=track_type,
+            sample_rate=sample_rate, piece=piece)
+    except FileNotFoundError as e:
+        raise HTTPException(404, f"soundfont file missing: {e}")
+    except Exception as e:
+        logger.exception("audition_render failed")
+        raise HTTPException(500, f"audition_render failed: {e}")
+    return Response(content=wav, media_type="audio/wav")
+
+
+# --- guitar lab (기타 연구소): strummed-guitar audition ----------------------
+@app.get("/guitar_lab_sounds")
+def guitar_lab_sounds():
+    """Guitar sounds available in the lab: GM programs 24-31 + catalog fonts."""
+    if not render_mod.is_engine_available():
+        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+    return {"items": guitar_lab_mod.list_guitar_sounds()}
+
+
+@app.post("/guitar_lab_render")
+async def guitar_lab_render(payload: dict):
+    """Render a strummed guitar chord with the lab's articulation params → WAV.
+
+    Body: ``{source, bank/program | soundfont_id, ...articulation params}``.
+    Articulation params (all optional, see guitar_lab.DEFAULT_PARAMS): root,
+    voicing, strum_ms, direction, velocity, velocity_falloff, velocity_jitter,
+    timing_jitter_ms, ring_ms, palm_mute, let_ring, pattern, bpm, repeats, reverb.
+    """
+    if not render_mod.is_engine_available():
+        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+    source = str(payload.get("source") or "gm")
+    sample_rate = int(payload.get("sample_rate") or 44100)
+    seed = payload.get("seed")
+    # reuse the sound-picker source resolution (gm / catalog / sentinel -> sf2)
+    try:
+        sf2_path, sf_bank, sf_program = _resolve_audition_source(source, payload)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not sf2_path:
+        raise HTTPException(503, "global SoundFont unavailable")
+    keys = (
+        "root", "voicing", "strum_ms", "direction", "velocity", "velocity_falloff",
+        "velocity_jitter", "timing_jitter_ms", "ring_ms", "palm_mute", "let_ring",
+        "pattern", "bpm", "repeats", "reverb",
+    )
+    art = {k: payload[k] for k in keys if k in payload}
+    try:
+        wav = guitar_lab_mod.render_guitar_strum(
+            sf2_path, sf_bank, sf_program,
+            sample_rate=sample_rate,
+            seed=int(seed) if seed is not None else None,
+            **art,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(404, f"soundfont file missing: {e}")
+    except Exception as e:
+        logger.exception("guitar_lab_render failed")
+        raise HTTPException(500, f"guitar_lab_render failed: {e}")
     return Response(content=wav, media_type="audio/wav")
 
 

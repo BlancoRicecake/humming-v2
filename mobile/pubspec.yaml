@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.1+10
+version: 1.0.4+30
 
 environment:
   sdk: ^3.7.0
@@ -39,7 +39,6 @@ dependencies:
   cupertino_icons: ^1.0.8
   dio: ^5.9.2
   record: ^6.2.1
-  permission_handler: ^12.0.1
   path_provider: ^2.1.5
   google_fonts: ^6.3.2
   material_symbols_icons: ^4.2928.1
@@ -47,6 +46,10 @@ dependencies:
   provider: ^6.1.5+1
   audioplayers: ^6.6.0
   flutter_midi_pro: ^3.1.6
+  # iOS-only live synth output: MeltySynth (dart_melty_soundfont) renders audio
+  # blocks that we stream to the speaker via flutter_pcm_sound. Android keeps
+  # flutter_midi_pro (FluidSynth). See lib/audio/melty_synth_backend.dart.
+  flutter_pcm_sound: ^3.0.0
   flutter_svg: ^2.0.10+1
   # ── 외부 SDK (신규: 2026-06-02) ──
   # 인증/DB: Supabase. IAP: in_app_purchase.
@@ -70,6 +73,17 @@ dependencies:
   flutter_markdown: ^0.7.4
   url_launcher: ^6.3.2
   dart_melty_soundfont: ^2.0.0
+
+dependency_overrides:
+  # iOS drum-kit fix. Upstream flutter_midi_pro's selectInstrument loads the
+  # percussion kit (bank MSB 120) but then sends a program change hardcoded to
+  # the melodic bank (MSB 121, LSB=128) — clobbering the kit, so drum kits play
+  # as melodic instruments on iOS (Android/FluidSynth is unaffected). Fork is
+  # 3.1.7-dev (identical Android source) + a one-line percussion-bank fix.
+  flutter_midi_pro:
+    git:
+      url: https://github.com/hjm181227/flutter_midi_pro.git
+      ref: 1d8fc682517e3e8398c3aba73abec7d39e5b0e40
 
 dev_dependencies:
   flutter_test:
@@ -109,7 +123,9 @@ flutter:
 
   assets:
     - assets/icon/
-    - assets/sounds/TimGM6mb.sf2
+    - assets/sounds/GeneralUser-GS.sf2
+    - assets/sounds/808.sf2
+    - assets/sounds/hiphop_kit.sf2
     - assets/legal/
 
   # An image asset can refer to one or more resolution-specific "variants", see

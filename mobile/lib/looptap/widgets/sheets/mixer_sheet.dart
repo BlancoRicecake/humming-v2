@@ -9,6 +9,7 @@ import 'lt_modal.dart';
 
 Future<void> showMixerSheet(
   BuildContext context, {
+  required List<TrackMeta> tracks,
   required Map<String, double> vol,
   required Map<String, bool> mutes,
   required void Function(String id, double v) onVol,
@@ -17,12 +18,25 @@ Future<void> showMixerSheet(
   return showLtModal(
     context,
     width: 460,
-    child: _MixerSheet(vol: vol, mutes: mutes, onVol: onVol, onToggleMute: onToggleMute),
+    child: _MixerSheet(
+      tracks: tracks,
+      vol: vol,
+      mutes: mutes,
+      onVol: onVol,
+      onToggleMute: onToggleMute,
+    ),
   );
 }
 
 class _MixerSheet extends StatefulWidget {
-  const _MixerSheet({required this.vol, required this.mutes, required this.onVol, required this.onToggleMute});
+  const _MixerSheet({
+    required this.tracks,
+    required this.vol,
+    required this.mutes,
+    required this.onVol,
+    required this.onToggleMute,
+  });
+  final List<TrackMeta> tracks;
   final Map<String, double> vol;
   final Map<String, bool> mutes;
   final void Function(String id, double v) onVol;
@@ -42,12 +56,30 @@ class _MixerSheetState extends State<_MixerSheet> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Mixer', style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1)),
-            IconBtn(icon: LtIcons.close, tooltip: 'Close', onTap: () => Navigator.of(context).pop()),
+            Text(
+              'Mixer',
+              style: LTType.inter(
+                size: 15,
+                weight: FontWeight.w800,
+                color: LT.t1,
+              ),
+            ),
+            IconBtn(
+              icon: LtIcons.close,
+              tooltip: 'Close',
+              onTap: () => Navigator.of(context).pop(),
+            ),
           ],
         ),
         const SizedBox(height: 16),
-        for (final t in kTracks) _row(t),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 430),
+          child: ListView(
+            shrinkWrap: true,
+            physics: const ClampingScrollPhysics(),
+            children: [for (final t in widget.tracks) _row(t)],
+          ),
+        ),
       ],
     );
   }
@@ -72,14 +104,22 @@ class _MixerSheetState extends State<_MixerSheet> {
                 borderRadius: BorderRadius.circular(9),
                 border: Border.all(color: muted ? LT.border : t.color),
               ),
-              child: Center(child: Ms(t.icon, size: 18, color: muted ? LT.t3 : t.color)),
+              child: Center(
+                child: Ms(t.icon, size: 18, color: muted ? LT.t3 : t.color),
+              ),
             ),
           ),
           const SizedBox(width: 12),
           SizedBox(
             width: 56,
-            child: Text(t.label,
-                style: LTType.inter(size: 12, weight: FontWeight.w700, color: muted ? LT.t3 : LT.t1)),
+            child: Text(
+              t.label,
+              style: LTType.inter(
+                size: 12,
+                weight: FontWeight.w700,
+                color: muted ? LT.t3 : LT.t1,
+              ),
+            ),
           ),
           Expanded(
             child: SliderTheme(
@@ -95,19 +135,23 @@ class _MixerSheetState extends State<_MixerSheet> {
                 min: 0,
                 max: 100,
                 value: (v * 100).clamp(0, 100),
-                onChanged: muted
-                    ? null
-                    : (nv) {
-                        widget.onVol(t.id, nv / 100);
-                        setState(() {});
-                      },
+                onChanged:
+                    muted
+                        ? null
+                        : (nv) {
+                          widget.onVol(t.id, nv / 100);
+                          setState(() {});
+                        },
               ),
             ),
           ),
           SizedBox(
             width: 34,
-            child: Text(muted ? '—' : '${(v * 100).round()}',
-                textAlign: TextAlign.right, style: LTType.mono(size: 11, color: LT.t2)),
+            child: Text(
+              muted ? '—' : '${(v * 100).round()}',
+              textAlign: TextAlign.right,
+              style: LTType.mono(size: 11, color: LT.t2),
+            ),
           ),
         ],
       ),

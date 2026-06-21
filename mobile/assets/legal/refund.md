@@ -12,18 +12,17 @@
 
 ### 1. 기본 원칙: 스토어 IAP 환불
 
-HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP)를 통해서만** 판매됩니다. 회사는 자체 결제 시스템을 운영하지 않으며, 결제 카드 정보에 직접 접근하지 못합니다. 따라서 **환불 처리 권한은 1차적으로 해당 스토어가 보유**합니다.
+HumTrack Pro 구독은 **앱 마켓의 인앱결제(IAP)를 통해서만** 판매됩니다. 회사는 자체 결제 시스템을 운영하지 않으며, 결제 카드 정보에 직접 접근하지 못합니다. 따라서 **환불 처리 권한은 1차적으로 해당 스토어가 보유**합니다.
 
 회원이 결제 환불을 원하는 경우 다음 경로를 통해 직접 요청하는 것이 가장 빠릅니다:
 
 - **Apple (iOS)**: https://reportaproblem.apple.com — "App Store 환불 요청"
   - 안내: https://support.apple.com/ko-kr/HT204084
-- **Google (Android)**: https://play.google.com/store/account/orderhistory — 해당 거래 옆 "환불 요청"
-  - 안내: https://support.google.com/googleplay/answer/2479637
+- **기타 앱 마켓**: 구매하신 앱 마켓의 주문/구매 내역에서 직접 환불을 요청하실 수 있습니다.
 
 스토어 환불 결정은 각 스토어의 정책에 따르며, 회사가 이를 번복할 권한은 없습니다.
 
-**Apple App Store / Google Play 를 통해 구매한 정기 구독 상품의 해지 및 환불은 각 스토어의 정책과 절차에 따릅니다.** 환불이 승인되는 경우 해당 스토어를 통해 원 결제수단으로 환불됩니다. 회사는 관련 법령 또는 각 스토어 정책상 허용되는 범위 내에서 환불 처리에 협조합니다.
+**앱 마켓을 통해 구매한 정기 구독 상품의 해지 및 환불은 각 스토어의 정책과 절차에 따릅니다.** 환불이 승인되는 경우 해당 스토어를 통해 원 결제수단으로 환불됩니다. 회사는 관련 법령 또는 각 스토어 정책상 허용되는 범위 내에서 환불 처리에 협조합니다.
 
 ### 2. 구독 취소와 사용 기간
 
@@ -31,8 +30,8 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
 - **취소 ≠ 즉시 환불**: 스토어 IAP 의 특성상 구독 취소는 다음 갱신을 막는 행위이며, 잔여 기간에 대한 비례 환불은 기본 제공되지 않습니다.
 - **해지 경로**:
   - iOS: 설정 → [사용자 이름] → 구독 → HumTrack
-  - Android: Play 스토어 → 프로필 → 결제 및 정기결제
-- **갱신 24시간 전 해지 원칙**: Apple / Google 정책상 자동 갱신을 막으려면 **만료 시점 최소 24시간 전**에 해지해야 합니다.
+  - 기타 앱 마켓: 구매하신 마켓의 구독 관리 화면에서 해지
+- **갱신 24시간 전 해지 원칙**: 앱 마켓 정책상 자동 갱신을 막으려면 **만료 시점 최소 24시간 전**에 해지해야 합니다.
 
 ### 3. 법정 청약철회권
 
@@ -69,7 +68,7 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
 
 ### 5. 미성년자 결제 취소
 
-만 19세 미만 회원이 법정대리인의 동의 없이 결제한 경우, 「민법」 제5조에 따라 법정대리인은 결제를 취소할 수 있습니다. 다만 회사는 결제 카드 정보를 직접 보유하지 않으므로, 실제 환불 처리는 Apple / Google 의 환불 절차를 통해 진행됩니다. `heobusy@gmail.com` 으로 미성년자 결제임을 통보해 주시면 회사가 스토어 환불 요청을 적극 지원합니다.
+만 19세 미만 회원이 법정대리인의 동의 없이 결제한 경우, 「민법」 제5조에 따라 법정대리인은 결제를 취소할 수 있습니다. 다만 회사는 결제 카드 정보를 직접 보유하지 않으므로, 실제 환불 처리는 앱 마켓의 환불 절차를 통해 진행됩니다. `heobusy@gmail.com` 으로 미성년자 결제임을 통보해 주시면 회사가 스토어 환불 요청을 적극 지원합니다.
 
 ### 6. 회사가 직접 환불을 검토하는 케이스
 
@@ -90,7 +89,7 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
 - 회원의 약관 위반으로 인한 계정 정지
 - 제3자(Apple / Google / Supabase / Cloudflare / Fly.io) 의 일시적 장애 (회사 책임 범위 밖)
 - 디바이스 분실, 로컬 데이터 손실 등 회사가 통제할 수 없는 사유
-- Apple / Google 가족 공유, Apple ID 잔액 충전 등 스토어 정책에 따른 결제
+- Apple 가족 공유, Apple ID 잔액 충전 등 스토어 정책에 따른 결제
 
 ### 8. 환불 시 데이터 보존
 
@@ -104,20 +103,20 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
 ## English Version
 
 ### 1. Stores Govern IAP Refunds
-HumTrack Pro is sold exclusively via Apple App Store or Google Play in-app purchase. **The store of purchase holds primary refund authority**; we do not process payments directly and cannot override store refund decisions.
+HumTrack Pro is sold exclusively via the app marketplace in-app purchase. **The store of purchase holds primary refund authority**; we do not process payments directly and cannot override store refund decisions.
 
 Direct refund requests to:
 - **Apple**: https://reportaproblem.apple.com (see https://support.apple.com/HT204084)
-- **Google**: https://play.google.com/store/account/orderhistory (see https://support.google.com/googleplay/answer/2479637)
+- **Other app marketplaces**: request a refund from your store's order or purchase history.
 
-**Cancellation and refunds of any auto-renewing subscription purchased through Apple App Store or Google Play are governed by the policies and procedures of each store.** If a refund is approved, it will be returned via the original payment method through that store. We will cooperate with refund handling to the extent permitted by applicable law and each store's policy.
+**Cancellation and refunds of any auto-renewing subscription purchased through the app marketplace are governed by the policies and procedures of each store.** If a refund is approved, it will be returned via the original payment method through that store. We will cooperate with refund handling to the extent permitted by applicable law and each store's policy.
 
 ### 2. Cancellation vs. Refund
 Canceling your subscription stops the **next** renewal; it does **not** trigger a prorated refund. You retain Pro until the paid period ends, then switch to Free.
 
-**Cancel at least 24 hours before renewal** (Apple/Google policy).
+**Cancel at least 24 hours before renewal** (app marketplace policy).
 - iOS: Settings → [your name] → Subscriptions → HumTrack
-- Android: Play Store → Profile → Payments & subscriptions
+- Other app marketplaces: cancel from your store's subscription management screen.
 
 ### 3. Statutory Withdrawal Rights
 
@@ -136,7 +135,7 @@ Canceling your subscription stops the **next** renewal; it does **not** trigger 
 For **annual** auto-renewals, we send a pre-renewal notice via your registered email or app push at least **7 days** before the renewal charge, per the 2022 amendment to the Korean Electronic Commerce Act Enforcement Decree. Monthly subscriptions are not mandated but we may send courtesy notifications.
 
 ### 5. Minors
-Purchases by minors under 19 (Korea) without parental consent may be voidable under Korean Civil Code §5. We do not hold the payment instrument; the actual refund is processed by Apple/Google. Email `heobusy@gmail.com` and we will assist with the store refund request.
+Purchases by minors under 19 (Korea) without parental consent may be voidable under Korean Civil Code §5. We do not hold the payment instrument; the actual refund is processed through the app marketplace's refund process. Email `heobusy@gmail.com` and we will assist with the store refund request.
 
 ### 6. Company-Initiated Refund Review
 We do not run our own billing. Where store-level refunds fall short, we may **supplement** with goodwill compensation (e.g., extra free time) for:

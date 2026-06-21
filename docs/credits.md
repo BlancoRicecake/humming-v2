@@ -18,3 +18,15 @@
 
 - Material Symbols Icons (Apache 2.0) — used via `material_symbols_icons` for
   non-instrument UI affordances.
+
+## SoundFonts
+
+- **GeneralUser GS v2.0.3** by S. Christian Collins — the bundled General MIDI
+  bank (`mobile/assets/sounds/GeneralUser-GS.sf2`), powering melody/bass/drum
+  playback and WAV/stems export. License: free for personal and **commercial**
+  use; the bank and its packaging may be modified. Full license text:
+  https://www.schristiancollins.com (the v2.0.3 documentation/LICENSE.txt ships
+  with the original download). Replaced the earlier TimGM6mb bank (2026-06-15).
+- **808 sub-bass** (`808.sf2`) — CC0, from a Freesound 808 one-shot (Johnnie_Holiday).
+- **Hip-Hop kit** (`hiphop_kit.sf2`) — CC0, built from Freesound one-shots,
+  preset patched to GM bank 128 (kick 36 / snare 38 / clap 39 / hat 42 / openhat 46 / perc 54).

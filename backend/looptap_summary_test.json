@@ -9,11 +9,11 @@
     },
     "layer2_app": {
       "app_step_f1": 0.7034,
-      "app_note_f1": 0.6278,
-      "app_pitch_acc": 0.8925,
-      "app_pc_acc": 0.9035,
+      "app_note_f1": 0.6598,
+      "app_pitch_acc": 0.9381,
+      "app_pc_acc": 0.9381,
       "app_step_f1_t1": 0.9673,
-      "app_note_f1_t1": 0.87
+      "app_note_f1_t1": 0.9097
     },
     "ceiling": {
       "survival": 0.9962,
@@ -35,6 +35,7 @@
     "min_notes": 3,
     "bpm": null,
     "pitch_model": "pyin",
+    "layers": "both",
     "normalize_key": true,
     "onset_tol": 0.12,
     "offset_tol": 0.18,

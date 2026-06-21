@@ -1,9 +1,3 @@
-Introducing HumTrack 🎧
+What's new
 
-A tap-first mobile DAW for making beats and loops on the go.
-
-- Four-track workflow: melody / bass / drums / vocal
-- Two input modes — Pads for two-thumb play, Grid for precision
-- Chord mode — one pad, one key-based triad
-- 7-day free trial, then go Pro for unlimited songs + MIDI / audio export
-- Sign in with Apple, Google, or email
+- Fixed crackling and distorted synth audio during and right after hum recording.

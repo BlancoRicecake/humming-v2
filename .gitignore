@@ -18,6 +18,12 @@ backend/**/__pycache__/
 # drop the redundant archive
 backend/bin/fluidsynth.zip
 
+# Downloadable catalog soundfonts — large CC0 .sf2 served by /soundfonts and
+# downloaded on-demand by the app. Too big for GitHub (>100MB each) and they're
+# deploy artifacts, not source: deploy them to the server's soundfonts/ dir
+# out-of-band. catalog.json (the manifest) stays tracked.
+backend/soundfonts/*.sf2
+
 # personal local Claude Code settings (agents are kept, local settings are not)
 .claude/settings.local.json
 

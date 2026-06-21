@@ -37,6 +37,7 @@ class _SettingsSheet extends StatefulWidget {
 class _SettingsSheetState extends State<_SettingsSheet> {
   late bool _metro = LoopPrefs.instance.metro.value;
   late bool _haptics = LoopPrefs.instance.haptics.value;
+  late int _vocalLatencyMs = LoopPrefs.instance.vocalLatencyMs.value;
 
   void _setMetro(bool v) {
     setState(() => _metro = v);
@@ -46,6 +47,12 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   void _setHaptics(bool v) {
     setState(() => _haptics = v);
     LoopPrefs.instance.setHaptics(v);
+  }
+
+  void _setVocalLatencyMs(int v) {
+    final next = v.clamp(0, 250).toInt();
+    setState(() => _vocalLatencyMs = next);
+    LoopPrefs.instance.setVocalLatencyMs(next);
   }
 
   void _setLang(int i) {
@@ -70,21 +77,24 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     if (launched || !mounted) return;
     await Clipboard.setData(const ClipboardData(text: _kSupportEmail));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: LT.surface2,
-      content: Text(
-        'Email copied: $_kSupportEmail',
-        style: LTType.inter(size: 13, color: LT.t1),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: LT.surface2,
+        content: Text(
+          'Email copied: $_kSupportEmail',
+          style: LTType.inter(size: 13, color: LT.t1),
+        ),
+        duration: const Duration(seconds: 4),
       ),
-      duration: const Duration(seconds: 4),
-    ));
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final l = L10n.of(context);
     // null (system default) falls back to the Korean segment.
-    final langIdx = LocaleService.instance.selected.value?.languageCode == 'en' ? 1 : 0;
+    final langIdx =
+        LocaleService.instance.selected.value?.languageCode == 'en' ? 1 : 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -92,8 +102,19 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(l.ltSettingsTitle, style: LTType.inter(size: 17, weight: FontWeight.w800, color: LT.t1)),
-            IconBtn(icon: LtIcons.close, tooltip: 'Close', onTap: () => Navigator.of(context).pop()),
+            Text(
+              l.ltSettingsTitle,
+              style: LTType.inter(
+                size: 17,
+                weight: FontWeight.w800,
+                color: LT.t1,
+              ),
+            ),
+            IconBtn(
+              icon: LtIcons.close,
+              tooltip: 'Close',
+              onTap: () => Navigator.of(context).pop(),
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -108,6 +129,15 @@ class _SettingsSheetState extends State<_SettingsSheet> {
           title: l.ltSettingsHaptics,
           sub: l.ltSettingsHapticsSub,
           right: _MiniSwitch(on: _haptics, onChanged: _setHaptics),
+        ),
+        _Row(
+          icon: LtIcons.timer,
+          title: 'Vocal sync',
+          sub: 'Increase if the take lands late; decrease if early',
+          right: _LatencyStepper(
+            value: _vocalLatencyMs,
+            onChanged: _setVocalLatencyMs,
+          ),
         ),
         _Row(
           icon: LtIcons.translate,
@@ -138,7 +168,11 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         _Row(
           icon: LtIcons.code,
           title: l.ltSettingsOpenSource,
-          onTap: () => showLicensePage(context: context, applicationName: 'HumTrack'),
+          onTap:
+              () => showLicensePage(
+                context: context,
+                applicationName: 'HumTrack',
+              ),
         ),
         _Row(
           icon: LtIcons.mail,
@@ -147,7 +181,11 @@ class _SettingsSheetState extends State<_SettingsSheet> {
           onTap: _contact,
         ),
         const SizedBox(height: 6),
-        _Row(icon: LtIcons.info, title: l.ltSettingsAbout, sub: l.ltSettingsAboutSub),
+        _Row(
+          icon: LtIcons.info,
+          title: l.ltSettingsAbout,
+          sub: l.ltSettingsAboutSub,
+        ),
         // 회원 탈퇴 — 로그인된 사용자에게만, 작게 + 차분하게 맨 아래.
         if (context.watch<LoopStore>().isSignedIn) ...[
           const SizedBox(height: 12),
@@ -156,7 +194,10 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               onPressed: () => _confirmDelete(context),
               style: TextButton.styleFrom(
                 minimumSize: const Size(0, 32),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
               ),
               child: Text(
                 l.ltSettingsDeleteAccount,
@@ -180,46 +221,68 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     final ok = await showDialog<bool>(
       context: context,
       useRootNavigator: true,
-      builder: (dctx) => AlertDialog(
-        backgroundColor: LT.surface,
-        title: Text(
-          l.ltSettingsDeleteAccountConfirmTitle,
-          style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.danger),
-        ),
-        content: Text(
-          l.ltSettingsDeleteAccountConfirmBody,
-          style: LTType.inter(size: 13, color: LT.t1),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(false),
-            child: Text(l.cancel, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t3)),
+      builder:
+          (dctx) => AlertDialog(
+            backgroundColor: LT.surface,
+            title: Text(
+              l.ltSettingsDeleteAccountConfirmTitle,
+              style: LTType.inter(
+                size: 16,
+                weight: FontWeight.w800,
+                color: LT.danger,
+              ),
+            ),
+            content: Text(
+              l.ltSettingsDeleteAccountConfirmBody,
+              style: LTType.inter(size: 13, color: LT.t1),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dctx).pop(false),
+                child: Text(
+                  l.cancel,
+                  style: LTType.inter(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: LT.t3,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dctx).pop(true),
+                child: Text(
+                  l.delete,
+                  style: LTType.inter(
+                    size: 14,
+                    weight: FontWeight.w800,
+                    color: LT.danger,
+                  ),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(true),
-            child: Text(l.delete, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.danger)),
-          ),
-        ],
-      ),
     );
     if (ok != true) return;
     final err = await store.deleteAccount();
     if (!mounted) return;
-    final msg = err == null
-        ? l.ltSettingsDeleteAccountDone
-        : l.ltSettingsDeleteAccountFailed(err);
+    final msg =
+        err == null
+            ? l.ltSettingsDeleteAccountDone
+            : l.ltSettingsDeleteAccountFailed(err);
     if (err == null) {
       Navigator.of(this.context).pop(); // settings sheet 닫기
     }
     rootMessengerKey.currentState
       ?..clearSnackBars()
-      ..showSnackBar(SnackBar(
-        backgroundColor: LT.surface2,
-        content: Text(msg, style: LTType.inter(size: 13, color: LT.t1)),
-        duration: const Duration(seconds: 4),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-      ));
+      ..showSnackBar(
+        SnackBar(
+          backgroundColor: LT.surface2,
+          content: Text(msg, style: LTType.inter(size: 13, color: LT.t1)),
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+        ),
+      );
   }
 }
 
@@ -231,14 +294,22 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(left: 2, bottom: 8),
-      child: Text(text.toUpperCase(),
-          style: LTType.mono(size: 10, weight: FontWeight.w700, color: LT.t3)),
+      child: Text(
+        text.toUpperCase(),
+        style: LTType.mono(size: 10, weight: FontWeight.w700, color: LT.t3),
+      ),
     );
   }
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.icon, required this.title, this.sub, this.right, this.onTap});
+  const _Row({
+    required this.icon,
+    required this.title,
+    this.sub,
+    this.right,
+    this.onTap,
+  });
   final IconData icon;
   final String title;
   final String? sub;
@@ -265,18 +336,31 @@ class _Row extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(title, style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t1)),
-                if (sub != null) Text(sub!, style: LTType.inter(size: 11, color: LT.t3)),
+                Text(
+                  title,
+                  style: LTType.inter(
+                    size: 13,
+                    weight: FontWeight.w700,
+                    color: LT.t1,
+                  ),
+                ),
+                if (sub != null)
+                  Text(sub!, style: LTType.inter(size: 11, color: LT.t3)),
               ],
             ),
           ),
           if (right != null) right!,
-          if (onTap != null && right == null) const Ms(LtIcons.arrowBack, size: 16, color: LT.t3),
+          if (onTap != null && right == null)
+            const Ms(LtIcons.arrowBack, size: 16, color: LT.t3),
         ],
       ),
     );
     if (onTap == null) return row;
-    return GestureDetector(onTap: onTap, behavior: HitTestBehavior.opaque, child: row);
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: row,
+    );
   }
 }
 
@@ -305,7 +389,10 @@ class _MiniSwitch extends StatelessWidget {
             child: Container(
               width: 17,
               height: 17,
-              decoration: BoxDecoration(color: on ? LT.bg : LT.t3, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: on ? LT.bg : LT.t3,
+                shape: BoxShape.circle,
+              ),
             ),
           ),
         ),
@@ -314,8 +401,47 @@ class _MiniSwitch extends StatelessWidget {
   }
 }
 
+class _LatencyStepper extends StatelessWidget {
+  const _LatencyStepper({required this.value, required this.onChanged});
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconBtn(
+          icon: LtIcons.remove,
+          size: 28,
+          tooltip: 'Earlier',
+          onTap: () => onChanged(value - 10),
+        ),
+        SizedBox(
+          width: 54,
+          child: Text(
+            '${value}ms',
+            textAlign: TextAlign.center,
+            style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.t2),
+          ),
+        ),
+        IconBtn(
+          icon: LtIcons.add,
+          size: 28,
+          tooltip: 'Later',
+          onTap: () => onChanged(value + 10),
+        ),
+      ],
+    );
+  }
+}
+
 class _Segmented extends StatelessWidget {
-  const _Segmented({required this.options, required this.index, required this.onChanged});
+  const _Segmented({
+    required this.options,
+    required this.index,
+    required this.onChanged,
+  });
   final List<String> options;
   final int index;
   final ValueChanged<int> onChanged;
@@ -343,8 +469,14 @@ class _Segmented extends StatelessWidget {
                   color: index == i ? LT.lime : Colors.transparent,
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: Text(options[i],
-                    style: LTType.inter(size: 11, weight: FontWeight.w700, color: index == i ? LT.bg : LT.t2)),
+                child: Text(
+                  options[i],
+                  style: LTType.inter(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    color: index == i ? LT.bg : LT.t2,
+                  ),
+                ),
               ),
             ),
         ],

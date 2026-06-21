@@ -90,6 +90,95 @@ List<int> diatonicTriad(int rootMidi, String tonic, String scale) {
   return [root, third, fifth];
 }
 
+// ── Guitar voicing + strum (validated in SoundLab "기타 연구소") ──────
+/// Real 6-string guitar range, standard tuning: open low E (E2=40) to the
+/// 24th fret of the high E (E6=88). Guitar voicings are clamped here.
+const int kGuitarLo = 40; // E2
+const int kGuitarHi = 88; // E6
+
+/// A guitar-style spread voicing for chord-mode pad input. Takes the diatonic
+/// root/3rd/5th and re-voices it like a strummed barre/open 6-string shape: the
+/// bass root drops to the low guitar register (~E2) with the 5th, octave, 3rd,
+/// 5th and high octave stacked above (the open-E / barre shape), clamped to the
+/// real guitar range. Intervals stay diatonic (so e.g. vii° keeps its dim 5th).
+List<int> guitarVoicing(int rootMidi, String tonic, String scale) {
+  final triad = diatonicTriad(rootMidi, tonic, scale);
+  final rootPc = ((triad[0] % 12) + 12) % 12;
+  final thirdInterval = ((triad[1] - triad[0]) % 12 + 12) % 12; // 3 (min) or 4 (maj)
+  final fifthInterval = ((triad[2] - triad[0]) % 12 + 12) % 12; // 6 / 7 / 8
+  // Lowest instance of the root's pitch class at/above E2 — the 6th/5th-string
+  // bass position a guitarist would fret the chord from.
+  final bass = kGuitarLo + ((rootPc - kGuitarLo) % 12 + 12) % 12;
+  final offsets = [0, fifthInterval, 12, 12 + thirdInterval, 12 + fifthInterval, 24];
+  final out = <int>{};
+  for (final o in offsets) {
+    final m = bass + o;
+    if (m >= kGuitarLo && m <= kGuitarHi) out.add(m);
+  }
+  final list = out.toList()..sort();
+  return list.isEmpty ? triad : list;
+}
+
+/// A power chord (5th) for chord-mode pad input: root + perfect 5th + octave.
+/// No third, so it's key/scale-agnostic (sounds the same in major or minor) —
+/// exactly how a guitarist plays a power chord.
+List<int> powerChord(int rootMidi) => [rootMidi, rootMidi + 7, rootMidi + 12];
+
+/// A guitar-register power chord: drops the root to the low guitar register
+/// (~E2) and stacks the 5th + octave above, clamped to the real guitar range.
+/// Reuses [guitarVoicing]'s bass-position logic; only the offsets differ (the
+/// root/5th/octave power-chord shape instead of the full triad voicing).
+List<int> guitarPowerVoicing(int rootMidi) {
+  final rootPc = ((rootMidi % 12) + 12) % 12;
+  final bass = kGuitarLo + ((rootPc - kGuitarLo) % 12 + 12) % 12;
+  const offsets = [0, 7, 12]; // root, perfect 5th, octave
+  final out = <int>{};
+  for (final o in offsets) {
+    final m = bass + o;
+    if (m >= kGuitarLo && m <= kGuitarHi) out.add(m);
+  }
+  final list = out.toList()..sort();
+  return list.isEmpty ? powerChord(rootMidi) : list;
+}
+
+/// Guitar strum profile — the lab-confirmed defaults. [strumMs] is the gap
+/// between successive strings; [velocityFalloff] is the fraction the
+/// last-struck string is quieter than the first (humanizes the pick sweep).
+class GuitarStrum {
+  const GuitarStrum({this.strumMs = 28, this.velocityFalloff = 0.18, this.down = true});
+  final int strumMs;
+  final double velocityFalloff;
+  final bool down; // true = down-stroke (low→high), false = up-stroke (high→low)
+}
+
+const GuitarStrum kGuitarStrum = GuitarStrum();
+
+/// Per-note strum schedule for a set of simultaneous chord notes: ordered by
+/// the stroke direction, each note gets an onset delay (ms) and a velocity
+/// scale. Shared by live play, sequencer playback and MIDI export so the strum
+/// is identical everywhere.
+List<({int midi, int delayMs, double velScale})> strumPlan(
+  List<int> midis, {
+  GuitarStrum profile = kGuitarStrum,
+}) {
+  final ordered = [...midis]..sort();
+  if (!profile.down) {
+    final r = ordered.reversed.toList();
+    ordered
+      ..clear()
+      ..addAll(r);
+  }
+  final n = ordered.length;
+  return [
+    for (var i = 0; i < n; i++)
+      (
+        midi: ordered[i],
+        delayMs: i * profile.strumMs,
+        velScale: 1.0 - profile.velocityFalloff * (n > 1 ? i / (n - 1) : 0.0),
+      ),
+  ];
+}
+
 // ── Transport constants (16th grid) ─────────────────────────────────
 const int kBeatsPerBar = 4;
 const int kStepsPerBeat = 4;
@@ -133,6 +222,32 @@ class TrackMeta {
 
   /// Percussion kinds for drum tracks (drives the drum surface + note map).
   final List<String>? drumKinds;
+
+  TrackMeta copyWith({String? id, String? label, int? channel}) => TrackMeta(
+        id ?? this.id,
+        label ?? this.label,
+        icon,
+        color,
+        kind,
+        channel: channel ?? this.channel,
+        defaultProgram: defaultProgram,
+        group: group,
+        decoration: decoration,
+        drumKinds: drumKinds,
+      );
+}
+
+/// An added track instance: a unique [id] plus the base track [type] it copies
+/// (one of the kTracks ids). The fixed base tracks aren't TrackRefs — only the
+/// user-added extras are.
+class TrackRef {
+  const TrackRef(this.id, this.type);
+  final String id;
+  final String type;
+
+  Map<String, dynamic> toJson() => {'id': id, 'type': type};
+  static TrackRef fromJson(Map<String, dynamic> j) =>
+      TrackRef(j['id'] as String, j['type'] as String);
 }
 
 /// Six tracks: main + decoration layers. Order = arrangement strip order
@@ -148,9 +263,40 @@ const List<TrackMeta> kTracks = [
       channel: 1, defaultProgram: 33, group: 'bass'),
   TrackMeta('drums', 'Drums', LtIcons.graphicEq, LT.amber, TrackKind.drums,
       channel: 9, group: 'beat', drumKinds: ['hihat', 'snare', 'kick']),
+  // Beat-fill is its own track with an independent kit, so it lives on its own
+  // channel (10) rather than sharing the drums' ch9. (Live only — export renders
+  // each drum lane as a separate ch9 job through its kit.)
   TrackMeta('beatDec', 'Beat Fill', LtIcons.graphicEq, LT.amber, TrackKind.drums,
-      channel: 9, group: 'beat', decoration: true, drumKinds: ['shaker', 'tambourine', 'clap']),
+      channel: 10, group: 'beat', decoration: true, drumKinds: ['shaker', 'tambourine', 'clap']),
   TrackMeta('vocal', 'Vocal', LtIcons.mic, LT.pink, TrackKind.vocal, group: 'vocal'),
+];
+
+/// Audio lane — behaves EXACTLY like the base Vocal track (records, edits, and
+/// plays an audio clip via the same VocalClip model), but it is user-ADDABLE and
+/// named "Audio" with a distinct violet so several can coexist for overlapping
+/// takes / layered parts. Not one of the fixed base [kTracks]; added as an extra
+/// instance, and picked up by vocal-kind logic (export/bounce) like any vocal.
+const TrackMeta kAudioTrack = TrackMeta(
+    'audio', 'Audio', LtIcons.audiotrack, Color(0xFFA78BFA), TrackKind.vocal,
+    group: 'vocal');
+
+/// The track TYPES the add-track picker offers: every base track (Vocal too —
+/// it can now be instanced for layered/overlapping takes) plus the Audio lane.
+List<TrackMeta> get kAddableTracks => [...kTracks, kAudioTrack];
+
+/// Beat-fill launchpad percussion palette — the sounds a Fill pad can play.
+/// Each must exist in kDrumNote (audio), _drumNote (midi_export) and kDrumSpecs
+/// (drum_surface) — the three maps are a documented mirror. kick/snare/hihat are
+/// main-kit only and intentionally NOT here.
+const List<String> kFillPalette = [
+  'clap', 'shaker', 'tambourine', 'cowbell', 'maracas', 'claves',
+  'rimshot', 'woodhi', 'woodlo', 'ride', 'crash', 'triangle',
+];
+
+/// Default 6 Fill pad assignments (one per launchpad pad). Includes the legacy
+/// shaker/tambourine/clap so old songs' Fill notes still land on a pad.
+const List<String> kFillKindsDefault = [
+  'clap', 'shaker', 'tambourine', 'cowbell', 'maracas', 'claves',
 ];
 
 /// The pitched/bass tracks (melody, melody-fill, bass) — used wherever code
@@ -158,4 +304,36 @@ const List<TrackMeta> kTracks = [
 List<TrackMeta> get kPitchedTracks =>
     kTracks.where((t) => t.kind == TrackKind.pitched || t.kind == TrackKind.bass).toList();
 
-TrackMeta trackById(String id) => kTracks.firstWhere((t) => t.id == id);
+TrackMeta trackById(String id) =>
+    id == kAudioTrack.id ? kAudioTrack : kTracks.firstWhere((t) => t.id == id);
+
+/// MIDI channels free after the base tracks claim 0,1,2 (melody, bass,
+/// melody-fill), 9 (drums) and 15 (metronome click). Added track instances —
+/// pitched AND drums — each draw a distinct channel from here so they get an
+/// independent instrument/kit. (FluidSynth on Android + AVAudioUnitSampler on
+/// iOS both play a bank-128 kit on any channel, so a drum instance need not be
+/// on ch9.)
+const List<int> kExtraPitchChannels = [3, 4, 5, 6, 7, 8, 11, 12, 13, 14];
+
+/// The full ordered track-meta list for a section: the fixed base tracks
+/// (kTracks, channels unchanged) followed by [extras], each given an allocated
+/// channel and a numbered label (e.g. "Melody 2"). The base case (no extras) is
+/// exactly kTracks, so existing songs/playback/export are unchanged.
+List<TrackMeta> sectionTrackMetas(List<TrackRef> extras) {
+  final out = <TrackMeta>[...kTracks];
+  if (extras.isEmpty) return out;
+  final perType = <String, int>{for (final t in kTracks) t.id: 1};
+  var pi = 0;
+  for (final e in extras) {
+    final base = trackById(e.type);
+    final n = perType[e.type] = (perType[e.type] ?? 1) + 1;
+    // Vocal stays nominal ch0 (audio-only, no synth voice); every other added
+    // instance — pitched or drums — gets its own channel so its kit/instrument
+    // is independent of the base tracks and of other instances.
+    final ch = base.kind == TrackKind.vocal
+        ? 0
+        : (pi < kExtraPitchChannels.length ? kExtraPitchChannels[pi++] : kExtraPitchChannels.last);
+    out.add(base.copyWith(id: e.id, label: '${base.label} $n', channel: ch));
+  }
+  return out;
+}

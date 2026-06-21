@@ -13,12 +13,18 @@ import 'theory.dart';
 /// Whole-octave shift centering a hummed phrase on the ladder's range. A phrase
 /// sung an octave high/low shifts as a unit, preserving contour, instead of
 /// clamping to the top/bottom rung.
+///
+/// Uses the phrase MEAN, not the median: the median is a knife-edge statistic —
+/// near the ÷12 rounding boundary a 1-semitone difference flips the whole
+/// phrase by an octave, putting every note on the wrong rung. The mean moves
+/// smoothly with small note differences (validated on HumTrans, see
+/// backend/EVAL_LOOPTAP.md).
 int phraseOctaveShift(Iterable<int> midis, List<Rung> ladder) {
-  final list = midis.toList()..sort();
+  final list = midis.toList();
   if (list.isEmpty) return 0;
-  final median = list[list.length ~/ 2];
+  final mean = list.reduce((a, b) => a + b) / list.length;
   final center = (ladder.first.midi + ladder.last.midi) ~/ 2;
-  return ((center - median) / 12).round() * 12;
+  return ((center - mean) / 12).round() * 12;
 }
 
 /// Fold [midi] into the ladder's octave range, then snap to the nearest in-key

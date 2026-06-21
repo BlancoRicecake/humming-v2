@@ -76,7 +76,7 @@
 | Cloudflare, Inc. | 객체 스토리지 (R2), DNS | 미국 (us-east-1) | Pro 보컬 파일 |
 | Fly.io, Inc. | 백엔드 분석 서버 호스팅 | 미국 (iad — Ashburn, VA) | 보컬 (메모리 처리, 즉시 폐기) |
 | Apple Inc. | iOS IAP 처리, Apple Sign In | 미국 | 영수증, OAuth sub |
-| Google LLC | Android IAP 처리, Google Sign In | 미국 | 영수증, OAuth sub |
+| Google LLC | Google Sign In | 미국 | 영수증, OAuth sub |
 | (예정) Functional Software, Inc. (Sentry) | 에러 추적 | 미국 | 에러 stack trace (PII 마스킹) |
 | (예정) PostHog Inc. | 익명 행동 분석 | 미국 또는 EU | anonymous_id, 이벤트 |
 
@@ -106,7 +106,7 @@ EU/EEA 거주자의 개인정보가 한국 또는 미국으로 이전되는 경�
 회사는 소규모 운영 단계로, ISO 27001 등 공식 인증은 보유하지 않습니다. 인증 획득 시 본 방침에 반영합니다.
 
 ### 8. 만 14세 미만 아동
-회사는 만 14세 미만(한국 PIPA 기준) 및 만 13세 미만(미국 COPPA 기준) 아동의 개인정보를 의도적으로 수집하지 않습니다. 보호자가 자녀의 무단 사용·계정을 발견한 경우 위 이메일로 통보 시 즉시 삭제 처리합니다. App Store / Google Play 의 앱 등급은 4+ 또는 12+ 로 설정되어 13세 미만 다운로드를 제한합니다.
+회사는 만 14세 미만(한국 PIPA 기준) 및 만 13세 미만(미국 COPPA 기준) 아동의 개인정보를 의도적으로 수집하지 않습니다. 보호자가 자녀의 무단 사용·계정을 발견한 경우 위 이메일로 통보 시 즉시 삭제 처리합니다. 앱 마켓의 앱 등급은 4+ 또는 12+ 로 설정되어 13세 미만 다운로드를 제한합니다.
 
 ### 9. 개인정보보호 책임자
 - **책임자**: 김동현 (대표)
@@ -167,7 +167,7 @@ Service operation, payment management, security, planned stability/product analy
 | Cloudflare, Inc. | R2 object storage, DNS | US (us-east-1) |
 | Fly.io, Inc. | Backend analysis | US (iad, Ashburn VA) |
 | Apple Inc. | iOS IAP, Sign In with Apple | US |
-| Google LLC | Android IAP, Google Sign In | US |
+| Google LLC | Google Sign In | US |
 | (Planned) Sentry | Error tracking | US |
 | (Planned) PostHog | Anonymous analytics | US or EU |
 
@@ -186,7 +186,7 @@ Pro Members can export their MIDI/WAV directly in-app. Bulk backend data export 
 TLS 1.3 in transit; AES-256 at rest in R2; Supabase Row-Level Security; OAuth via Apple/Google (we never store your password); planned PII scrubbing in Sentry. We are a small operation and do not currently hold formal certifications (e.g., ISO 27001, SOC 2).
 
 ### 8. Children
-We do not knowingly collect data from children under 14 (under 13 for U.S. COPPA). App Store / Google Play age rating is set to restrict download. Parents may contact us to delete a child's data.
+We do not knowingly collect data from children under 14 (under 13 for U.S. COPPA). The app marketplace age rating is set to restrict download. Parents may contact us to delete a child's data.
 
 ### 9. Data Protection
 - **Privacy lead**: Kim Dong Hyun (Representative), heobusy@gmail.com
