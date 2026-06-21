@@ -237,6 +237,13 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <td>12개월, 개인 미연결</td>
 <td>정당한 이익 (제품 개선)</td>
 </tr>
+<tr>
+<td>화면 상호작용 (탭·스크롤 등 세션 리플레이·히트맵, PII 자동 마스킹)</td>
+<td>앱 사용 시</td>
+<td>Microsoft Clarity (미국/글로벌)</td>
+<td>세션 녹화 90일</td>
+<td>정당한 이익 (제품·UX 개선)</td>
+</tr>
 </tbody>
 </table>
 <p><strong>중요 (수집하지 않는 항목)</strong>:<br>
@@ -246,12 +253,14 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 - 사진 라이브러리 접근 ❌<br>
 - 광고 추적 식별자 (IDFA, AAID) ❌ — iOS ATT 권한도 요청하지 않습니다.</p>
 <p><strong>예정 항목 표시</strong>: 위 표에 "(예정)" 으로 표기된 Sentry, PostHog 는 본 약관 시행 시점(2026-06-04) 기준 아직 통합되지 않았으며, 통합 시 본 방침을 개정하여 30일 전 사전 고지합니다.</p>
+<p><strong>Microsoft Clarity (세션 리플레이·히트맵)</strong>: 익명 행동 분석 도구로, 화면 녹화 영상이나 키 입력 원문을 저장하지 않으며 입력 필드 등 민감 영역은 SDK 가 자동 마스킹합니다. 광고 목적으로 사용되지 않고 제3자에 데이터를 이전하지 않으며, IDFA/ATT 추적 식별자도 사용하지 않습니다. (IP 로부터 도시 단위의 대략적 위치가 추정될 수 있으나 개인과 연결되지 않습니다.)</p>
 <h3>3. 처리 목적</h3>
 <ol>
 <li>서비스 제공: 계정 인증, 보컬 분석, Pro 클라우드 동기화 및 복원</li>
 <li>결제 및 구독 관리: IAP 영수증 검증, 갱신 webhook 처리, 5GB quota 추적</li>
 <li>(예정) 안정성 개선: 에러 추적 (Sentry, 익명화)</li>
 <li>(예정) 제품 개선: 익명 사용 분석 (PostHog, anonymous_id 기반)</li>
+<li>제품·UX 개선: 익명 세션 리플레이·히트맵 분석 (Microsoft Clarity)</li>
 <li>보안: 이상 접속 탐지, API rate limiting</li>
 <li>법령상 의무: 세법, 전자상거래법, 전자금융거래법</li>
 </ol>
@@ -315,6 +324,12 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <td>익명 행동 분석</td>
 <td>미국 또는 EU</td>
 <td>anonymous_id, 이벤트</td>
+</tr>
+<tr>
+<td>Microsoft Corporation (Clarity)</td>
+<td>세션 리플레이·히트맵 (익명 행동 분석)</td>
+<td>미국 / 글로벌</td>
+<td>화면 상호작용 이벤트 (PII 마스킹)</td>
 </tr>
 </tbody>
 </table>
@@ -442,12 +457,20 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <td>12 months, not linked to identity</td>
 <td>Legitimate interest</td>
 </tr>
+<tr>
+<td>Screen interactions (taps/scrolls — session replay &amp; heatmaps, PII auto-masked)</td>
+<td>Use</td>
+<td>Microsoft Clarity (US/global)</td>
+<td>90-day session recordings</td>
+<td>Legitimate interest</td>
+</tr>
 </tbody>
 </table>
 <p><strong>We do NOT collect</strong>: payment card numbers (Apple/Google handle), location, contacts, photo library, ad identifiers (IDFA/AAID — we never request iOS ATT permission).</p>
 <p><strong>"Planned" services</strong> (Sentry, PostHog) are not integrated as of 2026-06-04. We will amend this policy with 30 days' notice before activation.</p>
+<p><strong>Microsoft Clarity</strong> (session replay &amp; heatmaps) is anonymous behavior analytics: it does not store raw screen recordings or keystrokes, auto-masks sensitive fields, is never used for advertising, transfers no data to third parties, and uses no ad/ATT identifiers. Approximate city-level location may be inferred from IP but is not linked to identity.</p>
 <h3>3. Purposes</h3>
-<p>Service operation, payment management, security, planned stability/product analytics, legal compliance (Korean tax law and Electronic Commerce Act).</p>
+<p>Service operation, payment management, security, product/UX analytics (Microsoft Clarity), planned stability analytics (Sentry/PostHog), legal compliance (Korean tax law and Electronic Commerce Act).</p>
 <p><strong>We never use vocal recordings, analysis results, or generated music for advertising, AI/ML training, third-party resale, or our own marketing without your explicit consent.</strong></p>
 <h3>4. Retention and Deletion</h3>
 <ul>
@@ -501,6 +524,11 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <td>(Planned) PostHog</td>
 <td>Anonymous analytics</td>
 <td>US or EU</td>
+</tr>
+<tr>
+<td>Microsoft Corporation (Clarity)</td>
+<td>Session replay &amp; heatmaps (anonymous analytics)</td>
+<td>US / global</td>
 </tr>
 </tbody>
 </table>
