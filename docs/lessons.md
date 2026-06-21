@@ -87,3 +87,56 @@
 3. **추측을 반복하기 전에 의존성 네이티브 코드를 직접 읽어라.** 실시간 오디오 버퍼를 메인 스레드 왕복으로 채운다는 사실 하나가 전체 그림을 바꿨다.
 4. **실시간 오디오는 메인 스레드 경합에 취약하다.** RT 스레드가 비우는 버퍼를 비-RT 경로로 채운다면, 경합 최악의 경우를 버틸 만큼의 cushion(버퍼 깊이)이 반드시 필요하다.
 5. **레이턴시 vs 안정성은 상황별로 다르게 잡아라.** 라이브 입력이 없는 녹음 구간에선 깊은 버퍼(안정성), 라이브 탭이 있는 평소엔 얕은 버퍼(반응성).
+
+---
+
+## dart-define 시크릿 주입: all-or-nothing 폴백 함정 + `set -e` 조기 종료
+
+날짜: 2026-06
+
+### 배경
+
+신규 외부 SDK(Microsoft Clarity)를 붙이면서 `CLARITY_PROJECT_ID`를 빌드에 dart-define으로 주입해야 했다. 모바일 빌드는 시크릿을 두 경로로 주입한다:
+
+- **디버그**: `mobile/scripts/run.sh` 가 `backend/.env.secrets` 의 키를 읽어 `--dart-define` 으로 붙임.
+- **출시**: `mobile/{ios,android}/fastlane/Fastfile` 의 `collect_dart_defines` 가 같은 일을 함.
+
+"기존 키(SUPABASE_URL 등)처럼 `DEFINE_KEYS` 배열과 `.env.secrets` 에만 추가하면 끝"이라고 생각했고, 대체로 맞았지만 두 개의 숨은 함정이 있었다.
+
+### 함정 1 — `run.sh` 가 `set -e` 로 조기 종료 (디버그 빌드 자체가 안 됨)
+
+`run.sh` 는 `set -euo pipefail` 상태에서 각 키를 `grep ... | tail | sed` 파이프로 읽었다. **`.env.secrets` 에 없는 키**(이 환경에선 `ENGINE_URL`)를 만나면 `grep` 이 1을 반환 → `pipefail` 로 파이프라인 실패 → 변수 할당의 커맨드 치환 실패 → `set -e` 로 **스크립트가 그 줄에서 즉시 종료**. flutter run 까지 도달조차 못 했다.
+
+증상이 고약했던 이유: 백그라운드 실행 시 **출력이 비어 있고 exit 1** 만 떨어져, 마치 빌드 도구나 환경 문제처럼 보였다. 포그라운드 `bash -x` 트레이스를 떠서야 "ENGINE_URL 읽는 줄에서 죽는다"가 드러났다.
+
+해결: `read_env` 의 파이프라인을 `{ ...; } || true` 로 감싸 미설정 키는 빈 값으로 graceful 하게 넘어가게 함(원래 의도대로).
+
+### 함정 2 — fastlane `collect_dart_defines` 의 all-or-nothing 폴백
+
+원래 로직은 "ENV 에서 키를 먼저 모으고, **`env.empty?` 면** `.env.secrets` 로 폴백"이었다.
+
+```ruby
+DEFINE_KEYS.each { |k| ...ENV[k]... }   # ENV 먼저
+if env.empty?                            # 단 하나도 없을 때만
+  ...read backend/.env.secrets...
+end
+```
+
+지금은 fastlane `.env.default` 에 DEFINE_KEYS 가 하나도 없어 항상 `env.empty?` → 폴백이 작동 → 정상. **하지만** 누군가 CI/셸에서 키를 **하나라도**(예: `SUPABASE_URL` 만) ENV 로 주입하기 시작하면 `env.empty?` 가 거짓이 되어 **폴백이 통째로 꺼지고**, `CLARITY_PROJECT_ID` 를 포함한 나머지 키가 전부 누락된다 — Clarity 가 조용히 비활성된 채 출시될 수 있는 시한폭탄.
+
+해결: 순서를 뒤집어 **`.env.secrets` 를 base 로 먼저 읽고, ENV 가 있으면 키 단위로 덮어쓰기**. 부분 주입도 안전하고, ENV override 도 그대로 된다.
+
+```ruby
+# 1) 파일을 base 로
+read backend/.env.secrets → env
+# 2) ENV 가 있으면 키 단위 override
+DEFINE_KEYS.each { |k| env[k] = ENV[k] unless ENV[k].to_s.empty? }
+```
+
+### 교훈 정리
+
+1. **"기존 패턴 따라하기"는 그 패턴의 숨은 전제까지 따라가는 것이다.** 배열에 키 한 줄 추가는 맞았지만, 그 키가 흐르는 스크립트의 `set -e`/폴백 조건까지 봐야 실제로 동작했다.
+2. **빈 출력 + exit 1 은 "환경 탓"으로 속단하기 쉽다.** 포그라운드 `bash -x` 로 죽는 지점을 먼저 특정하는 게 빨랐다.
+3. **`set -euo pipefail` + `grep | ...` 커맨드 치환은 "값이 없을 수 있는" 조회와 상극이다.** 선택적 조회는 `|| true` 로 명시적으로 graceful 하게.
+4. **설정 병합은 "base 먼저, override 나중"이 안전하다.** `if empty? then fallback` 같은 all-or-nothing 분기는 부분 주입에서 조용히 무너진다 — 키 단위 머지로.
+5. **graceful-degrade 연동은 "조용히 꺼짐"이 양날의 검이다.** 키가 빠져도 앱은 안 죽지만, 그래서 누락을 빌드 로그(`dart-defines: ...` 출력)로만 잡을 수 있다 — 그 줄을 출시 체크리스트에 둘 것.

@@ -18,22 +18,21 @@ DEFINE_KEYS = %w[SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL 
 
 def collect_dart_defines
   env = {}
+  # 1) backend/.env.secrets 를 기본값(base)으로 먼저 읽는다.
+  secrets_path = File.expand_path("../../../backend/.env.secrets", __dir__)
+  if File.exist?(secrets_path)
+    File.readlines(secrets_path).each do |line|
+      line.strip!
+      next if line.start_with?("#") || line.empty?
+      k, v = line.split("=", 2)
+      env[k] = v if DEFINE_KEYS.include?(k) && !v.nil? && !v.empty?
+    end
+  end
+  # 2) 셸/CI 환경변수가 있으면 키 단위로 덮어쓴다 — 부분 주입도 안전
+  #    (예: CI 가 SUPABASE_URL 만 ENV 로 줘도 나머지 키는 파일 값을 유지).
   DEFINE_KEYS.each do |k|
     v = ENV[k]
-    next if v.nil? || v.empty?
-    env[k] = v
-  end
-  if env.empty?
-    # backend/.env.secrets 의 값을 폴백으로 시도.
-    secrets_path = File.expand_path("../../../backend/.env.secrets", __dir__)
-    if File.exist?(secrets_path)
-      File.readlines(secrets_path).each do |line|
-        line.strip!
-        next if line.start_with?("#") || line.empty?
-        k, v = line.split("=", 2)
-        env[k] = v if DEFINE_KEYS.include?(k) && !v.nil? && !v.empty?
-      end
-    end
+    env[k] = v unless v.nil? || v.empty?
   end
   env
 end
