@@ -1,3 +1,4 @@
 What's new
 
-- Fixed crackling and distorted synth audio during and right after hum recording.
+- Improved app stability and fixed minor issues.
+- Under-the-hood improvements for a smoother, more reliable experience.
