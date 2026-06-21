@@ -53,7 +53,9 @@ dependencies:
   flutter_svg: ^2.0.10+1
   # ── 외부 SDK (신규: 2026-06-02) ──
   # 인증/DB: Supabase. IAP: in_app_purchase.
-  # sentry_flutter: Xcode 26 호환성 이슈로 다음 배치에서 추가 예정.
+  # 에러/크래시 추적: Sentry. dart-define SENTRY_DSN_MOBILE 미설정 시 비활성
+  # (graceful-degrade) — lib/services/observability_service.dart.
+  sentry_flutter: ^9.22.0
   # posthog_flutter: MVP1 스킵 (#44 task pending).
   # 모두 graceful-degrade — env 키 미설정 시 초기화 스킵, mock 분기 유지.
   # Microsoft Clarity (세션 리플레이 + 히트맵, 무료·무제한). dart-define

@@ -21,11 +21,15 @@ import 'services/auth_service.dart';
 import 'services/clarity_service.dart';
 import 'services/iap_service.dart';
 import 'services/locale_service.dart';
+import 'services/observability_service.dart';
 
 /// 앱 전역 EngineApi 인스턴스 — IapService verify + 향후 다른 backend 호출 공용.
 late final EngineApi engineApi;
 
 Future<void> main() async {
+  // 앱 실행 전체를 Sentry 의 에러 캡처 zone 으로 감싼다 (SENTRY_DSN_MOBILE 미설정
+  // 시 아래 본문을 그대로 실행 — graceful-degrade). lib/services/observability_service.dart.
+  await ObservabilityService.instance.bootstrap(() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.landscapeLeft,
@@ -63,6 +67,8 @@ Future<void> main() async {
   String? lastClarityUid;
   AuthService.instance.onSession.listen((s) {
     final uid = s.userId;
+    // Sentry: 세션 변화마다 사용자 식별(id 만). 로그아웃이면 null 로 제거.
+    ObservabilityService.instance.setUser(uid);
     if (uid == null) return;
     ClarityService.instance.setUserId(uid);
     if (s.provider != null) ClarityService.instance.tag('auth_provider', s.provider!);
@@ -75,4 +81,5 @@ Future<void> main() async {
   // Clarity 세션 리플레이/히트맵으로 루트를 감싼다 (CLARITY_PROJECT_ID 미설정
   // 시 앱을 그대로 반환 — graceful-degrade). lib/services/clarity_service.dart.
   runApp(ClarityService.instance.wrap(const LoopTapApp()));
+  });
 }
