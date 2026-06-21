@@ -13,6 +13,7 @@ import 'package:record/record.dart';
 import '../../../audio/container.dart';
 import '../../../audio/headset.dart';
 import '../../../audio/synth.dart';
+import '../../../services/clarity_service.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import 'lt_modal.dart';
@@ -169,6 +170,7 @@ class _HumModalState extends State<_HumModal> {
         path: path,
       );
       _recStarted = true;
+      ClarityService.instance.event('recording_started');
       // _rec.start just flipped the shared AVAudioSession to .playAndRecord,
       // which corrupts the synth's already-running output pipe (RemoteIO) →
       // crackle. Rebuild that pipe under .playAndRecord so the backing plays

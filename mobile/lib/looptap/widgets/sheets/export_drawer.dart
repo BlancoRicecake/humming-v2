@@ -8,6 +8,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../models/loop_models.dart';
 import '../../music/midi_export.dart';
 import '../../music/theory.dart';
+import '../../../services/clarity_service.dart';
 import '../../music/wav_export.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
@@ -152,6 +153,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
           songVocalPath: widget.songVocalPath);
       final file = res.file;
       await _share([XFile(file.path, mimeType: 'audio/wav')], '$_scopeTitle.wav');
+      ClarityService.instance.event('export_wav');
       if (mounted) {
         _note(res.skippedVocals > 0
             ? L10n.of(context).ltExportVocalSkipped(res.skippedVocals)
@@ -183,6 +185,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
           [for (final f in files) XFile(f.path)],
           '${widget.title} stems',
         );
+        ClarityService.instance.event('export_stems');
         if (mounted) _note(L10n.of(context).ltExportSaved('${files.length} stems'));
       }
     } catch (e, st) {
@@ -217,6 +220,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
       try {
         final r = await SharePlus.instance.share(params);
         debugPrint('[export] share result: ${r.status} ${r.raw}');
+        ClarityService.instance.event('export_midi');
       } catch (shareErr) {
         // share 실패해도 파일은 저장됐으니 saved 메시지는 보여줌.
         debugPrint('[export] share failed: $shareErr');

@@ -26,6 +26,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 
 import 'auth_service.dart';
+import 'clarity_service.dart';
 
 const String kProductMonthly = 'humtrack_pro_monthly_v2';
 const String kProductYearly  = 'humtrack_pro_yearly';
@@ -200,6 +201,10 @@ class IapService {
             productId: p.productID,
             error: ok ? null : 'verify_failed',
           ));
+          if (ok) {
+            ClarityService.instance.event('subscription_started');
+            ClarityService.instance.tag('plan', p.productID);
+          }
           if (p.pendingCompletePurchase) await _iap.completePurchase(p);
           break;
       }

@@ -57,6 +57,21 @@ Future<void> main() async {
     // (ProductDetails.price) 이 즉시 표시되도록 (KRW 폴백 노출 회피).
     IapService.instance.init().then((_) => IapService.instance.loadProducts()),
   ]);
+  // Clarity: 로그인 사용자를 세션에 태깅 + 로그인 이벤트. onSession 은 cold
+  // start 캐시 복원과 신규 로그인 모두 발행하므로, userId 태깅은 매번(idempotent)
+  // 하고 signed_in 이벤트는 미로그인→로그인 전환에서만 쏜다.
+  String? lastClarityUid;
+  AuthService.instance.onSession.listen((s) {
+    final uid = s.userId;
+    if (uid == null) return;
+    ClarityService.instance.setUserId(uid);
+    if (s.provider != null) ClarityService.instance.tag('auth_provider', s.provider!);
+    if (uid != lastClarityUid) {
+      lastClarityUid = uid;
+      ClarityService.instance.event('signed_in');
+    }
+  });
+
   // Clarity 세션 리플레이/히트맵으로 루트를 감싼다 (CLARITY_PROJECT_ID 미설정
   // 시 앱을 그대로 반환 — graceful-degrade). lib/services/clarity_service.dart.
   runApp(ClarityService.instance.wrap(const LoopTapApp()));

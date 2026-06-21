@@ -49,6 +49,7 @@ import '../widgets/surfaces/live_pads.dart';
 import '../widgets/surfaces/step_grid.dart';
 import '../widgets/surfaces/vocal_surface.dart';
 import '../widgets/transport_bar.dart';
+import '../../services/clarity_service.dart';
 
 class EditScreen extends StatefulWidget {
   const EditScreen({super.key, required this.song});
@@ -2047,6 +2048,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         count = out.length;
       }
       _toast('Added $count notes from your hum');
+      // Clarity: 분석 성공 + 분기(드럼/멜로딕) 태깅. noteCount 는 이벤트로 분포 확인.
+      ClarityService.instance.event('analyze_completed');
+      ClarityService.instance.tag('analyze_role', drums ? 'drum' : 'melodic');
     } catch (e) {
       _humFallback();
       _toast('Engine unavailable — used a generated phrase');

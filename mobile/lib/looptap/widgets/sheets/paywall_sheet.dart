@@ -11,6 +11,7 @@ import '../../../services/iap_service.dart';
 import '../../app.dart' show rootMessengerKey;
 import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
+import '../../../services/clarity_service.dart';
 import '../../theme/tokens.dart';
 import 'account_sheet.dart';
 import 'lt_modal.dart';
@@ -57,6 +58,9 @@ class _PaywallSheetState extends State<_PaywallSheet> {
   @override
   void initState() {
     super.initState();
+    // Clarity: paywall 노출 + 진입 트리거(export/songQuota/upgrade) 태깅.
+    ClarityService.instance.event('paywall_viewed');
+    ClarityService.instance.tag('paywall_trigger', widget.trigger.name);
     // 시트 진입 시점에 ProductDetails 로드 — 라벨이 KRW 폴백 → 스토어 가격으로 갱신.
     final store = context.read<LoopStore>();
     store.loadProducts().then((_) {
