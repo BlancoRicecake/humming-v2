@@ -18,6 +18,7 @@ import 'api/engine_api.dart';
 import 'looptap/app.dart';
 import 'looptap/state/loop_prefs.dart';
 import 'services/auth_service.dart';
+import 'services/clarity_service.dart';
 import 'services/iap_service.dart';
 import 'services/locale_service.dart';
 
@@ -56,5 +57,7 @@ Future<void> main() async {
     // (ProductDetails.price) 이 즉시 표시되도록 (KRW 폴백 노출 회피).
     IapService.instance.init().then((_) => IapService.instance.loadProducts()),
   ]);
-  runApp(const LoopTapApp());
+  // Clarity 세션 리플레이/히트맵으로 루트를 감싼다 (CLARITY_PROJECT_ID 미설정
+  // 시 앱을 그대로 반환 — graceful-degrade). lib/services/clarity_service.dart.
+  runApp(ClarityService.instance.wrap(const LoopTapApp()));
 }

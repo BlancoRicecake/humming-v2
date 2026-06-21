@@ -56,6 +56,9 @@ dependencies:
   # sentry_flutter: Xcode 26 호환성 이슈로 다음 배치에서 추가 예정.
   # posthog_flutter: MVP1 스킵 (#44 task pending).
   # 모두 graceful-degrade — env 키 미설정 시 초기화 스킵, mock 분기 유지.
+  # Microsoft Clarity (세션 리플레이 + 히트맵, 무료·무제한). dart-define
+  # CLARITY_PROJECT_ID 미설정 시 비활성 — lib/services/clarity_service.dart.
+  clarity_flutter: ^1.9.0
   supabase_flutter: ^2.5.0
   in_app_purchase: ^3.2.0
   # Play 구독 base plan 가격 추출에 필요 (trial offer phase[0]=₩0 으로 표시되는 버그 회피).
