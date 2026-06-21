@@ -13,7 +13,7 @@ WORKSPACE   = "Runner.xcworkspace"
 EXPORT_METHOD = "app-store"
 
 # Flutter dart-define 키 (Android Fastfile 과 동일하게 유지).
-DEFINE_KEYS = %w[SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL]
+DEFINE_KEYS = %w[SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL CLARITY_PROJECT_ID]
 
 def collect_dart_defines
   env = {}
