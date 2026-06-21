@@ -253,7 +253,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 - 사진 라이브러리 접근 ❌<br>
 - 광고 추적 식별자 (IDFA, AAID) ❌ — iOS ATT 권한도 요청하지 않습니다.</p>
 <p><strong>예정 항목 표시</strong>: 위 표에 "(예정)" 으로 표기된 Sentry, PostHog 는 본 약관 시행 시점(2026-06-04) 기준 아직 통합되지 않았으며, 통합 시 본 방침을 개정하여 30일 전 사전 고지합니다.</p>
-<p><strong>Microsoft Clarity (세션 리플레이·히트맵)</strong>: 익명 행동 분석 도구로, 화면 녹화 영상이나 키 입력 원문을 저장하지 않으며 입력 필드 등 민감 영역은 SDK 가 자동 마스킹합니다. 광고 목적으로 사용되지 않고 제3자에 데이터를 이전하지 않으며, IDFA/ATT 추적 식별자도 사용하지 않습니다. (IP 로부터 도시 단위의 대략적 위치가 추정될 수 있으나 개인과 연결되지 않습니다.)</p>
+<p><strong>Microsoft Clarity (세션 리플레이·히트맵)</strong>: 익명 행동 분석 도구로, 화면 녹화 영상이나 키 입력 원문을 저장하지 않으며 입력 필드 등 민감 영역은 SDK 가 자동 마스킹합니다. 광고 목적으로 사용되지 않고 제3자에 데이터를 이전하지 않으며, IDFA/ATT 추적 식별자도 사용하지 않습니다. 로그인 사용자의 경우 세션을 식별·필터링하기 위해 <strong>Supabase 사용자 ID(불투명 UUID)</strong> 가 Clarity 로 함께 전달됩니다(개인을 직접 식별하는 PII 아님). (IP 로부터 도시 단위의 대략적 위치가 추정될 수 있으나 개인과 연결되지 않습니다.)</p>
 <h3>3. 처리 목적</h3>
 <ol>
 <li>서비스 제공: 계정 인증, 보컬 분석, Pro 클라우드 동기화 및 복원</li>
@@ -468,7 +468,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 </table>
 <p><strong>We do NOT collect</strong>: payment card numbers (Apple/Google handle), location, contacts, photo library, ad identifiers (IDFA/AAID — we never request iOS ATT permission).</p>
 <p><strong>"Planned" services</strong> (Sentry, PostHog) are not integrated as of 2026-06-04. We will amend this policy with 30 days' notice before activation.</p>
-<p><strong>Microsoft Clarity</strong> (session replay &amp; heatmaps) is anonymous behavior analytics: it does not store raw screen recordings or keystrokes, auto-masks sensitive fields, is never used for advertising, transfers no data to third parties, and uses no ad/ATT identifiers. Approximate city-level location may be inferred from IP but is not linked to identity.</p>
+<p><strong>Microsoft Clarity</strong> (session replay &amp; heatmaps) is anonymous behavior analytics: it does not store raw screen recordings or keystrokes, auto-masks sensitive fields, is never used for advertising, transfers no data to third parties, and uses no ad/ATT identifiers. For signed-in users, your <strong>Supabase user ID (an opaque UUID, not directly identifying PII)</strong> is passed to Clarity to filter session replays by user. Approximate city-level location may be inferred from IP but is not linked to identity.</p>
 <h3>3. Purposes</h3>
 <p>Service operation, payment management, security, product/UX analytics (Microsoft Clarity), planned stability analytics (Sentry/PostHog), legal compliance (Korean tax law and Electronic Commerce Act).</p>
 <p><strong>We never use vocal recordings, analysis results, or generated music for advertising, AI/ML training, third-party resale, or our own marketing without your explicit consent.</strong></p>

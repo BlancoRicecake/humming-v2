@@ -27,7 +27,10 @@
             </array>
         </dict>
 
-        <!-- User ID: Supabase auth user UUID, used to associate projects/subscriptions. -->
+        <!-- User ID: Supabase auth user UUID. Used to associate projects/
+             subscriptions (App Functionality) AND passed to Microsoft Clarity
+             via setCustomUserId to filter session replays by user (Analytics).
+             Opaque UUID, not PII; not used for cross-app tracking. -->
         <dict>
             <key>NSPrivacyCollectedDataType</key>
             <string>NSPrivacyCollectedDataTypeUserID</string>
@@ -38,6 +41,7 @@
             <key>NSPrivacyCollectedDataTypePurposes</key>
             <array>
                 <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+                <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
             </array>
         </dict>
 
