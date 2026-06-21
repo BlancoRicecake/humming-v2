@@ -29,9 +29,11 @@ fi
 # .env.secrets 의 key=value 추출 (주석/빈줄 무시, 따옴표 제거).
 read_env() {
   local key="$1"
-  grep -E "^${key}=" "$SECRETS" 2>/dev/null \
+  # 키가 없으면 grep 이 1 을 반환 → pipefail+set -e 로 스크립트가 중단되므로
+  # || true 로 빈 값을 돌려준다 (미설정 키는 graceful 하게 스킵하는 게 의도).
+  { grep -E "^${key}=" "$SECRETS" 2>/dev/null \
     | tail -1 \
-    | sed -E "s/^${key}=//; s/^['\"]//; s/['\"]$//"
+    | sed -E "s/^${key}=//; s/^['\"]//; s/['\"]$//"; } || true
 }
 
 # Fastfile 과 동일한 키 셋. GOOGLE_WEB_CLIENT_ID 가 비었으면 GOOGLE_OAUTH_CLIENT_ID 폴백.
