@@ -39,7 +39,14 @@ def _resolve_version() -> str:
 
 
 @router.get("/health")
-def health() -> dict:
+async def health() -> dict:
+    # MUST stay `async def`. Sentry's FastApiIntegration re-wraps the handler of
+    # *sync* endpoints (`dependant.call`) on every get_request_handler call with
+    # no idempotency guard (sentry-sdk 2.61.1, integrations/fastapi.py). /health
+    # is hit every few seconds by Fly's health checker, so a sync handler
+    # accumulates hundreds of nested wrappers until a request RecursionErrors.
+    # `async def` is skipped by that wrapper (iscoroutinefunction guard) → safe.
+    # Body is trivial/non-blocking, so async costs nothing.
     return {
         "ok": True,
         "uptime_sec": round(time.time() - _BOOT_TS, 1),
