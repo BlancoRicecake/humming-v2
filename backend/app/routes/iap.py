@@ -23,10 +23,12 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import secrets
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+import anyio
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -450,6 +452,77 @@ async def apple_webhook(request: Request):
     return {"ok": True, "status": status_v}
 
 
+def _verify_pubsub_oidc(token: str, audience: str, expected_email: Optional[str]) -> None:
+    """Verify a Pub/Sub push OIDC bearer token (blocking — run off-loop).
+
+    Validates the Google signature, expiry, and audience. When
+    ``expected_email`` is set, also pins the authorized service account.
+    Raises HTTPException(403) on any failure.
+    """
+    try:
+        from google.oauth2 import id_token as google_id_token
+        from google.auth.transport import requests as google_auth_requests
+    except ImportError as e:  # pragma: no cover — google-auth is in requirements
+        raise HTTPException(500, f"google-auth not installed: {e}")
+    try:
+        claims = google_id_token.verify_oauth2_token(
+            token, google_auth_requests.Request(), audience=audience
+        )
+    except Exception as e:
+        logger.warning("google webhook OIDC verify failed: %s", e)
+        raise HTTPException(403, "invalid OIDC token")
+    if expected_email:
+        if not claims.get("email_verified", False):
+            raise HTTPException(403, "OIDC email not verified")
+        if claims.get("email") != expected_email:
+            logger.warning("google webhook OIDC email mismatch: %s", claims.get("email"))
+            raise HTTPException(403, "unauthorized service account")
+
+
+async def _authenticate_google_webhook(request: Request) -> None:
+    """Authenticate a Pub/Sub push before any processing. Raises on failure.
+
+    Accepts a request that satisfies any configured mechanism:
+    - ``IAP_WEBHOOK_SECRET`` — shared secret via ``?token=`` or the
+      ``X-Webhook-Token`` header (constant-time compared).
+    - ``GOOGLE_PUBSUB_AUDIENCE`` — the SA-signed OIDC bearer token Pub/Sub
+      attaches (optionally pinned to ``GOOGLE_PUBSUB_SA_EMAIL``).
+
+    Fails CLOSED in production when neither is configured (the endpoint
+    mutates subscription state, so an open webhook is an account-takeover
+    vector). In dev it is allowed with a warning to keep local testing easy.
+    """
+    s = get_settings()
+    secret = s.iap_webhook_secret
+    audience = s.google_pubsub_audience
+
+    if not secret and not audience:
+        if (s.environment or "dev").lower() == "production":
+            logger.error(
+                "google webhook BLOCKED: configure IAP_WEBHOOK_SECRET or "
+                "GOOGLE_PUBSUB_AUDIENCE to authenticate Pub/Sub pushes")
+            raise HTTPException(403, "webhook authentication not configured")
+        logger.warning("google webhook auth skipped (dev: no secret/audience configured)")
+        return
+
+    # Shared-secret path (cheap, no network). Pass => authenticated.
+    if secret:
+        provided = request.query_params.get("token") or request.headers.get("x-webhook-token") or ""
+        if secrets.compare_digest(provided, secret):
+            return
+        if not audience:  # secret was the only mechanism → reject
+            raise HTTPException(403, "invalid webhook token")
+
+    # OIDC path. Google signs the push request; verify it.
+    if audience:
+        authz = request.headers.get("authorization", "")
+        if authz[:7].lower() != "bearer ":
+            raise HTTPException(401, "missing OIDC bearer token")
+        token = authz[7:].strip()
+        await anyio.to_thread.run_sync(
+            _verify_pubsub_oidc, token, audience, s.google_pubsub_sa_email)
+
+
 @router.post("/webhook/google")
 async def google_webhook(request: Request):
     """Google Real-time Developer Notifications via Pub/Sub push.
@@ -458,9 +531,11 @@ async def google_webhook(request: Request):
     ```
     {"message": {"data": "<base64 JSON>", "messageId": "..."}, "subscription": "..."}
     ```
-    For MVP we don't verify Pub/Sub OIDC token signature — gate this endpoint
-    behind a secret URL token + the (forthcoming) Google JWT middleware.
+    The push is authenticated first (see ``_authenticate_google_webhook``):
+    a shared secret (``IAP_WEBHOOK_SECRET``) and/or the Pub/Sub OIDC bearer
+    token (``GOOGLE_PUBSUB_AUDIENCE``). Fails closed in production.
     """
+    await _authenticate_google_webhook(request)
     envelope = await request.json()
     msg = envelope.get("message") or {}
     msg_id = msg.get("messageId")

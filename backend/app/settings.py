@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     # Google Play Developer API
     google_service_account_json: Optional[str] = None  # raw JSON string
     google_package_name: Optional[str] = None
+    # Google Pub/Sub push (RTDN) webhook auth — see /iap/webhook/google.
+    # Configure at least ONE in production, else the endpoint fails closed:
+    #   GOOGLE_PUBSUB_AUDIENCE — expected OIDC `aud` (usually the push URL);
+    #                            verifies the SA-signed token Pub/Sub attaches.
+    #   GOOGLE_PUBSUB_SA_EMAIL — (optional) pin the authorized service account.
+    #   IAP_WEBHOOK_SECRET     — shared secret via ?token= / X-Webhook-Token.
+    google_pubsub_audience: Optional[str] = None
+    google_pubsub_sa_email: Optional[str] = None
+    iap_webhook_secret: Optional[str] = None
 
     # Observability
     sentry_dsn: Optional[str] = None
