@@ -51,10 +51,24 @@ if _settings.sentry_dsn:
         import sentry_sdk
         from sentry_sdk.integrations.fastapi import FastApiIntegration
         from sentry_sdk.integrations.starlette import StarletteIntegration
+        def _traces_sampler(sampling_context):
+            # /health is hit every few seconds by Fly's internal health checker
+            # (private 172.x source). Tracing it wastes quota AND on *sampled*
+            # requests the Sentry transaction instrumentation + SlowAPIMiddleware's
+            # per-request anyio task groups nest deep enough to trip a
+            # RecursionError (same mechanism as the BodySizeLimitMiddleware note
+            # below; middleware_spans=False alone wasn't enough). Never sample it.
+            scope = sampling_context.get("asgi_scope") or {}
+            if str(scope.get("path", "")).startswith("/health"):
+                return 0.0
+            return _settings.sentry_traces_sample_rate
+
         sentry_sdk.init(
             dsn=_settings.sentry_dsn,
             environment=_settings.environment,
-            traces_sample_rate=_settings.sentry_traces_sample_rate,
+            # traces_sampler (takes precedence over traces_sample_rate) so we can
+            # exclude /health — see _traces_sampler.
+            traces_sampler=_traces_sampler,
             # middleware_spans=False: Sentry's per-middleware span instrumentation
             # wraps every BaseHTTPMiddleware.__call__ (plus the receive/send
             # callbacks) on *sampled* requests, multiplying stack frames per
