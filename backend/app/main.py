@@ -24,7 +24,6 @@ import anyio
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
-from starlette.middleware.base import BaseHTTPMiddleware
 
 from .analyze import analyze_audio, process_vocal
 from . import soundfonts as soundfonts_mod
@@ -56,7 +55,17 @@ if _settings.sentry_dsn:
             dsn=_settings.sentry_dsn,
             environment=_settings.environment,
             traces_sample_rate=_settings.sentry_traces_sample_rate,
-            integrations=[FastApiIntegration(), StarletteIntegration()],
+            # middleware_spans=False: Sentry's per-middleware span instrumentation
+            # wraps every BaseHTTPMiddleware.__call__ (plus the receive/send
+            # callbacks) on *sampled* requests, multiplying stack frames per
+            # middleware layer. Combined with the per-request task groups that
+            # BaseHTTPMiddleware spins up, deep enough nesting tripped a
+            # RecursionError on sampled requests (seen intermittently even on
+            # /health). We don't rely on middleware spans — turn them off.
+            integrations=[
+                FastApiIntegration(),
+                StarletteIntegration(middleware_spans=False),
+            ],
             send_default_pii=False,
         )
         logger.info("Sentry initialised env=%s", _settings.environment)
@@ -85,27 +94,38 @@ except ImportError:
 
 
 # --- Body-size cap middleware -----------------------------------------------
-class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+class BodySizeLimitMiddleware:
     """Reject requests whose Content-Length exceeds the configured cap.
+
+    Implemented as a *pure ASGI* middleware (not BaseHTTPMiddleware) on purpose:
+    BaseHTTPMiddleware spins up a per-request anyio task group and, under
+    Sentry's middleware-span instrumentation, deep enough nesting tripped a
+    RecursionError on sampled requests. A Content-Length check needs none of
+    that machinery, so we keep the middleware stack shallow.
 
     Streaming uploads without Content-Length are NOT capped here (rare on
     mobile); /analyze additionally counts bytes when reading the upload.
     """
 
     def __init__(self, app, max_bytes: int):
-        super().__init__(app)
+        self.app = app
         self.max_bytes = max_bytes
 
-    async def dispatch(self, request: Request, call_next):
-        cl = request.headers.get("content-length")
-        if cl is not None:
-            try:
-                if int(cl) > self.max_bytes:
-                    return JSONResponse(status_code=413,
-                                        content={"detail": f"body too large (>{self.max_bytes} bytes)"})
-            except ValueError:
-                pass
-        return await call_next(request)
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            cl = next((v for k, v in scope.get("headers", []) if k.lower() == b"content-length"), None)
+            if cl is not None:
+                try:
+                    if int(cl) > self.max_bytes:
+                        response = JSONResponse(
+                            status_code=413,
+                            content={"detail": f"body too large (>{self.max_bytes} bytes)"},
+                        )
+                        await response(scope, receive, send)
+                        return
+                except ValueError:
+                    pass
+        await self.app(scope, receive, send)
 
 
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=_settings.max_body_bytes)
