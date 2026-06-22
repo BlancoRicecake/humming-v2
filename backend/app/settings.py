@@ -10,6 +10,8 @@ import os
 from functools import lru_cache
 from typing import Optional
 
+from pydantic import AliasChoices, Field
+
 try:
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError:  # pragma: no cover — pydantic-settings is in requirements
@@ -50,7 +52,17 @@ class Settings(BaseSettings):
     apple_iap_product_yearly: Optional[str] = None
 
     # Google Play Developer API
-    google_service_account_json: Optional[str] = None  # raw JSON string
+    # 두 env 이름을 모두 허용한다 — 코드 표준은 GOOGLE_SERVICE_ACCOUNT_JSON 이지만
+    # SETUP.md / .env.secrets.example / fly.toml 은 GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+    # 을 쓴다. 과거 이 이름 불일치로 서비스계정이 None → Play 영수증 검증이 503 으로
+    # 실패한 적이 있어(alias 부재), 양쪽 다 읽도록 고정. canonical(첫 번째)이 우선.
+    google_service_account_json: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "google_service_account_json",       # GOOGLE_SERVICE_ACCOUNT_JSON
+            "google_play_service_account_json",  # GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+        ),
+    )  # raw JSON string
     google_package_name: Optional[str] = None
     # Google Pub/Sub push (RTDN) webhook auth — see /iap/webhook/google.
     # Configure at least ONE in production, else the endpoint fails closed:
