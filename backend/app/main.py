@@ -121,12 +121,46 @@ def _learned_model_status() -> Dict[str, bool]:
     return status
 
 
+def _config_status() -> None:
+    """Shout at boot about configuration that silently breaks paying users.
+
+    JWT verification fails closed (a deliberate change — it used to accept
+    unsigned HS256 tokens), so a deploy that forgets these secrets answers 401
+    or 503 to every signed-in request and every subscriber loses Pro. Better to
+    see it in the first ten lines of the boot log than in support mail.
+    """
+    s = _settings
+    if not s.supabase_url and not s.supabase_jwt_secret:
+        logger.error("AUTH DISABLED: neither SUPABASE_URL (JWKS) nor SUPABASE_JWT_SECRET is set "
+                     "— every authenticated request will fail. Set them in fly secrets.")
+    elif not s.supabase_jwt_secret:
+        logger.info("auth: JWKS only (no SUPABASE_JWT_SECRET) — fine for asymmetric-key "
+                    "Supabase projects; legacy HS256 tokens will be rejected.")
+    if not s.supabase_service_role_key:
+        logger.error("SUPABASE_SERVICE_ROLE_KEY unset — /iap/*, /projects and /account will 503.")
+    if not (s.iap_webhook_secret or s.google_pubsub_audience):
+        logger.error("Google RTDN webhook is unauthenticated and therefore BLOCKED: set "
+                     "IAP_WEBHOOK_SECRET (and use it in the Pub/Sub push URL) or "
+                     "GOOGLE_PUBSUB_AUDIENCE. Play renewals/cancellations are not being recorded.")
+    if not s.apple_bundle_id:
+        logger.warning("APPLE_BUNDLE_ID unset — Apple receipts are accepted without a bundle check.")
+    if not s.google_package_name:
+        logger.warning("GOOGLE_PACKAGE_NAME unset — Play verification will 503.")
+    if not s.is_production:
+        logger.warning("environment=%r (not production) — check ENV/ENVIRONMENT if this is prod.",
+                       s.environment)
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(_app: FastAPI):
     try:
         _learned_model_status()
     except Exception:
         logger.exception("learned model status probe failed")
+    try:
+        _config_status()
+    except Exception:
+        logger.exception("config status probe failed")
     yield
 
 
