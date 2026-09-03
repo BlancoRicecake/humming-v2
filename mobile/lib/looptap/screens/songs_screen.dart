@@ -17,6 +17,15 @@ import 'edit_screen.dart';
 /// 비-Pro 사용자가 만들 수 있는 작업물 최대 개수.
 const int kFreeSongQuota = 4;
 
+/// Songs that count against the free quota — the bundled demos (ids
+/// `seed…`) are not the user's work and don't (C15 / M4).
+int userSongCount(Iterable<Song> songs) =>
+    songs.where((s) => !s.id.startsWith('seed')).length;
+
+/// True when a non-Pro user is at the free quota (demos excluded).
+bool atFreeQuota(LoopStore store) =>
+    !store.proActive && userSongCount(store.songs) >= kFreeSongQuota;
+
 class SongsScreen extends StatelessWidget {
   const SongsScreen({super.key});
 
@@ -27,7 +36,7 @@ class SongsScreen extends StatelessWidget {
   /// 새 작업물 생성. 비-Pro 가 quota (4개) 에 도달하면 paywall 우선 표시.
   Future<void> _new(BuildContext context) async {
     final store = context.read<LoopStore>();
-    if (!store.proActive && store.songs.length >= kFreeSongQuota) {
+    if (atFreeQuota(store)) {
       await showPaywallSheet(context, trigger: PaywallTrigger.songQuota);
       if (!context.mounted) return;
       // paywall 닫혔는데도 여전히 비-Pro 라면 그대로 종료.
@@ -256,8 +265,15 @@ class _Grid extends StatelessWidget {
     }
   }
 
-  Future<void> _duplicateSong(BuildContext context, Song song) {
-    return context.read<LoopStore>().duplicate(song);
+  Future<void> _duplicateSong(BuildContext context, Song song) async {
+    final store = context.read<LoopStore>();
+    // a duplicate is a new song — same free-quota gate as "New song".
+    if (atFreeQuota(store)) {
+      await showPaywallSheet(context, trigger: PaywallTrigger.songQuota);
+      if (!context.mounted) return;
+      if (!context.read<LoopStore>().proActive) return;
+    }
+    await store.duplicate(song);
   }
 
   Future<void> _deleteSong(BuildContext context, Song song) async {

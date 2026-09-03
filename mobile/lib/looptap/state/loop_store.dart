@@ -56,12 +56,25 @@ class LoopStore extends ChangeNotifier {
     await SoundfontCatalog.instance.warm();
     unawaited(SoundfontCatalog.instance.refresh());
     final loaded = await LoopStorage.load();
+    // Seed the demos exactly once per install (C30): an empty library after
+    // the user deleted everything stays empty. NEVER seed + persist over an
+    // unreadable songs.json (C1) — that would overwrite the user's data with
+    // demos and let the next sweep delete every vocal take.
+    final seededBefore = await LoopStorage.seeded();
+    final seedNow = loaded.isEmpty && !LoopStorage.loadFailed && !seededBefore;
     _songs
       ..clear()
-      ..addAll(loaded.isEmpty ? _seed() : loaded);
+      ..addAll(seedNow ? _seed() : loaded);
     _songs.sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
     _loaded = true;
-    if (loaded.isEmpty) await _persist();
+    if (seedNow) {
+      await _persist();
+      await LoopStorage.markSeeded();
+    } else if (!seededBefore && loaded.isNotEmpty) {
+      // pre-marker install that already has songs — record it so a later
+      // delete-all doesn't bring the demos back.
+      await LoopStorage.markSeeded();
+    }
 
     // Supabase 세션 listener — 부트 시점에 cached session 이 있으면 즉시 발행됨.
     _authSub = AuthService.instance.onSession.listen(_onSession);

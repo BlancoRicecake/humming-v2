@@ -441,7 +441,9 @@ class Song {
         id: (j['id'] ?? 'lt') as String,
         title: (j['title'] ?? 'Untitled loop') as String,
         key: (j['key'] ?? 'A') as String,
-        scale: (j['scale'] ?? 'minor') as String,
+        // an unknown scale (older build / hand-edited file) would crash every
+        // kScales[scale]! lookup downstream — normalise it here once.
+        scale: kScales.containsKey(j['scale']) ? j['scale'] as String : 'minor',
         bpm: (j['bpm'] as num?)?.toInt() ?? 92,
         swing: (j['swing'] as num?)?.toDouble() ?? 0,
         bars: (j['bars'] as num?)?.toInt() ?? 2,
@@ -464,11 +466,44 @@ class Song {
         songVocalBars: (j['songVocalBars'] as num?)?.toInt(),
       );
 
-  static String encodeList(List<Song> songs) =>
-      jsonEncode(songs.map((s) => s.toJson()).toList());
+  /// songs.json top-level schema version. v1 = a bare JSON list (never
+  /// written any more, still readable); v2 = `{"v": 2, "songs": [...]}`.
+  static const int kSchemaVersion = 2;
 
-  static List<Song> decodeList(String raw) {
-    final list = jsonDecode(raw) as List;
-    return list.map((e) => Song.fromJson(e as Map<String, dynamic>)).toList();
+  static String encodeList(List<Song> songs) => jsonEncode({
+        'v': kSchemaVersion,
+        'songs': songs.map((s) => s.toJson()).toList(),
+      });
+
+  /// The raw song entries of either file shape (v1 bare list, v2 envelope).
+  /// Throws on anything else — the caller decides what "unreadable" means.
+  static List<dynamic> _unwrap(String raw) {
+    final decoded = jsonDecode(raw);
+    if (decoded is List) return decoded; // v1
+    if (decoded is Map) {
+      final songs = decoded['songs'];
+      if (songs is List) return songs; // v2+
+    }
+    throw const FormatException('songs.json: unrecognised top-level shape');
+  }
+
+  /// Strict decode — any malformed song fails the whole list.
+  static List<Song> decodeList(String raw) =>
+      _unwrap(raw).map((e) => Song.fromJson(e as Map<String, dynamic>)).toList();
+
+  /// Lenient decode — a malformed song entry is skipped (and counted) instead
+  /// of taking the whole library down with it. Still throws when the file
+  /// itself isn't parseable, so the caller can fall back to a backup.
+  static ({List<Song> songs, int skipped}) decodeListLenient(String raw) {
+    final out = <Song>[];
+    var skipped = 0;
+    for (final e in _unwrap(raw)) {
+      try {
+        out.add(Song.fromJson((e as Map).cast<String, dynamic>()));
+      } catch (_) {
+        skipped++;
+      }
+    }
+    return (songs: out, skipped: skipped);
   }
 }

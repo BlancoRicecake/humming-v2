@@ -11,13 +11,14 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show Uint8List, Float32List, compute;
+import 'package:flutter/foundation.dart' show Float32List, compute;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../../audio/autotune_monitor.dart';
 import '../../../audio/headset.dart';
+import '../../../audio/synth.dart';
 import '../../music/wav_codec.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
@@ -110,6 +111,12 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
   Timer? _msTimer;
   Timer? _autoStop;
   StreamSubscription<Amplitude>? _ampSub;
+  StreamSubscription<RecordState>? _stateSub;
+  // True once _rec.start() flipped the session to .playAndRecord (and we
+  // rebuilt the synth output under it) — gates the restore on stop. Mirrors
+  // hum_modal (audit A5).
+  bool _recStarted = false;
+  bool _permissionDenied = false; // error phase offers "Open Settings"
 
   int get _loopMs => (widget.bars * 4 * 60000 / widget.bpm).round();
   int get _beatMs => (60000 / widget.bpm).round();
@@ -143,6 +150,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     _msTimer?.cancel();
     _autoStop?.cancel();
     _ampSub?.cancel();
+    _stateSub?.cancel();
     _rec.dispose();
     if (_backingOn) widget.stopBacking?.call();
     _stopMonitor();
@@ -160,6 +168,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     }
     if (_closed || !mounted) return;
     if (!granted) {
+      _permissionDenied = true;
       _fail('Microphone permission needed');
       return;
     }
@@ -222,25 +231,57 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
       if (_closed || !mounted) return;
       final path =
           '${dir.path}/humtrack_vocal_${DateTime.now().millisecondsSinceEpoch}.wav';
+      // Record at the device's CURRENT output rate (iOS) like the hum modal:
+      // record_ios pins the shared session to config.sampleRate and never
+      // restores it, so a fixed 44.1k would drag 48k hardware down and leave
+      // the synth output crackling after. _alignJob resamples to _sr anyway.
+      final deviceRate = await outputSampleRate() ?? _sr;
+      if (_closed || !mounted) return;
       await _rec.start(
-        const RecordConfig(
+        RecordConfig(
           encoder: AudioEncoder.wav,
-          sampleRate: _sr,
+          sampleRate: deviceRate,
           numChannels: 1,
           // Don't let the recorder grab Bluetooth SCO / flip the audio route:
           // on Android that disconnects flutter_midi_pro's Oboe output stream
           // and it doesn't recover, so synth sound (instrument preview, loop,
           // drums) goes dead after the first recording.
-          androidConfig: AndroidRecordConfig(manageBluetooth: false),
+          androidConfig: const AndroidRecordConfig(manageBluetooth: false),
+          // Never let the plugin pause the take on its own (phone call, Siri,
+          // Android focus loss) — a silently paused take resumes with a hole
+          // in it. We watch the state stream instead and fail loudly (A4).
+          audioInterruption: AudioInterruptionMode.none,
         ),
         path: path,
       );
+      _recStarted = true;
       if (_closed || !mounted) {
         // cancelled while start() was in flight — _cancel's stop ran before
         // the recorder existed, so stop it here and skip backing/monitor
+        String? p;
         try {
-          await _rec.stop();
+          p = await _rec.stop();
         } catch (_) {}
+        _deleteQuiet(p);
+        await _restoreOutput();
+        return;
+      }
+      _stateSub = _rec.onStateChanged().listen(_onRecordState);
+      // _rec.start just flipped the shared AVAudioSession to .playAndRecord,
+      // which corrupts the synth's already-running output pipe (RemoteIO) →
+      // crackle in the backing. Rebuild it under .playAndRecord; with NO
+      // headset force the built-in speaker (the rebuild's setCategory drops
+      // .defaultToSpeaker), with a headset leave the route alone. iOS-only,
+      // no-op elsewhere. Done BEFORE the monitor so its session tweaks win.
+      await SynthEngine().rebuildOutput(forRecording: true);
+      if (widget.headset == HeadsetRoute.none) await overrideOutputToSpeaker();
+      if (_closed || !mounted) {
+        String? p;
+        try {
+          p = await _rec.stop();
+        } catch (_) {}
+        _deleteQuiet(p);
+        await _restoreOutput();
         return;
       }
       // Backing starts right after recording opens, so audio t≈0 (minus the
@@ -254,9 +295,12 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
       await _startMonitor(); // after the recorder owns the mic; fails soft
       if (_closed || !mounted) {
         _stopBacking();
+        String? p;
         try {
-          await _rec.stop();
+          p = await _rec.stop();
         } catch (_) {}
+        _deleteQuiet(p);
+        await _restoreOutput();
         return;
       }
       setState(() {
@@ -301,9 +345,30 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     });
   }
 
-  Future<void> _finish() async {
-    if (_phase == 'saving' || _phase == 'done') return;
-    if (mounted) setState(() => _phase = 'saving');
+  /// Recording left the session in .playAndRecord; restore .playback and
+  /// rebuild the synth output so pad taps / playback are clean afterwards.
+  /// Once per started take (guarded by [_recStarted]). Call AFTER the recorder
+  /// has stopped and the monitor session was released.
+  Future<void> _restoreOutput() async {
+    if (!_recStarted) return;
+    _recStarted = false;
+    await SynthEngine().rebuildOutput(forRecording: false);
+  }
+
+  static void _deleteQuiet(String? path) {
+    if (path == null || path.isEmpty) return;
+    try {
+      final f = File(path);
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
+  }
+
+  // The recorder paused underneath us (system interruption the plugin could
+  // not ignore). The take would have a hole in it — abort with a clear message
+  // instead of saving a truncated vocal.
+  Future<void> _onRecordState(RecordState s) async {
+    if (s != RecordState.pause || _phase != 'listen') return;
+    if (mounted) setState(() => _phase = 'saving'); // blocks Stop/_finish
     _autoStop?.cancel();
     _msTimer?.cancel();
     _ampSub?.cancel();
@@ -313,8 +378,31 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     try {
       path = await _rec.stop();
     } catch (_) {}
+    _deleteQuiet(path);
+    await releaseAutotuneMonitorSession();
+    await _restoreOutput();
+    _fail('Recording was interrupted — try again'); // TODO(l10n)
+  }
+
+  Future<void> _finish() async {
+    if (_phase == 'saving' || _phase == 'done') return;
+    if (mounted) setState(() => _phase = 'saving');
+    _autoStop?.cancel();
+    _msTimer?.cancel();
+    _ampSub?.cancel();
+    _stateSub?.cancel();
+    _stopBacking();
+    _stopMonitor();
+    String? path;
+    try {
+      path = await _rec.stop();
+    } catch (_) {}
     // recorder is fully stopped — safe to let go of the iOS audio session
-    unawaited(releaseAutotuneMonitorSession());
+    // (awaited so its deactivate lands BEFORE the output rebuild re-activates
+    // .playback — the other order would leave the fresh output unit on a
+    // deactivated session).
+    await releaseAutotuneMonitorSession();
+    await _restoreOutput();
     if (path == null) {
       _fail('No audio captured');
       return;
@@ -336,6 +424,8 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
       'minVoiceRms': _minVoiceRms,
       'minVoicePeak': _minVoicePeak,
     });
+    // The raw capture is consumed — the aligned copy is all that's needed now.
+    _deleteQuiet(path);
     if (out == null) {
       _fail('Recording failed');
       return;
@@ -346,10 +436,12 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     }
     var committed = false;
     try {
+      // the host COPIES the aligned take into Documents (LoopStorage.copyVocal)
       committed = await widget.onDone(out.peaks, out.path);
     } catch (_) {
       committed = false;
     }
+    _deleteQuiet(out.path); // temp aligned file — copied or rejected either way
     if (!mounted) return;
     if (!committed) {
       _fail("Couldn't save the recording");
@@ -367,8 +459,8 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     Map<String, Object> a,
   ) async {
     try {
-      final bytes = await File(a['src'] as String).readAsBytes();
-      final wav = parseWav(Uint8List.fromList(bytes));
+      // readAsBytes already yields a Uint8List — no defensive copy (A14).
+      final wav = parseWav(await File(a['src'] as String).readAsBytes());
       if (wav == null || wav.samples.isEmpty) return null;
       var pcm =
           wav.sampleRate == _sr
@@ -424,12 +516,16 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     _autoStop?.cancel();
     _msTimer?.cancel();
     _ampSub?.cancel();
+    _stateSub?.cancel();
     _stopBacking();
     _stopMonitor();
+    String? path;
     try {
-      await _rec.stop();
+      path = await _rec.stop();
     } catch (_) {}
-    unawaited(releaseAutotuneMonitorSession());
+    _deleteQuiet(path); // abandoned raw take
+    await releaseAutotuneMonitorSession();
+    await _restoreOutput();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -607,7 +703,17 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
           else if (_phase == 'countin')
             _ghostBtn('Cancel', _cancel)
           else if (_phase == 'error')
-            _ghostBtn('Close', _cancel),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_permissionDenied) ...[
+                  // TODO(l10n)
+                  _solidBtn('Open Settings', () => openAppSettings()),
+                  const SizedBox(width: 8),
+                ],
+                _ghostBtn('Close', _cancel),
+              ],
+            ),
         ],
       ),
     );

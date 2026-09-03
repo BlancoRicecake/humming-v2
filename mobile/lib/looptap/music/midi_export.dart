@@ -213,6 +213,7 @@ Future<File> exportMidiSong(
   int drumProgram = 0,
   List<TrackRef> extras = const [],
   Map<String, int> instruments = const {},
+  String fallbackName = 'loop',
 }) async {
   final flat = flattenSong(sections);
   // A .mid can't carry a custom soundfont — fall back to the nearest GM voice:
@@ -232,8 +233,9 @@ Future<File> exportMidiSong(
   final dir = await getApplicationDocumentsDirectory();
   final folder = Directory('${dir.path}/looptap/exports');
   if (!await folder.exists()) await folder.create(recursive: true);
-  final safe = title.trim().isEmpty ? 'loop' : title.trim().replaceAll(RegExp(r'[^\w\-]+'), '_');
-  final file = File('${folder.path}/$safe.mid');
+  // shared sanitiser (C11): non-ASCII titles survive; never overwrite (A20).
+  final file = await uniqueExportFile(
+      folder, exportFileName(title, fallback: fallbackName), 'mid');
   await file.writeAsBytes(bytes);
   if (kDebugMode) {
     final hdrOk = bytes.length > 14 &&

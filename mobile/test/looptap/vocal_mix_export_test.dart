@@ -110,6 +110,22 @@ void main() {
       expect(scheduleVocalMixes([s], bpm, 1.0, {'a.wav'}), isEmpty);
     });
 
+    test('added Audio lanes take their own level; muting Vocal keeps them (C8)', () {
+      final s = Section(id: 'A', name: 'A', bars: 1, extras: const [TrackRef('audio_x1', 'audio')]);
+      s.tracks['vocal'] = TrackData(clips: [VocalClip(path: 'v.wav')]);
+      s.tracks['audio_x1'] = TrackData(clips: [VocalClip(path: 'a.wav', gain: 0.5)]);
+      final names = {'v.wav', 'a.wav'};
+      // base vocal muted (0), audio lane at 0.6 → only the audio lane, at 0.3
+      final jobs = scheduleVocalMixes([s], bpm, 0, names, laneVol: {'vocal': 0, 'audio_x1': 0.6});
+      expect(jobs.length, 1);
+      expect(jobs.single['name'], 'a.wav');
+      expect(jobs.single['gain'], closeTo(0.3, 1e-9));
+      // no laneVol → extras follow the base gain (legacy behaviour)
+      final legacy = scheduleVocalMixes([s], bpm, 0.8, names);
+      expect(legacy.length, 2);
+      expect(legacy[1]['gain'], closeTo(0.4, 1e-9));
+    });
+
     test('legacy single take schedules identically to a step-0 clip', () {
       final legacy = scheduleVocalMixes([sec('A', bars: 2, vocal: 'v.wav')], bpm, 0.7, {'v.wav'});
       final s = Section(id: 'A', name: 'A', bars: 2);

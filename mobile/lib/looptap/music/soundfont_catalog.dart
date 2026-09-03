@@ -9,6 +9,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -112,7 +113,39 @@ class SoundfontCatalog {
     return _dir = d;
   }
 
+  /// Test hook: point the cache at a directory without path_provider.
+  @visibleForTesting
+  void debugSetDirectory(Directory d) => _dir = d;
+
   File _fileFor(SoundfontEntry e) => File('${_dir!.path}/${e.id}.sf2');
+
+  /// Lower-case hex sha256 of [f], streamed (SF2s are tens of MB — never
+  /// read whole into memory just to hash).
+  static Future<String> fileSha256(File f) async =>
+      (await sha256.bind(f.openRead()).first).toString();
+
+  /// Remove a downloaded soundfont (and any stale `.part`) by manifest id.
+  /// Returns true when a file was actually deleted. The manifest entry stays —
+  /// the slot simply reads as not-downloaded again (synth falls back to the
+  /// track's default instrument until re-downloaded). A synth that already
+  /// loaded the file keeps its in-memory copy until the app restarts.
+  Future<bool> delete(String id) async {
+    try {
+      final dir = await _folder();
+      var removed = false;
+      for (final name in ['$id.sf2', '$id.sf2.part']) {
+        final f = File('${dir.path}/$name');
+        if (await f.exists()) {
+          await f.delete();
+          removed = true;
+        }
+      }
+      return removed;
+    } catch (e) {
+      debugPrint('[soundfont] delete $id failed: $e');
+      return false;
+    }
+  }
 
   /// Absolute path of a downloaded slot's SF2, or null if not present. Sync —
   /// callers (export job builder) must have called [warm]/[ensureDownloaded]
@@ -132,10 +165,14 @@ class SoundfontCatalog {
 
   /// Load the cached manifest (instant) so the picker + slot resolution work
   /// offline; call [refresh] to pull the latest from the backend.
+  ///
+  /// Never throws: this runs inside LoopStore.bootstrap, and a path_provider /
+  /// filesystem failure here must not block app start (audit A17) — the
+  /// catalog simply stays empty until [refresh] succeeds.
   Future<void> warm() async {
     if (_manifestLoaded) return;
-    await _folder();
     try {
+      await _folder();
       final f = File('${_dir!.path}/catalog.json');
       if (await f.exists()) {
         final list = (jsonDecode(await f.readAsString()) as List)
@@ -152,8 +189,8 @@ class SoundfontCatalog {
   /// Fetch the latest manifest from the backend; caches it for offline use.
   /// Returns false on network error (keeps the warmed cache).
   Future<bool> refresh() async {
-    await _folder();
     try {
+      await _folder(); // inside the try: bootstrap fires this unawaited
       final list = await EngineApi().soundfontCatalogMapped(SoundfontEntry.fromJson);
       _replace(list);
       final f = File('${_dir!.path}/catalog.json');
@@ -206,6 +243,17 @@ class SoundfontCatalog {
         debugPrint('[soundfont] ${e.id} size mismatch $len/${e.bytes}');
         if (await part.exists()) await part.delete();
         return null;
+      }
+      // Integrity: a right-sized but corrupt/tampered file would otherwise be
+      // renamed in and fed straight to the synth (audit A16/C19). Only when
+      // the manifest carries a digest; streamed so big SF2s aren't buffered.
+      if (e.sha256.isNotEmpty) {
+        final got = await fileSha256(part);
+        if (got != e.sha256.toLowerCase()) {
+          debugPrint('[soundfont] ${e.id} sha256 mismatch $got/${e.sha256}');
+          if (await part.exists()) await part.delete();
+          return null;
+        }
       }
       if (await f.exists()) await f.delete();
       await part.rename(f.path);

@@ -10,6 +10,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart' show DioException, DioExceptionType;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
@@ -61,14 +62,21 @@ class EditScreen extends StatefulWidget {
 
 // TickerProviderStateMixin (not Single*) — the transport clock disposes and
 // re-creates its Ticker on every play/stop, which Single* would assert against.
-class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
+class _EditScreenState extends State<EditScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final LoopAudio _audio = LoopAudio.instance;
-  final math.Random _rng = math.Random();
 
   // ── persisted-ish song state ──
   late String _title = widget.song.title;
+  // One controller for the title field, owned by the State (C21) — rebuilding
+  // it per build reset the cursor on every keystroke.
+  late final TextEditingController _titleCtl =
+      TextEditingController(text: widget.song.title);
   late String _keyRoot = widget.song.key;
-  late String _scale = widget.song.scale;
+  // unknown scale names (old builds / hand-edited saves) fall back to minor —
+  // every kScales lookup below would otherwise `!`-crash (C5).
+  late String _scale =
+      kScales.containsKey(widget.song.scale) ? widget.song.scale : 'minor';
   late int _bpm = widget.song.bpm;
   late double _swing = widget.song.swing;
   late final Map<String, double> _vol = Map.of(widget.song.vol);
@@ -157,6 +165,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // WAV basename, so multiple takes / Audio lanes / trims play live. Key = section
   // id; '' = "computed, just use the raw single take". Cleared on record/edit.
   final Map<String, String> _vocalMix = {};
+  // True while the live vocal is a bounced section MIX (lane levels baked in,
+  // played at unity) rather than a raw single take (played at vol['vocal']).
+  bool _vocalIsMix = false;
+  // A vocal-lane level changed while a mix was playing: rebounce + restart it
+  // at the next loop start so the change is heard in sync (C8).
+  bool _vocalRestartAtWrap = false;
 
   // ── song-level continuous vocal take (recorded over the WHOLE song) ──
   // Local mirror of widget.song.songVocal*; written back in _snapshot. Plays
@@ -179,6 +193,19 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   Section get _sec => _sections[_activeIdx];
   Map<String, TrackData> get _tracks => _sec.tracks;
+
+  /// [tracks][id], falling back to the drums lane when [id] is dangling (e.g.
+  /// an added track that an undo removed, or a section without it) — never a
+  /// `!` crash (C2).
+  TrackData _trackIn(Map<String, TrackData> tracks, String id) =>
+      tracks[id] ?? tracks['drums'] ?? (tracks['drums'] = TrackData());
+  TrackData get _activeTrack => _trackIn(_tracks, _activeId);
+
+  /// Re-point the active track at 'drums' when the current section doesn't
+  /// have it (undo removed an added track / switched to a section without it).
+  void _ensureActiveIdValid() {
+    if (!_tracks.containsKey(_activeId)) _activeId = 'drums';
+  }
   /// The Beat-Fill launchpad's 6 pad sounds for the rendered section (preview
   /// section when previewing the song, else the editing section).
   List<String> get _fillKinds => (_songSection ?? _sec).fillKinds;
@@ -246,6 +273,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final id = ids.removeAt(oldIndex);
     ids.insert(newIndex.clamp(0, ids.length), id);
     setState(() {
+      _dirty = true;
       for (final s in _sections) {
         s.order
           ..clear()
@@ -347,8 +375,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // 가 낮은 데이터플로우 회피용 always-save 패턴).
   // _savedAt: 가장 최근 저장 시각 (UI 표시용).
   // _savedFlash: 명시적 Save 버튼 누른 직후 lime 강조 (2초간) 플래그.
-  // _dirty: 명시적 Save / autosave 이후 추가 입력 여부 — 현재는 항상 false 로
-  // 시작해서 첫 autosave 가 'Saved · 13:42' 로 표시되도록.
+  // _dirty: 명시적 Save / autosave 이후 추가 입력 여부 — 모든 편집은 _pushUndo
+  // 를 지나므로 거기서 true, 저장 시 false (C24).
   Timer? _autosaveTimer;
   bool _dirty = false;
   DateTime? _savedAt;
@@ -358,6 +386,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // apply this song's chosen instruments (per pitched channel), then warm the synth
     _audio.setPrograms({
       for (final t in kPitchedTracks)
@@ -384,6 +413,8 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _titleCtl.dispose();
     _autosaveTimer?.cancel();
     _flashTimer?.cancel();
     for (final t in _strumTimers) {
@@ -398,10 +429,22 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   /// 12초마다 호출. 변경 사항이 없어 보여도 일단 저장 — upsert 는 idempotent
   /// 하고, 자잘한 미반영 mutation 도 모두 잡힌다 (dirty 추적 정밀도가 낮은
   /// 데이터플로우 회피). UI 갱신은 setState 로 saved indicator 만.
+  // Backgrounded (or hidden) → stop the transport like the user pressed stop.
+  // A clock left running would only pile up a catch-up burst on resume (A7),
+  // and a pending count-in must not start recording into the void (C25).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.paused && state != AppLifecycleState.hidden) return;
+    if (_playing || _songSection != null || _countDown > 0) _stopAll();
+  }
+
   Future<void> _autoSaveTick() async {
     if (!mounted) return;
     try {
-      await context.read<LoopStore>().upsert(_snapshot());
+      final store = context.read<LoopStore>();
+      // an untouched brand-new song doesn't earn a library slot yet (C15)
+      if (_isPristineNew(store)) return;
+      await store.upsert(_snapshot());
       if (!mounted) return;
       setState(() {
         _dirty = false;
@@ -424,12 +467,25 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final sec = elapsed.inMicroseconds / 1e6;
     final beats = sec * (_bpm / 60);
     final abs = _startStep + beats * kStepsPerBeat;
+    // Fell more than a whole loop behind (frames stalled / app resumed): skip
+    // ahead instead of firing every missed trigger in one burst (A7).
+    if (abs - _nextAbs > steps) {
+      _nextAbs = abs.ceil();
+      _freshThisLoop.clear();
+    }
     while (abs >= _nextAbs + _swFrac(_nextAbs)) {
       final st = ((_nextAbs % steps) + steps) % steps;
       // new loop pass — notes recorded last pass may now play normally; re-align
       // the recorded vocal to the loop start so it stays in sync.
       if (st == 0) {
         _freshThisLoop.clear();
+        // a lane level changed mid-loop → swap in the rebounced mix here, at
+        // the loop start, so it comes back in sync.
+        if (_vocalRestartAtWrap && _songSection == null) {
+          _vocalRestartAtWrap = false;
+          _stopVocal();
+          _startVocalIfAny();
+        }
         // single-section loop re-aligns its one vocal; song mode handles vocals
         // per-section in _trigger (the step-0 boundary restarts the first one).
         // Aligned takes loop natively in the player (ReleaseMode.loop) — a
@@ -465,9 +521,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       final path = sched[step];
       if (path != null) {
         _vocalPlaying = true;
+        _vocalIsMix = _isMixFile(path);
         _audio.playVocal(
           LoopStorage.resolveVocal(path),
-          vol: _vol['vocal'] ?? 0.85,
+          vol: _vocalFileVol(path),
         );
       } else {
         _vocalPlaying = false;
@@ -663,9 +720,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     _vocalPlaying = false;
     _songVocalActive = false;
     _playStep.value = 0;
+    _countInGen++; // abandon any pending count-in
     setState(() {
       _playing = false;
       _recording = false;
+      _countDown = 0;
       _litMidis = {};
       if (_songSection != null) {
         _songSection = null;
@@ -677,6 +736,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   void _armRecord() {
     _audio.ensure();
+    // Rec tapped again DURING the count-in → cancel the pending start (C25).
+    if (_countDown > 0) {
+      _countInGen++;
+      setState(() => _countDown = 0);
+      return;
+    }
     if (_recording) {
       setState(() => _recording = false);
       return;
@@ -700,15 +765,19 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     }
   }
 
+  // Bumped to abandon an in-flight count-in (Rec toggled off, stop, background).
+  int _countInGen = 0;
+
   void _doCountIn(VoidCallback then) {
     _audio.ensure();
+    final gen = ++_countInGen;
     final beatMs = (60 / _bpm * 1000).round();
     var n = 4;
     setState(() => _countDown = 4);
     _audio.click(true);
     void step() {
       Future.delayed(Duration(milliseconds: beatMs), () {
-        if (!mounted) return;
+        if (!mounted || gen != _countInGen) return; // cancelled
         n -= 1;
         if (n <= 0) {
           setState(() => _countDown = 0);
@@ -730,6 +799,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     if (_playing) _stopAll();
     setState(() {
       _activeIdx = idx;
+      _ensureActiveIdValid();
       _playStep.value = 0;
     });
   }
@@ -755,7 +825,14 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       id: 'sec${DateTime.now().millisecondsSinceEpoch}',
       name: _nextSectionName(),
       bars: _bars,
+      // the track set is song-wide (see _addTrack) — a new section gets every
+      // added track too, so switching to it never dangles the active id.
+      extras: [for (final e in _sec.extras) TrackRef(e.id, e.type)],
+      order: [..._sec.order],
     );
+    for (final e in ns.extras) {
+      ns.tracks[e.id] = TrackData();
+    }
     setState(() {
       _sections.add(ns);
       _relabelSections();
@@ -817,9 +894,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   // User typed a name → it's custom now, so _relabelSections leaves it alone.
   void _renameSection(int idx, String name) {
-    _sections[idx]
-      ..name = name
-      ..autoName = false;
+    _pushUndo(coalesce: true); // one undo entry per typing burst
+    setState(() {
+      _sections[idx]
+        ..name = name
+        ..autoName = false;
+    });
   }
 
   // long-press a section chip → Duplicate / Move left / Move right
@@ -918,12 +998,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       return;
     }
     final flat = flattenSong(_sections);
-    final disp = Section(id: 'song', name: 'SONG', bars: _bars);
-    disp.tracks['melody'] = TrackData(notes: flat.melody);
-    disp.tracks['melodyDec'] = TrackData(notes: flat.melodyDec);
-    disp.tracks['bass'] = TrackData(notes: flat.bass);
-    disp.tracks['drums'] = TrackData(drums: flat.drums);
-    disp.tracks['beatDec'] = TrackData(drums: flat.beatDec);
+    final disp = _songDisplay(flat);
     // Bounce each section's vocal lanes once (cached), then schedule that mix at
     // every section instance — so the full-song preview hears all takes/Audio
     // lanes/trims, matching export (not just the first raw take).
@@ -954,6 +1029,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       final native = _songVocalBpm == _bpm && _songVocalBars == _songTotalBars;
       _vocalLoopNative = native;
       _vocalPlaying = true;
+      _vocalIsMix = false;
       _songVocalActive = true;
       _audio.playVocal(
         LoopStorage.resolveVocal(_songVocalPath!),
@@ -1003,12 +1079,51 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void _reflattenSong() {
     final s = _songSection;
     if (s == null) return;
-    final flat = flattenSong(_sections);
-    s.tracks['melody'] = TrackData(notes: flat.melody);
-    s.tracks['melodyDec'] = TrackData(notes: flat.melodyDec);
-    s.tracks['bass'] = TrackData(notes: flat.bass);
-    s.tracks['drums'] = TrackData(drums: flat.drums);
-    s.tracks['beatDec'] = TrackData(drums: flat.beatDec);
+    _fillSongTracks(s, flattenSong(_sections));
+  }
+
+  /// The flattened whole-song display section: every base lane PLUS every
+  /// added track (so Play song hears them and the surface can show the active
+  /// one — C3), carrying the editing section's pad layout / row order.
+  Section _songDisplay(FlatSong flat) {
+    final extras = <TrackRef>[];
+    final seen = <String>{};
+    for (final s in _sections) {
+      for (final e in s.extras) {
+        if (seen.add(e.id)) extras.add(TrackRef(e.id, e.type));
+      }
+    }
+    final disp = Section(
+      id: 'song',
+      name: 'SONG',
+      bars: _bars,
+      extras: extras,
+      order: [..._sec.order],
+      fillKinds: [..._sec.fillKinds],
+    );
+    _fillSongTracks(disp, flat);
+    return disp;
+  }
+
+  void _fillSongTracks(Section disp, FlatSong flat) {
+    disp.tracks['melody'] = TrackData(notes: flat.melody);
+    disp.tracks['melodyDec'] = TrackData(notes: flat.melodyDec);
+    disp.tracks['bass'] = TrackData(notes: flat.bass);
+    disp.tracks['drums'] = TrackData(drums: flat.drums);
+    disp.tracks['beatDec'] = TrackData(drums: flat.beatDec);
+    for (final e in disp.extras) {
+      disp.tracks[e.id] = switch (trackById(e.type).kind) {
+        TrackKind.drums => TrackData(drums: flat.extraDrums[e.id] ?? []),
+        // audio lanes are display-only here (vocals play via the schedule)
+        TrackKind.vocal => _sec.tracks[e.id]?.deepCopy() ?? TrackData(),
+        _ => TrackData(notes: flat.extraPitched[e.id] ?? []),
+      };
+    }
+    // cosmetic (C32): the song-level take's waveform when there is one, else
+    // the editing section's vocal lane.
+    disp.tracks['vocal'] = _songVocalPeaks != null
+        ? TrackData(clip: _songVocalPeaks)
+        : (_sec.tracks['vocal']?.deepCopy() ?? TrackData());
   }
 
   // Re-assert every drum track's kit on its channel: base drums on ch9, beat-fill
@@ -1031,7 +1146,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     final tgt = _recTarget(g);
     if (tgt == null) return;
     _pushUndo(coalesce: true);
-    final dn = tgt.tracks[_activeId]!.drumNotes;
+    final dn = _trackIn(tgt.tracks, _activeId).drumNotes;
     if (!dn.any((x) => x.kind == kind && x.step == tgt.step)) {
       setState(() => dn.add(DrumNote(kind: kind, step: tgt.step)));
     }
@@ -1048,7 +1163,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       return; // editing disabled while previewing the song
     }
     _pushUndo(coalesce: true);
-    final dn = _tracks[_activeId]!.drumNotes;
+    final dn = _activeTrack.drumNotes;
     final i = dn.indexWhere((x) => x.kind == kind && x.step == step);
     setState(() {
       if (i >= 0) {
@@ -1082,7 +1197,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       // Remap the swapped-away sound's notes → the new sound, deduping any
       // (kind, step) collision with notes the new sound already had. Operate on
       // the ACTIVE beat-fill track (could be an added instance, not 'beatDec').
-      final track = _sec.tracks[_activeId]!;
+      final track = _activeTrack;
       final seen = <String>{};
       final remapped = <DrumNote>[];
       for (final n in track.drumNotes) {
@@ -1205,8 +1320,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     setState(() {
       var lo = a < b ? a : b;
       var hi = a < b ? b : a;
+      final target = _trackIn(tracks, id);
       final kept = <PitchNote>[];
-      for (final x in tracks[id]!.pitchNotes) {
+      for (final x in target.pitchNotes) {
         if (x.midi == n.midi) {
           final xs = x.step, xe = x.step + x.dur - 1;
           if (xs <= hi && xe >= lo) {
@@ -1222,7 +1338,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       kept.add(
         PitchNote(midi: n.midi, freq: n.freq, step: lo, dur: hi - lo + 1),
       );
-      tracks[id]!.pitchNotes
+      target.pitchNotes
         ..clear()
         ..addAll(kept);
     });
@@ -1250,7 +1366,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void _gridErase(Rung n, int step) {
     _pushUndo(coalesce: true);
     setState(() {
-      final notes = _tracks[_activeId]!.pitchNotes;
+      final notes = _activeTrack.pitchNotes;
       final i = notes.indexWhere(
         (x) => x.midi == n.midi && step >= x.step && step < x.step + x.dur,
       );
@@ -1283,7 +1399,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   void _clearTrack() {
     _pushUndo();
     setState(() {
-      final t = _tracks[_activeId]!;
+      final t = _activeTrack;
       t.pitchNotes.clear();
       t.drumNotes.clear();
       t.clip = null;
@@ -1339,8 +1455,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       return false;
     }
     _pushUndo();
+    var laneWasFull = false;
     setState(() {
-      final t = _tracks[_vocalId]!;
+      final t = _trackIn(_tracks, _vocalId);
       // Multi-take: APPEND a new clip to the lane instead of replacing. The
       // first recording seeds the lane (migrating any legacy single take).
       final lane = t.clips ?? (t.vocalPath != null ? List.of(t.effectiveClips) : <VocalClip>[]);
@@ -1353,7 +1470,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         final end = c.startStep + dur;
         if (end > startStep) startStep = end;
       }
-      startStep = startStep.clamp(0, secSteps - 1);
+      // Lane already full → start over at step 0 (overlapping the first take)
+      // rather than a 1-step sliver at the loop end (C9). Told below.
+      if (startStep >= secSteps) {
+        startStep = 0;
+        laneWasFull = true;
+      }
       final clip = VocalClip(
         path: persisted,
         startStep: startStep,
@@ -1372,6 +1494,9 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       t.vocalBars = _bars;
     });
     _vocalMix.remove(_sec.id); // section mix is stale → rebounce on next play
+    if (laneWasFull) {
+      _toast('Lane is full — the new take starts at the beginning (overlapping)'); // TODO(l10n)
+    }
     return true;
   }
 
@@ -1387,15 +1512,23 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     if (!mounted || !identical(_sec, sec) || file == null) return;
     // A padded section mix (name prefixed '_mix_') always loops natively; a raw
     // single take loops only when it's loop-aligned at this bpm/bars.
+    _vocalIsMix = _isMixFile(file);
     _vocalLoopNative =
-        file.startsWith('_mix_') || (_tracks['vocal']?.vocalIsAligned(_bpm, _bars) ?? false);
+        _vocalIsMix || (_tracks['vocal']?.vocalIsAligned(_bpm, _bars) ?? false);
     _vocalPlaying = true;
     _audio.playVocal(
       LoopStorage.resolveVocal(file),
-      vol: _vol['vocal'] ?? 0.85,
+      vol: _vocalFileVol(file),
       loop: _vocalLoopNative,
     );
   }
+
+  static bool _isMixFile(String name) => name.startsWith('_mix_');
+
+  /// Player volume for a vocal file: a bounced section mix already has every
+  /// lane's mixer level baked in (unity here); a raw single take is the base
+  /// Vocal lane, so its level is applied by the player.
+  double _vocalFileVol(String name) => _isMixFile(name) ? 1.0 : (_vol['vocal'] ?? 0.85);
 
   /// The cached playable vocal basename for [sec] (the lane mix, or a raw single
   /// take). '' is cached for "nothing to play". Cleared on record/edit/mute.
@@ -1412,21 +1545,32 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   /// multiple takes / lanes / trims play live. Returns null when there's nothing
   /// to play; a single untouched take returns its own path (no mix written).
   Future<String?> _bounceSectionVocal(Section sec) async {
+    // Each lane's mixer level is baked into its clips' gain so added Audio
+    // lanes get their own volume (C8); muted / zero lanes are left out — so
+    // muting the base Vocal never silences the other lanes.
     final clips = <VocalClip>[];
+    var baseLaneOnly = true;
     for (final vid in vocalTrackIds(sec)) {
       if (_mutes[vid] ?? false) continue;
-      clips.addAll(sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[]);
+      final laneVol = _vol[vid] ?? 0.85;
+      if (laneVol <= 0) continue;
+      final lane = sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[];
+      if (lane.isEmpty) continue;
+      if (vid != 'vocal') baseLaneOnly = false;
+      for (final c in lane) {
+        clips.add(c.copy()..gain = c.gain * laneVol);
+      }
     }
     if (clips.isEmpty) return null;
-    if (clips.length == 1) {
-      final c = clips.first;
+    if (clips.length == 1 && baseLaneOnly) {
+      final c = sec.tracks['vocal']!.effectiveClips.first;
       final untouched = c.startStep == 0 &&
           c.trimStart == 0 &&
           c.trimEnd == -1 &&
           c.fadeInMs == 0 &&
           c.fadeOutMs == 0 &&
           c.gain == 1.0;
-      if (untouched) return c.path; // play the raw take directly
+      if (untouched) return c.path; // play the raw take directly (level via the player)
     }
     final sources = <String, ({Float32List pcm, int sampleRate})>{};
     for (final c in clips) {
@@ -1494,7 +1638,15 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     // Coalesce the drag stream into one undo entry per gesture (500ms window).
     _pushUndo(coalesce: true);
     setState(() => _vol[id] = v);
-    if (id == 'vocal' && _vocalPlaying) _audio.setVocalVolume(v);
+    if (trackById(_typeOf(id)).kind != TrackKind.vocal) return;
+    // lane levels are baked into the section mix → it's stale now (C8)
+    _vocalMix.remove(_sec.id);
+    if (!_vocalPlaying) return;
+    if (id == 'vocal' && (!_vocalIsMix || _songVocalActive)) {
+      _audio.setVocalVolume(v); // raw take / song-level take: live
+    } else if (_songSection == null) {
+      _vocalRestartAtWrap = true; // mix: swap in the rebounce at the loop start
+    }
   }
 
   // ── sheets ────────────────────────────────────────────────────────
@@ -1655,12 +1807,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     _audio.ensure();
     _stopClock();
     final flat = flattenSong(_sections);
-    final disp = Section(id: 'song', name: 'SONG', bars: _bars);
-    disp.tracks['melody'] = TrackData(notes: flat.melody);
-    disp.tracks['melodyDec'] = TrackData(notes: flat.melodyDec);
-    disp.tracks['bass'] = TrackData(notes: flat.bass);
-    disp.tracks['drums'] = TrackData(drums: flat.drums);
-    disp.tracks['beatDec'] = TrackData(drums: flat.beatDec);
+    final disp = _songDisplay(flat);
     _playStep.value = 0;
     _freshThisLoop.clear();
     setState(() {
@@ -1813,7 +1960,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     required double retuneMs,
   }) async {
     final vid = _vocalId;
-    final t = _tracks[vid]!;
+    final t = _trackIn(_tracks, vid);
     final name = t.vocalPath;
     if (name == null) return;
     // blocking progress dialog for the server round-trip. Capture the root
@@ -1905,7 +2052,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   // edited vocal TrackData; we swap it in, push undo, and re-prepare playback.
   Future<void> _openVocalEditor() async {
     final vid = _vocalId;
-    final t = _tracks[vid]!;
+    final t = _trackIn(_tracks, vid);
     if (t.effectiveClips.isEmpty) return;
     final edited = await openVocalEditor(
       context,
@@ -1925,7 +2072,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _revertAutotune() async {
-    final t = _tracks[_vocalId]!;
+    final t = _trackIn(_tracks, _vocalId);
     final orig = t.vocalOrigPath;
     if (orig == null) return;
     List<double>? peaks;
@@ -1983,7 +2130,6 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   static const _engineScale = {'pentatonic': 'minor_pentatonic'};
 
   Future<void> _humConvert(String audioPath) async {
-    _pushUndo();
     final drums = _meta.kind == TrackKind.drums;
     final opts = eng.AnalyzeOptions(
       // snap to the song's chosen key/scale (LoopTap's in-key guarantee)
@@ -2002,11 +2148,16 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
       stepsPerBar: kStepsPerBeat * kBeatsPerBar,
       swing: _swing,
     );
+    // Nothing is mutated (and no undo entry pushed) until the engine has
+    // answered AND produced notes — a failure leaves the track exactly as it
+    // was and offers a retry; no silent generated filler (C12).
+    var ok = false;
     try {
       final res = await EngineApi().analyze(audioPath, opts);
+      if (!mounted) return;
       final sps = 60 / _bpm / kStepsPerBeat;
       final steps = _steps;
-      final t = _tracks[_activeId]!;
+      final t = _activeTrack;
       var count = 0;
       if (drums) {
         final out = <DrumNote>[];
@@ -2023,6 +2174,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           out.add(DrumNote(kind: kind, step: step));
         }
         if (out.isEmpty) throw StateError('no drums');
+        _pushUndo();
         setState(() => t.drumNotes.addAll(out));
         count = out.length;
       } else {
@@ -2044,17 +2196,63 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           out.add(PitchNote(midi: r.midi, freq: r.freq, step: step, dur: dur));
         }
         if (out.isEmpty) throw StateError('no notes');
+        _pushUndo();
         setState(() => t.pitchNotes.addAll(out));
         count = out.length;
       }
+      ok = true;
       _toast('Added $count notes from your hum');
       // Clarity: 분석 성공 + 분기(드럼/멜로딕) 태깅. noteCount 는 이벤트로 분포 확인.
       ClarityService.instance.event('analyze_completed');
       ClarityService.instance.tag('analyze_role', drums ? 'drum' : 'melodic');
     } catch (e) {
-      _humFallback();
-      _toast('Engine unavailable — used a generated phrase');
+      debugPrint('[hum] convert failed: $e');
+      if (!mounted) {
+        _deleteTempFile(audioPath);
+        return;
+      }
+      // keep the recording for a retry; drop it once the offer goes unanswered
+      final ctl = ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar();
+      final shown = ctl.showSnackBar(
+        SnackBar(
+          content: Text(_humErrorMessage(e)),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Retry', // TODO(l10n)
+            onPressed: () => _humConvert(audioPath),
+          ),
+        ),
+      );
+      unawaited(shown.closed.then((reason) {
+        if (reason != SnackBarClosedReason.action) _deleteTempFile(audioPath);
+      }));
+    } finally {
+      if (ok) _deleteTempFile(audioPath); // temp hum recording (C27)
     }
+  }
+
+  /// User-facing reason a hum conversion failed. DioException → status-aware
+  /// hints (413 too long, 429 busy, connect timeout = cold server); a run that
+  /// simply found no notes says so; anything else is generic.
+  String _humErrorMessage(Object e) {
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 413) return 'Recording too long'; // TODO(l10n)
+      if (code == 429) return 'Server busy, try again shortly'; // TODO(l10n)
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        return 'Server is waking up, try again'; // TODO(l10n)
+      }
+      return "Couldn't convert your hum"; // TODO(l10n)
+    }
+    if (e is StateError) return 'No notes detected — try humming louder'; // TODO(l10n)
+    return "Couldn't convert your hum"; // TODO(l10n)
+  }
+
+  /// Best-effort delete of a temp recording handed to us by a modal.
+  void _deleteTempFile(String path) {
+    unawaited(File(path).delete().then((_) {}, onError: (_) {}));
   }
 
   // Fit an engine MIDI note onto the grid's in-key rows. The grid spans ~1
@@ -2072,34 +2270,6 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   String? _drumKind(eng.Note n) => drumKind(n.drum, n.drumName, n.pitch);
 
-  // generated-phrase fallback (the original behaviour) when the engine fails
-  void _humFallback() {
-    setState(() {
-      final t = _tracks[_activeId]!;
-      final kind = _meta.kind;
-      if (kind == TrackKind.drums) {
-        // main kit → the canonical beat; decoration kit → a light fill on its
-        // own kinds (first kind every 2 steps).
-        final gen =
-            _meta.decoration
-                ? [
-                  for (var s = 0; s < _steps; s += 2)
-                    DrumNote(kind: _meta.drumKinds!.first, step: s),
-                ]
-                : genDrums(_steps);
-        for (final n in gen) {
-          if (!t.drumNotes.any((x) => x.kind == n.kind && x.step == n.step)) {
-            t.drumNotes.add(n);
-          }
-        }
-      } else if (kind == TrackKind.bass) {
-        t.pitchNotes.addAll(genBass(_bassLadder, _bars));
-      } else if (kind == TrackKind.pitched) {
-        t.pitchNotes.addAll(genMelody(_ladder, _steps, _rng));
-      }
-    });
-  }
-
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -2114,6 +2284,19 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     if (_songSection != null) return;
     _pushUndo();
     setState(() => _sec.bars = b);
+  }
+
+  /// Tempo change. While playing, the clock is rebased at the current
+  /// playhead so the new tempo takes over smoothly — recomputing elapsed
+  /// beats at a new BPM would otherwise jump the playhead (a burst of missed
+  /// triggers, or a stall) (C6).
+  void _setBpm(int v) {
+    if (v == _bpm) return;
+    setState(() {
+      _bpm = v;
+      _dirty = true;
+    });
+    if (_playing) _startClock();
   }
 
   // ── persistence ───────────────────────────────────────────────────
@@ -2154,12 +2337,42 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     });
   }
 
+  /// A brand-new song the user never touched — not in the library yet, no
+  /// notes / clips / takes, default title — doesn't earn a library slot (nor
+  /// count against the free quota) just for being opened (C15).
+  bool _isPristineNew(LoopStore store) {
+    if (store.songs.any((s) => s.id == widget.song.id)) return false;
+    final title = _title.trim();
+    if (title.isNotEmpty && title != 'Untitled loop') return false;
+    if (_songVocalPath != null) return false;
+    for (final sec in _sections) {
+      for (final t in sec.tracks.values) {
+        if (t.pitchNotes.isNotEmpty ||
+            t.drumNotes.isNotEmpty ||
+            t.effectiveClips.isNotEmpty) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  // Leaving is in flight (back arrow / system back / edge swipe) — a second
+  // request must not save + sweep + pop twice (C4).
+  bool _leaving = false;
+
   Future<void> _backWithSave() async {
+    if (_leaving) return;
+    _leaving = true;
     final store = context.read<LoopStore>();
-    await store.upsert(_snapshot());
-    // editor session over → undo stack (the last holder of replaced takes) is
-    // gone, so unreferenced vocal files are safe to drop.
-    await store.sweepVocals();
+    try {
+      if (!_isPristineNew(store)) await store.upsert(_snapshot());
+      // editor session over → undo stack (the last holder of replaced takes) is
+      // gone, so unreferenced vocal files are safe to drop.
+      await store.sweepVocals();
+    } catch (e) {
+      debugPrint('[edit] save on leave failed: $e');
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -2193,6 +2406,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     await showExportDrawer(
       context,
       title: _title,
+      songId: widget.song.id,
       sections: _sections,
       bpm: _bpm,
       swing: _swing,
@@ -2210,18 +2424,28 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   /// Save indicator 텍스트 — "Saved" (방금) / "Saved · 13:42" (시간 표시) /
   /// "Unsaved" (dirty).
   String _saveLabel() {
-    if (_savedAt == null) return _dirty ? 'Unsaved' : '';
-    final t = _savedAt!;
+    if (_savedFlash) return 'Saved';
+    if (_dirty) return 'Unsaved';
+    final t = _savedAt;
+    if (t == null) return '';
     final hh = t.hour.toString().padLeft(2, '0');
     final mm = t.minute.toString().padLeft(2, '0');
-    return _savedFlash ? 'Saved' : 'Saved · $hh:$mm';
+    return 'Saved · $hh:$mm';
   }
 
   // ── build ─────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final pitched = _isPitched;
-    return Scaffold(
+    // System back / edge-swipe goes through the same save + sweep as the back
+    // arrow (C4) — the route never pops on its own.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _backWithSave();
+      },
+      child: Scaffold(
       backgroundColor: LT.bg,
       body: SafeArea(
         child: Stack(
@@ -2307,7 +2531,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                     onStop: _stopAll,
                     onRec: _armRecord,
                     bpm: _bpm,
-                    onBpm: (v) => setState(() => _bpm = v),
+                    onBpm: _setBpm,
                     metro: _metro,
                     onMetro: (v) {
                       setState(() => _metro = v);
@@ -2319,7 +2543,10 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
                     onCountIn: (v) => setState(() => _countIn = v),
                     onClear: _clearTrack,
                     swing: _swing,
-                    onSwing: (v) => setState(() => _swing = v),
+                    onSwing: (v) => setState(() {
+                      _swing = v;
+                      _dirty = true;
+                    }),
                     bars: _bars,
                     onBars: _setBars,
                     showRecord: trackById(_activeType).kind != TrackKind.vocal,
@@ -2333,6 +2560,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
             if (_countDown > 1) _countInOverlay(),
           ],
         ),
+      ),
       ),
     );
   }
@@ -2364,9 +2592,11 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           constraints: const BoxConstraints(maxWidth: 240),
           child: IntrinsicWidth(
             child: TextField(
-              controller: TextEditingController(text: _title)
-                ..selection = TextSelection.collapsed(offset: _title.length),
-              onChanged: (v) => _title = v,
+              controller: _titleCtl,
+              onChanged: (v) {
+                _title = v;
+                if (!_dirty) setState(() => _dirty = true);
+              },
               cursorColor: LT.lime,
               style: LTType.inter(
                 size: 14,
@@ -2429,7 +2659,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         ),
         const SizedBox(width: 8),
         Pill(
-          label: '$_keyRoot ${kScales[_scale]!.label}',
+          label: '$_keyRoot ${(kScales[_scale] ?? kScales['minor']!).label}',
           icon: LtIcons.musicNote,
           height: pillH,
           fontSize: pillFS,
@@ -2790,7 +3020,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
 
   Widget _surface() {
     final kind = _meta.kind;
-    final src = (_songSection ?? _sec).tracks[_activeId]!;
+    final src = _trackIn((_songSection ?? _sec).tracks, _activeId);
     if (kind == TrackKind.drums) {
       // Beat-Fill's pad sounds are user-assignable (per section); the main drums
       // use their fixed kinds. Match by TYPE, not id, so ADDED beat-fill
@@ -2885,7 +3115,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
     }
     if (kind == TrackKind.vocal) {
       // Base 'vocal' OR an added 'Audio' lane — the surface edits the ACTIVE id.
-      final vt = _tracks[_activeId]!;
+      final vt = _activeTrack;
       return VocalSurface(
         clip: vt.clip,
         onRecord: _openVocalRecord,
@@ -2901,7 +3131,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
           _pushUndo();
           _stopVocal();
           setState(() {
-            final t = _tracks[_activeId]!;
+            final t = _activeTrack;
             t.clip = null;
             t.clips = null;
             t.vocalPath = null;
@@ -2954,6 +3184,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   _EditSnapshot _capture() => _EditSnapshot(
     sections: _sections.map((s) => s.deepCopy()).toList(),
     activeIdx: _activeIdx,
+    activeId: _activeId,
     keyRoot: _keyRoot,
     scale: _scale,
     bpm: _bpm,
@@ -2971,6 +3202,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
   /// Snapshot current state before a mutation. [coalesce] merges rapid bursts
   /// (drag-erase, live recording taps) into a single undo step.
   void _pushUndo({bool coalesce = false}) {
+    _dirty = true; // every edit passes through here (C24)
     final now = DateTime.now().millisecondsSinceEpoch;
     if (coalesce && now - _lastUndoMs < 500) {
       _lastUndoMs = now;
@@ -2995,8 +3227,12 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         ..clear()
         ..addAll(s.sections.map((x) => x.deepCopy()));
       _activeIdx = s.activeIdx.clamp(0, _sections.length - 1);
+      // the restored arrangement may not have the track that was active
+      // (undoing "add track") — never leave _activeId dangling (C2).
+      _activeId = s.activeId;
+      _ensureActiveIdValid();
       _keyRoot = s.keyRoot;
-      _scale = s.scale;
+      _scale = kScales.containsKey(s.scale) ? s.scale : 'minor';
       _bpm = s.bpm;
       _swing = s.swing;
       _vol
@@ -3009,6 +3245,7 @@ class _EditScreenState extends State<EditScreen> with TickerProviderStateMixin {
         ..clear()
         ..addAll(s.instruments);
       _title = s.title;
+      if (_titleCtl.text != s.title) _titleCtl.text = s.title;
       _songVocalPath = s.songVocalPath;
       _songVocalPeaks = s.songVocalPeaks;
       _songVocalBpm = s.songVocalBpm;
@@ -3055,6 +3292,7 @@ class _EditSnapshot {
   _EditSnapshot({
     required this.sections,
     required this.activeIdx,
+    required this.activeId,
     required this.keyRoot,
     required this.scale,
     required this.bpm,
@@ -3070,6 +3308,7 @@ class _EditSnapshot {
   });
   final List<Section> sections;
   final int activeIdx;
+  final String activeId;
   final String keyRoot, scale, title;
   final int bpm;
   final double swing;

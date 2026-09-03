@@ -6,13 +6,16 @@
 // only subtly). buildMidi already covers all five lanes (melody/bass/melodyDec/
 // drums/beatDec), so stems and the full mix include the decoration tracks too.
 //
-// The heavy render runs in a background isolate via compute(): the SF2 bytes are
-// loaded on the main isolate (rootBundle) and passed in, since rootBundle isn't
-// available inside a plain isolate.
+// The heavy render runs in a background isolate via compute(). Every SoundFont
+// — bundled assets (materialised once to the app-support dir) and downloaded
+// catalog fonts — is handed over as a file PATH and read inside the isolate
+// (C20/A8): no multi-hundred-MB byte blobs are copied through the isolate
+// message, only one SoundFont is parsed at a time, and the full mix is summed
+// into a single shared L/R buffer instead of one full-length buffer per lane.
 //
 // Vocal recordings are PCM16 WAV (44.1k mono) since the opus→WAV switch, so
 // the full mix decodes them in pure Dart (inside the render isolate — the main
-// isolate only reads the raw bytes) and sums them into the render at each
+// isolate only resolves file paths) and sums them into the render at each
 // section instance's start (same schedule as live playback's _songVocalSched).
 // Legacy opus takes (.caf/.ogg) are converted once via the backend's
 // /process_vocal when online (cached as *.cnv.wav); otherwise they're skipped
@@ -21,6 +24,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dart_melty_soundfont/dart_melty_soundfont.dart';
+import 'package:dart_melty_soundfont/soundfont.dart' show SoundFont;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
@@ -42,32 +46,92 @@ const String _sfHipHopAsset = 'assets/sounds/hiphop_kit.sf2';
 // Render past the last note-off so reverb/release tails aren't cut.
 const double _tailSec = 1.2;
 
-// ── SF2 asset bytes (loaded on the main isolate, passed into compute) ──
-Future<Uint8List> _sf2Bytes() async {
-  final bd = await rootBundle.load(_sfAsset);
-  return bd.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes);
+// ── SF2 sources ─────────────────────────────────────────────────────
+// A bundled SF2 asset is copied ONCE to <support>/looptap/sf2/<name> so the
+// render isolate can open every soundfont from disk itself (rootBundle isn't
+// reachable from a plain isolate). Re-copied when the asset size changes
+// (app update).
+Future<String> _assetSf2Path(String asset) async {
+  final dir = await getApplicationSupportDirectory();
+  final folder = Directory('${dir.path}/looptap/sf2');
+  if (!await folder.exists()) await folder.create(recursive: true);
+  final f = File('${folder.path}/${asset.split('/').last}');
+  final bd = await rootBundle.load(asset);
+  if (await f.exists() && await f.length() == bd.lengthInBytes) return f.path;
+  await f.writeAsBytes(
+      bd.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes),
+      flush: true);
+  return f.path;
 }
 
-Future<Uint8List> _sf808Bytes() async {
-  final bd = await rootBundle.load(_sf808Asset);
-  return bd.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes);
+/// The SoundFont files one render needs, deduplicated; jobs refer to them by
+/// index into [paths].
+class _Sf2Pool {
+  final List<String> paths = [];
+  final Map<String, int> _idx = {};
+
+  int file(String path) => _idx.putIfAbsent(path, () {
+        paths.add(path);
+        return paths.length - 1;
+      });
+
+  Future<int> asset(String asset) async => file(await _assetSf2Path(asset));
+
+  /// Index for a resolved render source (asset or file), or [fallback] when
+  /// it's the GM font.
+  Future<int> of({String? asset, String? path, required int fallback}) async {
+    if (asset != null) return this.asset(asset);
+    if (path != null) return file(path);
+    return fallback;
+  }
 }
 
-Future<Uint8List> _sfHipHopBytes() async {
-  final bd = await rootBundle.load(_sfHipHopAsset);
-  return bd.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes);
+// ── instrument → render source resolution (shared by mix + stems, C10) ──
+/// How a pitched lane's program renders: which SF2 it needs (asset or file;
+/// both null = the GM font), the program to emit for it, and whether to force
+/// the guitar strum (catalog guitars — buildMidi only sees the SF2 preset).
+/// Base lanes and added instances resolve identically.
+({String? asset, String? path, int program, bool strum}) _pitchedRender(int program) {
+  if (program == kProgram808) {
+    // 808.sf2's single preset is program 0
+    return (asset: _sf808Asset, path: null, program: 0, strum: false);
+  }
+  if (isDynamicSlot(program)) {
+    final e = SoundfontCatalog.instance.bySlot(program);
+    final path = SoundfontCatalog.instance.localPath(program);
+    if (e != null && path != null) {
+      return (asset: null, path: path, program: e.sfProgram, strum: isGuitarProgram(program));
+    }
+    // not downloaded → GM fallback (same voice the .mid export uses)
+    return (asset: null, path: null, program: SoundfontCatalog.instance.midiFallback(program), strum: false);
+  }
+  // any other out-of-range sentinel → nearest GM voice (mirrors buildMidi.gm)
+  return (asset: null, path: null, program: program > 127 ? kProgram808MidiFallback : program, strum: false);
+}
+
+/// How a drum lane's kit renders: its SF2 (both null = GM font, bank 128) and
+/// the bank-128 program to select (0 for custom kits: their only preset).
+({String? asset, String? path, int gmKit}) _kitRender(int kit) {
+  if (kit == kProgramHipHopKit) return (asset: _sfHipHopAsset, path: null, gmKit: 0);
+  if (isDynamicSlot(kit)) {
+    final path = SoundfontCatalog.instance.localPath(kit);
+    // not downloaded → the GM standard kit
+    return (asset: null, path: path, gmKit: 0);
+  }
+  return (asset: null, path: null, gmKit: kit > 127 ? 0 : kit);
 }
 
 // ── isolate render ──────────────────────────────────────────────────
-// Input: a['sf2s'] = list of SoundFont blobs; a['jobs'] = list of {sf2:int(index
-// into sf2s), midi:Uint8List}; a['mix'] = bool. Each job renders its MIDI through
-// its own SoundFont — this is how the 808 bass lane (a second SF2) is mixed with
-// the GM lanes. When mix=true the job buffers are summed into one WAV; otherwise
-// one WAV per job (stems). Vocal takes arrive as raw WAV bytes
-// (a['vocalBytes'] = {name: Uint8List}) and are decoded/resampled HERE so the
-// parse doesn't jank the UI isolate; a['vocals'] schedules them by name.
+// Input: a['sf2s'] = SoundFont file paths; a['jobs'] = list of {sf2:int(index
+// into sf2s), midi:Uint8List}; a['mix'] = bool. Each job renders its MIDI
+// through its own SoundFont — this is how the 808 bass lane (a second SF2) is
+// mixed with the GM lanes. When mix=true every job is summed straight into ONE
+// shared L/R buffer; otherwise one WAV per job (stems), encoded as soon as it's
+// rendered. Vocal takes arrive as file paths (a['vocalPaths'] = {name: path})
+// and are read/decoded/resampled HERE so nothing heavy crosses the isolate
+// boundary; a['vocals'] schedules them by name.
 List<Uint8List> _renderIso(Map<String, dynamic> a) {
-  final sf2s = (a['sf2s'] as List).cast<Uint8List>();
+  final sf2Paths = (a['sf2s'] as List).cast<String>();
   final jobs = (a['jobs'] as List).cast<Map>();
   final sampleRate = a['sampleRate'] as int;
   final tailSec = a['tail'] as double;
@@ -76,10 +140,14 @@ List<Uint8List> _renderIso(Map<String, dynamic> a) {
   // fade are non-destructive and clip-specific, so they're applied per scheduled
   // occurrence below (in source samples) before resampling to the render rate.
   final vocalSrc = <String, WavData>{};
-  for (final e in ((a['vocalBytes'] as Map?) ?? const {}).entries) {
-    final wav = parseWav(e.value as Uint8List);
-    if (wav == null) continue; // corrupt take — drop from the mix
-    vocalSrc[e.key as String] = wav;
+  for (final e in ((a['vocalPaths'] as Map?) ?? const {}).entries) {
+    try {
+      final wav = parseWav(File(e.value as String).readAsBytesSync());
+      if (wav == null) continue; // corrupt take — drop from the mix
+      vocalSrc[e.key as String] = wav;
+    } catch (_) {
+      // unreadable take — drop from the mix
+    }
   }
   // Memoize the no-edit resample (a take repeated across sections is common).
   final resampledPlain = <String, Float32List>{};
@@ -116,45 +184,78 @@ List<Uint8List> _renderIso(Map<String, dynamic> a) {
     ));
   }
 
-  final lefts = <Float32List>[];
-  final rights = <Float32List>[];
-  var maxN = vocalMixEnd(vocals);
-  for (final job in jobs) {
-    final synth = Synthesizer.loadByteData(
-      ByteData.sublistView(sf2s[job['sf2'] as int]),
-      SynthesizerSettings(sampleRate: sampleRate, enableReverbAndChorus: true),
-    );
-    final midiFile = MidiFile.fromByteData(ByteData.sublistView(job['midi'] as Uint8List));
-    final seq = MidiFileSequencer(synth);
-    seq.play(midiFile, loop: false);
+  // Parse every job's MIDI up front so the mix length is known before any
+  // audio is allocated.
+  final midis = [
+    for (final j in jobs) MidiFile.fromByteData(ByteData.sublistView(j['midi'] as Uint8List)),
+  ];
+  int framesOf(MidiFile m) => ((m.length.inMicroseconds / 1e6 + tailSec) * sampleRate).ceil();
+  // Render jobs grouped by SoundFont so each font is parsed once and released
+  // before the next — only ONE font lives in memory at a time.
+  final order = List<int>.generate(jobs.length, (i) => i)
+    ..sort((x, y) => (jobs[x]['sf2'] as int).compareTo(jobs[y]['sf2'] as int));
+  final settings = SynthesizerSettings(sampleRate: sampleRate, enableReverbAndChorus: true);
+  SoundFont? font;
+  var fontIdx = -1;
+  SoundFont fontFor(int idx) {
+    if (idx != fontIdx) {
+      font = null; // let the previous font go before loading the next
+      font = SoundFont.fromFile(sf2Paths[idx]);
+      fontIdx = idx;
+    }
+    return font!;
+  }
 
-    final totalSec = midiFile.length.inMicroseconds / 1e6 + tailSec;
-    final n = (totalSec * sampleRate).ceil();
-    if (n > maxN) maxN = n;
+  if (mix) {
+    var maxN = vocalMixEnd(vocals);
+    for (final m in midis) {
+      maxN = math.max(maxN, framesOf(m));
+    }
+    final left = Float32List(maxN);
+    final right = Float32List(maxN);
+    // Each job is rendered in small blocks and accumulated straight into the
+    // shared mix — no per-job full-length buffers (A8).
+    const block = 4096;
+    final bl = Float32List(block), br = Float32List(block);
+    for (final i in order) {
+      final synth = Synthesizer.load(fontFor(jobs[i]['sf2'] as int), settings);
+      final seq = MidiFileSequencer(synth);
+      seq.play(midis[i], loop: false);
+      final n = framesOf(midis[i]);
+      var pos = 0;
+      while (pos < n) {
+        final cnt = math.min(block, n - pos);
+        seq.render(bl, br);
+        for (var k = 0; k < cnt; k++) {
+          left[pos + k] += bl[k];
+          right[pos + k] += br[k];
+        }
+        pos += cnt;
+      }
+      seq.stop(); // release the synth's voices before it goes out of scope
+    }
+    font = null;
+    mixVocalsInto(left, right, vocals);
+    // Final mix: normalize up to the headroom so exports are full-level and
+    // consistent (stems above keep their relative balance — no upward boost).
+    return [encodeWavMono16FromStereo(left, right, sampleRate, normalize: true)];
+  }
+
+  // Stems: one buffer per job, encoded right away so only one is alive.
+  final out = List<Uint8List?>.filled(jobs.length, null);
+  for (final i in order) {
+    final synth = Synthesizer.load(fontFor(jobs[i]['sf2'] as int), settings);
+    final seq = MidiFileSequencer(synth);
+    seq.play(midis[i], loop: false);
+    final n = framesOf(midis[i]);
     final left = Float32List(n);
     final right = Float32List(n);
     seq.render(left, right);
-    lefts.add(left);
-    rights.add(right);
+    seq.stop();
+    out[i] = encodeWavMono16FromStereo(left, right, sampleRate);
   }
-
-  if (!mix) {
-    return [for (var i = 0; i < lefts.length; i++) encodeWavMono16FromStereo(lefts[i], rights[i], sampleRate)];
-  }
-  // Sum all job buffers (different lengths possible) into one mix.
-  final left = Float32List(maxN);
-  final right = Float32List(maxN);
-  for (var j = 0; j < lefts.length; j++) {
-    final l = lefts[j], r = rights[j];
-    for (var i = 0; i < l.length; i++) {
-      left[i] += l[i];
-      right[i] += r[i];
-    }
-  }
-  mixVocalsInto(left, right, vocals);
-  // Final mix: normalize up to the headroom so exports are full-level and
-  // consistent (stems above keep their relative balance — no upward boost).
-  return [encodeWavMono16FromStereo(left, right, sampleRate, normalize: true)];
+  font = null;
+  return out.cast<Uint8List>();
 }
 
 // Debug-only: report duration + level so an export can be sanity-checked from
@@ -179,61 +280,62 @@ void _logWavStats(String tag, String path, Uint8List wav) {
 }
 
 // ── public API ──────────────────────────────────────────────────────
-Future<String> _exportPath(String title, String ext) async {
+/// A fresh export file under Documents/looptap/exports — shared sanitiser
+/// (C11) + never-overwrite numbering (A20).
+Future<File> _exportFile(String title, String ext, {required String fallback}) async {
   final dir = await getApplicationDocumentsDirectory();
   final folder = Directory('${dir.path}/looptap/exports');
   if (!await folder.exists()) await folder.create(recursive: true);
-  final safe = title.trim().isEmpty ? 'loop' : title.trim().replaceAll(RegExp(r'[^\w\- ]+'), '_');
-  return '${folder.path}/$safe.$ext';
+  return uniqueExportFile(folder, exportFileName(title, fallback: fallback), ext);
 }
 
 // ── vocal scheduling for the full mix ───────────────────────────────
-// Load each section's vocal bytes once (memoized INCLUDING failures, so a
-// broken take is attempted/counted exactly once) and emit one schedule entry
-// per section INSTANCE (repeats included), mirroring _songVocalSched in the
-// editor. Legacy opus files round-trip through /process_vocal when online
-// (cached next to the original as *.cnv.wav); failures count as skipped.
-// Decoding/resampling the bytes happens inside the render isolate.
-Future<({Map<String, Uint8List> bytes, List<Map<String, Object>> schedule, int skipped})>
+// Resolve each vocal take to a readable WAV path once (memoized INCLUDING
+// failures, so a broken take is attempted/counted exactly once) and emit one
+// schedule entry per section INSTANCE (repeats included), mirroring
+// _songVocalSched in the editor. Legacy opus files round-trip through
+// /process_vocal when online (cached next to the original as *.cnv.wav);
+// failures count as skipped. Lanes at zero level (muted) are left out (C8).
+// Reading/decoding/resampling happens inside the render isolate.
+Future<({Map<String, String> paths, List<Map<String, Object>> schedule, int skipped})>
     _vocalJobs(
   List<Section> sections,
   int bpm,
-  double gain,
+  Map<String, double> vol,
 ) async {
-  final bytesByName = <String, Uint8List?>{};
+  final pathByName = <String, String?>{};
   var skipped = 0;
-  if (gain > 0) {
-    for (final sec in sections) {
-      for (final vid in vocalTrackIds(sec)) {
-        for (final c in sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[]) {
-          if (bytesByName.containsKey(c.path)) continue;
-          final bytes = await _loadVocalBytes(c.path);
-          bytesByName[c.path] = bytes; // null memoizes the failure
-          if (bytes == null) skipped++;
-        }
+  for (final sec in sections) {
+    for (final vid in vocalTrackIds(sec)) {
+      if ((vol[vid] ?? 0.85) <= 0) continue;
+      for (final c in sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[]) {
+        if (pathByName.containsKey(c.path)) continue;
+        final path = await _loadVocalPath(c.path);
+        pathByName[c.path] = path; // null memoizes the failure
+        if (path == null) skipped++;
       }
     }
   }
-  final ok = <String, Uint8List>{
-    for (final e in bytesByName.entries)
+  final ok = <String, String>{
+    for (final e in pathByName.entries)
       if (e.value != null) e.key: e.value!,
   };
   return (
-    bytes: ok,
-    schedule: scheduleVocalMixes(sections, bpm, gain, ok.keys.toSet()),
+    paths: ok,
+    schedule: scheduleVocalMixes(sections, bpm, vol['vocal'] ?? 0.85, ok.keys.toSet(), laneVol: vol),
     skipped: skipped,
   );
 }
 
-/// Song-level continuous vocal: load the one take and schedule it from t=0 over
-/// the whole arrangement (mirrors live playback, which replaces the per-section
-/// vocals with this single clip). Same return shape as [_vocalJobs].
-Future<({Map<String, Uint8List> bytes, List<Map<String, Object>> schedule, int skipped})>
-    _songVocalJob(String path, List<Section> sections, int bpm, double gain) async {
-  if (gain <= 0) return (bytes: <String, Uint8List>{}, schedule: const <Map<String, Object>>[], skipped: 0);
-  final bytes = await _loadVocalBytes(path);
-  if (bytes == null) {
-    return (bytes: <String, Uint8List>{}, schedule: const <Map<String, Object>>[], skipped: 1);
+/// Song-level continuous vocal: resolve the one take and schedule it from t=0
+/// over the whole arrangement (mirrors live playback, which replaces the
+/// per-section vocals with this single clip). Same return shape as [_vocalJobs].
+Future<({Map<String, String> paths, List<Map<String, Object>> schedule, int skipped})>
+    _songVocalJob(String name, List<Section> sections, int bpm, double gain) async {
+  if (gain <= 0) return (paths: <String, String>{}, schedule: const <Map<String, Object>>[], skipped: 0);
+  final path = await _loadVocalPath(name);
+  if (path == null) {
+    return (paths: <String, String>{}, schedule: const <Map<String, Object>>[], skipped: 1);
   }
   final spStep = 60 / bpm / kStepsPerBeat * _sr; // samples per 16th step
   var totalSteps = 0;
@@ -242,10 +344,10 @@ Future<({Map<String, Uint8List> bytes, List<Map<String, Object>> schedule, int s
   }
   final len = (totalSteps * spStep).round(); // mixVocalsInto caps at the take length
   return (
-    bytes: {path: bytes},
+    paths: {name: path},
     schedule: <Map<String, Object>>[
       {
-        'name': path,
+        'name': name,
         'start': 0,
         'len': len,
         'gain': gain,
@@ -268,6 +370,10 @@ Future<({Map<String, Uint8List> bytes, List<Map<String, Object>> schedule, int s
 /// edits the render isolate applies before resampling. A legacy single-take
 /// section resolves (via [TrackData.effectiveClips]) to one clip at step 0,
 /// gain 1, no edits — byte-identical to the old per-section schedule.
+///
+/// [gain] is the base Vocal lane's level. Added Audio lanes take their own
+/// level from [laneVol] (C8) — when it's not given they follow [gain]. A lane
+/// at zero level schedules nothing.
 @visibleForTesting
 List<Map<String, Object>> scheduleVocalMixes(
   List<Section> sections,
@@ -275,6 +381,7 @@ List<Map<String, Object>> scheduleVocalMixes(
   double gain,
   Set<String> names, {
   int sampleRate = _sr,
+  Map<String, double>? laneVol,
 }) {
   final spStep = 60 / bpm / kStepsPerBeat * sampleRate; // samples per 16th step
   final vocals = <Map<String, Object>>[];
@@ -284,27 +391,30 @@ List<Map<String, Object>> scheduleVocalMixes(
     // every vocal lane in the section (base 'vocal' + any added vocal tracks)
     // mixes down together — overlapping clips on separate lanes play at once.
     final lanes = [
-      for (final vid in vocalTrackIds(sec)) sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[],
+      for (final vid in vocalTrackIds(sec))
+        (
+          gain: vid == 'vocal' ? gain : (laneVol == null ? gain : (laneVol[vid] ?? 0.85)),
+          clips: sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[],
+        ),
     ];
     for (var r = 0; r < sec.repeats; r++) {
-      if (gain > 0) {
-        for (final clips in lanes) {
-          for (final c in clips) {
-            if (!names.contains(c.path) || c.gain <= 0) continue;
-            if (c.startStep < 0 || c.startStep >= secSteps) continue; // out of loop
-            final start = ((offSteps + c.startStep) * spStep).round();
-            final len = ((secSteps - c.startStep) * spStep).round();
-            vocals.add({
-              'name': c.path,
-              'start': start,
-              'len': len,
-              'gain': gain * c.gain,
-              'trimStart': c.trimStart,
-              'trimEnd': c.trimEnd,
-              'fadeInMs': c.fadeInMs,
-              'fadeOutMs': c.fadeOutMs,
-            });
-          }
+      for (final lane in lanes) {
+        if (lane.gain <= 0) continue;
+        for (final c in lane.clips) {
+          if (!names.contains(c.path) || c.gain <= 0) continue;
+          if (c.startStep < 0 || c.startStep >= secSteps) continue; // out of loop
+          final start = ((offSteps + c.startStep) * spStep).round();
+          final len = ((secSteps - c.startStep) * spStep).round();
+          vocals.add({
+            'name': c.path,
+            'start': start,
+            'len': len,
+            'gain': lane.gain * c.gain,
+            'trimStart': c.trimStart,
+            'trimEnd': c.trimEnd,
+            'fadeInMs': c.fadeInMs,
+            'fadeOutMs': c.fadeOutMs,
+          });
         }
       }
       offSteps += secSteps;
@@ -366,16 +476,20 @@ Float32List bounceVocalClips(
   return left;
 }
 
-/// Bounce all of [sec]'s vocal-kind lanes (base Vocal + Audio lanes, skipping
-/// any whose [vol] is 0) into one mono WAV at the export rate — the vocal STEM,
-/// reflecting every take's position/trim/fade/gain. Returns null when nothing
-/// loads. Reuses [_loadVocalBytes] (legacy-opus aware) and [bounceVocalClips].
+/// Bounce all of [sec]'s vocal-kind lanes (base Vocal + Audio lanes, each at
+/// its own [vol] level; zero/muted lanes excluded — C8) into one mono WAV at
+/// the export rate — the vocal STEM, reflecting every take's position/trim/
+/// fade/gain. Returns null when nothing loads. Reuses [_loadVocalBytes]
+/// (legacy-opus aware) and [bounceVocalClips].
 Future<Uint8List?> bounceSectionVocalWav(
     Section sec, int bpm, Map<String, double> vol) async {
   final clips = <VocalClip>[];
   for (final vid in vocalTrackIds(sec)) {
-    if ((vol[vid] ?? 0.85) <= 0) continue; // muted lane → excluded
-    clips.addAll(sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[]);
+    final laneVol = vol[vid] ?? 0.85;
+    if (laneVol <= 0) continue; // muted lane → excluded
+    for (final c in sec.tracks[vid]?.effectiveClips ?? const <VocalClip>[]) {
+      clips.add(c.copy()..gain = c.gain * laneVol);
+    }
   }
   if (clips.isEmpty) return null;
   final sources = <String, ({Float32List pcm, int sampleRate})>{};
@@ -392,34 +506,47 @@ Future<Uint8List?> bounceSectionVocalWav(
   return encodeWavMono16(lane, _sr);
 }
 
-/// Read a stored vocal (basename) as raw WAV bytes, or null when it can't be
-/// included (missing file / undecodable legacy take offline). The backend
-/// conversion network call stays on the main isolate; parse/resample of the
-/// returned bytes happens in the render isolate.
-Future<Uint8List?> _loadVocalBytes(String name) async {
+/// Resolve a stored vocal (basename) to a readable WAV file path, or null when
+/// it can't be included (missing file / undecodable legacy take offline). The
+/// backend conversion network call stays on the main isolate; the bytes are
+/// read + parsed by whoever needs them (the render isolate for the mix).
+Future<String?> _loadVocalPath(String name) async {
   final path = LoopStorage.resolveVocal(name);
   final f = File(path);
   if (!await f.exists()) return null;
-  if (path.toLowerCase().endsWith('.wav')) return f.readAsBytes();
+  if (path.toLowerCase().endsWith('.wav')) return path;
   // legacy opus (.caf/.ogg): use a previous conversion if cached, else convert
   // through the backend once.
   final cnv = File('$path.cnv.wav');
-  if (await cnv.exists()) return cnv.readAsBytes();
+  if (await cnv.exists()) return cnv.path;
   try {
     final res = await engineApi.processVocal(path);
     await cnv.writeAsBytes(res.wav); // cache the round-trip
-    return res.wav;
+    return cnv.path;
   } catch (e) {
     debugPrint('[export] legacy vocal convert failed ($name): $e');
     return null;
   }
 }
 
+/// Read a stored vocal (basename) as raw WAV bytes (see [_loadVocalPath]).
+Future<Uint8List?> _loadVocalBytes(String name) async {
+  final path = await _loadVocalPath(name);
+  if (path == null) return null;
+  try {
+    return await File(path).readAsBytes();
+  } catch (e) {
+    debugPrint('[export] vocal read failed ($name): $e');
+    return null;
+  }
+}
+
 /// Full-mix WAV — all instrument lanes plus every section's vocal recording
-/// at its scheduled offset. When the bass uses the 808 (no GM slot) the bass
-/// lane renders through 808.sf2 and the rest through the GM SF2, then the two
-/// are summed so the mix matches live playback. [skippedVocals] counts takes
-/// that couldn't be included (legacy format while offline / missing file).
+/// at its scheduled offset. Lanes whose instrument lives outside the GM font
+/// (808, hip-hop kit, downloaded catalog fonts — base AND added tracks, C10)
+/// each render through their own SF2 and are summed with the GM render so the
+/// mix matches live playback. [skippedVocals] counts takes that couldn't be
+/// included (legacy format while offline / missing file).
 Future<({File file, int skippedVocals})> exportWavSong(
   List<Section> sections,
   int bpm,
@@ -433,89 +560,80 @@ Future<({File file, int skippedVocals})> exportWavSong(
   List<TrackRef> extras = const [],
   Map<String, int> instruments = const {},
   String? songVocalPath,
+  String fallbackName = 'loop',
 }) async {
   final flat = flattenSong(sections);
-  // Custom-soundfont lanes (no GM slot) render through their own SF2 and are
-  // summed with the GM render. 808 bass → 808.sf2; hip-hop kit → hiphop_kit.sf2;
-  // runtime-catalog instruments (slot >= 1000) → their downloaded SF2.
-  final use808 = bassProgram == kProgram808;
-  final useHipHop = drumProgram == kProgramHipHopKit;
-  final sf2s = <Uint8List>[await _sf2Bytes()]; // index 0 = GM
-  int idx808 = 0, idxHip = 0;
-  if (use808) {
-    sf2s.add(await _sf808Bytes());
-    idx808 = sf2s.length - 1;
-  }
-  if (useHipHop) {
-    sf2s.add(await _sfHipHopBytes());
-    idxHip = sf2s.length - 1;
-  }
   // Muted lanes arrive as vol == 0 from the editor. CC7 covers most of them,
-  // but ch9 CC7 is driven by vol['drums'] alone, so a muted beat-fill must be
+  // but ch9 CC7 is driven by vol['drums'] alone, so a muted drum lane must be
   // dropped from note emission entirely.
   bool silent(String id) => (vol[id] ?? 0.85) <= 0;
 
-  // Resolve the three base pitched lanes that carry a downloaded catalog slot
-  // into their own SF2 render jobs (mirrors 808). A dynamic-but-not-downloaded
-  // lane stays in the GM job at its GM fallback program so export never goes
-  // silent or stalls on a network fetch.
-  final dynJobs = <Map<String, Object>>[];
-  final dynLanes = <String>{}; // lanes pulled out of the GM render
+  final pool = _Sf2Pool();
+  final gmIdx = await pool.asset(_sfAsset); // index 0 = GM
+  final jobs = <Map<String, Object>>[];
+  // Lanes that stay in the single GM job, with the programs they use there
+  // (dynamic-but-not-downloaded instruments fall back to their GM voice).
+  final gmTracks = <String>{};
   int melGm = melodyProgram, mdGm = melodyDecProgram, bassGm = bassProgram;
-  Future<void> addDynLane(String lane, int program, int channelProgArg) async {
-    if (!isDynamicSlot(program)) return;
-    final e = SoundfontCatalog.instance.bySlot(program);
-    final path = SoundfontCatalog.instance.localPath(program);
-    if (e == null) return;
-    if (path == null) {
-      // not downloaded → render as the GM fallback in the main job
-      final fb = e.midiFallback;
-      if (lane == 'melody') melGm = fb;
-      if (lane == 'melodyDec') mdGm = fb;
-      if (lane == 'bass') bassGm = fb;
+  final gmExtra = <String, int>{};
+
+  // A pitched lane: its own SF2 job when the instrument lives outside the GM
+  // font, else queued into the GM job at (possibly fallback) GM program.
+  Future<void> pitchedLane(String lane, int program, void Function(int gm) useGm) async {
+    if (silent(lane)) return;
+    final r = _pitchedRender(program);
+    if (r.asset == null && r.path == null) {
+      useGm(r.program);
+      gmTracks.add(lane);
       return;
     }
-    if (silent(lane)) {
-      dynLanes.add(lane);
-      return;
-    }
-    sf2s.add(await File(path).readAsBytes());
-    final sfIdx = sf2s.length - 1;
-    dynLanes.add(lane);
-    dynJobs.add({
-      'sf2': sfIdx,
+    final idx = await pool.of(asset: r.asset, path: r.path, fallback: gmIdx);
+    jobs.add({
+      'sf2': idx,
       'midi': buildMidi(flat, bpm,
-          melodyProgram: lane == 'melody' ? e.sfProgram : melodyProgram,
-          melodyDecProgram: lane == 'melodyDec' ? e.sfProgram : melodyDecProgram,
-          bassProgram: lane == 'bass' ? e.sfProgram : bassProgram,
+          melodyProgram: lane == 'melody' ? r.program : melodyProgram,
+          melodyDecProgram: lane == 'melodyDec' ? r.program : melodyDecProgram,
+          bassProgram: lane == 'bass' ? r.program : bassProgram,
           swing: swing,
           vol: vol,
           tracks: {lane},
-          // the lane's real program is a catalog slot here; force strum when
-          // that slot is a guitar (buildMidi only sees the SF2's preset = 0).
-          strumGuitar: isGuitarProgram(program)),
+          extras: extras,
+          extraInstruments: {...instruments, lane: r.program},
+          strumGuitar: r.strum),
     });
   }
 
-  await addDynLane('melody', melodyProgram, 0);
-  await addDynLane('melodyDec', melodyDecProgram, 2);
-  await addDynLane('bass', bassProgram, 1);
-
-  // Dynamic drum kit (downloaded) → its own bank-128 SF2 job, like hip-hop.
-  final useDynDrum = isDynamicSlot(drumProgram) && SoundfontCatalog.instance.localPath(drumProgram) != null;
-  int idxDynDrum = 0;
-  if (useDynDrum) {
-    sf2s.add(await File(SoundfontCatalog.instance.localPath(drumProgram)!).readAsBytes());
-    idxDynDrum = sf2s.length - 1;
+  await pitchedLane('melody', melodyProgram, (p) => melGm = p);
+  await pitchedLane('melodyDec', melodyDecProgram, (p) => mdGm = p);
+  await pitchedLane('bass', bassProgram, (p) => bassGm = p);
+  for (final e in extras) {
+    final base = trackById(e.type);
+    if (base.kind == TrackKind.pitched || base.kind == TrackKind.bass) {
+      await pitchedLane(e.id, instruments[e.id] ?? base.defaultProgram, (p) => gmExtra[e.id] = p);
+    }
   }
-  // A dynamic-but-not-downloaded drum kit falls back to the GM standard kit.
-  final drumGm = isDynamicSlot(drumProgram) ? 0 : drumProgram;
+
+  // Base drums: in the GM job when the kit is a GM kit, else its own ch9 job.
+  var drumGm = 0;
+  if (!silent('drums')) {
+    final r = _kitRender(drumProgram);
+    if (r.asset == null && r.path == null) {
+      drumGm = r.gmKit;
+      gmTracks.add('drums');
+    } else {
+      jobs.add({
+        'sf2': await pool.of(asset: r.asset, path: r.path, fallback: gmIdx),
+        // custom kit's single bank-128 preset (ch9 default)
+        'midi': buildMidi(flat, bpm, swing: swing, vol: vol, tracks: const {'drums'}),
+      });
+    }
+  }
 
   // Drum lanes that carry their OWN kit, independent of the base ch9 'drums'
   // kit: beat-fill + every added drum track. Each renders as a separate ch9
-  // job through its kit's SF2 and is summed like the 808/hip-hop lanes, so
-  // different drum tracks can use different kits in one mix. (MeltySynth only
-  // treats ch9 as percussion, so "per-kit" means per-render, not per-channel.)
+  // job through its kit's SF2 and is summed like the other lanes, so different
+  // drum tracks can use different kits in one mix. (MeltySynth only treats ch9
+  // as percussion, so "per-kit" means per-render, not per-channel.)
   final perKitDrums = <String>[
     if (flat.beatDec.isNotEmpty) 'beatDec',
     for (final e in extras)
@@ -523,34 +641,14 @@ Future<({File file, int skippedVocals})> exportWavSong(
           (flat.extraDrums[e.id]?.isNotEmpty ?? false))
         e.id,
   ];
-  final perKitDrumJobs = <Map<String, Object>>[];
-  final perKitDrumLanes = <String>{}; // pulled out of the GM render
   for (final lane in perKitDrums) {
-    perKitDrumLanes.add(lane);
-    if (silent(lane)) continue; // excluded from GM + no job → silent
-    final kit = instruments[lane] ?? kDefaultDrumKit;
-    final int sfIdx;
-    final int gmKit;
-    if (kit == kProgramHipHopKit) {
-      if (idxHip == 0) {
-        sf2s.add(await _sfHipHopBytes());
-        idxHip = sf2s.length - 1;
-      }
-      sfIdx = idxHip;
-      gmKit = 0;
-    } else if (isDynamicSlot(kit) && SoundfontCatalog.instance.localPath(kit) != null) {
-      sf2s.add(await File(SoundfontCatalog.instance.localPath(kit)!).readAsBytes());
-      sfIdx = sf2s.length - 1;
-      gmKit = 0;
-    } else {
-      sfIdx = 0; // a GM kit lives in bank 128 of the main SF2
-      gmKit = isDynamicSlot(kit) ? 0 : kit;
-    }
-    perKitDrumJobs.add({
-      'sf2': sfIdx,
+    if (silent(lane)) continue; // no job → silent
+    final r = _kitRender(instruments[lane] ?? kDefaultDrumKit);
+    jobs.add({
+      'sf2': await pool.of(asset: r.asset, path: r.path, fallback: gmIdx),
       // notes emit on ch9 (addDrums), so ch9's CC7 must carry THIS lane's volume.
       'midi': buildMidi(flat, bpm,
-          drumProgram: gmKit,
+          drumProgram: r.gmKit,
           swing: swing,
           vol: {...vol, 'drums': vol[lane] ?? 0.85},
           tracks: {lane},
@@ -559,52 +657,37 @@ Future<({File file, int skippedVocals})> exportWavSong(
     });
   }
 
-  final gmTracks = <String>{'melody', 'melodyDec', 'bass', 'drums', for (final e in extras) e.id};
-  gmTracks.removeAll({if (use808) 'bass', if (useHipHop || useDynDrum) 'drums', ...dynLanes, ...perKitDrumLanes});
-  gmTracks.removeWhere(silent);
-  // base 'drums' (ch9) only — beat-fill is now its own per-kit job above.
-  final hipTracks = silent('drums') ? const <String>{} : const {'drums'};
-  final jobs = <Map<String, Object>>[
-    {
-      'sf2': 0,
+  if (gmTracks.isNotEmpty) {
+    jobs.insert(0, {
+      'sf2': gmIdx,
       'midi': buildMidi(flat, bpm,
           melodyProgram: melGm,
           bassProgram: bassGm,
           melodyDecProgram: mdGm,
-          drumProgram: (useHipHop || useDynDrum) ? 0 : drumGm,
+          drumProgram: drumGm,
           swing: swing,
           vol: vol,
           tracks: gmTracks,
           extras: extras,
-          extraInstruments: instruments),
-    },
-    if (use808 && !silent('bass'))
-      // bassProgram 0 → selects the 808.sf2's single preset.
-      {'sf2': idx808, 'midi': buildMidi(flat, bpm, bassProgram: 0, swing: swing, vol: vol, tracks: const {'bass'})},
-    if (useHipHop && hipTracks.isNotEmpty)
-      // base drums → the hip-hop kit's bank-128 preset (ch9 default).
-      {'sf2': idxHip, 'midi': buildMidi(flat, bpm, swing: swing, vol: vol, tracks: hipTracks)},
-    if (useDynDrum && hipTracks.isNotEmpty)
-      // base drums → the catalog kit's bank-128 preset (ch9 default).
-      {'sf2': idxDynDrum, 'midi': buildMidi(flat, bpm, swing: swing, vol: vol, tracks: hipTracks)},
-    ...dynJobs,
-    ...perKitDrumJobs,
-  ];
+          extraInstruments: {...instruments, ...gmExtra}),
+    });
+  }
+
   // A song-level take (recorded over the whole song) replaces the per-section
   // vocal schedule — one clip mixed from t=0, mirroring live playback.
   final vocal = songVocalPath != null
       ? await _songVocalJob(songVocalPath, sections, bpm, vol['vocal'] ?? 0.85)
-      : await _vocalJobs(sections, bpm, vol['vocal'] ?? 0.85);
+      : await _vocalJobs(sections, bpm, vol);
   final wavs = await compute(_renderIso, {
-    'sf2s': sf2s,
+    'sf2s': pool.paths,
     'jobs': jobs,
     'vocals': vocal.schedule,
-    'vocalBytes': vocal.bytes,
+    'vocalPaths': vocal.paths,
     'mix': true,
     'sampleRate': _sr,
     'tail': _tailSec,
   });
-  final f = File(await _exportPath(title, 'wav'));
+  final f = await _exportFile(title, 'wav', fallback: fallbackName);
   await f.writeAsBytes(wavs.first);
   _logWavStats('WAV mix', f.path, wavs.first);
   return (file: f, skippedVocals: vocal.skipped);
@@ -624,6 +707,7 @@ Future<List<File>> exportStems(
   List<TrackRef> extras = const [],
   Map<String, int> instruments = const {},
   String? songVocalPath,
+  String fallbackName = 'loop',
 }) async {
   final flat = flattenSong(sections);
   final labelOf = {for (final m in sectionTrackMetas(extras)) m.id: m.label};
@@ -644,74 +728,65 @@ Future<List<File>> exportStems(
         (id: e.id, label: labelOf[e.id] ?? e.id),
   ];
   final out = <File>[];
+  Future<File> stemFile(String label) =>
+      _exportFile('$title - $label', 'wav', fallback: '$fallbackName - $label');
 
   if (present.isNotEmpty) {
-    final use808 = bassProgram == kProgram808;
-    final useHipHop = drumProgram == kProgramHipHopKit;
-    final sf2s = <Uint8List>[await _sf2Bytes()]; // index 0 = GM
-    int idx808 = 0, idxHip = 0;
-    if (use808) {
-      sf2s.add(await _sf808Bytes());
-      idx808 = sf2s.length - 1;
-    }
-    if (useHipHop) {
-      sf2s.add(await _sfHipHopBytes());
-      idxHip = sf2s.length - 1;
-    }
+    final pool = _Sf2Pool();
+    final gmIdx = await pool.asset(_sfAsset);
     final jobs = <Map<String, Object>>[];
     for (final p in present) {
-      final isBaseDrums = p.id == 'drums';
-      final extraDrum =
-          extras.any((e) => e.id == p.id && trackById(e.type).kind == TrackKind.drums);
-      // beat-fill + added drum tracks each carry their own kit; only the base
-      // 'drums' lane uses the song-level drumProgram.
-      final isDrum = isBaseDrums || p.id == 'beatDec' || extraDrum;
-      final isBass808 = use808 && p.id == 'bass';
-      int sf2i = 0;
-      int gmKit = 0;
-      if (isBass808) {
-        sf2i = idx808;
-      } else if (isDrum) {
+      final extraRef = extras.where((e) => e.id == p.id).firstOrNull;
+      final isDrum = p.id == 'drums' ||
+          p.id == 'beatDec' ||
+          (extraRef != null && trackById(extraRef.type).kind == TrackKind.drums);
+      if (isDrum) {
         // each drum stem renders through ITS kit — same resolution as the mix.
-        final kit = isBaseDrums ? drumProgram : (instruments[p.id] ?? kDefaultDrumKit);
-        if (kit == kProgramHipHopKit) {
-          if (idxHip == 0) {
-            sf2s.add(await _sfHipHopBytes());
-            idxHip = sf2s.length - 1;
-          }
-          sf2i = idxHip;
-        } else if (isDynamicSlot(kit) && SoundfontCatalog.instance.localPath(kit) != null) {
-          sf2s.add(await File(SoundfontCatalog.instance.localPath(kit)!).readAsBytes());
-          sf2i = sf2s.length - 1;
-        } else {
-          sf2i = 0; // GM kit lives in bank 128 of the main SF2
-          gmKit = isDynamicSlot(kit) ? 0 : kit;
-        }
+        final kit = p.id == 'drums' ? drumProgram : (instruments[p.id] ?? kDefaultDrumKit);
+        final r = _kitRender(kit);
+        jobs.add({
+          'sf2': await pool.of(asset: r.asset, path: r.path, fallback: gmIdx),
+          'midi': buildMidi(flat, bpm,
+              drumProgram: r.gmKit,
+              swing: swing,
+              vol: p.id == 'drums' ? vol : {...vol, 'drums': vol[p.id] ?? 0.85},
+              tracks: {p.id},
+              extras: extras,
+              extraInstruments: instruments),
+        });
+        continue;
       }
+      // pitched: base lane programs, or the added instance's own instrument.
+      final program = switch (p.id) {
+        'melody' => melodyProgram,
+        'bass' => bassProgram,
+        'melodyDec' => melodyDecProgram,
+        _ => instruments[p.id] ?? (extraRef == null ? 0 : trackById(extraRef.type).defaultProgram),
+      };
+      final r = _pitchedRender(program);
       jobs.add({
-        'sf2': sf2i,
+        'sf2': await pool.of(asset: r.asset, path: r.path, fallback: gmIdx),
         'midi': buildMidi(flat, bpm,
-            melodyProgram: melodyProgram,
-            // 808 bass stem → program 0 selects the 808.sf2 preset.
-            bassProgram: isBass808 ? 0 : bassProgram,
-            melodyDecProgram: melodyDecProgram,
-            drumProgram: gmKit,
+            melodyProgram: p.id == 'melody' ? r.program : melodyProgram,
+            bassProgram: p.id == 'bass' ? r.program : bassProgram,
+            melodyDecProgram: p.id == 'melodyDec' ? r.program : melodyDecProgram,
             swing: swing,
             vol: vol,
             tracks: {p.id},
             extras: extras,
-            extraInstruments: instruments),
+            extraInstruments: {...instruments, p.id: r.program},
+            strumGuitar: r.strum),
       });
     }
     final wavs = await compute(_renderIso, {
-      'sf2s': sf2s,
+      'sf2s': pool.paths,
       'jobs': jobs,
       'mix': false,
       'sampleRate': _sr,
       'tail': _tailSec,
     });
     for (var i = 0; i < present.length; i++) {
-      final f = File(await _exportPath('$title - ${present[i].label}', 'wav'));
+      final f = await stemFile(present[i].label);
       await f.writeAsBytes(wavs[i]);
       _logWavStats('stem ${present[i].label}', f.path, wavs[i]);
       out.add(f);
@@ -724,7 +799,7 @@ Future<List<File>> exportStems(
   if (songVocalPath != null) {
     final bytes = await _loadVocalBytes(songVocalPath);
     if (bytes != null) {
-      final f = File(await _exportPath('$title - vocal (song)', 'wav'));
+      final f = await stemFile('vocal (song)');
       await f.writeAsBytes(bytes);
       out.add(f);
     }
@@ -733,7 +808,7 @@ Future<List<File>> exportStems(
       final sec = sections[i];
       final bytes = await bounceSectionVocalWav(sec, bpm, vol);
       if (bytes == null) continue;
-      final f = File(await _exportPath('$title - vocal ${i + 1} ${sec.name}', 'wav'));
+      final f = await stemFile('vocal ${i + 1} ${sec.name}');
       await f.writeAsBytes(bytes);
       out.add(f);
     }

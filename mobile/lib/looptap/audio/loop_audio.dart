@@ -6,6 +6,7 @@
 //   drums  -> ch9 GM kit; kick=36 snare=38 hihat=42 (matches export.jsx DRUM_NOTE)
 //   click  -> ch9 wood block (accent=76 / normal=77)
 import 'dart:async';
+import 'dart:io' show File, FileSystemEntityType;
 
 import 'package:audioplayers/audioplayers.dart';
 
@@ -191,6 +192,36 @@ class LoopAudio {
   final AudioPlayer _vocalPlayer = AudioPlayer();
   bool _vocalConfigured = false;
   String? _preparedPath; // source already loaded — start is just seek+resume
+  // Identity of the prepared file (mtime + size). The section mix WAV is
+  // re-bounced IN PLACE at the same path, so a path match alone would replay
+  // the stale audio the player still holds (audit C17).
+  DateTime? _preparedMtime;
+  int? _preparedLength;
+
+  Future<({DateTime mtime, int length})?> _statOf(String path) async {
+    try {
+      final st = await File(path).stat();
+      if (st.type == FileSystemEntityType.notFound) return null;
+      return (mtime: st.modified, length: st.size);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _remember(String path) async {
+    final st = await _statOf(path);
+    _preparedPath = path;
+    _preparedMtime = st?.mtime;
+    _preparedLength = st?.length;
+  }
+
+  /// True when [path] is the prepared source AND the file on disk is still the
+  /// same one we loaded (unchanged mtime + size).
+  Future<bool> _preparedIsCurrent(String path) async {
+    if (_preparedPath != path) return false;
+    final st = await _statOf(path);
+    return st != null && st.mtime == _preparedMtime && st.length == _preparedLength;
+  }
 
   Future<void> _configVocal() async {
     if (_vocalConfigured) return;
@@ -216,7 +247,7 @@ class LoopAudio {
     await _configVocal();
     try {
       await _vocalPlayer.setSource(DeviceFileSource(path));
-      _preparedPath = path;
+      await _remember(path);
     } catch (_) {
       _preparedPath = null;
     }
@@ -230,12 +261,13 @@ class LoopAudio {
     try {
       await _vocalPlayer.setReleaseMode(loop ? ReleaseMode.loop : ReleaseMode.stop);
       await _vocalPlayer.setVolume(vol.clamp(0.0, 1.0));
-      if (_preparedPath == path) {
+      if (await _preparedIsCurrent(path)) {
         await _vocalPlayer.seek(Duration.zero);
         await _vocalPlayer.resume();
       } else {
+        // not prepared, or the file was overwritten since — (re)load it
         await _vocalPlayer.play(DeviceFileSource(path), volume: vol.clamp(0.0, 1.0));
-        _preparedPath = path;
+        await _remember(path);
       }
     } catch (_) {/* file missing / unsupported — stay silent */}
   }
@@ -254,7 +286,13 @@ class LoopAudio {
     } catch (_) {}
   }
 
+  /// Stop and forget the prepared source: the next [playVocal] reloads from
+  /// disk, so a mix WAV re-bounced while stopped is never replayed stale.
+  /// (Call [prepareVocal] again after a stop if start latency matters.)
   Future<void> stopVocal() async {
+    _preparedPath = null;
+    _preparedMtime = null;
+    _preparedLength = null;
     try {
       await _vocalPlayer.stop();
     } catch (_) {}

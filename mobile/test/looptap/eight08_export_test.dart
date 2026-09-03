@@ -81,4 +81,28 @@ void main() {
     print('[808] extra instance: ${r.sec.toStringAsFixed(2)}s peak=${(r.peak * 100).toStringAsFixed(1)}%');
     expect(r.peak, greaterThan(0.02), reason: 'added instance should render audibly');
   });
+
+  test('added bass instance on the 808 renders through 808.sf2 (C10)', () {
+    // exportWavSong routes an extra lane whose instrument is the 808 to its
+    // own 808.sf2 job with the lane's program rewritten to 0 (the font's only
+    // preset) — the same emission the base-bass 808 path uses. Verify that
+    // MIDI is audible through 808.sf2 and NOT emitted as GM Synth Bass.
+    const exId = 'bass_x808';
+    final exFlat = FlatSong(const [], const [], const [], 32,
+        extraPitched: {
+          exId: [
+            PitchNote(midi: 40, freq: 0, step: 0, dur: 8),
+            PitchNote(midi: 43, freq: 0, step: 16, dur: 8),
+          ]
+        });
+    final midi = buildMidi(exFlat, 90,
+        extras: const [TrackRef(exId, 'bass')],
+        extraInstruments: const {exId: 0},
+        tracks: const {exId});
+    final sf808 = File('assets/sounds/808.sf2').readAsBytesSync();
+    final r = _render(sf808, midi);
+    // ignore: avoid_print
+    print('[808] extra 808 lane: ${r.sec.toStringAsFixed(2)}s peak=${(r.peak * 100).toStringAsFixed(1)}%');
+    expect(r.peak, greaterThan(0.02), reason: 'added 808 lane should be audible through 808.sf2');
+  });
 }

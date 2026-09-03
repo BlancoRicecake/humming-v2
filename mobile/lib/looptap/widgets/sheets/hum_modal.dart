@@ -5,6 +5,7 @@
 // On Convert it passes the recorded file to [onConvert] (which sends it to the
 // humming→MIDI engine and inserts the result). Falls back gracefully on failure.
 import 'dart:async';
+import 'dart:io' show File;
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -86,12 +87,16 @@ class _HumModalState extends State<_HumModal> {
   // the synth output under it). Gates the restore-to-.playback rebuild on stop so
   // we don't reconfigure output when recording never actually started.
   bool _recStarted = false;
+  bool _finishing = false; // _finish re-entrancy guard (auto-stop + Convert tap)
+  bool _closed = false; // cancelled/disposed — in-flight awaits must bail
+  bool _permissionDenied = false; // error phase offers "Open Settings"
   // waveform driven by REAL mic amplitude — bars only move when you actually
   // make sound (silence stays flat), so it reflects the input.
   List<double> _levels = List.filled(40, 0.04);
   Timer? _msTimer;
   Timer? _autoStop;
   StreamSubscription<Amplitude>? _ampSub;
+  StreamSubscription<RecordState>? _stateSub;
 
   // One loop pass length (LoopTap is 4/4 → bars * 4 beats).
   int get _loopMs => (widget.bars * 4 * 60000 / widget.bpm).round();
@@ -100,17 +105,38 @@ class _HumModalState extends State<_HumModal> {
   @override
   void initState() {
     super.initState();
-    _startCountIn();
+    _count = widget.countInBeats; // shown while the permission prompt is up
+    _requestPermissionThenCountIn();
   }
 
   @override
   void dispose() {
+    _closed = true;
     _msTimer?.cancel();
     _autoStop?.cancel();
     _ampSub?.cancel();
+    _stateSub?.cancel();
     _rec.dispose();
     widget.stopBacking?.call();
     super.dispose();
+  }
+
+  /// Mic permission BEFORE the count-in — the OS prompt would otherwise pop
+  /// mid-count and the take would start while the user is still answering it.
+  Future<void> _requestPermissionThenCountIn() async {
+    bool granted;
+    try {
+      granted = await _rec.hasPermission();
+    } catch (_) {
+      granted = false;
+    }
+    if (_closed || !mounted) return;
+    if (!granted) {
+      _permissionDenied = true;
+      _fail('Microphone permission needed');
+      return;
+    }
+    _startCountIn();
   }
 
   // dBFS (negative) → 0..1; below ~ -48 dB reads as silence (flat bars).
@@ -142,15 +168,14 @@ class _HumModalState extends State<_HumModal> {
 
   Future<void> _beginCapture() async {
     try {
-      if (!await _rec.hasPermission()) {
-        _fail('Microphone permission needed');
-        return;
-      }
       final dir = await getTemporaryDirectory();
       // Opus + 플랫폼별 컨테이너(.caf/.ogg) — AAC .m4a 는 stop() 직후 moov atom
-      // finalize 가 안 끝나 partial file 로 업로드되던 회귀 fix.
+      // finalize 가 안 끝나 partial file 로 업로드되던 회귀 fix. Android API 29
+      // 미만은 Opus 인코더가 없어 AAC-LC(.m4a) 로 폴백 (audit A3).
+      final opus = opusSupported(await androidSdkInt());
+      if (_closed || !mounted) return;
       final path =
-          '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${opusContainerExt()}';
+          '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${takeContainerExt(opus: opus)}';
       // Record at the device's CURRENT output rate (iOS), not a fixed 16k. On
       // iOS record_ios pins the shared session to config.sampleRate and never
       // restores it; a lower rate (16k) drags the hardware down and the synth
@@ -160,24 +185,41 @@ class _HumModalState extends State<_HumModal> {
       debugPrint('[hum] >>> rec start, recordRate=$deviceRate');
       await _rec.start(
         RecordConfig(
-          encoder: AudioEncoder.opus,
+          encoder: opus ? AudioEncoder.opus : AudioEncoder.aacLc,
           sampleRate: deviceRate,
           numChannels: 1,
           // see vocal_record_modal: keep the recorder off Bluetooth SCO so it
           // doesn't disconnect the synth's Oboe output stream on Android.
           androidConfig: const AndroidRecordConfig(manageBluetooth: false),
+          // Never let the plugin pause the take on its own (phone call, Siri,
+          // Android focus loss) — a silently paused take resumes with a hole
+          // in it. We watch the state stream instead and fail loudly (A4).
+          audioInterruption: AudioInterruptionMode.none,
         ),
         path: path,
       );
       _recStarted = true;
+      if (_closed || !mounted) {
+        // cancelled while start() was in flight — stop what we just started
+        try {
+          await _rec.stop();
+        } catch (_) {}
+        await _restoreOutput();
+        return;
+      }
+      _stateSub = _rec.onStateChanged().listen(_onRecordState);
       ClarityService.instance.event('recording_started');
       // _rec.start just flipped the shared AVAudioSession to .playAndRecord,
       // which corrupts the synth's already-running output pipe (RemoteIO) →
       // crackle. Rebuild that pipe under .playAndRecord so the backing plays
-      // cleanly during the hum, then force output back to the speaker (the
-      // rebuild's setCategory drops .defaultToSpeaker). iOS-only; no-op elsewhere.
+      // cleanly during the hum. The rebuild's setCategory drops
+      // .defaultToSpeaker, so with NO headset force the built-in speaker
+      // (otherwise it'd play out the quiet receiver); with a headset leave the
+      // route alone so the backing stays in the earphones (A11). iOS-only.
       await SynthEngine().rebuildOutput(forRecording: true);
-      await overrideOutputToSpeaker();
+      if (await headsetRoute() == HeadsetRoute.none) {
+        await overrideOutputToSpeaker();
+      }
       // Start the loop backing on the downbeat, right after recording opens, so
       // audio t≈0 lines up with loop step 0 (the engine absorbs the small
       // constant latency via its grid-phase estimate).
@@ -219,7 +261,21 @@ class _HumModalState extends State<_HumModal> {
     });
   }
 
-  Future<void> _finish() async {
+  /// record left the session in .playAndRecord; restore .playback and rebuild
+  /// the output pipe so pad taps / playback are clean after the hum. Runs once
+  /// per started take (guarded by [_recStarted]).
+  Future<void> _restoreOutput() async {
+    if (!_recStarted) return;
+    _recStarted = false;
+    await SynthEngine().rebuildOutput(forRecording: false);
+  }
+
+  // The recorder paused underneath us (system interruption the plugin could
+  // not ignore). The take would have a hole in it — abort it with a clear
+  // message instead of converting a truncated hum.
+  Future<void> _onRecordState(RecordState s) async {
+    if (s != RecordState.pause || _phase != 'listen' || _finishing) return;
+    _finishing = true;
     _autoStop?.cancel();
     _msTimer?.cancel();
     _ampSub?.cancel();
@@ -228,13 +284,35 @@ class _HumModalState extends State<_HumModal> {
     try {
       path = await _rec.stop();
     } catch (_) {}
-    if (_recStarted) {
-      // record left the session in .playAndRecord; restore .playback and rebuild
-      // the output pipe so pad taps / playback are clean after the hum.
-      _recStarted = false;
-      await SynthEngine().rebuildOutput(forRecording: false);
-    }
+    _deleteQuiet(path);
+    await _restoreOutput();
+    _finishing = false;
+    _fail('Recording was interrupted — try again'); // TODO(l10n)
+  }
+
+  static void _deleteQuiet(String? path) {
+    if (path == null) return;
+    try {
+      final f = File(path);
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
+  }
+
+  Future<void> _finish() async {
+    if (_finishing || _phase != 'listen') return; // auto-stop + Convert tap race
+    _finishing = true;
+    _autoStop?.cancel();
+    _msTimer?.cancel();
+    _ampSub?.cancel();
+    _stateSub?.cancel();
+    _stopBacking();
+    String? path;
+    try {
+      path = await _rec.stop();
+    } catch (_) {}
+    await _restoreOutput();
     if (path == null) {
+      _finishing = false;
       _fail('No audio captured');
       return;
     }
@@ -250,17 +328,19 @@ class _HumModalState extends State<_HumModal> {
   }
 
   Future<void> _cancel() async {
+    if (_closed) return; // Close + Cancel double-tap → single pop
+    _closed = true;
     _autoStop?.cancel();
     _msTimer?.cancel();
     _ampSub?.cancel();
+    _stateSub?.cancel();
     _stopBacking();
+    String? path;
     try {
-      await _rec.stop();
+      path = await _rec.stop();
     } catch (_) {}
-    if (_recStarted) {
-      _recStarted = false;
-      await SynthEngine().rebuildOutput(forRecording: false);
-    }
+    _deleteQuiet(path);
+    await _restoreOutput();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -344,7 +424,17 @@ class _HumModalState extends State<_HumModal> {
         else if (_phase == 'countin')
           _ghostBtn('Cancel', _cancel)
         else if (_phase == 'error')
-          _ghostBtn('Close', _cancel),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (_permissionDenied) ...[
+                // TODO(l10n)
+                _solidBtn('Open Settings', () => openAppSettings()),
+                const SizedBox(width: 8),
+              ],
+              _ghostBtn('Close', _cancel),
+            ],
+          ),
       ],
     );
   }
@@ -360,6 +450,17 @@ class _HumModalState extends State<_HumModal> {
             border: Border.all(color: LT.border),
           ),
           child: Text(label, style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t2)),
+        ),
+      );
+
+  Widget _solidBtn(String label, VoidCallback onTap) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: widget.accent, borderRadius: BorderRadius.circular(999)),
+          child: Text(label, style: LTType.inter(size: 13, weight: FontWeight.w800, color: LT.bg)),
         ),
       );
 }

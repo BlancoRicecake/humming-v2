@@ -1,5 +1,6 @@
 // LoopTap song helpers — flatten sections, build grid thumbnails, and the
 // "hum to MIDI" content generators. Ported from prototype/export.jsx + screens.jsx.
+import 'dart:io';
 import 'dart:math' as math;
 
 import '../models/loop_models.dart';
@@ -32,18 +33,26 @@ class FlatSong {
 
 FlatSong flattenSong(List<Section> sections) {
   var off = 0;
+  var secSteps = 0; // steps of the section being flattened
   final m = <PitchNote>[], md = <PitchNote>[], b = <PitchNote>[];
   final d = <DrumNote>[], bd = <DrumNote>[];
+  // Notes outside the section's current length (left behind when bars were
+  // shrunk) are dropped, and a note running past the end is clamped — else
+  // they'd leak into the NEXT section instance on the flat timeline (C7).
   void pitched(TrackData? t, List<PitchNote> out) {
     if (t == null) return;
     for (final n in t.pitchNotes) {
-      out.add(PitchNote(midi: n.midi, freq: n.freq, step: n.step + off, dur: n.dur));
+      if (n.step < 0 || n.step >= secSteps) continue;
+      final dur = math.min(n.dur, secSteps - n.step);
+      if (dur <= 0) continue;
+      out.add(PitchNote(midi: n.midi, freq: n.freq, step: n.step + off, dur: dur));
     }
   }
 
   void perc(TrackData? t, List<DrumNote> out) {
     if (t == null) return;
     for (final n in t.drumNotes) {
+      if (n.step < 0 || n.step >= secSteps) continue;
       out.add(DrumNote(kind: n.kind, step: n.step + off));
     }
   }
@@ -53,6 +62,7 @@ FlatSong flattenSong(List<Section> sections) {
   for (final sec in sections) {
     final reps = sec.repeats;
     final st = stepsForBars(sec.bars);
+    secSteps = st;
     for (var r = 0; r < reps; r++) {
       pitched(sec.tracks['melody'], m);
       pitched(sec.tracks['melodyDec'], md);
@@ -139,4 +149,32 @@ List<DrumNote> genDrums(int steps) {
     if (s % 2 == 0) out.add(DrumNote(kind: 'hihat', step: s));
   }
   return out;
+}
+
+// ── export file naming (C11 / A20) ──────────────────────────────────
+// One sanitiser for .wav / .mid / stems: strip only what a filesystem can't
+// take (Korean and other non-ASCII titles survive intact), trim, and fall
+// back to [fallback] (the song id) when nothing is left.
+final RegExp _kIllegalFileChars = RegExp(r'[\\/:*?"<>|\x00-\x1F\x7F]');
+
+String exportFileName(String title, {String fallback = 'loop'}) {
+  var s = title.replaceAll(_kIllegalFileChars, '').trim();
+  // Windows also rejects trailing dots/spaces in a name.
+  s = s.replaceAll(RegExp(r'[. ]+$'), '');
+  if (s.isEmpty) {
+    s = fallback.replaceAll(_kIllegalFileChars, '').trim();
+  }
+  return s.isEmpty ? 'loop' : s;
+}
+
+/// `<folder>/<base>.<ext>`, or `<base> (2).<ext>`, `(3)`… when the name is
+/// taken — an export never silently overwrites an earlier one.
+Future<File> uniqueExportFile(Directory folder, String base, String ext) async {
+  var f = File('${folder.path}/$base.$ext');
+  var n = 2;
+  while (await f.exists()) {
+    f = File('${folder.path}/$base ($n).$ext');
+    n++;
+  }
+  return f;
 }

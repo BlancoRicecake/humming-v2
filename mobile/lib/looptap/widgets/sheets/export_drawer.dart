@@ -16,6 +16,7 @@ import '../../theme/tokens.dart';
 Future<void> showExportDrawer(
   BuildContext context, {
   required String title,
+  String songId = 'loop',
   required List<Section> sections,
   required int bpm,
   double swing = 0,
@@ -38,6 +39,7 @@ Future<void> showExportDrawer(
       alignment: Alignment.centerRight,
       child: _ExportDrawer(
         title: title,
+        songId: songId,
         sections: sections,
         bpm: bpm,
         swing: swing,
@@ -62,6 +64,7 @@ Future<void> showExportDrawer(
 class _ExportDrawer extends StatefulWidget {
   const _ExportDrawer({
     required this.title,
+    required this.songId,
     required this.sections,
     required this.bpm,
     required this.swing,
@@ -75,6 +78,8 @@ class _ExportDrawer extends StatefulWidget {
     this.songVocalPath,
   });
   final String title;
+  // file-name fallback when the title sanitises to nothing (C11)
+  final String songId;
   final List<Section> sections;
   final int bpm;
   final double swing;
@@ -150,7 +155,8 @@ class _ExportDrawerState extends State<_ExportDrawer> {
           drumProgram: widget.drumProgram,
           extras: widget.extras,
           instruments: widget.instruments,
-          songVocalPath: widget.songVocalPath);
+          songVocalPath: widget.songVocalPath,
+          fallbackName: widget.songId);
       final file = res.file;
       await _share([XFile(file.path, mimeType: 'audio/wav')], '$_scopeTitle.wav');
       ClarityService.instance.event('export_wav');
@@ -177,7 +183,8 @@ class _ExportDrawerState extends State<_ExportDrawer> {
           drumProgram: widget.drumProgram,
           extras: widget.extras,
           instruments: widget.instruments,
-          songVocalPath: widget.songVocalPath);
+          songVocalPath: widget.songVocalPath,
+          fallbackName: widget.songId);
       if (files.isEmpty) {
         if (mounted) _note(L10n.of(context).ltExportFailed, ok: false);
       } else {
@@ -208,6 +215,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
         drumProgram: widget.drumProgram,
         extras: widget.extras,
         instruments: widget.instruments,
+        fallbackName: widget.songId,
       );
       debugPrint('[export] midi written: ${file.path}');
       // 파일 저장 후 iOS 의 share sheet 로 사용자에게 노출 — Documents 폴더가
