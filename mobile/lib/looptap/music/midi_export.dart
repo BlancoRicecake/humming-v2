@@ -4,7 +4,6 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../models/loop_models.dart';
 import 'instruments.dart';
@@ -230,9 +229,7 @@ Future<File> exportMidiSong(
       drumProgram: gmKit,
       extras: extras,
       extraInstruments: gmInstruments);
-  final dir = await getApplicationDocumentsDirectory();
-  final folder = Directory('${dir.path}/looptap/exports');
-  if (!await folder.exists()) await folder.create(recursive: true);
+  final folder = await exportsFolder(); // created + backup-excluded (C18)
   // shared sanitiser (C11): non-ASCII titles survive; never overwrite (A20).
   final file = await uniqueExportFile(
       folder, exportFileName(title, fallback: fallbackName), 'mid');

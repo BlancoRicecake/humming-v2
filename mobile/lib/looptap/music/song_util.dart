@@ -3,6 +3,9 @@
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:path_provider/path_provider.dart';
+
+import '../../audio/backup_exclusion.dart';
 import '../models/loop_models.dart';
 import 'theory.dart';
 
@@ -165,6 +168,20 @@ String exportFileName(String title, {String fallback = 'loop'}) {
     s = fallback.replaceAll(_kIllegalFileChars, '').trim();
   }
   return s.isEmpty ? 'loop' : s;
+}
+
+/// `<Documents>/looptap/exports`, created if missing — the single home for
+/// every rendered .wav / .mid / stem (wav_export.dart, midi_export.dart).
+///
+/// Excluded from iCloud/iTunes backup (C18): an export is regenerable from the
+/// song, so it must not eat the user's iCloud quota. The exclusion is best
+/// effort and never throws — an export must never fail because of it.
+Future<Directory> exportsFolder() async {
+  final dir = await getApplicationDocumentsDirectory();
+  final folder = Directory('${dir.path}/looptap/exports');
+  if (!await folder.exists()) await folder.create(recursive: true);
+  await excludeFromBackup(folder.path);
+  return folder;
 }
 
 /// `<folder>/<base>.<ext>`, or `<base> (2).<ext>`, `(3)`… when the name is

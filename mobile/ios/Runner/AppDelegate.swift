@@ -65,6 +65,16 @@ import UIKit
             NSLog("[audio] resetToPlaybackSession failed: \(error)")
             result(false)
           }
+        case "excludeFromBackup":
+          // iOS Data Storage Guidelines / App Store Review 2.5.x: only
+          // user-generated data may sit in an iCloud-backed container.
+          // Downloadable catalog SoundFonts (hundreds of MB) and rendered
+          // exports are re-downloadable / regenerable, so they must not eat
+          // the user's iCloud quota. Setting the flag on the DIRECTORY covers
+          // everything inside it; songs.json / meta.json / vocals stay backed
+          // up (they are the irreplaceable work).
+          let backupArgs = call.arguments as? [String: Any]
+          result(AppDelegate.excludeFromBackup(backupArgs?["path"] as? String))
         case "overrideOutputToSpeaker":
           // After the synth output is rebuilt under .playAndRecord (recording
           // window), flutter_pcm_sound's setCategory carries no .defaultToSpeaker
@@ -148,6 +158,24 @@ import UIKit
           result(FlutterMethodNotImplemented)
         }
       }
+    }
+  }
+
+  /// Set NSURLIsExcludedFromBackupKey on [path] (file or directory).
+  /// Returns false — never throws — when the path is nil/empty, does not
+  /// exist yet, or the flag could not be written.
+  private static func excludeFromBackup(_ path: String?) -> Bool {
+    guard let path = path, !path.isEmpty else { return false }
+    var url = URL(fileURLWithPath: path)
+    guard FileManager.default.fileExists(atPath: url.path) else { return false }
+    do {
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      try url.setResourceValues(values)
+      return true
+    } catch {
+      NSLog("[backup] excludeFromBackup failed for \(path): \(error)")
+      return false
     }
   }
 

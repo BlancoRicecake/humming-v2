@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../api/engine_api.dart';
+import '../../audio/backup_exclusion.dart';
 
 /// Catalog program slots start here — must match backend MIN_SLOT.
 const int kSoundfontSlotBase = 1000;
@@ -110,6 +111,11 @@ class SoundfontCatalog {
     final docs = await getApplicationDocumentsDirectory();
     final d = Directory('${docs.path}/looptap/soundfonts');
     if (!await d.exists()) await d.create(recursive: true);
+    // C18: catalog SF2s are 200-400MB and re-downloadable — keep them out of
+    // the user's iCloud backup. In place (no relocation, so already-downloaded
+    // fonts keep working); the flag on the directory covers its contents.
+    // Never throws, so it can't block bootstrap (A17).
+    await excludeFromBackup(d.path);
     return _dir = d;
   }
 

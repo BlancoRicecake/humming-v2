@@ -29,6 +29,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 
+import '../../audio/backup_exclusion.dart';
 import '../../main.dart' show engineApi;
 import '../models/loop_models.dart';
 import '../state/loop_storage.dart';
@@ -55,6 +56,9 @@ Future<String> _assetSf2Path(String asset) async {
   final dir = await getApplicationSupportDirectory();
   final folder = Directory('${dir.path}/looptap/sf2');
   if (!await folder.exists()) await folder.create(recursive: true);
+  // C18: pure copies of bundled assets (~tens of MB) — regenerable from the
+  // app bundle, so keep them out of the backup too. Best effort, never throws.
+  await excludeFromBackup(folder.path);
   final f = File('${folder.path}/${asset.split('/').last}');
   final bd = await rootBundle.load(asset);
   if (await f.exists() && await f.length() == bd.lengthInBytes) return f.path;
@@ -283,9 +287,7 @@ void _logWavStats(String tag, String path, Uint8List wav) {
 /// A fresh export file under Documents/looptap/exports — shared sanitiser
 /// (C11) + never-overwrite numbering (A20).
 Future<File> _exportFile(String title, String ext, {required String fallback}) async {
-  final dir = await getApplicationDocumentsDirectory();
-  final folder = Directory('${dir.path}/looptap/exports');
-  if (!await folder.exists()) await folder.create(recursive: true);
+  final folder = await exportsFolder(); // created + backup-excluded (C18)
   return uniqueExportFile(folder, exportFileName(title, fallback: fallback), ext);
 }
 

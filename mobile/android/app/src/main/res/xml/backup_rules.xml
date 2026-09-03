@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto Backup rules for API 23-30 (android:fullBackupContent).
+     Everything is backed up by default; these exclude the large regenerable
+     caches (audit C18). Auto Backup has a 25MB per-app cap, and a single
+     catalog SoundFont is 200-400MB — without these excludes the whole backup
+     (including songs.json / vocals, the user's real work) would silently fail.
+
+     path_provider maps getApplicationDocumentsDirectory() to
+     context.getDir("flutter", MODE_PRIVATE) = <dataDir>/app_flutter, hence
+     domain="root"; getApplicationSupportDirectory() is getFilesDir() =
+     domain="file". -->
+<full-backup-content>
+    <!-- downloadable catalog SF2s — re-downloadable from the backend -->
+    <exclude domain="root" path="app_flutter/looptap/soundfonts" />
+    <!-- rendered WAV / MID exports — regenerable from the song -->
+    <exclude domain="root" path="app_flutter/looptap/exports" />
+    <!-- copies of bundled SF2 assets — regenerable from the APK -->
+    <exclude domain="file" path="looptap/sf2" />
+</full-backup-content>
