@@ -22,3 +22,14 @@ import 'dart:io';
 
 /// Opus 컨테이너 확장자 — iOS=.caf, Android=.ogg.
 String opusContainerExt() => Platform.isIOS ? '.caf' : '.ogg';
+
+/// Opus 녹음 가능 여부. Android 는 API 29(Q) 미만에서 record_android 가
+/// Opus 인코더를 거부(IllegalAccessException)하므로 AAC-LC 로 폴백해야 한다.
+/// [androidSdkInt] 가 null(= iOS / 조회 실패)이면 Opus 로 간주.
+bool opusSupported(int? androidSdkInt) =>
+    androidSdkInt == null || androidSdkInt >= 29;
+
+/// 압축 테이크 파일 확장자 — Opus 면 플랫폼 컨테이너(.caf/.ogg), 아니면 AAC-LC
+/// 의 .m4a. 백엔드는 magic bytes 로 컨테이너를 판별하므로 어느 쪽이든 분석 가능.
+String takeContainerExt({required bool opus}) =>
+    opus ? opusContainerExt() : '.m4a';

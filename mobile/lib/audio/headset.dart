@@ -5,11 +5,72 @@
 //  - any headset → safe to play the backing loop while recording (no bleed)
 //  - WIRED only → low enough round-trip latency for live autotune monitoring
 //    (Bluetooth adds 150-300ms each way — disorienting to sing against)
+import 'dart:io' show Platform;
+
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 enum HeadsetRoute { wired, bluetooth, none }
 
 const _channel = MethodChannel('humming/audio');
+
+/// AVAudioSession interruption (iOS) forwarded by AppDelegate.swift over the
+/// `humming/audio` channel. [began] = the system stopped our audio (phone
+/// call, Siri, alarm); otherwise the interruption ended and [shouldResume]
+/// mirrors `.shouldResume` (the native side already re-activated the session
+/// when it is set).
+class AudioInterruptionEvent {
+  const AudioInterruptionEvent({required this.began, required this.shouldResume});
+  final bool began;
+  final bool shouldResume;
+}
+
+void Function(AudioInterruptionEvent)? _interruptionListener;
+bool _callHandlerInstalled = false;
+
+/// Register the (single) listener for native audio-interruption events. The
+/// channel's method-call handler is installed on first use.
+void setAudioInterruptionListener(void Function(AudioInterruptionEvent)? listener) {
+  _interruptionListener = listener;
+  if (_callHandlerInstalled) return;
+  _callHandlerInstalled = true;
+  _channel.setMethodCallHandler((call) async {
+    if (call.method != 'audioInterruption') return null;
+    final args = call.arguments;
+    if (args is! Map) return null;
+    _interruptionListener?.call(AudioInterruptionEvent(
+      began: args['began'] == true,
+      shouldResume: args['shouldResume'] == true,
+    ));
+    return null;
+  });
+}
+
+/// Android `Build.VERSION.SDK_INT`, or null off Android / on error.
+Future<int?> androidSdkInt() async {
+  if (!Platform.isAndroid) return null;
+  try {
+    return await _channel.invokeMethod<int>('sdkInt');
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Open this app's page in the OS Settings (where the user re-enables a
+/// denied microphone permission). iOS: the `app-settings:` URL via
+/// url_launcher; Android: ACTION_APPLICATION_DETAILS_SETTINGS on the native
+/// side. Returns false when nothing could be opened.
+Future<bool> openAppSettings() async {
+  try {
+    if (Platform.isIOS) {
+      return await launchUrl(Uri.parse('app-settings:'));
+    }
+    if (Platform.isAndroid) {
+      return await _channel.invokeMethod<bool>('openAppSettings') ?? false;
+    }
+  } catch (_) {/* simulator / older native side */}
+  return false;
+}
 
 /// Current audio output route. Errors (simulator, missing impl) → none.
 Future<HeadsetRoute> headsetRoute() async {

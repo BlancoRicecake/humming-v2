@@ -71,6 +71,12 @@ class SynthEngine {
   // 채널이 현재 어느 soundfont(sfId)에 바인딩됐는지 — 808 채널은 _sf808Id 로
   // playNote/stopNote 해야 하므로 추적한다.
   final Map<int, int> _channelSf = <int, int>{};
+  // Notes currently sounding per channel (playNote/noteOn without a matching
+  // stop yet). Needed so a channel re-bound to a DIFFERENT soundfont can
+  // release its old voices on the old sfId — flutter_midi_pro has no
+  // per-channel all-notes-off, and a noteOff sent to the new sfId would leave
+  // them ringing forever (audit A9).
+  final Map<int, Set<int>> _sounding = <int, Set<int>>{};
 
   // 재생 중인 (channel, pitch) → 예약된 release 타이머. stopAll 시 모두 취소.
   final Map<int, Map<int, Timer>> _activeReleases = <int, Map<int, Timer>>{};
@@ -101,6 +107,28 @@ class SynthEngine {
   Future<void> rebuildOutput({required bool forRecording}) async {
     if (_useMelty) await _melty.rebuildOutput(forRecording: forRecording);
   }
+
+  /// Point [channel] at soundfont [sfId]; when that's a different soundfont
+  /// than before, stop every note still sounding on the previous one first.
+  Future<void> _bindSf(int channel, int sfId) async {
+    final prev = _channelSf[channel];
+    if (prev != null && prev != sfId) {
+      final notes = _sounding.remove(channel);
+      if (notes != null) {
+        for (final pitch in notes) {
+          try {
+            await _midi.stopNote(channel: channel, key: pitch, sfId: prev);
+          } catch (_) {/* already silent */}
+        }
+      }
+    }
+    _channelSf[channel] = sfId;
+  }
+
+  void _markSounding(int channel, int pitch) =>
+      (_sounding[channel] ??= <int>{}).add(pitch);
+
+  void _markSilent(int channel, int pitch) => _sounding[channel]?.remove(pitch);
 
   /// 채널에 GM program 선택 — 캐시 hit 시 no-op.
   Future<void> _ensureProgram(int sfId, int channel, int program) async {
@@ -155,7 +183,7 @@ class SynthEngine {
         await _midi.selectInstrument(sfId: sf8, channel: channel, bank: 0, program: 0);
         _channelProgram[channel] = program808;
       }
-      _channelSf[channel] = sf8;
+      await _bindSf(channel, sf8);
       return sf8;
     }
     if (isDynamicSlot(program)) {
@@ -164,11 +192,11 @@ class SynthEngine {
       // file not downloaded / load failed → fall back to grand piano so the
       // track still makes sound rather than going silent.
       await _ensureProgram(mainId, channel, 0);
-      _channelSf[channel] = mainId;
+      await _bindSf(channel, mainId);
       return mainId;
     }
     await _ensureProgram(mainId, channel, program);
-    _channelSf[channel] = mainId;
+    await _bindSf(channel, mainId);
     return mainId;
   }
 
@@ -199,7 +227,7 @@ class SynthEngine {
           sfId: sfId, channel: channel, bank: entry.sfBank, program: entry.sfProgram);
       _channelProgram[channel] = marker;
     }
-    _channelSf[channel] = sfId;
+    await _bindSf(channel, sfId);
     return sfId;
   }
 
@@ -226,11 +254,13 @@ class SynthEngine {
 
     await _midi.playNote(
         channel: channel, key: pitch, velocity: velocity, sfId: sfId);
+    _markSounding(channel, pitch);
 
     final timer = Timer(release, () async {
       try {
         await _midi.stopNote(channel: channel, key: pitch, sfId: sfId);
       } catch (_) {}
+      _markSilent(channel, pitch);
       _activeReleases[channel]?.remove(pitch);
     });
     (_activeReleases[channel] ??= <int, Timer>{})[pitch] = timer;
@@ -282,7 +312,7 @@ class SynthEngine {
     try {
       await _midi.selectInstrument(sfId: sfId, channel: channel, bank: bank, program: prog);
       _channelProgram[channel] = marker;
-      _channelSf[channel] = sfId;
+      await _bindSf(channel, sfId);
     } catch (e) {
       debugPrint('[synth] drum select failed (ch=$channel kit=$program): $e');
     }
@@ -338,6 +368,7 @@ class SynthEngine {
     final p = pitch.clamp(0, 127);
     try {
       await _midi.playNote(channel: channel, key: p, velocity: v, sfId: sfId);
+      _markSounding(channel, p);
     } catch (e) {
       debugPrint('[synth] noteOn ch=$channel pitch=$p failed: $e');
     }
@@ -348,8 +379,10 @@ class SynthEngine {
     // 채널이 808 로 바인딩됐으면 그 sfId 로 stop 해야 음이 꺼진다.
     final sfId = _channelSf[channel] ?? _sfId;
     if (sfId == null) return;
+    final p = pitch.clamp(0, 127);
+    _markSilent(channel, p);
     try {
-      await _midi.stopNote(channel: channel, key: pitch.clamp(0, 127), sfId: sfId);
+      await _midi.stopNote(channel: channel, key: p, sfId: sfId);
     } catch (_) {/* 이미 정지 */}
   }
 
@@ -362,6 +395,7 @@ class SynthEngine {
       }
       m.clear();
     }
+    _sounding.clear();
     for (final id in {_sfId, _sf808Id, _sfHipHopId, ..._slotSfId.values}) {
       if (id == null) continue;
       try {

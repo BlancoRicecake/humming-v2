@@ -1,8 +1,11 @@
 package com.humtrack.app
 
+import android.content.Intent
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -16,8 +19,24 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "hasHeadset" -> result.success(headsetRoute() != "none")
                 "headsetRoute" -> result.success(headsetRoute())
+                // Dart picks the take encoder by API level (Opus needs 29+).
+                "sdkInt" -> result.success(Build.VERSION.SDK_INT)
+                // Mic permission denied → let the user flip it in app settings.
+                "openAppSettings" -> result.success(openAppSettings())
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    private fun openAppSettings(): Boolean {
+        return try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            intent.data = Uri.fromParts("package", packageName, null)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 

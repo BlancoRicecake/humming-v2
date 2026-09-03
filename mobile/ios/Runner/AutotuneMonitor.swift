@@ -24,6 +24,24 @@ final class AutotuneMonitor {
   private var timePitch: AVAudioUnitTimePitch?
   private var routeObserver: NSObjectProtocol?
   private var sessionActivated = false
+  /// IO buffer preference in force before start() shrank it to 5 ms. Put back
+  /// in releaseSession() (i.e. after the recorder has stopped — changing it
+  /// mid-take would renegotiate the hardware IO under AVAudioRecorder) so the
+  /// tiny buffer, with its extra CPU + underrun risk for the synth output,
+  /// doesn't outlive the monitor (audit A12).
+  private var savedIOBufferDuration: TimeInterval?
+
+  private func restoreIOBufferDuration() {
+    guard let prev = savedIOBufferDuration else { return }
+    savedIOBufferDuration = nil
+    let session = AVAudioSession.sharedInstance()
+    do {
+      try session.setPreferredIOBufferDuration(prev)
+    } catch {
+      // prev == 0 ("no preference") can be rejected — fall back to iOS' usual ~20 ms
+      try? session.setPreferredIOBufferDuration(0.02)
+    }
+  }
   private var scalePcs: [Int] = []
   private var strength: Double = 1.0
   private var heldTarget: Double?
@@ -70,10 +88,12 @@ final class AutotuneMonitor {
     do {
       try session.setCategory(.playAndRecord, mode: .measurement,
                               options: [.mixWithOthers, .allowBluetoothA2DP])
+      savedIOBufferDuration = session.preferredIOBufferDuration
       try session.setPreferredIOBufferDuration(0.005) // ~256 frames @48k
       try session.setActive(true)
       sessionActivated = true
     } catch {
+      restoreIOBufferDuration()
       return false
     }
 
@@ -143,6 +163,7 @@ final class AutotuneMonitor {
   func releaseSession() {
     guard engine == nil, sessionActivated else { return }
     sessionActivated = false
+    restoreIOBufferDuration()
     try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
   }
 

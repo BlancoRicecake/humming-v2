@@ -81,6 +81,44 @@ import UIKit
           result(FlutterMethodNotImplemented)
         }
       }
+
+      // AVAudioSession interruptions (phone call, Siri, alarm, another app's
+      // audio). The system stops our RemoteIO output unit on `began` and the
+      // Dart synth (MeltyEngine) would otherwise never know — its feed loop
+      // just dies and the app stays silent until relaunch. Forward both edges
+      // to Dart; on `ended` with `.shouldResume` re-activate the session here
+      // (must happen before Dart rebuilds/re-primes the output unit).
+      NotificationCenter.default.addObserver(
+        forName: AVAudioSession.interruptionNotification,
+        object: nil,
+        queue: .main
+      ) { note in
+        guard let info = note.userInfo,
+              let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue)
+        else { return }
+        switch type {
+        case .began:
+          channel.invokeMethod("audioInterruption",
+                               arguments: ["began": true, "shouldResume": false])
+        case .ended:
+          var shouldResume = false
+          if let optValue = info[AVAudioSessionInterruptionOptionsKey] as? UInt {
+            shouldResume = AVAudioSession.InterruptionOptions(rawValue: optValue).contains(.shouldResume)
+          }
+          if shouldResume {
+            do {
+              try AVAudioSession.sharedInstance().setActive(true)
+            } catch {
+              NSLog("[audio] session re-activate after interruption failed: \(error)")
+            }
+          }
+          channel.invokeMethod("audioInterruption",
+                               arguments: ["began": false, "shouldResume": shouldResume])
+        @unknown default:
+          break
+        }
+      }
     }
 
     // humming/autotune_monitor — live pitch-corrected monitoring while

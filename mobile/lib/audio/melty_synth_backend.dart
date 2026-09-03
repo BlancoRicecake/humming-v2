@@ -33,12 +33,19 @@ import 'dart:math' as math;
 import 'package:dart_melty_soundfont/dart_melty_soundfont.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/widgets.dart'
+    show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 import 'package:flutter_pcm_sound/flutter_pcm_sound.dart';
 
-import 'headset.dart'; // resetToPlaybackSession (full session reset after recording)
+// resetToPlaybackSession (full session reset after recording) +
+// setAudioInterruptionListener (native AVAudioSession interruption events).
+import 'headset.dart';
 import '../looptap/music/soundfont_catalog.dart'; // isDynamicSlot, SoundfontCatalog
 
-class MeltyEngine {
+// WidgetsBindingObserver: the PCM feed loop must stop while the app is not in
+// the foreground and the output unit must be re-primed / rebuilt on return
+// (see _onFeed / didChangeAppLifecycleState).
+class MeltyEngine with WidgetsBindingObserver {
   MeltyEngine._();
   static final MeltyEngine _instance = MeltyEngine._();
   factory MeltyEngine() => _instance;
@@ -88,6 +95,25 @@ class MeltyEngine {
   // noticeably quiet on iOS. ~1.5× (+3.5dB) lifts the body; the tanh limiter
   // below keeps peaks from clipping when several tracks/synths sum past 1.0.
   static const double _masterGain = 1.5;
+
+  // ── lifecycle / interruption state (audit A1/A2) ──────────────────────
+  // Category the output unit was last built under — recovery rebuilds under
+  // the same one so a rebuild mid-recording keeps capture alive.
+  bool _forRecording = false;
+  // App not in the foreground: _onFeed is a no-op. Without this the native
+  // side answers every feed with OnFeedSamples(0) while inactive (it drops the
+  // buffer), and _onFeed → feed → OnFeedSamples(0) → _onFeed spins the main
+  // thread (Control Center pull-down, lock screen, app switcher).
+  bool _feedPaused = false;
+  // Output unit must be recreated before feeding again (real background,
+  // AVAudioSession interruption began, feed error). Gates _onFeed too.
+  bool _needsRebuild = false;
+  bool _recovering = false;
+  int _recoverFailures = 0;
+  static const int _maxRecoverFailures = 3;
+  DateTime _lastRecoverAt = DateTime.fromMillisecondsSinceEpoch(0);
+  static const Duration _recoverBackoff = Duration(seconds: 1);
+  Timer? _recoverRetry;
 
   Synthesizer? _main;
   Synthesizer? _s808;
@@ -181,9 +207,106 @@ class MeltyEngine {
     await FlutterPcmSound.setLogLevel(LogLevel.none); // silence per-feed [PCM] spam
     await FlutterPcmSound.setup(sampleRate: _sampleRate, channelCount: 1);
     _targetFrames = _idleTarget;
+    _forRecording = false;
     FlutterPcmSound.setFeedThreshold(_idleThreshold);
     FlutterPcmSound.setFeedCallback(_onFeed);
+    // Lifecycle gate + native interruption events (iOS). Registered once.
+    WidgetsBinding.instance.addObserver(this);
+    final st = WidgetsBinding.instance.lifecycleState;
+    _feedPaused = st != null && st != AppLifecycleState.resumed;
+    setAudioInterruptionListener(_onAudioInterruption);
     FlutterPcmSound.start(); // returns bool (not a Future) in this version
+  }
+
+  // ── lifecycle / interruption recovery ─────────────────────────────────
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _feedPaused = false;
+      if (_needsRebuild) {
+        _scheduleRecover('resumed');
+      } else {
+        // Native dropped its ring buffer while inactive and the feed loop is
+        // idle (no OnFeedSamples will come) — kick it once. Harmless if the
+        // loop is still running: it just tops the buffer up.
+        _onFeed(0);
+      }
+      return;
+    }
+    _feedPaused = true;
+    if (state != AppLifecycleState.inactive) {
+      // paused / hidden / detached: the RemoteIO unit gets stopped underneath
+      // us and the session may be interrupted — recreate it on return.
+      _needsRebuild = true;
+    }
+  }
+
+  // AppDelegate.swift forwards AVAudioSession.interruptionNotification. On
+  // `began` the system has stopped our audio unit; on `ended` with
+  // shouldResume the native side re-activated the session and we rebuild +
+  // re-prime right away. Ended WITHOUT shouldResume (another app kept the
+  // audio): stay silent until the next user-driven note (see _touchOutput) so
+  // we don't barge in over the other app.
+  void _onAudioInterruption(AudioInterruptionEvent ev) {
+    if (ev.began) {
+      _needsRebuild = true;
+      return;
+    }
+    if (ev.shouldResume) {
+      _scheduleRecover('interruption ended');
+    } else {
+      _needsRebuild = true;
+    }
+  }
+
+  // User-driven sound request while the output is flagged dead → recover now.
+  void _touchOutput() {
+    if (_needsRebuild && !_feedPaused) _scheduleRecover('note');
+  }
+
+  /// Rebuild the output unit (release → setup under the current category →
+  /// prime) at most once per [_recoverBackoff]; a request inside the window
+  /// is retried once the window closes, and repeated failures give up until
+  /// the next external trigger (resume / interruption end / note).
+  void _scheduleRecover(String reason) {
+    _needsRebuild = true;
+    if (!_outputStarted || _feedPaused || _recovering) return;
+    if (_recoverFailures >= _maxRecoverFailures) return;
+    final wait = _recoverBackoff - DateTime.now().difference(_lastRecoverAt);
+    if (wait > Duration.zero) {
+      _recoverRetry ??= Timer(wait, () {
+        _recoverRetry = null;
+        if (_needsRebuild) _scheduleRecover('$reason/backoff');
+      });
+      return;
+    }
+    _lastRecoverAt = DateTime.now();
+    _recovering = true;
+    _recover(reason).whenComplete(() => _recovering = false);
+  }
+
+  Future<void> _recover(String reason) async {
+    debugPrint('[melty] recover output ($reason) forRecording=$_forRecording');
+    try {
+      await FlutterPcmSound.release();
+      await FlutterPcmSound.setup(
+        sampleRate: _sampleRate,
+        channelCount: 1,
+        iosAudioCategory: _forRecording
+            ? IosAudioCategory.playAndRecord
+            : IosAudioCategory.playback,
+      );
+      _targetFrames = _forRecording ? _recTarget : _idleTarget;
+      FlutterPcmSound.setFeedThreshold(_forRecording ? _recThreshold : _idleThreshold);
+      FlutterPcmSound.setFeedCallback(_onFeed);
+      _needsRebuild = false;
+      _recoverFailures = 0;
+      _onFeed(0); // prime — restarts the native feed loop
+    } catch (e) {
+      _recoverFailures += 1;
+      debugPrint('[melty] recover failed ($_recoverFailures): $e');
+      if (_recoverFailures < _maxRecoverFailures) _scheduleRecover('retry');
+    }
   }
 
   /// Rebuild the PCM output unit under the CURRENT shared audio session.
@@ -232,8 +355,14 @@ class MeltyEngine {
     // Deep buffer while recording (survives main-thread stalls = no crackle),
     // shallow again after (responsive pad taps).
     _targetFrames = forRecording ? _recTarget : _idleTarget;
+    _forRecording = forRecording;
     FlutterPcmSound.setFeedThreshold(forRecording ? _recThreshold : _idleThreshold);
     FlutterPcmSound.setFeedCallback(_onFeed);
+    // A fresh unit supersedes any pending recovery.
+    _recoverRetry?.cancel();
+    _recoverRetry = null;
+    _needsRebuild = false;
+    _recoverFailures = 0;
     _onFeed(0); // manual prime — bypasses the _needsStart no-op in start()
     debugPrint('[rebuild] done forRecording=$forRecording '
         'hwRate(after)=${await outputSampleRate()}');
@@ -243,14 +372,29 @@ class MeltyEngine {
   // Top the native ring buffer back up to _targetFrames — feeding SEVERAL blocks
   // per callback when deep — so a main-thread stall between refills can't drain
   // it to silence (that underrun is the crackle). At idle this feeds one block.
+  //
+  // No-op while the app is not in the foreground or the unit is flagged for
+  // rebuild — otherwise the native inactive-path (OnFeedSamples(0) for every
+  // feed) turns this into a main-thread render storm (audit A2).
   void _onFeed(int remainingFrames) {
-    if (_main == null) return;
+    if (_main == null || _feedPaused || _needsRebuild) return;
     var depth = remainingFrames;
     do {
       _renderBlock();
-      FlutterPcmSound.feed(PcmArrayInt16.fromList(_out)); // fromList copies _out
+      _feed(PcmArrayInt16.fromList(_out)); // fromList copies _out
       depth += _frames;
     } while (depth < _targetFrames);
+  }
+
+  // feed() is fire-and-forget on the hot path; a failure (AudioOutputUnitStart
+  // after an interruption, "must call setup first" after a stale release)
+  // means the unit is dead → recover once (backoff-limited) instead of
+  // surfacing an unhandled async error on every block.
+  void _feed(PcmArrayInt16 buf) {
+    FlutterPcmSound.feed(buf).catchError((Object e) {
+      debugPrint('[melty] feed failed: $e');
+      _scheduleRecover('feed error');
+    });
   }
 
   // Render one _frames block: sum every loaded synth to mono Int16 in _out.
@@ -292,6 +436,18 @@ class MeltyEngine {
   }
 
   // ── instrument routing ────────────────────────────────────────────────
+  // Point [channel] at synth [s]. When the channel moves to a DIFFERENT synth
+  // (808 ↔ GM, catalog slot ↔ GM, kit swaps), release every note still
+  // sounding on the previous synth's channel first — noteOff would otherwise
+  // go to the new synth and the old voices would ring forever (audit A9).
+  void _bindSynth(int channel, Synthesizer s) {
+    final prev = _channelSynth[channel];
+    if (prev != null && !identical(prev, s)) {
+      prev.noteOffAll(channel: channel); // natural release, not a hard cut
+    }
+    _channelSynth[channel] = s;
+  }
+
   // Bind a melodic channel to the synth/preset for [program] and return it.
   // program == null keeps the existing binding (per-note sequencer calls).
   Future<Synthesizer> _bindMelodic(int channel, int? program) async {
@@ -303,7 +459,7 @@ class MeltyEngine {
         _programChange(s, channel, 0); // 808's single preset (default bank 0)
         _channelProgram[channel] = program808;
       }
-      _channelSynth[channel] = s;
+      _bindSynth(channel, s);
       return s;
     }
     if (isDynamicSlot(program)) {
@@ -316,16 +472,16 @@ class MeltyEngine {
               bank: entry?.sfBank ?? 0, program: entry?.sfProgram ?? 0);
           _channelProgram[channel] = marker;
         }
-        _channelSynth[channel] = s;
+        _bindSynth(channel, s);
         return s;
       }
       // not downloaded / failed → fall back to grand piano so it still sounds.
       _selectGm(main, channel, 0);
-      _channelSynth[channel] = main;
+      _bindSynth(channel, main);
       return main;
     }
     _selectGm(main, channel, program);
-    _channelSynth[channel] = main;
+    _bindSynth(channel, main);
     return main;
   }
 
@@ -385,7 +541,7 @@ class MeltyEngine {
       _selectWithBank(s, channel, bank: 128, program: prog);
     }
     _channelProgram[channel] = marker;
-    _channelSynth[channel] = s;
+    _bindSynth(channel, s);
   }
 
   Future<void> ensureDrumKit(int program) => ensureDrumKitOn(drumChannel, program);
@@ -398,6 +554,7 @@ class MeltyEngine {
     int? program,
   }) async {
     await ensureLoaded();
+    _touchOutput();
     final Synthesizer s;
     if (_drumChannels.contains(channel)) {
       // A drum channel: any non-null program is a KIT, not a GM melodic program.
@@ -441,6 +598,7 @@ class MeltyEngine {
   Future<void> playClick(bool accent) async {
     try {
       await ensureLoaded();
+      _touchOutput();
       final s = _main!;
       _selectGm(s, clickChannel, 115); // GM Wood Block
       final pitch = accent ? 84 : 79;
