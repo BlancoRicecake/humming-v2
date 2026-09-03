@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from ..auth import extract_user_id
 from ..deps import require_supabase
-from ..storage_r2 import delete_prefix
+from ..storage_r2 import delete_prefix, sanitise_key_part
 
 logger = logging.getLogger("humming.cloud_projects")
 router = APIRouter(prefix="/projects", tags=["cloud-projects"])
@@ -34,6 +34,13 @@ class CloudProjectSummary(BaseModel):
 
 class CloudProjectDetail(CloudProjectSummary):
     meta: Dict[str, Any]
+
+
+class CloudProjectListItem(CloudProjectSummary):
+    """List row. ``meta`` is populated only for ``?include=meta`` and omitted
+    from the JSON otherwise (``response_model_exclude_none``), so the default
+    list shape is unchanged."""
+    meta: Optional[Dict[str, Any]] = None
 
 
 class CloudProjectUpsertIn(BaseModel):
@@ -77,9 +84,9 @@ def _used_bytes(sb, user_id: str) -> int:
             .maybe_single()
             .execute()
         )
-    except Exception as e:
+    except Exception:
         logger.exception("quota lookup failed")
-        raise HTTPException(500, f"quota lookup failed: {e}")
+        raise HTTPException(500, "quota lookup failed")
     row = getattr(res, "data", None) or {}
     return int(row.get("used_bytes") or 0)
 
@@ -96,7 +103,7 @@ def _to_dt(v: Any) -> Optional[datetime]:
 
 
 # ── GET /projects ───────────────────────────────────────────────────────────
-@router.get("", response_model=List[CloudProjectSummary])
+@router.get("", response_model=List[CloudProjectListItem], response_model_exclude_none=True)
 def list_cloud_projects(
     include: Optional[str] = Query(default=None, description="`meta` 포함 여부"),
     authorization: Optional[str] = Header(default=None),
@@ -116,11 +123,10 @@ def list_cloud_projects(
             .data
             or []
         )
-    except Exception as e:
+    except Exception:
         logger.exception("list failed")
-        raise HTTPException(500, f"list failed: {e}")
-    # When `meta` requested, callers expect richer payload — return Detail model shape via dict.
-    return rows  # FastAPI will coerce; extra keys (meta) tolerated by Pydantic v2 if allowed.
+        raise HTTPException(500, "list failed")
+    return rows
 
 
 # ── GET /projects/{project_id} ──────────────────────────────────────────────
@@ -140,9 +146,9 @@ def get_cloud_project(
             .maybe_single()
             .execute()
         )
-    except Exception as e:
+    except Exception:
         logger.exception("get failed")
-        raise HTTPException(500, f"get failed: {e}")
+        raise HTTPException(500, "get failed")
     row = getattr(res, "data", None)
     if not row:
         raise HTTPException(404, "project not found")
@@ -169,9 +175,9 @@ def upsert_cloud_project(
             .maybe_single()
             .execute()
         )
-    except Exception as e:
+    except Exception:
         logger.exception("conflict pre-read failed")
-        raise HTTPException(500, f"conflict pre-read failed: {e}")
+        raise HTTPException(500, "conflict pre-read failed")
     existing = getattr(existing_res, "data", None)
 
     if (
@@ -225,9 +231,9 @@ def upsert_cloud_project(
                 "p_size_bytes": payload.size_bytes,
             },
         ).execute()
-    except Exception as e:
+    except Exception:
         logger.exception("upsert RPC failed")
-        raise HTTPException(500, f"upsert failed: {e}")
+        raise HTTPException(500, "upsert failed")
 
     used = int(getattr(rpc_res, "data", 0) or 0)
     return CloudProjectUpsertOut(
@@ -249,17 +255,18 @@ def delete_cloud_project(
             "delete_cloud_project",
             {"p_user_id": user_id, "p_project_id": project_id},
         ).execute()
-    except Exception as e:
+    except Exception:
         logger.exception("delete RPC failed")
-        raise HTTPException(500, f"delete failed: {e}")
+        raise HTTPException(500, "delete failed")
 
     result = getattr(rpc_res, "data", None)
     if result is None:
         # 존재하지 않음 — idempotent: 그래도 204 로 응답.
         logger.info("delete: project not found user=%s pid=%s", user_id, project_id)
 
-    # R2 객체 삭제 (best-effort)
-    prefix = f"vocals/{user_id}/{project_id}/"
+    # R2 객체 삭제 (best-effort). Same key normalisation as /storage/presign so
+    # the prefix matches what was actually uploaded (B22).
+    prefix = f"vocals/{user_id}/{sanitise_key_part(project_id)}/"
     try:
         deleted = delete_prefix(prefix)
         if deleted:

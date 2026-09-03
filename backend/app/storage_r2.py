@@ -7,12 +7,27 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Iterable, List, Optional
 
 from .deps import get_r2_client
 from .settings import get_settings
 
 logger = logging.getLogger("humming.r2")
+
+_SAFE_KEY_PART = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def sanitise_key_part(name: str) -> str:
+    """Normalise one path segment of an R2 object key (project_id / file_name).
+
+    Shared by ``/storage/presign`` (key issuance) and ``DELETE /projects``
+    (prefix cleanup) so both derive the *same* ``vocals/{uid}/{project}/``
+    prefix for a given project_id — otherwise deletes would miss objects
+    whose project_id contained characters the presign path rewrote.
+    """
+    base = _SAFE_KEY_PART.sub("_", name).strip("._") or "file"
+    return base[:120]
 
 
 def presign_put(

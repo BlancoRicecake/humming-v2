@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import functools
 import json
 import logging
@@ -86,16 +87,75 @@ if _settings.sentry_dsn:
     except ImportError:
         logger.warning("SENTRY_DSN set but sentry-sdk not installed")
 
-app = FastAPI(title="Humming V2 backend", version="0.3.0")
+# --- Startup: learned-model availability log (B9) ---------------------------
+def _learned_model_status() -> Dict[str, bool]:
+    """Cheap startup probe: does each learned-correction .npz exist AND load?
+
+    Production once shipped without ``models/`` in the image and silently ran
+    the heuristic fallbacks; this makes that state loud in the boot log.
+    """
+    from . import drum_classifier, offset_correction, pitch_correction
+
+    probes = (
+        ("pitch_correction", (pitch_correction.MODEL_PATH,), pitch_correction._load_model),
+        ("offset_correction", (offset_correction.MODEL_PATH,), offset_correction._load_model),
+        ("drum_classifier", tuple(drum_classifier.MODEL_PATHS), drum_classifier._load),
+    )
+    status: Dict[str, bool] = {}
+    for name, paths, loader in probes:
+        present = [str(p) for p in paths if Path(p).is_file()]
+        loaded = False
+        if present:
+            try:
+                loaded = loader() is not None
+            except Exception:
+                logger.exception("learned model %s: load raised", name)
+        if loaded:
+            logger.info("learned model %s: loaded (%s)", name, present[0])
+        else:
+            logger.warning(
+                "learned model %s: MISSING or failed to load — analysis runs on heuristics only "
+                "(looked in %s)", name, [str(p) for p in paths],
+            )
+        status[name] = loaded
+    return status
+
+
+@contextlib.asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    try:
+        _learned_model_status()
+    except Exception:
+        logger.exception("learned model status probe failed")
+    yield
+
+
+app = FastAPI(title="Humming V2 backend", version="0.3.0", lifespan=_lifespan)
+
+
+def _client_ip(request: Request) -> str:
+    """Rate-limit key (B15).
+
+    uvicorn runs with ``--forwarded-allow-ips '*'`` so ``request.client.host``
+    (what slowapi's ``get_remote_address`` returns) is the *leftmost*
+    X-Forwarded-For entry — which the client controls. Prefer the header the
+    edge proxy itself stamps (Fly: ``fly-client-ip``; Cloudflare:
+    ``cf-connecting-ip``) and only then fall back to the socket/forwarded peer.
+    """
+    for h in ("fly-client-ip", "cf-connecting-ip"):
+        v = request.headers.get(h)
+        if v:
+            return v.strip()
+    return request.client.host if request.client else "127.0.0.1"
+
 
 # --- Rate limit (slowapi) ---------------------------------------------------
 try:
     from slowapi import Limiter
     from slowapi.errors import RateLimitExceeded
     from slowapi.middleware import SlowAPIMiddleware
-    from slowapi.util import get_remote_address
 
-    limiter = Limiter(key_func=get_remote_address, default_limits=[])
+    limiter = Limiter(key_func=_client_ip, default_limits=[])
     app.state.limiter = limiter
     app.add_middleware(SlowAPIMiddleware)
 
@@ -118,7 +178,8 @@ class BodySizeLimitMiddleware:
     that machinery, so we keep the middleware stack shallow.
 
     Streaming uploads without Content-Length are NOT capped here (rare on
-    mobile); /analyze additionally counts bytes when reading the upload.
+    mobile); the upload endpoints additionally count bytes while reading the
+    upload (see _read_upload_capped).
     """
 
     def __init__(self, app, max_bytes: int):
@@ -243,6 +304,34 @@ def get_soundfont(entry_id: str):
 
 
 # --- analysis + export ------------------------------------------------------
+async def _read_upload_capped(upload: UploadFile, max_bytes: int) -> bytes:
+    """Read an UploadFile in chunks, raising 413 once more than ``max_bytes``
+    have been received (B16). Chunked uploads carry no Content-Length, so
+    BodySizeLimitMiddleware can't cap them — this is the backstop.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await upload.read(256 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(413, f"body too large (>{max_bytes} bytes)")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+# Cap concurrent CPU-bound DSP jobs (/analyze, /process_vocal, /process_fx,
+# /autotune). Each runs off the event loop via anyio.to_thread so /health (Fly
+# check, 3 s timeout) stays responsive during multi-second analysis (B8); the
+# semaphore bounds peak RAM on the 1 GB VM (WORLD jobs peak ~200 MB float64).
+_dsp_sem = asyncio.Semaphore(2)
+_autotune_sem = _dsp_sem  # legacy name
+# FluidSynth renders load a whole SF2 into the throwaway synth (GeneralUser GS
+# ~30 MB; catalog fonts up to hundreds of MB) — never run two at once.
+_render_sem = asyncio.Semaphore(1)
+
 _analyze_decorators = []
 if limiter is not None:
     _analyze_decorators.append(limiter.limit("10/minute"))
@@ -263,7 +352,7 @@ async def analyze(
     audio: UploadFile = File(...),
     options: str | None = Form(None),
 ):
-    raw = await audio.read()
+    raw = await _read_upload_capped(audio, _settings.max_body_bytes)
     if not raw:
         raise HTTPException(400, "empty audio upload")
     # DEBUG: HUMMING_DEBUG_DUMP=1 이면 업로드된 WAV를 _debug_uploads/ 에 저장 →
@@ -283,35 +372,37 @@ async def analyze(
     except Exception as e:
         raise HTTPException(400, f"invalid options json: {e}")
     try:
-        return analyze_audio(raw, opts)
-    except Exception as e:
+        async with _dsp_sem:
+            return await anyio.to_thread.run_sync(functools.partial(analyze_audio, raw, opts))
+    except HTTPException:  # undecodable input etc. are already 4xx — don't mask as 500
+        raise
+    except Exception:
         logger.exception("analyze failed")
-        raise HTTPException(500, f"analyze failed: {e}")
+        raise HTTPException(500, "analyze failed")
 
 
 @app.post("/process_vocal")
 async def process_vocal_ep(audio: UploadFile = File(...), denoise: str = Form("1")):
     """보컬 트랙 — 악기 변환 없이 목소리 그대로. 가벼운 정리 후 정리된 WAV(base64) +
     표시용 파형 peaks + duration 반환. (믹스는 클라이언트에서 악기 믹스와 동시재생)"""
-    raw = await audio.read()
+    raw = await _read_upload_capped(audio, _settings.max_body_bytes)
     if not raw:
         raise HTTPException(400, "empty audio upload")
     try:
-        wav, peaks, dur, sr = process_vocal(raw, denoise=(denoise != "0"))
-    except Exception as e:
+        async with _dsp_sem:
+            wav, peaks, dur, sr = await anyio.to_thread.run_sync(
+                functools.partial(process_vocal, raw, denoise=(denoise != "0")))
+    except HTTPException:  # undecodable input is already 4xx — don't mask as 500
+        raise
+    except Exception:
         logger.exception("process_vocal failed")
-        raise HTTPException(500, f"process_vocal failed: {e}")
+        raise HTTPException(500, "process_vocal failed")
     return {
         "duration": dur,
         "sample_rate": sr,
         "peaks": peaks,
         "audio_b64": base64.b64encode(wav).decode("ascii"),
     }
-
-
-# Cap concurrent WORLD jobs — each is multi-second CPU-bound work peaking at
-# ~200MB of float64 buffers, run off the event loop via anyio.to_thread.
-_autotune_sem = asyncio.Semaphore(2)
 
 
 @app.post("/process_fx")
@@ -326,11 +417,9 @@ async def process_fx_ep(
     같은 세마포어로 직렬화해 메모리 폭주를 막는다.)"""
     from .fx import apply_fx
 
-    raw = await audio.read()
+    raw = await _read_upload_capped(audio, _settings.max_body_bytes)
     if not raw:
         raise HTTPException(400, "empty audio upload")
-    if len(raw) > _settings.max_body_bytes:
-        raise HTTPException(413, f"body too large (>{_settings.max_body_bytes} bytes)")
     try:
         p = json.loads(params or "{}")
         if not isinstance(p, dict):
@@ -338,16 +427,16 @@ async def process_fx_ep(
     except (ValueError, json.JSONDecodeError) as e:
         raise HTTPException(400, f"invalid params: {e}")
     try:
-        async with _autotune_sem:
+        async with _dsp_sem:
             wav, peaks, dur, sr = await anyio.to_thread.run_sync(
                 functools.partial(apply_fx, raw, fx_type, p))
     except HTTPException:  # decode failures are already 4xx — don't mask as 500
         raise
     except ValueError as e:  # unknown fx_type / empty audio
         raise HTTPException(400, str(e))
-    except Exception as e:
+    except Exception:
         logger.exception("process_fx failed")
-        raise HTTPException(500, f"process_fx failed: {e}")
+        raise HTTPException(500, "process_fx failed")
     return {
         "duration": dur,
         "sample_rate": sr,
@@ -372,12 +461,9 @@ async def autotune_ep(
     /process_vocal 과 동일: 보정된 WAV(base64) + 표시용 peaks + duration."""
     from .autotune import autotune_vocal
 
-    raw = await audio.read()
+    raw = await _read_upload_capped(audio, _settings.max_body_bytes)
     if not raw:
         raise HTTPException(400, "empty audio upload")
-    # chunked uploads carry no Content-Length, so the middleware can't cap them
-    if len(raw) > _settings.max_body_bytes:
-        raise HTTPException(413, f"body too large (>{_settings.max_body_bytes} bytes)")
     try:
         s = min(max(float(strength), 0.0), 1.0)
         r = min(max(float(retune_ms), 1.0), 1000.0)
@@ -386,7 +472,7 @@ async def autotune_ep(
     if not math.isfinite(s) or not math.isfinite(r):  # NaN survives min/max clamping
         raise HTTPException(400, "invalid strength/retune_ms")
     try:
-        async with _autotune_sem:
+        async with _dsp_sem:
             wav, peaks, dur, sr = await anyio.to_thread.run_sync(functools.partial(
                 autotune_vocal, raw, key, scale,
                 strength=s, retune_ms=r, denoise=(denoise != "0")))
@@ -394,9 +480,9 @@ async def autotune_ep(
         raise
     except ValueError as e:  # unknown tonic/scale, over-long input
         raise HTTPException(400, str(e))
-    except Exception as e:
+    except Exception:
         logger.exception("autotune failed")
-        raise HTTPException(500, f"autotune failed: {e}")
+        raise HTTPException(500, "autotune failed")
     return {
         "duration": dur,
         "sample_rate": sr,
@@ -439,6 +525,38 @@ async def assist(payload: dict):
     }
 
 
+def _render_sample_rate(payload: dict) -> int:
+    """Whitelist ``sample_rate`` (B17) → 400 on anything but 22050/44100/48000."""
+    try:
+        return render_mod.validate_sample_rate(payload.get("sample_rate") or 44100)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+def _check_render_notes(notes) -> None:
+    """Note-count / timeline-length budget (B17) → 400 on violation."""
+    try:
+        render_mod.validate_notes(notes)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+def _require_render_available() -> None:
+    if not render_mod.is_available():
+        raise HTTPException(503, render_mod.get_state().error or "SoundFont preview unavailable")
+
+
+def _require_render_engine() -> None:
+    if not render_mod.is_engine_available():
+        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+
+
+async def _run_render(fn, *args, **kwargs) -> bytes:
+    """Run a FluidSynth render off the event loop, one at a time (see _render_sem)."""
+    async with _render_sem:
+        return await anyio.to_thread.run_sync(functools.partial(fn, *args, **kwargs))
+
+
 @app.get("/render_capabilities")
 def render_capabilities():
     render_mod.initialize()
@@ -463,17 +581,17 @@ def soundfont_presets():
 @app.post("/render_demo")
 async def render_demo(payload: dict):
     """Render the fixed audition phrase through one SF2 preset → WAV."""
-    if not render_mod.is_available():
-        state = render_mod.get_state()
-        raise HTTPException(503, state.error or "SoundFont preview unavailable")
+    sample_rate = _render_sample_rate(payload)
     bank = int(payload.get("bank") or 0)
     program = int(payload.get("program") or 0)
-    sample_rate = int(payload.get("sample_rate") or 44100)
+    _require_render_available()
     try:
-        wav = render_mod.render_demo_to_wav(bank, program, sample_rate=sample_rate)
-    except Exception as e:
+        wav = await _run_render(render_mod.render_demo_to_wav, bank, program, sample_rate=sample_rate)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
         logger.exception("render_demo failed")
-        raise HTTPException(500, f"render_demo failed: {e}")
+        raise HTTPException(500, "render_demo failed")
     return Response(content=wav, media_type="audio/wav")
 
 
@@ -525,16 +643,15 @@ async def audition_render(payload: dict):
     """Render the per-track-type audition phrase through a GM / catalog /
     sentinel sound → WAV. The sound is selected by ``source``; see
     _resolve_audition_source."""
-    if not render_mod.is_engine_available():
-        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+    sample_rate = _render_sample_rate(payload)
     source = str(payload.get("source") or "gm")
     track_type = str(payload.get("track_type") or "melody")
-    sample_rate = int(payload.get("sample_rate") or 44100)
     piece = payload.get("piece")
     if track_type not in audition_palette_mod.ROLES:
         raise HTTPException(400, "track_type must be melody|bass|drums")
     if piece is not None and piece not in ("kick", "snare", "hat"):
         raise HTTPException(400, "piece must be kick|snare|hat")
+    _require_render_engine()
     try:
         sf2_path, sf_bank, sf_program = _resolve_audition_source(source, payload)
     except KeyError as e:
@@ -544,14 +661,17 @@ async def audition_render(payload: dict):
     if not sf2_path:
         raise HTTPException(503, "global SoundFont unavailable")
     try:
-        wav = render_mod.render_demo_through_sf2(
+        wav = await _run_render(
+            render_mod.render_demo_through_sf2,
             sf2_path, sf_bank, sf_program, track_type=track_type,
             sample_rate=sample_rate, piece=piece)
-    except FileNotFoundError as e:
-        raise HTTPException(404, f"soundfont file missing: {e}")
-    except Exception as e:
+    except FileNotFoundError:
+        raise HTTPException(404, "soundfont file missing")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
         logger.exception("audition_render failed")
-        raise HTTPException(500, f"audition_render failed: {e}")
+        raise HTTPException(500, "audition_render failed")
     return Response(content=wav, media_type="audio/wav")
 
 
@@ -573,11 +693,26 @@ async def guitar_lab_render(payload: dict):
     voicing, strum_ms, direction, velocity, velocity_falloff, velocity_jitter,
     timing_jitter_ms, ring_ms, palm_mute, let_ring, pattern, bpm, repeats, reverb.
     """
-    if not render_mod.is_engine_available():
-        raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
+    sample_rate = _render_sample_rate(payload)
     source = str(payload.get("source") or "gm")
-    sample_rate = int(payload.get("sample_rate") or 44100)
     seed = payload.get("seed")
+    keys = (
+        "root", "voicing", "strum_ms", "direction", "velocity", "velocity_falloff",
+        "velocity_jitter", "timing_jitter_ms", "ring_ms", "palm_mute", "let_ring",
+        "pattern", "bpm", "repeats", "reverb",
+    )
+    art = {k: payload[k] for k in keys if k in payload}
+    # Bound rendered length (B17): strokes = len(pattern) * repeats at 60/bpm/2 s each.
+    try:
+        repeats = int(art.get("repeats") or 1)
+        bpm = float(art.get("bpm") or 96.0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "invalid repeats/bpm")
+    if not (1 <= repeats <= 64) or not math.isfinite(bpm) or not (20.0 <= bpm <= 400.0):
+        raise HTTPException(400, "repeats must be 1..64 and bpm 20..400")
+    if len(str(art.get("pattern") or "")) > 256:
+        raise HTTPException(400, "pattern too long (max 256 strokes)")
+    _require_render_engine()
     # reuse the sound-picker source resolution (gm / catalog / sentinel -> sf2)
     try:
         sf2_path, sf_bank, sf_program = _resolve_audition_source(source, payload)
@@ -587,24 +722,21 @@ async def guitar_lab_render(payload: dict):
         raise HTTPException(400, str(e))
     if not sf2_path:
         raise HTTPException(503, "global SoundFont unavailable")
-    keys = (
-        "root", "voicing", "strum_ms", "direction", "velocity", "velocity_falloff",
-        "velocity_jitter", "timing_jitter_ms", "ring_ms", "palm_mute", "let_ring",
-        "pattern", "bpm", "repeats", "reverb",
-    )
-    art = {k: payload[k] for k in keys if k in payload}
     try:
-        wav = guitar_lab_mod.render_guitar_strum(
+        wav = await _run_render(
+            guitar_lab_mod.render_guitar_strum,
             sf2_path, sf_bank, sf_program,
             sample_rate=sample_rate,
             seed=int(seed) if seed is not None else None,
             **art,
         )
-    except FileNotFoundError as e:
-        raise HTTPException(404, f"soundfont file missing: {e}")
-    except Exception as e:
+    except FileNotFoundError:
+        raise HTTPException(404, "soundfont file missing")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
         logger.exception("guitar_lab_render failed")
-        raise HTTPException(500, f"guitar_lab_render failed: {e}")
+        raise HTTPException(500, "guitar_lab_render failed")
     return Response(content=wav, media_type="audio/wav")
 
 
@@ -618,24 +750,28 @@ async def render_audio(payload: dict):
     클라이언트의 ``EngineApi.renderAudio`` 는 ``@Deprecated`` 마킹되어
     실호출처가 없으며, 향후 제거 가능.
     """
-    if not render_mod.is_available():
-        state = render_mod.get_state()
-        raise HTTPException(503, state.error or "SoundFont preview unavailable")
+    sample_rate = _render_sample_rate(payload)
     notes_raw = payload.get("notes")
     if not isinstance(notes_raw, list):
         raise HTTPException(400, "missing notes[]")
+    if len(notes_raw) > render_mod.MAX_RENDER_NOTES:
+        raise HTTPException(400, f"too many notes ({len(notes_raw)} > {render_mod.MAX_RENDER_NOTES})")
     try:
         notes = [Note(**n) for n in notes_raw]
     except Exception as e:
         raise HTTPException(400, f"invalid note: {e}")
+    _check_render_notes(notes)
     program = int(payload.get("program") or 0)
     bank = int(payload.get("bank") or 0)
-    sample_rate = int(payload.get("sample_rate") or 44100)
+    _require_render_available()
     try:
-        wav = render_mod.render_notes_to_wav(notes, program=program, sample_rate=sample_rate, bank=bank)
-    except Exception as e:
+        wav = await _run_render(
+            render_mod.render_notes_to_wav, notes, program=program, sample_rate=sample_rate, bank=bank)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
         logger.exception("render failed")
-        raise HTTPException(500, f"render failed: {e}")
+        raise HTTPException(500, "render failed")
     return Response(content=wav, media_type="audio/wav")
 
 
@@ -649,12 +785,13 @@ async def render_mix(payload: dict):
     시트 경로에서만 호출됨. 향후 export 도 온디바이스 PCM bounce 로 옮기면
     deprecate 가능.
     """
-    if not render_mod.is_available():
-        state = render_mod.get_state()
-        raise HTTPException(503, state.error or "SoundFont preview unavailable")
+    sample_rate = _render_sample_rate(payload)
     tracks_raw = payload.get("tracks")
     if not isinstance(tracks_raw, list):
         raise HTTPException(400, "missing tracks[]")
+    total_raw = sum(len(tr.get("notes") or []) for tr in tracks_raw if isinstance(tr, dict))
+    if total_raw > render_mod.MAX_RENDER_NOTES:
+        raise HTTPException(400, f"too many notes ({total_raw} > {render_mod.MAX_RENDER_NOTES})")
     tracks = []
     try:
         for tr in tracks_raw:
@@ -662,12 +799,15 @@ async def render_mix(payload: dict):
             tracks.append({"notes": notes, "program": int(tr.get("program") or 0)})
     except Exception as e:
         raise HTTPException(400, f"invalid track: {e}")
-    sample_rate = int(payload.get("sample_rate") or 44100)
+    _check_render_notes([n for tr in tracks for n in tr["notes"]])
+    _require_render_available()
     try:
-        wav = render_mod.render_tracks_to_wav(tracks, sample_rate=sample_rate)
-    except Exception as e:
+        wav = await _run_render(render_mod.render_tracks_to_wav, tracks, sample_rate=sample_rate)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
         logger.exception("render_mix failed")
-        raise HTTPException(500, f"render_mix failed: {e}")
+        raise HTTPException(500, "render_mix failed")
     return Response(content=wav, media_type="audio/wav")
 
 

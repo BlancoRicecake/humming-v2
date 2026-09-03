@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -22,17 +21,14 @@ from pydantic import BaseModel, Field
 from ..auth import extract_user_id
 from ..deps import require_supabase
 from ..settings import get_settings
-from ..storage_r2 import presign_get, presign_put
+from ..storage_r2 import presign_get, presign_put, sanitise_key_part
 
 logger = logging.getLogger("humming.storage")
 router = APIRouter(prefix="/storage", tags=["storage"])
 
-_SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
-
-
-def _sanitise(name: str) -> str:
-    base = _SAFE_NAME.sub("_", name).strip("._") or "file"
-    return base[:120]
+# Key-segment normaliser lives in storage_r2 so DELETE /projects uses the
+# identical rule when computing the R2 prefix to clean up (B22).
+_sanitise = sanitise_key_part
 
 
 def _quota_bytes() -> int:
@@ -55,9 +51,9 @@ def _used_bytes(user_id: str) -> int:
             .maybe_single()
             .execute()
         )
-    except Exception as e:
+    except Exception:
         logger.exception("quota lookup failed")
-        raise HTTPException(500, f"quota lookup failed: {e}")
+        raise HTTPException(500, "quota lookup failed")
     row = getattr(res, "data", None) or {}
     return int(row.get("used_bytes") or 0)
 
@@ -159,9 +155,9 @@ def presign_download(
 
     try:
         url = presign_get(payload.key, expires_in=s.presign_ttl_sec)
-    except Exception as e:
+    except Exception:
         logger.exception("/storage/presign_get: R2 client error")
-        raise HTTPException(500, f"presign failed: {e}")
+        raise HTTPException(500, "presign failed")
 
     if url is None:
         raise HTTPException(503, "R2 not configured")

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+from dataclasses import dataclass
 import logging
 import math
 import subprocess
@@ -59,14 +60,20 @@ HOP = 256
 # ============================================================================
 # Decoder probe / debug surface (Opus integration)
 # ============================================================================
-# Last decode metadata — populated by _load_audio, consumed by analyze_audio()
-# at response-pack time. Module-level is fine because /analyze (main.py) calls
-# analyze_audio() synchronously on the event loop (no thread pool / no
-# semaphore), so within one worker process two /analyze calls never interleave
-# inside this function frame. If analyze_audio is ever moved off the event
-# loop (cf. /autotune's to_thread + Semaphore(2)), this slot must become
-# per-call state first.
-_LAST_DECODE_INFO: Dict[str, Optional[object]] = {}
+@dataclass(frozen=True)
+class DecodeInfo:
+    """Per-call decode metadata (codec / sr / channels / bitrate / decoder),
+    returned by ``_load_audio`` and threaded through to ``_pack_response``.
+
+    Deliberately NOT module-level state: ``analyze_audio`` / ``process_vocal``
+    run in worker threads (main.py: ``anyio.to_thread`` behind a Semaphore), so
+    two requests can be inside this module at the same time.
+    """
+    input_codec: Optional[str] = None
+    input_sr: Optional[int] = None
+    input_channels: Optional[object] = None
+    input_bitrate_kbps: Optional[int] = None
+    decoded_via: Optional[str] = None
 
 
 def _magic_is_wav(blob: bytes) -> bool:
@@ -197,14 +204,16 @@ def _ffmpeg_decode_to_pcm(
 # ============================================================================
 # Stage 2 — Preprocessing
 # ============================================================================
-def _load_audio(file_bytes: bytes) -> Tuple[np.ndarray, int]:
+def _load_audio(file_bytes: bytes) -> Tuple[np.ndarray, int, DecodeInfo]:
     """Decode any audio blob into mono float32 PCM at TARGET_SR.
+
+    Returns ``(y, sr, decode_info)``.
 
     Routing:
       - WAV (RIFF magic): keep the legacy soundfile path verbatim (no
         regression risk on PCM inputs).
       - Anything else (Opus/m4a/CAF/AAC/...): ffmpeg subprocess pipe.
-      - Both paths populate ``_LAST_DECODE_INFO`` for the response debug
+      - Both paths fill the returned ``DecodeInfo`` for the response debug
         surface.
     """
     probe = _ffprobe_info(file_bytes)
@@ -267,14 +276,13 @@ def _load_audio(file_bytes: bytes) -> Tuple[np.ndarray, int]:
         dur_decoded = (len(y) / float(sr) / ch) if sr else 0.0
         if dur_decoded > 0.05:
             bitrate_kbps = max(1, int(round(len(file_bytes) * 8.0 / dur_decoded / 1000)))
-    _LAST_DECODE_INFO.clear()
-    _LAST_DECODE_INFO.update({
-        "input_codec": container,
-        "input_sr": int(probe_sr) if probe_sr else int(sr),
-        "input_channels": probe.get("channels"),
-        "input_bitrate_kbps": bitrate_kbps,
-        "decoded_via": decoded_via,
-    })
+    info = DecodeInfo(
+        input_codec=container,
+        input_sr=int(probe_sr) if probe_sr else int(sr),
+        input_channels=probe.get("channels"),
+        input_bitrate_kbps=bitrate_kbps,
+        decoded_via=decoded_via,
+    )
 
     if y.ndim > 1:
         y = np.mean(y, axis=1)
@@ -283,7 +291,7 @@ def _load_audio(file_bytes: bytes) -> Tuple[np.ndarray, int]:
     peak = float(np.max(np.abs(y))) if y.size else 0.0
     if peak > 1e-6:
         y = y * (0.99 / max(peak, 0.99))
-    return y.astype(np.float32), sr
+    return y.astype(np.float32), sr, info
 
 
 def _downsample_for_display(y: np.ndarray, target_points: int = 1500) -> List[float]:
@@ -325,7 +333,7 @@ def denoise_vocal_light(y: np.ndarray, sr: int) -> np.ndarray:
 
 def process_vocal(file_bytes: bytes, denoise: bool = True) -> Tuple[bytes, List[float], float, int]:
     """업로드 WAV → (정리된 WAV bytes, 표시용 peaks, duration, sr)."""
-    y, sr = _load_audio(file_bytes)
+    y, sr, _info = _load_audio(file_bytes)
     if denoise:
         y = denoise_vocal_light(y, sr)
     buf = io.BytesIO()
@@ -980,14 +988,14 @@ def _split_chunk_by_pitch_states(
 # ============================================================================
 def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
     # ---- Stage 2: preprocessing -----------------------------------------------
-    y, sr = _load_audio(file_bytes)
+    y, sr, decode_info = _load_audio(file_bytes)
     duration = len(y) / sr if sr else 0.0
 
     # ---- Drum mode: skip the melodic pipeline entirely -----------------------
     # Notes come from onsets (not pYIN pitch), so unpitched percussion no longer
     # vanishes. The melodic path below is untouched → no auto-percussive misfire.
     if opts.as_drums:
-        return _analyze_drums(y, sr, duration, opts)
+        return _analyze_drums(y, sr, duration, opts, decode_info)
 
     # ---- Stage 3: voice region detection (RMS envelope + adaptive thresholds)
     env_times, rms = compute_rms_envelope(y, sr, hop=HOP)
@@ -1214,6 +1222,7 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
         notes = _apply_loop_grid(notes, opts, duration)
 
     return _pack_response(
+        decode_info=decode_info,
         notes=notes,
         chunks=[Chunk(**c) for c in chunks_final],
         y=y, sr=sr, duration=duration, opts=opts,
@@ -1234,7 +1243,9 @@ def analyze_audio(file_bytes: bytes, opts: AnalyzeOptions) -> AnalyzeResponse:
 # ============================================================================
 # Drum mode — onset-based, timbre-classified (as_drums); pitch-independent
 # ============================================================================
-def _analyze_drums(y: np.ndarray, sr: int, duration: float, opts: AnalyzeOptions) -> AnalyzeResponse:
+def _analyze_drums(
+    y: np.ndarray, sr: int, duration: float, opts: AnalyzeOptions, decode_info: DecodeInfo,
+) -> AnalyzeResponse:
     """One note per onset, classified by timbre (drum_onset.build_drum_notes).
 
     Does NOT run the melodic pitch/recovery/key path — drums have no pitch or
@@ -1247,6 +1258,7 @@ def _analyze_drums(y: np.ndarray, sr: int, duration: float, opts: AnalyzeOptions
     if opts.loop_quantize:
         notes = _apply_loop_grid(notes, opts, duration)
     return _pack_response(
+        decode_info=decode_info,
         notes=notes,
         chunks=[],
         y=y, sr=sr, duration=duration, opts=opts,
@@ -1263,22 +1275,21 @@ def _safe(arr: np.ndarray) -> List[float]:
 
 
 def _pack_response(
-    *, notes, chunks, y, sr, duration, opts,
+    *, decode_info: DecodeInfo, notes, chunks, y, sr, duration, opts,
     env_times, rms, th, pitch_track, detected_key, assist_count, key_candidates,
 ) -> AnalyzeResponse:
     """Assemble the AnalyzeResponse. Shared by the melodic and drum paths so the
     response shape never drifts between them. Decode debug metadata (codec/sr/
-    channels/bitrate/via) is sourced from module-level _LAST_DECODE_INFO populated
-    by _load_audio."""
-    decode_info = dict(_LAST_DECODE_INFO)
+    channels/bitrate/via) comes from the per-call ``DecodeInfo`` returned by
+    ``_load_audio``."""
     return AnalyzeResponse(
         notes=notes,
         chunks=chunks,
-        input_codec=decode_info.get("input_codec"),
-        input_sr=decode_info.get("input_sr"),
-        input_channels=decode_info.get("input_channels"),
-        input_bitrate_kbps=decode_info.get("input_bitrate_kbps"),
-        decoded_via=decode_info.get("decoded_via"),
+        input_codec=decode_info.input_codec,
+        input_sr=decode_info.input_sr,
+        input_channels=decode_info.input_channels,
+        input_bitrate_kbps=decode_info.input_bitrate_kbps,
+        decoded_via=decode_info.decoded_via,
         envelope=EnvelopeInfo(
             times=[float(t) for t in env_times.tolist()],
             rms=[float(x) for x in rms.tolist()],

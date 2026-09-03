@@ -42,7 +42,6 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends build-essential \
  && pip install --upgrade pip \
  && pip install -r requirements.txt \
- && pip install "gunicorn>=21.2" \
  && apt-get purge -y --auto-remove build-essential \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
@@ -57,6 +56,11 @@ COPY soundfonts ./soundfonts
 
 # --- app source ------------------------------------------------------------
 COPY app ./app
+# Learned-correction weights (pitch/offset/drum classifier, ~3MB of .npz tracked
+# in git). app/*_correction.py resolve them relative to app/ as ../models — without
+# this COPY production silently ran the heuristic fallbacks (audit B9). The
+# startup log in app/main.py reports whether each one loaded.
+COPY models ./models
 COPY migrations ./migrations
 # bin/ kept optional (FluidSynth portable build); ignore in prod if absent
 COPY bin ./bin

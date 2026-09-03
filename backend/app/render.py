@@ -12,6 +12,8 @@ import os
 import struct
 import sys
 from dataclasses import dataclass
+import math
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -51,23 +53,76 @@ class RenderState:
 
 
 _STATE = RenderState()
+# Render calls run in worker threads (main.py: anyio.to_thread); guard the
+# lazy one-time engine init so two first-callers can't race on _STATE. Each
+# render creates its own throwaway ``fluidsynth.Synth`` (no shared synth
+# object), so the per-call rendering itself needs no lock — main.py still
+# serialises renders with a Semaphore(1) purely for memory (SF2 load per synth).
+_INIT_LOCK = threading.Lock()
+
+# --- request-size guards (B17) ----------------------------------------------
+# get_samples() allocates int16 stereo for every second of timeline, and the
+# WAV is built fully in memory: 600 s @ 48 kHz stereo ≈ 115 MB int16 plus the
+# float32 normalisation copy. Anything larger risks OOM on the 1 GB VM.
+ALLOWED_SAMPLE_RATES: Tuple[int, ...] = (22050, 44100, 48000)
+MAX_RENDER_NOTES = 5000
+MAX_RENDER_SECONDS = 600.0
+
+
+def validate_sample_rate(sample_rate: object) -> int:
+    """Coerce + whitelist ``sample_rate``; raises ValueError otherwise."""
+    try:
+        sr = int(sample_rate)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        raise ValueError("invalid sample_rate")
+    if sr not in ALLOWED_SAMPLE_RATES:
+        raise ValueError(f"sample_rate must be one of {list(ALLOWED_SAMPLE_RATES)}")
+    return sr
+
+
+def validate_notes(
+    notes: Sequence[Note],
+    *,
+    max_notes: int = MAX_RENDER_NOTES,
+    max_seconds: float = MAX_RENDER_SECONDS,
+) -> None:
+    """Bound note count and rendered timeline length; raises ValueError.
+
+    Also rejects non-finite / negative times, which would otherwise turn into
+    absurd ``get_samples`` sizes.
+    """
+    if len(notes) > max_notes:
+        raise ValueError(f"too many notes ({len(notes)} > {max_notes})")
+    for n in notes:
+        start = float(n.start)
+        end = float(n.end)
+        if not (math.isfinite(start) and math.isfinite(end)):
+            raise ValueError("note start/end must be finite")
+        if start < 0.0 or end < 0.0:
+            raise ValueError("note start/end must be >= 0")
+        if end > max_seconds:
+            raise ValueError(f"note end {end:.1f}s exceeds max render length {max_seconds:.0f}s")
 
 
 def initialize() -> None:
     if _STATE.fluidsynth_module is not None or _STATE.error is not None:
         return
-    _prepare_fluidsynth_path()
-    try:
-        import fluidsynth  # type: ignore
-    except Exception as e:
-        _STATE.error = f"fluidsynth load failed: {e}"
-        return
-    _STATE.fluidsynth_module = fluidsynth
-    sf2 = os.environ.get("HUMMING_SF2_PATH", DEFAULT_SF2)
-    if sf2 and Path(sf2).is_file():
-        _STATE.sf2_path = sf2
-    else:
-        _STATE.error = f"SF2 not found at {sf2!r}"
+    with _INIT_LOCK:
+        if _STATE.fluidsynth_module is not None or _STATE.error is not None:
+            return
+        _prepare_fluidsynth_path()
+        try:
+            import fluidsynth  # type: ignore
+        except Exception as e:
+            _STATE.error = f"fluidsynth load failed: {e}"
+            return
+        sf2 = os.environ.get("HUMMING_SF2_PATH", DEFAULT_SF2)
+        if sf2 and Path(sf2).is_file():
+            _STATE.sf2_path = sf2
+        else:
+            _STATE.error = f"SF2 not found at {sf2!r}"
+        # Set last so is_engine_available() never observes a half-initialised state.
+        _STATE.fluidsynth_module = fluidsynth
 
 
 def get_state() -> RenderState:
@@ -186,6 +241,7 @@ def _phrase_for(track_type: str) -> List[Tuple[float, float, int]]:
 
 def render_demo_to_wav(bank: int, program: int, sample_rate: int = 44100) -> bytes:
     """Render the fixed audition phrase through one SF2 preset (bank+program)."""
+    sample_rate = validate_sample_rate(sample_rate)
     initialize()
     if not is_available():
         raise RuntimeError(_STATE.error or "SoundFont preview unavailable")
@@ -250,6 +306,8 @@ def render_notes_to_wav(
     Otherwise ``Note.kind == "percussive"`` notes still fall through to the
     default GM drum kit on ch10.
     """
+    sample_rate = validate_sample_rate(sample_rate)
+    validate_notes(notes)
     initialize()
     if not is_available():
         raise RuntimeError(_STATE.error or "SoundFont preview unavailable")
@@ -337,6 +395,7 @@ def render_demo_through_sf2(
     Raises ``FileNotFoundError`` if ``sf2_path`` is missing and ``RuntimeError``
     if the soundfont fails to load.
     """
+    sample_rate = validate_sample_rate(sample_rate)
     initialize()
     if _STATE.fluidsynth_module is None:
         raise RuntimeError(_STATE.error or "SoundFont engine unavailable")
@@ -402,6 +461,8 @@ def render_tracks_to_wav(
     notes are percussive is routed to GM drum channel 9 (bank 128); melodic
     tracks each get their own channel + program. FluidSynth mixes them.
     """
+    sample_rate = validate_sample_rate(sample_rate)
+    validate_notes([n for tr in tracks for n in (tr.get("notes") or [])])
     initialize()
     if not is_available():
         raise RuntimeError(_STATE.error or "SoundFont preview unavailable")
