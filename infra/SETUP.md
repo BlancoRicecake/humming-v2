@@ -195,6 +195,21 @@
 
 ---
 
+## 10. 구독 정합성 점검 (권장, 주 1회)
+
+스토어 웹훅이 유실되거나(엔드포인트 다운), 구 앱 빌드 사용자처럼 거래 바인딩이 아직 없는 행은 만료·환불이 반영되지 않을 수 있다. `backend/tools/reconcile_subscriptions.py` 가 스토어에 직접 물어보고 차이를 메운다.
+
+```bash
+cd backend
+python tools/reconcile_subscriptions.py                     # dry run — 차이만 출력
+python tools/reconcile_subscriptions.py --apply             # 실제 반영
+python tools/reconcile_subscriptions.py --apply --window-days 2   # 만료 임박 행만 (가벼움)
+```
+
+서버와 같은 env (`SUPABASE_*`, Apple StoreKit 키, `GOOGLE_*`) 가 필요하다. 바인딩이 없는 행은 **수정하지 않고 목록만** 보여준다 — 해당 사용자의 앱이 2026-09 이후 빌드로 올라가 `/iap/verify` 를 한 번 호출하면 자동으로 바인딩된다.
+
+---
+
 ## 시간 요약
 
 | 단계 | 실작업 시간 |
