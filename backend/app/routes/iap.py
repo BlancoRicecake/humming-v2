@@ -170,17 +170,38 @@ def _mark_notification(sb, notification_id: str, *, error: Optional[str] = None)
 
 
 # --- subscription persistence ------------------------------------------------
+# Columns added by migration 002. Used to degrade gracefully (with a loud log)
+# if the code is deployed before the migration runs.
+_V2_COLUMNS = frozenset({
+    "original_transaction_id", "transaction_id", "purchase_token",
+    "environment", "last_event_at",
+})
+
+
+def _is_missing_column_error(e: Exception) -> bool:
+    msg = str(e).lower()
+    # PostgREST: PGRST204 "Could not find the 'x' column"; Postgres: 42703.
+    return ("pgrst204" in msg or "42703" in msg
+            or ("column" in msg and ("does not exist" in msg or "could not find" in msg)))
+
+
 def _find_by_binding(sb, store: str, column: str, value: Optional[str]) -> Optional[dict]:
     if not value:
         return None
-    res = (
-        sb.table("subscriptions")
-        .select("*")
-        .eq("store", store)
-        .eq(column, value)
-        .limit(1)
-        .execute()
-    )
+    try:
+        res = (
+            sb.table("subscriptions")
+            .select("*")
+            .eq("store", store)
+            .eq(column, value)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        if not _is_missing_column_error(e):
+            raise
+        logger.error("subscriptions.%s missing — apply migration 002 (%s)", column, e)
+        return None
     rows = _rows(res)
     return rows[0] if rows else None
 
@@ -259,7 +280,22 @@ def _upsert_subscription(sb, *, user_id: str, store: str, product_id: str,
     # except the fields that must always be (re)written.
     always = {"status", "user_id", "store", "product_id", "cancel_reason", "updated_at"}
     row = {k: v for k, v in row.items() if v is not None or k in always}
-    sb.table("subscriptions").upsert(row, on_conflict="user_id").execute()
+    try:
+        sb.table("subscriptions").upsert(row, on_conflict="user_id").execute()
+    except Exception as e:
+        if not _is_missing_column_error(e):
+            raise
+        # Migration 002 has not been applied to this database yet. Rather than
+        # failing every purchase (which is what a deploy-before-migrate would
+        # otherwise do to paying users), write the pre-002 column set and shout
+        # in the logs. The binding columns are what webhooks need, so run
+        # `supabase db push` and the next verify backfills them.
+        logger.error(
+            "subscriptions is missing the 002 columns — writing legacy fields only. "
+            "Apply backend/migrations/002_iap_transaction_binding.sql now: %s", e)
+        legacy = {k: v for k, v in row.items() if k not in _V2_COLUMNS}
+        sb.table("subscriptions").upsert(legacy, on_conflict="user_id").execute()
+        return legacy, outcome
     return row, outcome
 
 

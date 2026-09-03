@@ -396,3 +396,45 @@ def google_fixture_verify(calls):
     async def fake_verify(product_id, token):
         return calls["resource"]
     return fake_verify
+
+
+# --- deploy-before-migrate safety -------------------------------------------
+def test_verify_still_works_when_migration_002_is_missing(client, db, chain, monkeypatch):
+    """Deploying this code before `supabase db push` must not break purchases:
+    the 002 columns are dropped (loudly) instead of failing the upsert."""
+    real_table = db.table
+    v2 = {"original_transaction_id", "transaction_id", "purchase_token",
+          "environment", "last_event_at"}
+
+    class PreMigrationDb:
+        tables = db.tables
+
+        def table(self, name):
+            q = real_table(name)
+            if name != "subscriptions":
+                return q
+            orig_upsert, orig_eq = q.upsert, q.eq
+
+            def upsert(row, on_conflict="user_id"):
+                if v2 & set(row):
+                    raise Exception(
+                        "PGRST204 Could not find the 'original_transaction_id' column")
+                return orig_upsert(row, on_conflict=on_conflict)
+
+            def eq(col, val):
+                if col in v2:
+                    raise Exception('column "%s" does not exist (42703)' % col)
+                return orig_eq(col, val)
+
+            q.upsert, q.eq = upsert, eq
+            return q
+
+        def sub(self, uid):
+            return db.sub(uid)
+
+    monkeypatch.setattr(iap_mod, "require_supabase", lambda: PreMigrationDb())
+    r = verify_apple(client, chain.sign(apple_tx()))
+    assert r.status_code == 200 and r.json()["pro"] is True
+    row = db.sub(USER_A)
+    assert row["status"] == "active"
+    assert "original_transaction_id" not in row  # dropped, not fatal
