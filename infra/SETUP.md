@@ -75,8 +75,17 @@
      SENTRY_DSN=... \
      POSTHOG_API_KEY=... \
      APPLE_SHARED_SECRET=... \
-     GOOGLE_PLAY_SERVICE_ACCOUNT_JSON='{...}'
+     APPLE_BUNDLE_ID=com.example.humtrack \
+     GOOGLE_PACKAGE_NAME=com.example.humtrack \
+     GOOGLE_PLAY_SERVICE_ACCOUNT_JSON='{...}' \
+     IAP_WEBHOOK_SECRET=$(openssl rand -hex 24)
    ```
+   > **2026-09 추가 (필수)**
+   > - `SUPABASE_JWT_SECRET` — 백엔드가 HS256 토큰을 **검증 없이 받던 폴백은 제거**됐다. 미설정이면 로그인 사용자의 모든 요청이 503. (프로젝트가 asymmetric 키(ES256/RS256)만 발급하면 JWKS 로 검증되므로 생략 가능.)
+   > - `IAP_WEBHOOK_SECRET` — Google RTDN Pub/Sub push URL 에 `?token=<값>` 으로 붙인다 (9번 단계). 미설정 시 웹훅은 환경과 무관하게 403 (fail-closed). OIDC 를 쓰려면 대신 `GOOGLE_PUBSUB_AUDIENCE`(+`GOOGLE_PUBSUB_SA_EMAIL`).
+   > - `APPLE_ACCEPT_SANDBOX` — 기본 `1`(TestFlight 테스터가 Sandbox 거래로 Pro 사용 가능). 운영에서 막으려면 `0`.
+   > - `ENV=production` 은 fly.toml `[env]` 에 있음 — 코드가 `ENV`/`ENVIRONMENT` 둘 다 읽는다.
+   > - **DB 마이그레이션** `backend/migrations/002_iap_transaction_binding.sql` 을 먼저 적용해야 새 `/iap/*` 코드가 동작한다 (4번 단계 `supabase db push`).
 4. **배포**: `flyctl deploy --remote-only`.
 5. **커스텀 호스트네임**: `flyctl certs add api.hum-track.com`. CNAME 대상 반환 → Cloudflare DNS 에 추가 (dns.md 참고). `flyctl certs show` 가 *Issued* 상태가 될 때까지 대기 (보통 5분 미만).
 6. **Cloudflare proxy 활성화** — `api.` 레코드의 orange cloud 켜기. 재테스트: `curl -fsS https://api.hum-track.com/health`.
@@ -157,6 +166,9 @@
 2. *App Information → App-Specific Shared Secret* → 생성 → `APPLE_SHARED_SECRET` 으로 복사.
 3. *Users and Access → Keys → In-App Purchase* → 키 생성, `.p8` 다운로드. Key ID + Issuer ID 메모 (App Store Server API 용).
 4. 첫 빌드와 함께 상품 심사 제출.
+5. **App Store Server Notifications V2** (*App Information → App Store Server Notifications*):
+   - Production URL: `https://api.hum-track.com/iap/webhook/apple`, Sandbox URL 도 동일.
+   - 백엔드는 알림의 JWS 를 Apple Root CA G3 까지 체인 검증하고, `originalTransactionId` 로 사용자 행을 찾는다 (앱이 `/iap/verify` 로 한 번이라도 검증한 거래만 매핑됨). 만료/환불/갱신이 여기로 들어와야 구독 상태가 유지된다.
 
 **받아낼 시크릿**:
 - `APPLE_SHARED_SECRET`
@@ -172,6 +184,7 @@
 2. *Monetization setup → Real-time developer notifications*:
    - Google Cloud Pub/Sub 토픽 `humming-rtdn` 생성.
    - 토픽명을 Play Console 에 붙여넣기.
+   - 토픽에 **push 구독** 추가 — endpoint `https://api.hum-track.com/iap/webhook/google?token=<IAP_WEBHOOK_SECRET>` (3번 단계에서 만든 값). 토큰이 없거나 틀리면 403.
 3. *Setup → API access*:
    - Google Cloud 프로젝트 연결.
    - 서비스 계정 `humming-play-api` 생성, 역할 *Pub/Sub Subscriber* + *Android Publisher* (Play Console linkage 경유).

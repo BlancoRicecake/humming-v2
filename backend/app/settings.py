@@ -48,8 +48,15 @@ class Settings(BaseSettings):
     apple_issuer_id: Optional[str] = None
     apple_private_key: Optional[str] = None
     apple_environment: str = "production"  # "sandbox" | "production"
+    # Sandbox-environment transactions (TestFlight / sandbox testers) are
+    # accepted by default so internal testers can exercise Pro. Set
+    # APPLE_ACCEPT_SANDBOX=0 in production to refuse them. Either way the
+    # environment is recorded on the subscription row.
+    apple_accept_sandbox: bool = True
     apple_iap_product_monthly: Optional[str] = None
     apple_iap_product_yearly: Optional[str] = None
+    # Optional PEM override for the pinned Apple root (rotation / tests).
+    apple_root_ca_pem: Optional[str] = None
 
     # Google Play Developer API
     # 두 env 이름을 모두 허용한다 — 코드 표준은 GOOGLE_SERVICE_ACCOUNT_JSON 이지만
@@ -77,12 +84,24 @@ class Settings(BaseSettings):
     # Observability
     sentry_dsn: Optional[str] = None
     sentry_traces_sample_rate: float = 0.1
-    environment: str = "dev"
+    # fly.toml sets ENV=production while older code read ENVIRONMENT — accept
+    # both so production is never mistaken for dev (Sentry env tag, webhook
+    # auth gating). Canonical name first.
+    environment: str = Field(
+        default="dev",
+        validation_alias=AliasChoices("environment", "env"),
+    )
 
     # Misc
     max_body_bytes: int = 2 * 1024 * 1024  # 2MB
     presign_max_bytes: int = 5 * 1024 * 1024  # 5MB
     presign_ttl_sec: int = 300
+    # /iap/verify makes an outbound Apple/Google call per request — cap per user.
+    iap_verify_per_minute: int = 10
+
+    @property
+    def is_production(self) -> bool:
+        return (self.environment or "dev").strip().lower() in ("production", "prod")
 
     # --- Apple resolution helpers ------------------------------------------
     def resolve_apple_key_id(self) -> Optional[str]:

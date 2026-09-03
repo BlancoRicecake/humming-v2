@@ -117,3 +117,18 @@ class IapVerifyResponse(BaseModel):
     expires_at: Optional[datetime]
     trial_ends_at: Optional[datetime]
     store: Store
+    # Server-side entitlement verdict (status ∈ {trial,active,cancelled} and
+    # not past expires_at). Clients gate Pro on this, not on ``status``.
+    pro: bool = False
+
+
+class IapStatusResponse(BaseModel):
+    """GET /iap/status — the single entitlement source of truth for clients."""
+    pro: bool
+    status: Optional[SubStatus] = None
+    product_id: Optional[str] = None
+    store: Optional[Store] = None
+    expires_at: Optional[datetime] = None
+    trial_ends_at: Optional[datetime] = None
+    environment: Optional[str] = None  # Apple: Sandbox | Production
+    server_time: datetime
