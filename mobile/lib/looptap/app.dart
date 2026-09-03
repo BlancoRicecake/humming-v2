@@ -75,11 +75,13 @@ class _AuthEventListenerState extends State<_AuthEventListener> {
     _sub = AuthService.instance.onAuthEvent.listen((e) {
       final messenger = rootMessengerKey.currentState;
       if (messenger == null) return;
+      if (!mounted) return;
+      final l = L10n.of(context);
       String msg;
       switch (e.kind) {
         case AuthEventKind.sessionExpired:
         case AuthEventKind.refreshFailed:
-          msg = 'Session expired. Please sign in again.';
+          msg = l.authSessionExpired;
           break;
       }
       messenger.showSnackBar(SnackBar(

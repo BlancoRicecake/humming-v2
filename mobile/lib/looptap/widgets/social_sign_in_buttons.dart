@@ -32,10 +32,11 @@ const double _kButtonRadius = 14;
 /// ─── Apple Sign In 버튼 ──────────────────────────────────────────────
 /// HIG light(white) variant — 시안 ⑤ 와 매칭.
 class AppleSignInButton extends StatelessWidget {
+  // label 은 호출부가 L10n 으로 넘긴다 (l.appleSignInCta) — 기본값 없음 (M12).
   const AppleSignInButton({
     super.key,
     required this.onPressed,
-    this.label = 'Apple로 계속하기',
+    required this.label,
   });
 
   final VoidCallback onPressed;
@@ -143,10 +144,11 @@ class _AppleLogoPainter extends CustomPainter {
 /// ─── Google Sign In 버튼 ─────────────────────────────────────────────
 /// 시안 ⑤ 와 매칭하는 dark variant. 4색 공식 G 로고 + Identity 가이드 텍스트.
 class GoogleSignInButton extends StatelessWidget {
+  // label 은 호출부가 L10n 으로 넘긴다 (l.googleSignInCta) — 기본값 없음 (M12).
   const GoogleSignInButton({
     super.key,
     required this.onPressed,
-    this.label = 'Google로 계속하기',
+    required this.label,
   });
 
   final VoidCallback onPressed;

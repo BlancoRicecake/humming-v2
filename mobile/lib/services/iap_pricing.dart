@@ -76,8 +76,9 @@ class IapPricing {
   /// 현재 사용자에게 [productId] 무료 체험이 제공되는지.
   /// Android: Google Play 가 subscriptionOfferDetails 를 *자격 기준으로 필터링* 하므로,
   ///   free($0) phase 가 있는 offer 가 보이면 아직 체험 가능 — 이미 쓴 유저에겐 사라진다.
-  /// iOS: StoreKit 이 결제 시점에 intro offer 자격을 자동 판정하므로 상품이 있으면 표시하고
-  ///   적용 여부는 StoreKit 에 맡긴다.
+  /// iOS: 클라이언트는 intro offer 자격을 알 수 없다 (StoreKit 이 결제 시점에 판정).
+  ///   상품이 있으면 true 를 돌려주되, paywall 문구는 반드시 "신규 구독자에 한해"
+  ///   로 조건을 명시한다 (audit M11 — l.payDisclosureTrial).
   /// 상품 미로드(시뮬레이터/네트워크 오류) 시 false → 체험 문구를 띄우지 않아 오도 방지.
   static bool hasFreeTrial(String productId) {
     final p = _find(productId);

@@ -231,7 +231,7 @@ class L10nKo extends L10n {
   String get subFreePlan => '무료 플랜';
 
   @override
-  String get subFreePlanSub => '내보내기와 클라우드 동기화는 Pro 에서 잠금이 풀려요';
+  String get subFreePlanSub => '내보내기와 무제한 곡 만들기는 Pro 에서 잠금이 풀려요';
 
   @override
   String get subTrial => '무료 체험 중';
@@ -323,7 +323,8 @@ class L10nKo extends L10n {
   String get labelAccountId => '계정 ID';
 
   @override
-  String get withdrawHint => '회원 탈퇴 시 모든 로컬 프로젝트와 클라우드 데이터가 삭제됩니다.\n구독 중인 경우 앱 마켓에서 별도로 해지해 주세요.';
+  String get withdrawHint =>
+      '계정을 삭제하면 계정 데이터가 영구 삭제돼요.\nApp Store / Google Play 구독은 계정 삭제로 해지되지 않으니, 계속 결제되지 않도록 스토어에서 별도로 해지해 주세요.';
 
   @override
   String get withdrawCta => '회원 탈퇴';
@@ -378,7 +379,7 @@ class L10nKo extends L10n {
   }
 
   @override
-  String get subStatusExpiredBody => '다시 구독하면 클라우드 작업물이 즉시 복원돼요';
+  String get subStatusExpiredBody => '다시 구독하면 Pro 기능이 즉시 복원돼요';
 
   @override
   String get subStatusAnonymous => '구독 정보 없음';
@@ -390,16 +391,16 @@ class L10nKo extends L10n {
   String get subCurrentEntitlements => '현재 권한';
 
   @override
-  String get subFeatureCloudSync => '클라우드 동기화';
+  String get subFeatureCloudSync => '무제한 곡 만들기';
 
   @override
   String get subFeatureExport => '무제한 내보내기 (WAV / MIDI)';
 
   @override
-  String get subFeatureVocalBackup => '보컬 영구 보관';
+  String get subFeatureVocalBackup => '스템 내보내기';
 
   @override
-  String get subFeaturePriority => '우선 처리 (빠른 분석)';
+  String get subFeaturePriority => 'MIDI 내보내기';
 
   @override
   String subStoreNoticeActive(String store) {
@@ -415,7 +416,7 @@ class L10nKo extends L10n {
   String get subResubCta => 'Pro 다시 구독하기';
 
   @override
-  String get subResubHint => '이전 작업물은 그대로 보관돼 있어요 — 재구독하면 다시 동기화돼요';
+  String get subResubHint => '만든 곡은 이 기기에 그대로 있어요 — 재구독하면 다시 내보낼 수 있어요';
 
   @override
   String get subStartCta => '구독 시작';
@@ -433,10 +434,10 @@ class L10nKo extends L10n {
   String get paywallHeadlineExport => '내보내려면 Pro 가 필요해요';
 
   @override
-  String get paywallHeadlineSync => '다른 기기에서 보려면 Pro';
+  String get paywallHeadlineSync => '무제한 곡 만들기는 Pro';
 
   @override
-  String get paywallHeadlineBackup => '보컬 영구 보관';
+  String get paywallHeadlineBackup => '스템 내보내기';
 
   @override
   String get paywallHeadlineDefault => 'Humming Pro';
@@ -445,31 +446,33 @@ class L10nKo extends L10n {
   String get paywallSubExport => 'WAV · MIDI 파일로 저장하고 공유하세요';
 
   @override
-  String get paywallSubSync => '클라우드 동기화로 어디서든 이어서 작업';
+  String get paywallSubSync => '무료 플랜 곡 개수 제한 없이 만들기';
 
   @override
-  String get paywallSubBackup => '내 목소리를 잃지 않고 평생 보관';
+  String get paywallSubBackup => '트랙별 WAV 로 분리 내보내기';
 
   @override
-  String get paywallSubDefault => '전체 기능 잠금 해제';
+  String get paywallSubDefault => '무제한 곡 · WAV / MIDI / 스템 내보내기';
 
   @override
-  String get looptapPaywallTriggerExport => '내보내기는 Pro 전용 기능입니다 — 구독하시면 MIDI / 오디오를 저장할 수 있어요.';
+  String get looptapPaywallTriggerExport =>
+      '내보내기는 Pro 전용 기능입니다 — 구독하시면 MIDI / 오디오를 저장할 수 있어요.';
 
   @override
-  String get looptapPaywallTriggerSongQuota => '무료 플랜의 곡 개수 한도에 도달했어요. Pro 로 업그레이드하면 무제한으로 만들 수 있습니다.';
+  String get looptapPaywallTriggerSongQuota =>
+      '무료 플랜의 곡 개수 한도에 도달했어요. Pro 로 업그레이드하면 무제한으로 만들 수 있습니다.';
 
   @override
-  String get paywallFeatureCloudTitle => '5GB 클라우드';
+  String get paywallFeatureCloudTitle => '무제한 곡';
 
   @override
-  String get paywallFeatureCloudSub => '모든 기기에서 작업물 이어쓰기';
+  String get paywallFeatureCloudSub => '무료 플랜은 4곡까지';
 
   @override
-  String get paywallFeatureBackupTitle => '영구 보관';
+  String get paywallFeatureBackupTitle => 'MIDI 내보내기';
 
   @override
-  String get paywallFeatureBackupSub => '기기 변경 · 분실에도 작업물은 그대로';
+  String get paywallFeatureBackupSub => '어떤 DAW 에서도 열리는 .mid';
 
   @override
   String get paywallFeatureExportTitle => '무제한 내보내기';
@@ -478,10 +481,10 @@ class L10nKo extends L10n {
   String get paywallFeatureExportSub => 'WAV · MIDI · 스템 모두';
 
   @override
-  String get paywallFeaturePriorityTitle => '우선 분석 처리';
+  String get paywallFeaturePriorityTitle => '스템 내보내기';
 
   @override
-  String get paywallFeaturePrioritySub => '더 빠른 허밍 분석 / 렌더';
+  String get paywallFeaturePrioritySub => '트랙별 WAV 분리';
 
   @override
   String get paywallPlanYearly => '연 구독';
@@ -525,7 +528,7 @@ class L10nKo extends L10n {
   String get loginTitle => '로그인';
 
   @override
-  String get loginSub => '구독 결제와 클라우드 동기화에 사용돼요';
+  String get loginSub => 'Pro 구독과 구매 복원에 사용돼요';
 
   @override
   String get loginFailedTitle => '로그인 실패';
@@ -555,7 +558,7 @@ class L10nKo extends L10n {
   String get logoutConfirmTitle => '로그아웃 하시겠어요?';
 
   @override
-  String get logoutConfirmBody => '이 기기의 로컬 프로젝트는 그대로 남아있어요. 다시 로그인하면 클라우드 작업물도 복원됩니다.';
+  String get logoutConfirmBody => '이 기기의 곡은 그대로 남아있어요.';
 
   @override
   String get logoutCta => '로그아웃';
@@ -570,7 +573,7 @@ class L10nKo extends L10n {
   String get restoreOkBody => 'Pro 기능이 다시 활성화됐어요.';
 
   @override
-  String get restoreEmptyBody => '다른 계정으로 로그인했는지 확인해 주세요.';
+  String get restoreEmptyBody => '구독한 계정으로 로그인했는지 확인해 주세요.';
 
   @override
   String get projectOptionUploadProBadge => 'Pro 필요';
@@ -623,7 +626,8 @@ class L10nKo extends L10n {
   String get cloudFreeImageHeadline => '아직 클라우드가 없어요';
 
   @override
-  String get cloudFreeImageSub => 'Pro 로 전환하면 5GB 클라우드를 받아\n모든 기기에서 작업물을 이어 만들 수 있어요.';
+  String get cloudFreeImageSub =>
+      'Pro 로 전환하면 5GB 클라우드를 받아\n모든 기기에서 작업물을 이어 만들 수 있어요.';
 
   @override
   String get cloudValueBackupTitle => '영구 보관';
@@ -652,7 +656,8 @@ class L10nKo extends L10n {
   String get cloudProEmptyTitle => '클라우드가 비어있어요';
 
   @override
-  String get cloudProEmptySub => '내 작업물 탭에서 작업물의 ⋯ 메뉴를 열고\n\"클라우드에 올리기\"를 눌러 보세요.';
+  String get cloudProEmptySub =>
+      '내 작업물 탭에서 작업물의 ⋯ 메뉴를 열고\n\"클라우드에 올리기\"를 눌러 보세요.';
 
   @override
   String get cloudGoToLocalTab => '내 작업물 탭으로 가기';
@@ -661,7 +666,8 @@ class L10nKo extends L10n {
   String get cloudGraceTitle => 'Pro 가 만료됐어요';
 
   @override
-  String get cloudGraceBody => '데이터는 그대로 보관돼 있어요. 다운로드는 언제든 가능하고, 재구독하면 동기화가 다시 켜져요.';
+  String get cloudGraceBody =>
+      '데이터는 그대로 보관돼 있어요. 다운로드는 언제든 가능하고, 재구독하면 동기화가 다시 켜져요.';
 
   @override
   String get cloudGraceEmpty => '클라우드 보관함이 비어있어요';
@@ -803,25 +809,28 @@ class L10nKo extends L10n {
   String get faq1Q => '무료로 어디까지 쓸 수 있나요?';
 
   @override
-  String get faq1A => '녹음 → 분석 → 편집까지 모든 기능을 자유롭게 써 보실 수 있어요. 내보내기 · 클라우드 동기화 · 보컬 영구 보관은 Pro 구독에서 잠금이 풀려요.';
+  String get faq1A =>
+      '녹음 → 분석 → 편집까지 모든 기능을 자유롭게 써 보실 수 있어요. 무료 플랜은 4곡까지 저장되고, 무제한 곡 만들기와 WAV · MIDI · 스템 내보내기는 Pro 구독에서 잠금이 풀려요.';
 
   @override
   String get faq2Q => '어떤 악기로 변환되나요?';
 
   @override
-  String get faq2A => '피아노 · 신스 · 어쿠스틱 기타 · 일렉 기타 · 베이스 · 드럼 그리고 보컬 원본까지 — 카드 탭으로 즉시 전환할 수 있어요.';
+  String get faq2A =>
+      '피아노 · 신스 · 어쿠스틱 기타 · 일렉 기타 · 베이스 · 드럼 그리고 보컬 원본까지 — 카드 탭으로 즉시 전환할 수 있어요.';
 
   @override
   String get faq3Q => '내 목소리는 누가 들을 수 있나요?';
 
   @override
-  String get faq3A => '기본은 기기 안에서만 처리됩니다. Pro 사용자에 한해 본인 계정의 암호화된 클라우드 보관함에 보컬을 동기화해요.';
+  String get faq3A => '모든 처리는 기기 안에서 이뤄지고, 허밍 분석에 필요한 오디오만 서버로 전송된 뒤 보관되지 않아요.';
 
   @override
   String get faq4Q => '구독을 해지하면 만든 곡은 어떻게 되나요?';
 
   @override
-  String get faq4A => '로컬 프로젝트는 그대로 남아 편집할 수 있어요. 클라우드 동기화 · 새로운 내보내기는 일시 정지되고, 다시 구독하면 즉시 복원됩니다.';
+  String get faq4A =>
+      '만든 곡은 이 기기에 그대로 남아 편집할 수 있어요. 새로운 내보내기와 무제한 곡 만들기는 일시 정지되고, 다시 구독하면 즉시 복원됩니다.';
 
   @override
   String get faq5Q => '환불은 가능한가요?';
@@ -876,7 +885,8 @@ class L10nKo extends L10n {
   String get cloudDownloadTitle => '클라우드에서 가져오기';
 
   @override
-  String get cloudDownloadBanner => '구독이 만료된 동안엔 새 업로드 / 동기화는 잠금돼요. 이전 작업물은 그대로 두고 언제든 다운로드하거나 삭제할 수 있어요.';
+  String get cloudDownloadBanner =>
+      '구독이 만료된 동안엔 새 업로드 / 동기화는 잠금돼요. 이전 작업물은 그대로 두고 언제든 다운로드하거나 삭제할 수 있어요.';
 
   @override
   String get cloudDownloadCta => '받기';
@@ -910,7 +920,8 @@ class L10nKo extends L10n {
   String get editMicPermNeededTitle => '마이크 권한이 필요해요';
 
   @override
-  String get editMicPermNeededBody => 'iPad 설정 → 개인정보 보호 → 마이크에서 HumTrack 을 허용해 주세요.';
+  String get editMicPermNeededBody =>
+      'iPad 설정 → 개인정보 보호 → 마이크에서 HumTrack 을 허용해 주세요.';
 
   @override
   String get editMicPermLabel => '마이크 권한이 필요합니다';
@@ -1175,7 +1186,12 @@ class L10nKo extends L10n {
   String get chordPickerScopeRoot => '루트';
 
   @override
-  String chordPickerSummary(String scope, String root, String keyPart, String chordPart) {
+  String chordPickerSummary(
+    String scope,
+    String root,
+    String keyPart,
+    String chordPart,
+  ) {
     return '$scope: $root$keyPart$chordPart';
   }
 
@@ -1243,7 +1259,8 @@ class L10nKo extends L10n {
   String get metronomeOff => '메트로놈 끄기';
 
   @override
-  String get metronomeNote => 'BPM 은 프로젝트 전체에 적용돼요. 박자 보정 카드의 그리드도 이 BPM 을 기준으로 정렬합니다.';
+  String get metronomeNote =>
+      'BPM 은 프로젝트 전체에 적용돼요. 박자 보정 카드의 그리드도 이 BPM 을 기준으로 정렬합니다.';
 
   @override
   String metronomeBeatSec(String sec) {
@@ -1292,7 +1309,8 @@ class L10nKo extends L10n {
   String get quantizeStrengthMax => '100%: 완벽 정렬';
 
   @override
-  String get quantizeFooter => '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요.';
+  String get quantizeFooter =>
+      '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요.';
 
   @override
   String get quantizeOff => 'off';
@@ -1309,13 +1327,15 @@ class L10nKo extends L10n {
   String get cardInstrumentFallback => '악기';
 
   @override
-  String get helpInstrumentBody => '이 트랙을 어떤 악기 소리로 재생할지 선택해요. 분석된 음정에 SoundFont 악기 음색을 입혀 들려줘요.';
+  String get helpInstrumentBody =>
+      '이 트랙을 어떤 악기 소리로 재생할지 선택해요. 분석된 음정에 SoundFont 악기 음색을 입혀 들려줘요.';
 
   @override
   String get cardKeyLabel => 'KEY';
 
   @override
-  String get helpKeyBody => '곡의 으뜸음(C, D…)과 모드(메이저/마이너)예요. AUTO = 분석이 자동 추정한 키. 카드를 탭하면 수동으로 바꿀 수 있어요. 신뢰도 = 추정이 얼마나 확실한지 (0~1).';
+  String get helpKeyBody =>
+      '곡의 으뜸음(C, D…)과 모드(메이저/마이너)예요. AUTO = 분석이 자동 추정한 키. 카드를 탭하면 수동으로 바꿀 수 있어요. 신뢰도 = 추정이 얼마나 확실한지 (0~1).';
 
   @override
   String get keyAnalysisPending => '녹음 후 분석';
@@ -1329,7 +1349,8 @@ class L10nKo extends L10n {
   String get cardAssistLabel => '피치 어시스트';
 
   @override
-  String get helpAssistBody => '키 밖으로 살짝 빗나간 음을 가장 가까운 in-key 음으로 자동 보정해 줘요. \"보정됨\" 숫자 = 실제로 끌어당겨진 노트 개수.';
+  String get helpAssistBody =>
+      '키 밖으로 살짝 빗나간 음을 가장 가까운 in-key 음으로 자동 보정해 줘요. \"보정됨\" 숫자 = 실제로 끌어당겨진 노트 개수.';
 
   @override
   String get assistCorrected => '보정됨';
@@ -1341,7 +1362,8 @@ class L10nKo extends L10n {
   String get cardQuantizeLabel => '박자 보정';
 
   @override
-  String get helpQuantizeBody => '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요. 원본 timing 은 그대로 보존돼, 토글을 꺼면 원래대로 돌아옵니다.';
+  String get helpQuantizeBody =>
+      '여러 트랙의 박자가 미세하게 어긋날 때 같은 BPM/박자 단위로 맞추면 자동으로 동기화돼요. 원본 timing 은 그대로 보존돼, 토글을 꺼면 원래대로 돌아옵니다.';
 
   @override
   String get conflictTitle => '양쪽 모두 변경됐어요';
@@ -1378,7 +1400,8 @@ class L10nKo extends L10n {
   String get authErrDisabled => 'Auth 비활성 (Supabase 키 미설정)';
 
   @override
-  String get authErrIdentityBlockedGeneric => '이미 다른 방법으로 가입된 이메일이에요.\n처음 가입했던 방법으로 로그인해 주세요.';
+  String get authErrIdentityBlockedGeneric =>
+      '이미 다른 방법으로 가입된 이메일이에요.\n처음 가입했던 방법으로 로그인해 주세요.';
 
   @override
   String authErrIdentityBlockedSpecific(String providers) {
@@ -1386,7 +1409,8 @@ class L10nKo extends L10n {
   }
 
   @override
-  String get authErrGoogleNoIdToken => 'Google: idToken 누락 (serverClientId/iOS client 미스매치 가능)';
+  String get authErrGoogleNoIdToken =>
+      'Google: idToken 누락 (serverClientId/iOS client 미스매치 가능)';
 
   @override
   String authErrAppleCode(String code, String message) {
@@ -1413,6 +1437,178 @@ class L10nKo extends L10n {
   }
 
   @override
+  String get payTitle => 'HumTrack Pro';
+
+  @override
+  String payBenefits(int n) {
+    return '무제한 곡 만들기 (무료 플랜은 $n곡까지) · WAV / MIDI / 스템 내보내기.';
+  }
+
+  @override
+  String get payPlanYearly => '연간';
+
+  @override
+  String get payPlanMonthly => '월간';
+
+  @override
+  String payPerMonthEquiv(String price) {
+    return '월 $price 꼴';
+  }
+
+  @override
+  String get payBilledMonthly => '매월 결제';
+
+  @override
+  String get payPeriodYear => '년';
+
+  @override
+  String get payPeriodMonth => '월';
+
+  @override
+  String payPerPeriod(String period) {
+    return ' / $period';
+  }
+
+  @override
+  String payDisclosureTrial(int days, String price, String period) {
+    return '신규 구독자에 한해 $days일 무료 체험 후 $period $price 결제. 해지 전까지 자동 갱신되며, 갱신 24시간 전까지 설정에서 언제든 해지할 수 있어요.';
+  }
+
+  @override
+  String payDisclosureNoTrial(String price, String period) {
+    return '$period $price 결제. 해지 전까지 자동 갱신되며, 갱신 24시간 전까지 설정에서 언제든 해지할 수 있어요.';
+  }
+
+  @override
+  String get paySubscribe => '구독하기';
+
+  @override
+  String get payPendingButton => '승인 대기 중…';
+
+  @override
+  String get payRestore => '구매 복원';
+
+  @override
+  String get payStoreUnavailable => '스토어를 사용할 수 없어요';
+
+  @override
+  String get payStoreUnavailableDevice => '이 기기에서는 스토어를 사용할 수 없어요.';
+
+  @override
+  String get payPurchaseFailed => '구매를 완료하지 못했어요. 다시 시도해 주세요.';
+
+  @override
+  String get payPendingApproval => '승인 대기 중이에요. 스토어에서 결제가 확인되면 Pro 가 활성화돼요.';
+
+  @override
+  String get payVerifyFailed =>
+      '결제가 확인됐어요 — Pro 를 활성화하는 중입니다. 반영되지 않으면 \'구매 복원\'을 눌러 주세요.';
+
+  @override
+  String get paySignInRequired => '구독하려면 로그인해 주세요.';
+
+  @override
+  String get payRestoreDone => 'Pro 가 복원됐어요. 다시 오신 걸 환영해요!';
+
+  @override
+  String get payRestoreAlready => '이미 Pro 를 이용 중이에요.';
+
+  @override
+  String get payRestoreEmpty => '이 계정에 활성 구독이 없어요. 구독한 계정으로 로그인했는지 확인해 주세요.';
+
+  @override
+  String get payRestoreError => '구매를 복원하지 못했어요. 연결을 확인하고 다시 시도해 주세요.';
+
+  @override
+  String get acctTitle => '마이 페이지';
+
+  @override
+  String get acctSignedIn => '로그인됨';
+
+  @override
+  String acctSignedInWith(String provider) {
+    return '로그인됨 · $provider';
+  }
+
+  @override
+  String get acctProActive => 'HumTrack Pro · 이용 중';
+
+  @override
+  String get acctProBenefits => '무제한 곡 · WAV / MIDI / 스템 내보내기';
+
+  @override
+  String acctProUntil(String date) {
+    return '$date까지';
+  }
+
+  @override
+  String get acctUpgrade => 'Pro 로 업그레이드';
+
+  @override
+  String get acctSignOut => '로그아웃';
+
+  @override
+  String get acctSignInTitle => 'HumTrack 에 로그인';
+
+  @override
+  String get acctSignInSub => 'Pro 구독과 구매 복원에 로그인이 필요해요.';
+
+  @override
+  String get acctSignInWithEmail => '이메일로 로그인';
+
+  @override
+  String get acctEmailHint => '이메일';
+
+  @override
+  String get acctPasswordHint => '비밀번호';
+
+  @override
+  String get acctEnterEmailPassword => '이메일과 비밀번호를 입력해 주세요.';
+
+  @override
+  String get acctSigningIn => '로그인 중…';
+
+  @override
+  String get acctSignIn => '로그인';
+
+  @override
+  String get acctDeleteNotSignedIn => '로그인되어 있지 않아요.';
+
+  @override
+  String acctDeleteRejected(int code) {
+    return '탈퇴 실패 ($code)';
+  }
+
+  @override
+  String get acctDeleteNetwork => '네트워크 오류예요. 연결을 확인하고 다시 시도해 주세요.';
+
+  @override
+  String get authNotConfigured => '이 빌드에는 로그인이 설정되어 있지 않아요.';
+
+  @override
+  String get authFailedGeneric => '로그인에 실패했어요. 다시 시도해 주세요.';
+
+  @override
+  String get authUnavailable => '지금은 로그인을 사용할 수 없어요.';
+
+  @override
+  String get authGoogleNoIdToken =>
+      'Google 로그인에서 ID 토큰을 받지 못했어요. 다시 시도하거나 Apple 로그인을 이용해 주세요.';
+
+  @override
+  String authAppleFailed(String code, String message) {
+    return 'Apple 로그인 실패 ($code). $message';
+  }
+
+  @override
+  String authProviderFailed(String provider) {
+    return '$provider 로그인에 실패했어요. 다시 시도해 주세요.';
+  }
+
+  @override
+  String get authSessionExpired => '세션이 만료됐어요. 다시 로그인해 주세요.';
+
+  @override
   String get ltCardMore => '더 보기';
 
   @override
@@ -1422,7 +1618,8 @@ class L10nKo extends L10n {
   String get ltSettingsDeleteAccountConfirmTitle => '회원 탈퇴할까요?';
 
   @override
-  String get ltSettingsDeleteAccountConfirmBody => '계정과 모든 데이터가 영구적으로 삭제돼요. 되돌릴 수 없어요.';
+  String get ltSettingsDeleteAccountConfirmBody =>
+      '계정과 모든 데이터가 영구적으로 삭제돼요. 되돌릴 수 없어요.';
 
   @override
   String ltSettingsDeleteAccountFailed(String err) {
@@ -1486,7 +1683,8 @@ class L10nKo extends L10n {
   String get ltExportFailed => 'MIDI 내보내기 실패';
 
   @override
-  String get ltExportFooter => '섹션은 순서대로(반복 포함) 렌더링됩니다. MIDI는 모든 DAW 에서 열립니다. WAV·스템은 사운드폰트로 렌더된 오디오입니다.';
+  String get ltExportFooter =>
+      '섹션은 순서대로(반복 포함) 렌더링됩니다. MIDI는 모든 DAW 에서 열립니다. WAV·스템은 사운드폰트로 렌더된 오디오입니다.';
 
   @override
   String get ltSettingsTitle => '설정';

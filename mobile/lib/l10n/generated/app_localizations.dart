@@ -18,7 +18,7 @@ import 'app_localizations_ko.dart';
 /// `supportedLocales` list. For example:
 ///
 /// ```dart
-/// import 'gen_l10n/app_localizations.dart';
+/// import 'generated/app_localizations.dart';
 ///
 /// return MaterialApp(
 ///   localizationsDelegates: L10n.localizationsDelegates,
@@ -62,7 +62,8 @@ import 'app_localizations_ko.dart';
 /// be consistent with the languages listed in the L10n.supportedLocales
 /// property.
 abstract class L10n {
-  L10n(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  L10n(String locale)
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -82,17 +83,18 @@ abstract class L10n {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
-    Locale('ko')
+    Locale('ko'),
   ];
 
   /// 앱 이름 — 영어 표기 유지 (브랜드)
@@ -494,7 +496,7 @@ abstract class L10n {
   /// No description provided for @subFreePlanSub.
   ///
   /// In ko, this message translates to:
-  /// **'내보내기와 클라우드 동기화는 Pro 에서 잠금이 풀려요'**
+  /// **'내보내기와 무제한 곡 만들기는 Pro 에서 잠금이 풀려요'**
   String get subFreePlanSub;
 
   /// No description provided for @subTrial.
@@ -662,7 +664,7 @@ abstract class L10n {
   /// No description provided for @withdrawHint.
   ///
   /// In ko, this message translates to:
-  /// **'회원 탈퇴 시 모든 로컬 프로젝트와 클라우드 데이터가 삭제됩니다.\n구독 중인 경우 앱 마켓에서 별도로 해지해 주세요.'**
+  /// **'계정을 삭제하면 계정 데이터가 영구 삭제돼요.\nApp Store / Google Play 구독은 계정 삭제로 해지되지 않으니, 계속 결제되지 않도록 스토어에서 별도로 해지해 주세요.'**
   String get withdrawHint;
 
   /// No description provided for @withdrawCta.
@@ -752,7 +754,7 @@ abstract class L10n {
   /// No description provided for @subStatusExpiredBody.
   ///
   /// In ko, this message translates to:
-  /// **'다시 구독하면 클라우드 작업물이 즉시 복원돼요'**
+  /// **'다시 구독하면 Pro 기능이 즉시 복원돼요'**
   String get subStatusExpiredBody;
 
   /// No description provided for @subStatusAnonymous.
@@ -776,7 +778,7 @@ abstract class L10n {
   /// No description provided for @subFeatureCloudSync.
   ///
   /// In ko, this message translates to:
-  /// **'클라우드 동기화'**
+  /// **'무제한 곡 만들기'**
   String get subFeatureCloudSync;
 
   /// No description provided for @subFeatureExport.
@@ -788,13 +790,13 @@ abstract class L10n {
   /// No description provided for @subFeatureVocalBackup.
   ///
   /// In ko, this message translates to:
-  /// **'보컬 영구 보관'**
+  /// **'스템 내보내기'**
   String get subFeatureVocalBackup;
 
   /// No description provided for @subFeaturePriority.
   ///
   /// In ko, this message translates to:
-  /// **'우선 처리 (빠른 분석)'**
+  /// **'MIDI 내보내기'**
   String get subFeaturePriority;
 
   /// No description provided for @subStoreNoticeActive.
@@ -818,7 +820,7 @@ abstract class L10n {
   /// No description provided for @subResubHint.
   ///
   /// In ko, this message translates to:
-  /// **'이전 작업물은 그대로 보관돼 있어요 — 재구독하면 다시 동기화돼요'**
+  /// **'만든 곡은 이 기기에 그대로 있어요 — 재구독하면 다시 내보낼 수 있어요'**
   String get subResubHint;
 
   /// No description provided for @subStartCta.
@@ -854,13 +856,13 @@ abstract class L10n {
   /// No description provided for @paywallHeadlineSync.
   ///
   /// In ko, this message translates to:
-  /// **'다른 기기에서 보려면 Pro'**
+  /// **'무제한 곡 만들기는 Pro'**
   String get paywallHeadlineSync;
 
   /// No description provided for @paywallHeadlineBackup.
   ///
   /// In ko, this message translates to:
-  /// **'보컬 영구 보관'**
+  /// **'스템 내보내기'**
   String get paywallHeadlineBackup;
 
   /// No description provided for @paywallHeadlineDefault.
@@ -878,19 +880,19 @@ abstract class L10n {
   /// No description provided for @paywallSubSync.
   ///
   /// In ko, this message translates to:
-  /// **'클라우드 동기화로 어디서든 이어서 작업'**
+  /// **'무료 플랜 곡 개수 제한 없이 만들기'**
   String get paywallSubSync;
 
   /// No description provided for @paywallSubBackup.
   ///
   /// In ko, this message translates to:
-  /// **'내 목소리를 잃지 않고 평생 보관'**
+  /// **'트랙별 WAV 로 분리 내보내기'**
   String get paywallSubBackup;
 
   /// No description provided for @paywallSubDefault.
   ///
   /// In ko, this message translates to:
-  /// **'전체 기능 잠금 해제'**
+  /// **'무제한 곡 · WAV / MIDI / 스템 내보내기'**
   String get paywallSubDefault;
 
   /// No description provided for @looptapPaywallTriggerExport.
@@ -908,25 +910,25 @@ abstract class L10n {
   /// No description provided for @paywallFeatureCloudTitle.
   ///
   /// In ko, this message translates to:
-  /// **'5GB 클라우드'**
+  /// **'무제한 곡'**
   String get paywallFeatureCloudTitle;
 
   /// No description provided for @paywallFeatureCloudSub.
   ///
   /// In ko, this message translates to:
-  /// **'모든 기기에서 작업물 이어쓰기'**
+  /// **'무료 플랜은 4곡까지'**
   String get paywallFeatureCloudSub;
 
   /// No description provided for @paywallFeatureBackupTitle.
   ///
   /// In ko, this message translates to:
-  /// **'영구 보관'**
+  /// **'MIDI 내보내기'**
   String get paywallFeatureBackupTitle;
 
   /// No description provided for @paywallFeatureBackupSub.
   ///
   /// In ko, this message translates to:
-  /// **'기기 변경 · 분실에도 작업물은 그대로'**
+  /// **'어떤 DAW 에서도 열리는 .mid'**
   String get paywallFeatureBackupSub;
 
   /// No description provided for @paywallFeatureExportTitle.
@@ -944,13 +946,13 @@ abstract class L10n {
   /// No description provided for @paywallFeaturePriorityTitle.
   ///
   /// In ko, this message translates to:
-  /// **'우선 분석 처리'**
+  /// **'스템 내보내기'**
   String get paywallFeaturePriorityTitle;
 
   /// No description provided for @paywallFeaturePrioritySub.
   ///
   /// In ko, this message translates to:
-  /// **'더 빠른 허밍 분석 / 렌더'**
+  /// **'트랙별 WAV 분리'**
   String get paywallFeaturePrioritySub;
 
   /// No description provided for @paywallPlanYearly.
@@ -1022,7 +1024,7 @@ abstract class L10n {
   /// No description provided for @loginSub.
   ///
   /// In ko, this message translates to:
-  /// **'구독 결제와 클라우드 동기화에 사용돼요'**
+  /// **'Pro 구독과 구매 복원에 사용돼요'**
   String get loginSub;
 
   /// No description provided for @loginFailedTitle.
@@ -1082,7 +1084,7 @@ abstract class L10n {
   /// No description provided for @logoutConfirmBody.
   ///
   /// In ko, this message translates to:
-  /// **'이 기기의 로컬 프로젝트는 그대로 남아있어요. 다시 로그인하면 클라우드 작업물도 복원됩니다.'**
+  /// **'이 기기의 곡은 그대로 남아있어요.'**
   String get logoutConfirmBody;
 
   /// No description provided for @logoutCta.
@@ -1112,7 +1114,7 @@ abstract class L10n {
   /// No description provided for @restoreEmptyBody.
   ///
   /// In ko, this message translates to:
-  /// **'다른 계정으로 로그인했는지 확인해 주세요.'**
+  /// **'구독한 계정으로 로그인했는지 확인해 주세요.'**
   String get restoreEmptyBody;
 
   /// No description provided for @projectOptionUploadProBadge.
@@ -1526,7 +1528,7 @@ abstract class L10n {
   /// No description provided for @faq1A.
   ///
   /// In ko, this message translates to:
-  /// **'녹음 → 분석 → 편집까지 모든 기능을 자유롭게 써 보실 수 있어요. 내보내기 · 클라우드 동기화 · 보컬 영구 보관은 Pro 구독에서 잠금이 풀려요.'**
+  /// **'녹음 → 분석 → 편집까지 모든 기능을 자유롭게 써 보실 수 있어요. 무료 플랜은 4곡까지 저장되고, 무제한 곡 만들기와 WAV · MIDI · 스템 내보내기는 Pro 구독에서 잠금이 풀려요.'**
   String get faq1A;
 
   /// No description provided for @faq2Q.
@@ -1550,7 +1552,7 @@ abstract class L10n {
   /// No description provided for @faq3A.
   ///
   /// In ko, this message translates to:
-  /// **'기본은 기기 안에서만 처리됩니다. Pro 사용자에 한해 본인 계정의 암호화된 클라우드 보관함에 보컬을 동기화해요.'**
+  /// **'모든 처리는 기기 안에서 이뤄지고, 허밍 분석에 필요한 오디오만 서버로 전송된 뒤 보관되지 않아요.'**
   String get faq3A;
 
   /// No description provided for @faq4Q.
@@ -1562,7 +1564,7 @@ abstract class L10n {
   /// No description provided for @faq4A.
   ///
   /// In ko, this message translates to:
-  /// **'로컬 프로젝트는 그대로 남아 편집할 수 있어요. 클라우드 동기화 · 새로운 내보내기는 일시 정지되고, 다시 구독하면 즉시 복원됩니다.'**
+  /// **'만든 곡은 이 기기에 그대로 남아 편집할 수 있어요. 새로운 내보내기와 무제한 곡 만들기는 일시 정지되고, 다시 구독하면 즉시 복원됩니다.'**
   String get faq4A;
 
   /// No description provided for @faq5Q.
@@ -2223,7 +2225,12 @@ abstract class L10n {
   ///
   /// In ko, this message translates to:
   /// **'{scope}: {root}{keyPart}{chordPart}'**
-  String chordPickerSummary(String scope, String root, String keyPart, String chordPart);
+  String chordPickerSummary(
+    String scope,
+    String root,
+    String keyPart,
+    String chordPart,
+  );
 
   /// No description provided for @chordPickerKeyPart.
   ///
@@ -2639,6 +2646,306 @@ abstract class L10n {
   /// **'서버 삭제 실패 ({status}){detail}'**
   String accountErrServerDelete(int status, String detail);
 
+  /// No description provided for @payTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'HumTrack Pro'**
+  String get payTitle;
+
+  /// No description provided for @payBenefits.
+  ///
+  /// In ko, this message translates to:
+  /// **'무제한 곡 만들기 (무료 플랜은 {n}곡까지) · WAV / MIDI / 스템 내보내기.'**
+  String payBenefits(int n);
+
+  /// No description provided for @payPlanYearly.
+  ///
+  /// In ko, this message translates to:
+  /// **'연간'**
+  String get payPlanYearly;
+
+  /// No description provided for @payPlanMonthly.
+  ///
+  /// In ko, this message translates to:
+  /// **'월간'**
+  String get payPlanMonthly;
+
+  /// No description provided for @payPerMonthEquiv.
+  ///
+  /// In ko, this message translates to:
+  /// **'월 {price} 꼴'**
+  String payPerMonthEquiv(String price);
+
+  /// No description provided for @payBilledMonthly.
+  ///
+  /// In ko, this message translates to:
+  /// **'매월 결제'**
+  String get payBilledMonthly;
+
+  /// No description provided for @payPeriodYear.
+  ///
+  /// In ko, this message translates to:
+  /// **'년'**
+  String get payPeriodYear;
+
+  /// No description provided for @payPeriodMonth.
+  ///
+  /// In ko, this message translates to:
+  /// **'월'**
+  String get payPeriodMonth;
+
+  /// No description provided for @payPerPeriod.
+  ///
+  /// In ko, this message translates to:
+  /// **' / {period}'**
+  String payPerPeriod(String period);
+
+  /// No description provided for @payDisclosureTrial.
+  ///
+  /// In ko, this message translates to:
+  /// **'신규 구독자에 한해 {days}일 무료 체험 후 {period} {price} 결제. 해지 전까지 자동 갱신되며, 갱신 24시간 전까지 설정에서 언제든 해지할 수 있어요.'**
+  String payDisclosureTrial(int days, String price, String period);
+
+  /// No description provided for @payDisclosureNoTrial.
+  ///
+  /// In ko, this message translates to:
+  /// **'{period} {price} 결제. 해지 전까지 자동 갱신되며, 갱신 24시간 전까지 설정에서 언제든 해지할 수 있어요.'**
+  String payDisclosureNoTrial(String price, String period);
+
+  /// No description provided for @paySubscribe.
+  ///
+  /// In ko, this message translates to:
+  /// **'구독하기'**
+  String get paySubscribe;
+
+  /// No description provided for @payPendingButton.
+  ///
+  /// In ko, this message translates to:
+  /// **'승인 대기 중…'**
+  String get payPendingButton;
+
+  /// No description provided for @payRestore.
+  ///
+  /// In ko, this message translates to:
+  /// **'구매 복원'**
+  String get payRestore;
+
+  /// No description provided for @payStoreUnavailable.
+  ///
+  /// In ko, this message translates to:
+  /// **'스토어를 사용할 수 없어요'**
+  String get payStoreUnavailable;
+
+  /// No description provided for @payStoreUnavailableDevice.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기에서는 스토어를 사용할 수 없어요.'**
+  String get payStoreUnavailableDevice;
+
+  /// No description provided for @payPurchaseFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'구매를 완료하지 못했어요. 다시 시도해 주세요.'**
+  String get payPurchaseFailed;
+
+  /// No description provided for @payPendingApproval.
+  ///
+  /// In ko, this message translates to:
+  /// **'승인 대기 중이에요. 스토어에서 결제가 확인되면 Pro 가 활성화돼요.'**
+  String get payPendingApproval;
+
+  /// No description provided for @payVerifyFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'결제가 확인됐어요 — Pro 를 활성화하는 중입니다. 반영되지 않으면 \'구매 복원\'을 눌러 주세요.'**
+  String get payVerifyFailed;
+
+  /// No description provided for @paySignInRequired.
+  ///
+  /// In ko, this message translates to:
+  /// **'구독하려면 로그인해 주세요.'**
+  String get paySignInRequired;
+
+  /// No description provided for @payRestoreDone.
+  ///
+  /// In ko, this message translates to:
+  /// **'Pro 가 복원됐어요. 다시 오신 걸 환영해요!'**
+  String get payRestoreDone;
+
+  /// No description provided for @payRestoreAlready.
+  ///
+  /// In ko, this message translates to:
+  /// **'이미 Pro 를 이용 중이에요.'**
+  String get payRestoreAlready;
+
+  /// No description provided for @payRestoreEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 계정에 활성 구독이 없어요. 구독한 계정으로 로그인했는지 확인해 주세요.'**
+  String get payRestoreEmpty;
+
+  /// No description provided for @payRestoreError.
+  ///
+  /// In ko, this message translates to:
+  /// **'구매를 복원하지 못했어요. 연결을 확인하고 다시 시도해 주세요.'**
+  String get payRestoreError;
+
+  /// No description provided for @acctTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'마이 페이지'**
+  String get acctTitle;
+
+  /// No description provided for @acctSignedIn.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그인됨'**
+  String get acctSignedIn;
+
+  /// No description provided for @acctSignedInWith.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그인됨 · {provider}'**
+  String acctSignedInWith(String provider);
+
+  /// No description provided for @acctProActive.
+  ///
+  /// In ko, this message translates to:
+  /// **'HumTrack Pro · 이용 중'**
+  String get acctProActive;
+
+  /// No description provided for @acctProBenefits.
+  ///
+  /// In ko, this message translates to:
+  /// **'무제한 곡 · WAV / MIDI / 스템 내보내기'**
+  String get acctProBenefits;
+
+  /// No description provided for @acctProUntil.
+  ///
+  /// In ko, this message translates to:
+  /// **'{date}까지'**
+  String acctProUntil(String date);
+
+  /// No description provided for @acctUpgrade.
+  ///
+  /// In ko, this message translates to:
+  /// **'Pro 로 업그레이드'**
+  String get acctUpgrade;
+
+  /// No description provided for @acctSignOut.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그아웃'**
+  String get acctSignOut;
+
+  /// No description provided for @acctSignInTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'HumTrack 에 로그인'**
+  String get acctSignInTitle;
+
+  /// No description provided for @acctSignInSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'Pro 구독과 구매 복원에 로그인이 필요해요.'**
+  String get acctSignInSub;
+
+  /// No description provided for @acctSignInWithEmail.
+  ///
+  /// In ko, this message translates to:
+  /// **'이메일로 로그인'**
+  String get acctSignInWithEmail;
+
+  /// No description provided for @acctEmailHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'이메일'**
+  String get acctEmailHint;
+
+  /// No description provided for @acctPasswordHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'비밀번호'**
+  String get acctPasswordHint;
+
+  /// No description provided for @acctEnterEmailPassword.
+  ///
+  /// In ko, this message translates to:
+  /// **'이메일과 비밀번호를 입력해 주세요.'**
+  String get acctEnterEmailPassword;
+
+  /// No description provided for @acctSigningIn.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그인 중…'**
+  String get acctSigningIn;
+
+  /// No description provided for @acctSignIn.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그인'**
+  String get acctSignIn;
+
+  /// No description provided for @acctDeleteNotSignedIn.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그인되어 있지 않아요.'**
+  String get acctDeleteNotSignedIn;
+
+  /// No description provided for @acctDeleteRejected.
+  ///
+  /// In ko, this message translates to:
+  /// **'탈퇴 실패 ({code})'**
+  String acctDeleteRejected(int code);
+
+  /// No description provided for @acctDeleteNetwork.
+  ///
+  /// In ko, this message translates to:
+  /// **'네트워크 오류예요. 연결을 확인하고 다시 시도해 주세요.'**
+  String get acctDeleteNetwork;
+
+  /// No description provided for @authNotConfigured.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 빌드에는 로그인이 설정되어 있지 않아요.'**
+  String get authNotConfigured;
+
+  /// No description provided for @authFailedGeneric.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그인에 실패했어요. 다시 시도해 주세요.'**
+  String get authFailedGeneric;
+
+  /// No description provided for @authUnavailable.
+  ///
+  /// In ko, this message translates to:
+  /// **'지금은 로그인을 사용할 수 없어요.'**
+  String get authUnavailable;
+
+  /// No description provided for @authGoogleNoIdToken.
+  ///
+  /// In ko, this message translates to:
+  /// **'Google 로그인에서 ID 토큰을 받지 못했어요. 다시 시도하거나 Apple 로그인을 이용해 주세요.'**
+  String get authGoogleNoIdToken;
+
+  /// No description provided for @authAppleFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'Apple 로그인 실패 ({code}). {message}'**
+  String authAppleFailed(String code, String message);
+
+  /// No description provided for @authProviderFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'{provider} 로그인에 실패했어요. 다시 시도해 주세요.'**
+  String authProviderFailed(String provider);
+
+  /// No description provided for @authSessionExpired.
+  ///
+  /// In ko, this message translates to:
+  /// **'세션이 만료됐어요. 다시 로그인해 주세요.'**
+  String get authSessionExpired;
+
   /// No description provided for @ltCardMore.
   ///
   /// In ko, this message translates to:
@@ -2841,25 +3148,26 @@ class _L10nDelegate extends LocalizationsDelegate<L10n> {
   }
 
   @override
-  bool isSupported(Locale locale) => <String>['en', 'ko'].contains(locale.languageCode);
+  bool isSupported(Locale locale) =>
+      <String>['en', 'ko'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_L10nDelegate old) => false;
 }
 
 L10n lookupL10n(Locale locale) {
-
-
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
-    case 'en': return L10nEn();
-    case 'ko': return L10nKo();
+    case 'en':
+      return L10nEn();
+    case 'ko':
+      return L10nKo();
   }
 
   throw FlutterError(
     'L10n.delegate failed to load unsupported locale "$locale". This is likely '
     'an issue with the localizations generation tool. Please file an issue '
     'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.'
+    'that was used.',
   );
 }

@@ -2,6 +2,7 @@
 // are all wired: MIDI via buildMidi; WAV/Stems render the song's MIDI through
 // the bundled SF2 (see wav_export.dart). Gated behind Pro by the caller.
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
@@ -10,8 +11,10 @@ import '../../music/midi_export.dart';
 import '../../music/theory.dart';
 import '../../../services/clarity_service.dart';
 import '../../music/wav_export.dart';
+import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
+import 'paywall_sheet.dart';
 
 Future<void> showExportDrawer(
   BuildContext context, {
@@ -28,8 +31,14 @@ Future<void> showExportDrawer(
   List<TrackRef> extras = const [],
   Map<String, int> instruments = const {},
   String? songVocalPath,
-}) {
-  return showGeneralDialog(
+}) async {
+  // Defence in depth: callers gate on proActive before opening, but re-check
+  // here so no code path reaches the export UI without a current Pro verdict.
+  if (!context.read<LoopStore>().proActive) {
+    await showPaywallSheet(context, trigger: PaywallTrigger.export);
+    if (!context.mounted || !context.read<LoopStore>().proActive) return;
+  }
+  await showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'export',

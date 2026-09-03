@@ -6,8 +6,10 @@
 // 백엔드 미연동. Email/password 는 스토어 리뷰용 사전 생성 계정 전용 — 백엔드
 // 가 public sign-up 을 차단한 상태에서만 안전하게 노출.
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../../services/auth_service.dart';
 import '../../app.dart' show rootMessengerKey;
 import '../../state/loop_store.dart';
@@ -17,45 +19,45 @@ import '../social_sign_in_buttons.dart';
 import 'lt_modal.dart';
 import 'paywall_sheet.dart';
 
-/// AuthError → 사용자 표시용 영어 문자열 (legacy _localizedAuthError 의 LoopTap
-/// 버전). LoopTap 은 L10n 미사용이라 inline 영어.
-String authErrorMessage(AuthError? e, {required bool authEnabled}) {
-  if (!authEnabled) return 'Sign-in is not configured in this build.';
-  if (e == null) return 'Sign-in failed. Please try again.';
+/// AuthError → 사용자 표시용 문자열 (L10n, audit M12). 사용자 취소는 호출부에서
+/// 걸러지므로 여기 도달한 null 은 "알 수 없는 실패".
+String authErrorMessage(L10n l, AuthError? e, {required bool authEnabled}) {
+  if (!authEnabled) return l.authNotConfigured;
+  if (e == null) return l.authFailedGeneric;
   switch (e.code) {
     case 'disabled':
-      return 'Sign-in is not available right now.';
+      return l.authUnavailable;
     case 'googleNoIdToken':
-      return 'Google sign-in did not return an ID token. Try again, or use Apple sign-in.';
+      return l.authGoogleNoIdToken;
     case 'identityBlockedGeneric':
-      return 'This email is already linked to another sign-in method. Use the original provider.';
+      return l.authErrIdentityBlockedGeneric;
     case 'identityBlockedSpecific':
-      final providers = e.providers.join(', ');
-      return 'This email is already registered with: $providers. Sign in with the original provider.';
+      return l.authErrIdentityBlockedSpecific(e.providers.join(', '));
     case 'appleCode':
-      return 'Apple sign-in failed (${e.appleCode}). ${e.appleMessage ?? ''}'.trim();
+      return l.authAppleFailed(e.appleCode ?? '', e.appleMessage ?? '').trim();
     case 'generic':
     default:
-      return 'Could not sign in${e.provider != null ? ' with ${e.provider}' : ''}. Please try again.';
+      return l.authProviderFailed(e.provider ?? '');
   }
 }
 
 /// Modal sheet 위에 dialog 띄우기 — SnackBar 는 모달 아래에 깔려 안 보임.
 Future<void> showAuthErrorDialog(BuildContext context, AuthError? err, {required bool authEnabled}) {
+  final l = L10n.of(context);
   return showDialog<void>(
     context: context,
     useRootNavigator: true,
     builder: (dctx) => AlertDialog(
       backgroundColor: LT.surface,
-      title: Text('Sign-in failed', style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.danger)),
+      title: Text(l.loginFailedTitle, style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.danger)),
       content: SelectableText(
-        authErrorMessage(err, authEnabled: authEnabled),
+        authErrorMessage(l, err, authEnabled: authEnabled),
         style: LTType.inter(size: 13, color: LT.t1),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dctx).pop(),
-          child: Text('OK', style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.lime)),
+          child: Text(l.ok, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.lime)),
         ),
       ],
     ),
@@ -74,6 +76,7 @@ class _AccountSheet extends StatefulWidget {
 
 class _AccountSheetState extends State<_AccountSheet> {
   String? _busyProvider; // 'apple' / 'google' / 'email' — 진행 중 표시.
+  bool _restoring = false;
 
   Future<void> _signIn(LoopStore store, String providerId) async {
     if (_busyProvider != null) return;
@@ -105,6 +108,7 @@ class _AccountSheetState extends State<_AccountSheet> {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<LoopStore>();
+    final l = L10n.of(context);
     final user = store.user;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -113,8 +117,8 @@ class _AccountSheetState extends State<_AccountSheet> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('My page', style: LTType.inter(size: 17, weight: FontWeight.w800, color: LT.t1)),
-            IconBtn(icon: LtIcons.close, tooltip: 'Close', onTap: () => Navigator.of(context).pop()),
+            Text(l.acctTitle, style: LTType.inter(size: 17, weight: FontWeight.w800, color: LT.t1)),
+            IconBtn(icon: LtIcons.close, tooltip: l.close, onTap: () => Navigator.of(context).pop()),
           ],
         ),
         const SizedBox(height: 18),
@@ -131,9 +135,14 @@ class _AccountSheetState extends State<_AccountSheet> {
   }
 
   List<Widget> _signedIn(BuildContext context, LoopStore store, Map<String, String> user) {
+    final l = L10n.of(context);
     final name = user['name'] ?? 'User';
     final provider = user['provider'] ?? '';
     final email = user['email'] ?? '';
+    final renews = store.proRenewsAt;
+    final proSub = renews == null
+        ? l.acctProBenefits
+        : '${l.acctProBenefits} · ${l.acctProUntil(DateFormat.yMMMd(Localizations.localeOf(context).toString()).format(renews.toLocal()))}';
     return [
       Row(
         children: [
@@ -174,7 +183,7 @@ class _AccountSheetState extends State<_AccountSheet> {
                     children: [
                       Container(width: 7, height: 7, decoration: const BoxDecoration(color: LT.lime, shape: BoxShape.circle)),
                       const SizedBox(width: 5),
-                      Text('Signed in${provider.isEmpty ? '' : ' · $provider'}',
+                      Text(provider.isEmpty ? l.acctSignedIn : l.acctSignedInWith(provider),
                           style: LTType.inter(size: 10, weight: FontWeight.w700, color: LT.t2)),
                     ],
                   ),
@@ -185,27 +194,27 @@ class _AccountSheetState extends State<_AccountSheet> {
         ],
       ),
       const SizedBox(height: 18),
-      // TODO: Cloud backup 기능 미구현 — 백엔드 sync 연결 후 노출.
-      // const _AccRow(icon: LtIcons.cloudDone, title: 'Cloud backup', sub: 'Loops synced across devices'),
+      // 실제 제공 혜택만 (M10): 무제한 곡 + WAV/MIDI/스템 내보내기.
       if (store.proActive)
-        const _AccRow(
+        _AccRow(
           icon: LtIcons.workspacePremium,
-          title: 'HumTrack Pro · active',
-          sub: 'Stems · unlimited cloud',
+          title: l.acctProActive,
+          sub: proSub,
           accent: true,
         )
       else
         _AccRow(
           icon: LtIcons.workspacePremium,
-          title: 'Upgrade to Pro',
-          sub: 'Stems · unlimited cloud',
+          title: l.acctUpgrade,
+          sub: l.acctProBenefits,
           onTap: () => showPaywallSheet(context),
         ),
       _AccRow(
         icon: LtIcons.restore,
-        title: 'Restore purchases',
-        sub: store.iapEnabled ? '' : 'Store unavailable',
-        onTap: store.iapEnabled ? () => _handleRestore(context, store) : null,
+        title: l.payRestore,
+        sub: store.iapEnabled ? '' : l.payStoreUnavailable,
+        busy: _restoring,
+        onTap: store.iapEnabled && !_restoring ? () => _handleRestore(store) : null,
       ),
       const SizedBox(height: 10),
       GestureDetector(
@@ -217,39 +226,32 @@ class _AccountSheetState extends State<_AccountSheet> {
             borderRadius: BorderRadius.circular(LTRadius.control),
             border: Border.all(color: LT.border),
           ),
-          child: Text('Sign out', style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.danger)),
+          child: Text(l.acctSignOut, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.danger)),
         ),
       ),
     ];
   }
-}
 
-/// Restore purchases 처리 — 시각 피드백 제공. proActive 변화 전/후를 비교해
-/// 새로 복원된 경우와 이미 활성인 경우, 활성 구독 없음을 구분해서 안내.
-///
-/// rootMessenger 사용 — account sheet (showGeneralDialog) 위에서도 보이도록.
-Future<void> _handleRestore(BuildContext context, LoopStore store) async {
-  final wasActive = store.proActive;
-  await store.restorePurchases();
-  if (!context.mounted) return;
-  final isActive = store.proActive;
-  final String msg;
-  if (isActive && !wasActive) {
-    msg = 'Pro restored. Welcome back!';
-  } else if (isActive) {
-    msg = 'You are already Pro.';
-  } else {
-    msg = 'No active subscription found.';
+  /// Restore purchases — LoopStore 가 스토어 결과(또는 8초 timeout) 를 기다린
+  /// 뒤 /iap/status 로 판정한 [RestoreOutcome] 을 돌려주므로, 그때 문구를
+  /// 결정한다 (audit M6). rootMessenger 사용 — account sheet 위에서도 보이도록.
+  Future<void> _handleRestore(LoopStore store) async {
+    if (_restoring) return;
+    final l = L10n.of(context);
+    setState(() => _restoring = true);
+    final outcome = await store.restorePurchases();
+    if (!mounted) return;
+    setState(() => _restoring = false);
+    rootMessengerKey.currentState
+      ?..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        backgroundColor: LT.surface2,
+        content: Text(restoreMessageFor(l, outcome), style: LTType.inter(size: 13, color: LT.t1)),
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+      ));
   }
-  rootMessengerKey.currentState
-    ?..clearSnackBars()
-    ..showSnackBar(SnackBar(
-      backgroundColor: LT.surface2,
-      content: Text(msg, style: LTType.inter(size: 13, color: LT.t1)),
-      duration: const Duration(seconds: 3),
-      behavior: SnackBarBehavior.floating,
-      margin: const EdgeInsets.all(16),
-    ));
 }
 
 /// Logged-out view: 공식 Apple/Google 브랜드 버튼 + 보일 듯 말 듯한 email login
@@ -276,6 +278,7 @@ class _SignedOutViewState extends State<_SignedOutView> {
   @override
   Widget build(BuildContext context) {
     final busy = widget.busyProvider;
+    final l = L10n.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -293,9 +296,10 @@ class _SignedOutViewState extends State<_SignedOutView> {
               child: const Center(child: Ms(LtIcons.person, size: 30, color: LT.t2)),
             ),
             const SizedBox(height: 10),
-            Text('Sign in to HumTrack', style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
+            Text(l.acctSignInTitle, style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
             const SizedBox(height: 4),
-            Text('Back up your loops and sync across devices.',
+            // 실제 제공 기능만 (M10): 로그인은 Pro 구독 / 구매 복원에 필요.
+            Text(l.acctSignInSub,
                 textAlign: TextAlign.center, style: LTType.inter(size: 12, color: LT.t2)),
           ],
         ),
@@ -305,7 +309,7 @@ class _SignedOutViewState extends State<_SignedOutView> {
           busy: busy == 'apple',
           disabled: busy != null && busy != 'apple',
           child: AppleSignInButton(
-            label: 'Continue with Apple',
+            label: l.appleSignInCta,
             onPressed: () => widget.onSocial('apple'),
           ),
         ),
@@ -313,7 +317,7 @@ class _SignedOutViewState extends State<_SignedOutView> {
           busy: busy == 'google',
           disabled: busy != null && busy != 'google',
           child: GoogleSignInButton(
-            label: 'Continue with Google',
+            label: l.googleSignInCta,
             onPressed: () => widget.onSocial('google'),
           ),
         ),
@@ -325,7 +329,7 @@ class _SignedOutViewState extends State<_SignedOutView> {
             child: Container(
               height: 36,
               alignment: Alignment.center,
-              child: Text('Sign in with email',
+              child: Text(l.acctSignInWithEmail,
                   style: LTType.inter(size: 12, weight: FontWeight.w700, color: LT.t2)),
             ),
           )
@@ -367,7 +371,7 @@ class _EmailLoginFormState extends State<_EmailLoginForm> {
     final email = _email.text.trim();
     final pw = _password.text;
     if (email.isEmpty || pw.isEmpty) {
-      setState(() => _error = 'Enter your email and password.');
+      setState(() => _error = L10n.of(context).acctEnterEmailPassword);
       return;
     }
     setState(() => _error = null);
@@ -377,14 +381,15 @@ class _EmailLoginFormState extends State<_EmailLoginForm> {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 4),
-        _Field(controller: _email, hint: 'Email', keyboardType: TextInputType.emailAddress),
+        _Field(controller: _email, hint: l.acctEmailHint, keyboardType: TextInputType.emailAddress),
         const SizedBox(height: 8),
-        _Field(controller: _password, hint: 'Password', obscure: true),
+        _Field(controller: _password, hint: l.acctPasswordHint, obscure: true),
         if (_error != null) ...[
           const SizedBox(height: 6),
           Text(_error!, style: LTType.inter(size: 11, weight: FontWeight.w600, color: LT.danger)),
@@ -399,7 +404,7 @@ class _EmailLoginFormState extends State<_EmailLoginForm> {
               color: LT.lime,
               borderRadius: BorderRadius.circular(LTRadius.control),
             ),
-            child: Text(widget.busy ? 'Signing in…' : 'Sign in',
+            child: Text(widget.busy ? l.acctSigningIn : l.acctSignIn,
                 style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg)),
           ),
         ),
@@ -492,16 +497,19 @@ class _AccRow extends StatelessWidget {
     required this.sub,
     this.onTap,
     this.accent = false,
+    this.busy = false,
   });
   final IconData icon;
   final String title;
   final String sub;
   final VoidCallback? onTap;
   final bool accent;
+  /// 진행 중 — trailing 에 spinner, 탭 비활성 (lock 아이콘 대신).
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
-    final disabled = onTap == null && !accent;
+    final disabled = onTap == null && !accent && !busy;
     return GestureDetector(
       onTap: onTap,
       child: Opacity(
@@ -529,7 +537,14 @@ class _AccRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (disabled) const Ms(LtIcons.lock, size: 16, color: LT.t3),
+              if (busy)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: LT.lime),
+                )
+              else if (disabled)
+                const Ms(LtIcons.lock, size: 16, color: LT.t3),
             ],
           ),
         ),

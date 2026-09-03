@@ -6,17 +6,45 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../../main.dart' show engineApi;
 import '../../services/auth_service.dart';
+import '../../services/clarity_service.dart';
+import '../../services/entitlement_cache.dart';
 import '../../services/iap_service.dart';
+import '../../services/observability_service.dart';
 import '../models/loop_models.dart';
 import '../music/soundfont_catalog.dart';
 import '../music/theory.dart';
 import 'loop_storage.dart';
 
 enum ProStatus { inactive, active }
+
+/// [LoopStore.restorePurchases] 결과 — UI 가 문구를 고른다 (audit M6).
+enum RestoreOutcome { restored, alreadyActive, nothingFound, error }
+
+/// [LoopStore.deleteAccount] 실패 사유 — UI 가 l10n 으로 해석 (audit M9/M12).
+enum DeleteAccountFailure { notSignedIn, rejected, network }
+
+class DeleteAccountError {
+  const DeleteAccountError(this.kind, {this.code});
+  final DeleteAccountFailure kind;
+  /// [DeleteAccountFailure.rejected] 일 때 HTTP 상태.
+  final int? code;
+}
+
+/// GET /iap/status 가 200 이 아닐 때 Sentry 로 보내는 예외 (본문 앞 200자).
+class IapStatusHttpException implements Exception {
+  IapStatusHttpException(this.status, Object? body) : body = _truncate(body);
+  final int status;
+  final String body;
+  static String _truncate(Object? body) {
+    final t = body?.toString() ?? '';
+    return t.length <= 200 ? t : t.substring(0, 200);
+  }
+  @override
+  String toString() => 'IapStatusHttpException($status): $body';
+}
 
 class LoopStore extends ChangeNotifier {
   final List<Song> _songs = [];
@@ -28,6 +56,11 @@ class LoopStore extends ChangeNotifier {
 
   ProStatus _pro = ProStatus.inactive;
   DateTime? _renewsAt;
+  String? _proStatus; // trial | active | cancelled | expired | null (표시용)
+  String? _proProductId;
+
+  /// entitlement.json 의 메모리 사본 — bootstrap 에서 로드.
+  EntitlementCacheState _entitlement = EntitlementCacheState.empty;
 
   StreamSubscription? _authSub;
   StreamSubscription? _iapSub;
@@ -43,6 +76,10 @@ class LoopStore extends ChangeNotifier {
   static const bool _debugProOverride = false;
   bool get proActive => _pro == ProStatus.active || (kDebugMode && _debugProOverride);
   DateTime? get proRenewsAt => _renewsAt;
+  /// 서버 status 문자열 (trial/active/cancelled/expired) — 표시용. Pro 판정은
+  /// [proActive] 만 쓴다.
+  String? get proStatus => _proStatus;
+  String? get proProductId => _proProductId;
   bool get authEnabled => AuthService.instance.enabled;
   bool get iapEnabled => IapService.instance.enabled;
   AuthError? get lastAuthError => AuthService.instance.lastError;
@@ -76,6 +113,10 @@ class LoopStore extends ChangeNotifier {
       await LoopStorage.markSeeded();
     }
 
+    // 마지막 서버 판정 캐시 (오프라인/장애 시 폴백, M3). 세션 listener 보다
+    // 먼저 읽어야 _onSession 이 즉시 폴백을 적용할 수 있다.
+    _entitlement = await EntitlementCache.load();
+
     // Supabase 세션 listener — 부트 시점에 cached session 이 있으면 즉시 발행됨.
     _authSub = AuthService.instance.onSession.listen(_onSession);
     final cur = AuthService.instance.current;
@@ -98,22 +139,64 @@ class LoopStore extends ChangeNotifier {
         'provider': _providerLabel(s.provider),
         'email': email,
       };
-      // 로그인 직후 1회 restore — IapService 가 토큰 없을 때 큐에 남겨둔 영수증을
-      // 재배달받아 verify 한다. 이미 verify 된 정상 구독에는 영향 없음.
+      final uid = s.userId!;
+      final now = DateTime.now().toUtc();
+      // 1) 캐시된 판정을 즉시 적용 — 서버 응답 전/오프라인에도 유료 사용자가
+      //    paywall 을 보지 않도록 (같은 유저 + 만료 유예 내에서만).
+      final cached = _entitlement.verdict;
+      if (cached != null && cached.isUsable(uid, now)) {
+        _applyVerdict(cached, notify: false);
+      }
+      // 2) 로그인 직후 1회 restore — IapService 가 토큰 없을 때 큐에 남겨둔
+      //    영수증을 재배달받아 verify 한다. /iap/verify 는 서버 throttle 이
+      //    있으므로 유저당 24h 에 한 번만 (캐시 판정이 만료됐으면 즉시).
       if (!_restoredOnSignIn && IapService.instance.enabled) {
         _restoredOnSignIn = true;
-        IapService.instance.restore();
+        if (_entitlement.restoreDue(uid, now)) {
+          _markRestore(uid, now);
+          unawaited(IapService.instance.restore());
+        } else {
+          debugPrint('[loopstore] startup restore throttled (last ${_entitlement.lastRestoreAt})');
+        }
       }
-      // 백엔드의 subscriptions row 도 즉시 조회 — 리뷰 계정처럼 IAP 영수증 없이
-      // 직접 부여된 Pro 권한 케이스를 잡기 위해.
-      refreshSubscription();
+      // 3) 서버 판정 — 리뷰 계정처럼 IAP 영수증 없이 부여된 Pro 도 이 경로.
+      unawaited(refreshSubscription());
     } else {
       _user = null;
-      _pro = ProStatus.inactive;
-      _renewsAt = null;
+      _clearPro();
       _restoredOnSignIn = false;
+      _entitlement = EntitlementCacheState.empty;
+      unawaited(EntitlementCache.clear());
     }
     notifyListeners();
+  }
+
+  void _clearPro() {
+    _pro = ProStatus.inactive;
+    _renewsAt = null;
+    _proStatus = null;
+    _proProductId = null;
+  }
+
+  /// 서버/캐시 판정을 상태에 반영. 변화가 있을 때만 notify.
+  void _applyVerdict(EntitlementVerdict v, {bool notify = true}) {
+    final next = v.pro ? ProStatus.active : ProStatus.inactive;
+    final changed = _pro != next ||
+        _renewsAt != v.expiresAt ||
+        _proStatus != v.status ||
+        _proProductId != v.productId;
+    _pro = next;
+    _renewsAt = v.expiresAt;
+    _proStatus = v.status;
+    _proProductId = v.productId;
+    // Clarity: plan 태그는 구매 시점뿐 아니라 판정이 갱신될 때마다.
+    ClarityService.instance.tag('plan', v.pro ? (v.productId ?? 'pro') : 'free');
+    if (changed && notify) notifyListeners();
+  }
+
+  void _markRestore(String uid, DateTime now) {
+    _entitlement = _entitlement.copyWith(lastRestoreAt: now, lastRestoreUserId: uid);
+    unawaited(EntitlementCache.save(_entitlement));
   }
 
   String _providerLabel(String? p) {
@@ -138,21 +221,24 @@ class LoopStore extends ChangeNotifier {
 
   Future<void> signOut() async {
     await AuthService.instance.signOut();
+    // 사용자 전환 — 리플레이 세션 분리 + 로컬 권한 캐시 폐기.
+    ClarityService.instance.startNewSession();
+    _entitlement = EntitlementCacheState.empty;
+    await EntitlementCache.clear();
     // listener 가 _user=null 로 처리하지만, auth 비활성 환경(_enabled=false) 에서는
     // listener 가 발화하지 않으므로 여기서도 보강.
     if (!AuthService.instance.enabled && _user != null) {
       _user = null;
-      _pro = ProStatus.inactive;
-      _renewsAt = null;
+      _clearPro();
       notifyListeners();
     }
   }
 
   /// 회원 탈퇴 — backend DELETE /account → Supabase user + 관련 row 삭제 → 로컬
-  /// signOut. 실패 시 메시지 반환.
-  Future<String?> deleteAccount() async {
+  /// signOut. 실패 시 사유 반환 (문구는 UI 가 l10n 으로).
+  Future<DeleteAccountError?> deleteAccount() async {
     if (!AuthService.instance.enabled || _user == null) {
-      return 'Not signed in.';
+      return const DeleteAccountError(DeleteAccountFailure.notSignedIn);
     }
     try {
       // 전역 engineApi 의 dio 에 Bearer 인터셉터가 자동 부착됨.
@@ -163,12 +249,19 @@ class LoopStore extends ChangeNotifier {
       );
       final code = res.statusCode ?? 0;
       if (code != 200 && code != 204) {
-        return 'Delete failed ($code)';
+        ObservabilityService.instance.captureException(
+          StateError('account delete rejected ($code)'),
+          StackTrace.current,
+          tags: {'http_status': '$code'},
+          hint: 'deleteAccount rejected',
+        );
+        return DeleteAccountError(DeleteAccountFailure.rejected, code: code);
       }
       await signOut();
       return null;
-    } catch (e) {
-      return 'Network error: $e';
+    } catch (e, st) {
+      ObservabilityService.instance.captureException(e, st, hint: 'deleteAccount failed');
+      return const DeleteAccountError(DeleteAccountFailure.network);
     }
   }
 
@@ -178,59 +271,147 @@ class LoopStore extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    _pro = ProStatus.active;
+    // 서버 verify 가 pro=true 를 돌려줬다 (IapService 가 이미 판정). 즉시 반영
+    // + 캐시, 그리고 /iap/status 로 정본 status/expires_at 동기화.
+    final uid = AuthService.instance.current.userId;
     final isYearly = r.productId == kProductYearly;
-    _renewsAt = r.renewsAt ??
+    final renews = r.renewsAt ??
         DateTime.now().add(Duration(days: isYearly ? 365 : 30));
+    final v = EntitlementVerdict(
+      userId: uid ?? '',
+      pro: true,
+      status: 'active',
+      productId: r.productId,
+      expiresAt: renews,
+      checkedAt: DateTime.now().toUtc(),
+    );
+    _applyVerdict(v, notify: false);
+    if (uid != null) {
+      _entitlement = _entitlement.copyWith(verdict: v);
+      unawaited(EntitlementCache.save(_entitlement));
+    }
     notifyListeners();
+    unawaited(refreshSubscription());
   }
 
   Future<void> loadProducts() => IapService.instance.loadProducts();
-  Future<bool> buyMonthly() => IapService.instance.buy(kProductMonthly);
-  Future<bool> buyYearly() => IapService.instance.buy(kProductYearly);
+  /// null = 스토어 시트가 떴음 (결과는 IapService.onPurchaseResult).
+  Future<IapError?> buyMonthly() => IapService.instance.buy(kProductMonthly);
+  Future<IapError?> buyYearly() => IapService.instance.buy(kProductYearly);
 
-  /// IAP restorePurchases + 즉시 backend 의 subscriptions row 조회로 UI 갱신.
-  /// IAP restore 는 StoreKit 영수증 재전달이 비동기라 결과가 늦게 도착해서,
-  /// 그 사이에도 사용자에게 빠른 시각 피드백을 주기 위해 즉시 refresh 도 함께.
-  Future<void> restorePurchases() async {
-    await IapService.instance.restore();
-    await refreshSubscription();
+  /// 구매 복원 (audit M6): 스토어 restore 를 요청하고 **첫 결과**(onPurchaseResult)
+  /// 또는 pro 가 켜지는 상태 변화를 [timeout] 까지 기다린 뒤 /iap/status 로
+  /// 정본을 다시 읽어 결과를 판정한다. 영수증이 없으면 스토어가 아무 것도
+  /// 보내지 않으므로 timeout 이 곧 "복원할 것 없음".
+  Future<RestoreOutcome> restorePurchases({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final wasActive = proActive;
+    final uid = AuthService.instance.current.userId;
+    if (!IapService.instance.enabled) {
+      // 스토어 없이도 서버에 직접 부여된 Pro 는 잡힌다.
+      final ok = await refreshSubscription();
+      return _restoreOutcome(wasActive, null, refreshed: ok);
+    }
+    final first = Completer<IapResult?>();
+    late final StreamSubscription<IapResult> sub;
+    sub = IapService.instance.onPurchaseResult.listen((r) {
+      if (r.error == IapError.pending) return; // 중간 상태 — 계속 대기.
+      if (!first.isCompleted) first.complete(r);
+    });
+    void onFlip() {
+      if (proActive && !wasActive && !first.isCompleted) first.complete(null);
+    }
+    addListener(onFlip);
+    IapResult? result;
+    var launched = false;
+    try {
+      if (uid != null) _markRestore(uid, DateTime.now().toUtc());
+      launched = await IapService.instance.restore();
+      if (launched) {
+        try {
+          result = await first.future.timeout(timeout);
+        } on TimeoutException {
+          result = null;
+        }
+      }
+    } finally {
+      await sub.cancel();
+      removeListener(onFlip);
+    }
+    if (!launched) {
+      ClarityService.instance.event('restore_failed');
+      return RestoreOutcome.error; // IapService.restore 가 이미 Sentry 보고.
+    }
+    final refreshed = await refreshSubscription();
+    final outcome = _restoreOutcome(wasActive, result, refreshed: refreshed);
+    if (outcome == RestoreOutcome.nothingFound) {
+      ClarityService.instance.event('restore_empty');
+      ObservabilityService.instance.breadcrumb('restore empty', category: 'iap',
+          data: {'had_result': result != null, 'error': result?.error?.name});
+    } else if (outcome == RestoreOutcome.error) {
+      ClarityService.instance.event('restore_failed');
+      ObservabilityService.instance.captureException(
+        StateError('restore failed: ${result?.error?.name ?? 'status refresh failed'}'),
+        StackTrace.current,
+        tags: {'iap_error': result?.error?.name ?? 'none'},
+        hint: 'iap restore failed',
+      );
+    }
+    return outcome;
   }
 
-  /// public.subscriptions 에서 현재 사용자의 row 를 직접 조회 (RLS owner-read).
-  /// 리뷰용 email 계정처럼 IAP 영수증 없이 백엔드에서 직접 부여된 Pro 권한도
-  /// 이 경로로 잡힌다.
-  Future<void> refreshSubscription() async {
-    if (!AuthService.instance.enabled) return;
-    final session = sb.Supabase.instance.client.auth.currentSession;
-    if (session == null) return;
+  RestoreOutcome _restoreOutcome(bool wasActive, IapResult? result, {bool refreshed = true}) {
+    if (proActive && !wasActive) return RestoreOutcome.restored;
+    if (proActive) return RestoreOutcome.alreadyActive;
+    final err = result?.error;
+    if (err != null && err != IapError.canceled) return RestoreOutcome.error;
+    if (!refreshed && result == null) return RestoreOutcome.error;
+    return RestoreOutcome.nothingFound;
+  }
+
+  /// GET /iap/status — 서버의 권한 판정(`pro`)이 유일한 정본 (audit M2).
+  /// 성공하면 캐시 갱신(pro:true) / 폐기(pro:false). 실패(오프라인·5xx·401)
+  /// 하면 같은 유저의 유효한 캐시로 폴백하고 false 반환.
+  Future<bool> refreshSubscription() async {
+    if (!AuthService.instance.enabled) return false;
+    final uid = AuthService.instance.current.userId;
+    if (uid == null) return false;
+    int? httpStatus;
     try {
-      final row = await sb.Supabase.instance.client
-          .from('subscriptions')
-          .select('status, product_id, expires_at')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-      if (row == null) {
-        if (_pro != ProStatus.inactive) {
-          _pro = ProStatus.inactive;
-          _renewsAt = null;
-          notifyListeners();
-        }
-        return;
+      final r = await engineApi.dio.get<Map<String, dynamic>>(
+        '/iap/status',
+        options: Options(
+          validateStatus: (_) => true,
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      );
+      httpStatus = r.statusCode;
+      final data = r.data;
+      if (httpStatus != 200 || data == null) {
+        throw IapStatusHttpException(httpStatus ?? 0, r.data);
       }
-      final status = (row['status'] as String?)?.toLowerCase();
-      final isActive = status == 'active' || status == 'trial';
-      final renews = row['expires_at'] != null
-          ? DateTime.tryParse(row['expires_at'] as String)
-          : null;
-      final newStatus = isActive ? ProStatus.active : ProStatus.inactive;
-      if (_pro != newStatus || _renewsAt != renews) {
-        _pro = newStatus;
-        _renewsAt = renews;
-        notifyListeners();
-      }
-    } catch (e) {
+      // 응답이 오는 사이 로그아웃됐으면 무시.
+      if (AuthService.instance.current.userId != uid) return false;
+      final v = EntitlementVerdict.fromServer(data, userId: uid, now: DateTime.now().toUtc());
+      _applyVerdict(v);
+      _entitlement = v.pro
+          ? _entitlement.copyWith(verdict: v)
+          : _entitlement.copyWith(clearVerdict: true); // 확정 pro:false → 캐시 폐기
+      unawaited(EntitlementCache.save(_entitlement));
+      return true;
+    } catch (e, st) {
       debugPrint('[loopstore] refreshSubscription failed: $e');
+      ObservabilityService.instance.captureException(
+        e, st,
+        tags: {'endpoint': '/iap/status', 'http_status': '${httpStatus ?? 0}'},
+        hint: 'iap status failed',
+      );
+      final cached = _entitlement.verdict;
+      if (cached != null && cached.isUsable(uid, DateTime.now().toUtc())) {
+        _applyVerdict(cached);
+      }
+      return false;
     }
   }
 

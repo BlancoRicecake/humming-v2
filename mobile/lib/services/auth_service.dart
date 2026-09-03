@@ -10,7 +10,7 @@
 // 비활성(키 미설정) 상태에서는 모든 호출이 false 반환 — 호출자는 mockLogin 으로 폴백.
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, SocketException;
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
@@ -18,6 +18,8 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+
+import 'observability_service.dart';
 
 class AuthSession {
   const AuthSession({this.userId, this.email, this.provider});
@@ -154,13 +156,15 @@ class AuthService {
       final r = await sb.Supabase.instance.client.auth
           .signInWithPassword(email: email, password: password);
       return r.session != null;
-    } on sb.AuthException catch (e) {
+    } on sb.AuthException catch (e, st) {
       debugPrint('[supabase] email signIn failed: ${e.message} (status=${e.statusCode})');
       lastError = AuthError.generic('Email', e.message);
+      _reportSignInFailure('email', e, st);
       return false;
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[supabase] email signIn error: $e');
       lastError = AuthError.generic('Email', '$e');
+      _reportSignInFailure('email', e, st);
       return false;
     }
   }
@@ -199,11 +203,22 @@ class AuthService {
         redirectTo: 'humtrack://auth/callback',
       );
       return true;
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[supabase] signIn($provider) failed: $e');
       lastError = AuthError.generic(provider, '$e');
+      _reportSignInFailure(provider, e, st);
       return false;
     }
+  }
+
+  /// 로그인 실패 보고 (M8) — 사용자 취소는 호출부에서 걸러진다. provider 만
+  /// 태깅하고 이메일 등 PII 는 보내지 않는다.
+  void _reportSignInFailure(String provider, Object e, StackTrace st) {
+    ObservabilityService.instance.captureException(
+      e, st,
+      tags: {'auth_provider': provider, 'auth_error': lastError?.code ?? 'unknown'},
+      hint: 'sign-in failed ($provider)',
+    );
   }
 
   Future<bool> _nativeAppleSignIn() async {
@@ -227,15 +242,17 @@ class AuthService {
         nonce: rawNonce,
       );
       return true;
-    } on SignInWithAppleAuthorizationException catch (e) {
+    } on SignInWithAppleAuthorizationException catch (e, st) {
       debugPrint('[supabase] apple native cancel/fail: ${e.code}');
       if (e.code != AuthorizationErrorCode.canceled) {
         lastError = AuthError.appleCode(e.code.name, e.message);
+        _reportSignInFailure('apple', e, st);
       }
       return false;
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[supabase] apple native error: $e');
       lastError = await _humanizeAuthError('Apple', e, email: email);
+      _reportSignInFailure('apple', e, st);
       return false;
     }
   }
@@ -256,6 +273,7 @@ class AuthService {
       final accessToken = auth.accessToken;
       if (idToken == null) {
         lastError = AuthError.googleNoIdToken();
+        _reportSignInFailure('google', StateError('google idToken missing'), StackTrace.current);
         // 캐시 비워서 다음 시도 시 chooser 표시.
         await googleSignIn.signOut().catchError((_) => null);
         return false;
@@ -266,9 +284,10 @@ class AuthService {
         accessToken: accessToken,
       );
       return true;
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[supabase] google native error: $e');
       lastError = await _humanizeAuthError('Google', e, email: email);
+      _reportSignInFailure('google', e, st);
       // 실패 시 Google SDK 의 cached account 를 비워야 다음 탭에서 chooser 가 다시 뜸.
       // 안 비우면 같은 계정으로 silent 재시도 → 같은 에러 반복.
       await googleSignIn.signOut().catchError((_) => null);
@@ -323,6 +342,11 @@ class AuthService {
   /// 만료된(or 곧 만료될) 토큰이면 자동으로 refreshSession() 호출. Supabase SDK
   /// 의 background auto-refresh 가 실패한 케이스(앱이 오래 백그라운드, 디바이스
   /// 시계 점프 등)에서도 안전하게 fresh 토큰을 돌려주도록 보강.
+  ///
+  /// 갱신 실패 처리 (audit M7): refresh token 이 무효/만료라는 *확정* 응답일 때만
+  /// signOut + [AuthEventKind.refreshFailed]. 네트워크 단절·타임아웃·5xx 같은
+  /// 일시적 실패는 세션을 유지하고 현재(만료됐을 수 있는) 토큰을 돌려준다 —
+  /// 호출부의 401 은 다음 시도에서 회복된다.
   Future<String?> currentAccessToken() async {
     if (!_enabled) return null;
     final auth = sb.Supabase.instance.client.auth;
@@ -337,11 +361,20 @@ class AuthService {
         debugPrint('[supabase] session expiring (remaining=${remaining}s) → refresh');
         final r = await auth.refreshSession();
         session = r.session ?? auth.currentSession;
-      } catch (e) {
-        debugPrint('[supabase] refreshSession failed: $e');
-        // Refresh 실패 = refresh_token 도 만료/무효 → 복구 불가. 자동 signOut +
-        // UI 에 안내. (legacy 의 UnauthorizedException 대응을 LoopTap 에서는
-        // AuthEvent stream 으로 발행.)
+      } catch (e, st) {
+        final definitive = isDefinitiveRefreshFailure(e);
+        debugPrint('[supabase] refreshSession failed (definitive=$definitive): $e');
+        ObservabilityService.instance.captureException(
+          e, st,
+          tags: {'auth_stage': 'refresh', 'definitive': '$definitive'},
+          hint: 'token refresh failed',
+        );
+        if (!definitive) {
+          // 일시적 실패 — 세션 유지. stale 토큰이라도 돌려주면 서버가 401 로
+          // 알려주고, 다음 호출에서 다시 refresh 를 시도한다.
+          return auth.currentSession?.accessToken;
+        }
+        // Refresh token 자체가 만료/무효 → 복구 불가. 자동 signOut + UI 안내.
         _authEventCtl.add(AuthEvent(
           AuthEventKind.refreshFailed,
           detail: e.toString(),
@@ -353,6 +386,39 @@ class AuthService {
       }
     }
     return session?.accessToken;
+  }
+
+  /// refreshSession 예외가 "refresh token 무효/만료" 로 확정된 실패인지 (순수
+  /// 함수 — 테스트 대상). false 면 재시도 가능한 일시 오류로 간주해 세션을
+  /// 유지한다.
+  static bool isDefinitiveRefreshFailure(Object e) {
+    if (e is sb.AuthRetryableFetchException) return false;
+    if (e is sb.AuthSessionMissingException) return true;
+    if (e is sb.AuthException) {
+      final status = int.tryParse(e.statusCode ?? '');
+      if (status != null && status >= 500) return false;
+      const definitiveCodes = {
+        'refresh_token_not_found',
+        'refresh_token_already_used',
+        'session_not_found',
+        'session_expired',
+        'invalid_grant',
+        'bad_jwt',
+        'user_not_found',
+        'user_banned',
+      };
+      final code = e.code?.toLowerCase();
+      if (code != null && definitiveCodes.contains(code)) return true;
+      final msg = e.message.toLowerCase();
+      if (RegExp(r'refresh[ _]?token|invalid[ _]grant|session (not found|expired)|token (is )?expired|revoked')
+          .hasMatch(msg)) {
+        return true;
+      }
+      return status == 400 || status == 401 || status == 403;
+    }
+    // SocketException / TimeoutException / ClientException / 기타 → 네트워크.
+    if (e is SocketException || e is TimeoutException) return false;
+    return false;
   }
 
   Future<void> signOut() async {

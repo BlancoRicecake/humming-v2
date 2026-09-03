@@ -4,6 +4,8 @@
 //
 // Only the Settings detail text + legal docs are localized (per product call);
 // the rest of the LoopTap DAW UI stays English.
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,6 +14,7 @@ import 'package:provider/provider.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../screens/legal_doc_screen.dart';
+import '../../../services/iap_service.dart' show manageSubscriptionUri;
 import '../../../services/locale_service.dart';
 import '../../app.dart' show rootMessengerKey;
 import '../../state/loop_prefs.dart';
@@ -215,6 +218,24 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     );
   }
 
+  /// App Store / Google Play 구독 관리 페이지 (M9). 계정 삭제는 스토어 구독을
+  /// 해지하지 않으므로, 사용자가 직접 해지할 수 있게 링크를 연다.
+  Future<void> _openManageSubscription(LoopStore store) async {
+    final uri = manageSubscriptionUri(
+      isIOS: Platform.isIOS,
+      productId: store.proProductId,
+    );
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
+  String _deleteErrorText(L10n l, DeleteAccountError e) => switch (e.kind) {
+        DeleteAccountFailure.notSignedIn => l.acctDeleteNotSignedIn,
+        DeleteAccountFailure.rejected => l.acctDeleteRejected(e.code ?? 0),
+        DeleteAccountFailure.network => l.acctDeleteNetwork,
+      };
+
   Future<void> _confirmDelete(BuildContext context) async {
     final l = L10n.of(context);
     final store = context.read<LoopStore>();
@@ -232,9 +253,41 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 color: LT.danger,
               ),
             ),
-            content: Text(
-              l.ltSettingsDeleteAccountConfirmBody,
-              style: LTType.inter(size: 13, color: LT.t1),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.ltSettingsDeleteAccountConfirmBody,
+                  style: LTType.inter(size: 13, color: LT.t1),
+                ),
+                const SizedBox(height: 10),
+                // M9: 구독은 계정 삭제로 해지되지 않는다 — 스토어에서 별도 해지.
+                Text(
+                  l.withdrawHint,
+                  style: LTType.inter(size: 12, color: LT.t2, height: 1.4),
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => _openManageSubscription(store),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                    icon: const Ms(LtIcons.receiptLong, size: 16, color: LT.lime),
+                    label: Text(
+                      l.accountMenuManage,
+                      style: LTType.inter(
+                        size: 13,
+                        weight: FontWeight.w700,
+                        color: LT.lime,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             actions: [
               TextButton(
@@ -268,7 +321,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     final msg =
         err == null
             ? l.ltSettingsDeleteAccountDone
-            : l.ltSettingsDeleteAccountFailed(err);
+            : l.ltSettingsDeleteAccountFailed(_deleteErrorText(l, err));
     if (err == null) {
       Navigator.of(this.context).pop(); // settings sheet 닫기
     }
