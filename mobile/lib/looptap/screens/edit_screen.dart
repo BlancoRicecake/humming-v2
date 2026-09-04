@@ -139,7 +139,10 @@ class _EditScreenState extends State<EditScreen>
       _meta.kind == TrackKind.pitched || _meta.kind == TrackKind.bass;
 
   // glow: currently-sounding pitched notes (drums use press-only feedback)
-  Set<int> _litMidis = {};
+  /// Pads currently lit by playback. A ValueNotifier, not State: it changes
+  /// on nearly every 16th step and only NotePads reads it, so a setState here
+  /// rebuilt the whole editor several times a second (audit C22).
+  final ValueNotifier<Set<int>> _litMidis = ValueNotifier(const {});
 
   // notes recorded during the current loop pass — the clock skips replaying them
   // until the loop wraps, so a freshly-tapped note isn't heard twice (live tap +
@@ -423,6 +426,7 @@ class _EditScreenState extends State<EditScreen>
     }
     _ticker?.dispose();
     _playStep.dispose();
+    _litMidis.dispose();
     _audio.stopAll();
     super.dispose();
   }
@@ -584,8 +588,8 @@ class _EditScreenState extends State<EditScreen>
     if (_metro && step % kStepsPerBeat == 0) {
       _audio.click(step % (kStepsPerBeat * kBeatsPerBar) == 0);
     }
-    if (litM.isNotEmpty || _litMidis.isNotEmpty) {
-      setState(() => _litMidis = litM);
+    if (litM.isNotEmpty || _litMidis.value.isNotEmpty) {
+      _litMidis.value = litM;
     }
   }
 
@@ -727,7 +731,7 @@ class _EditScreenState extends State<EditScreen>
       _playing = false;
       _recording = false;
       _countDown = 0;
-      _litMidis = {};
+      _litMidis.value = const {};
       if (_songSection != null) {
         _songSection = null;
         _songSteps = null;
@@ -1833,7 +1837,7 @@ class _EditScreenState extends State<EditScreen>
         _playing = false;
         _songSection = null;
         _songSteps = null;
-        _litMidis = {};
+        _litMidis.value = const {};
       });
     }
   }
@@ -2162,7 +2166,7 @@ class _EditScreenState extends State<EditScreen>
     if (mounted) {
       setState(() {
         _playing = false;
-        _litMidis = {};
+        _litMidis.value = const {};
       });
     }
   }
@@ -2533,7 +2537,7 @@ class _EditScreenState extends State<EditScreen>
                                 _songSection == null ? _reorderTracks : null,
                             onMoveClip: _songSection == null ? _moveVocalClip : null,
                             playing: _playing,
-                            playStep: ps,
+                            playStep: _playStep,
                             steps: _steps,
                             ranges: _ranges,
                             // song-preview is read-only → no scrubbing there
@@ -3151,17 +3155,22 @@ class _EditScreenState extends State<EditScreen>
       }
       // melody / melody-fill / bass: a horizontal strip of the whole in-key
       // ladder; swipe to glide the strip and snap to a pad.
-      return NotePads(
-        key: ValueKey('pads-$_activeId'),
-        ladder: _activeFullLadder,
-        visibleCount: _padCount,
-        offset: _windowOffset.clamp(0, _maxWindow),
-        litMidis: _litMidis,
-        accent: _meta.color,
-        onDown: _pitchDown,
-        onUp: _pitchUp,
-        onSlideStart: _padSlideStart,
-        onOffsetChanged: _setWindowOffset,
+      // Only the pads care which notes are lit, so they subscribe directly
+      // instead of the whole editor rebuilding on every 16th (audit C22).
+      return ValueListenableBuilder<Set<int>>(
+        valueListenable: _litMidis,
+        builder: (context, lit, _) => NotePads(
+          key: ValueKey('pads-$_activeId'),
+          ladder: _activeFullLadder,
+          visibleCount: _padCount,
+          offset: _windowOffset.clamp(0, _maxWindow),
+          litMidis: lit,
+          accent: _meta.color,
+          onDown: _pitchDown,
+          onUp: _pitchUp,
+          onSlideStart: _padSlideStart,
+          onOffsetChanged: _setWindowOffset,
+        ),
       );
     }
     if (kind == TrackKind.vocal) {

@@ -2,6 +2,7 @@
 // One row per track (main + decoration layers): an 88px label chip + lane. The
 // strip fills its space, or scrolls when there are more rows than fit. A white
 // playhead line sweeps across all lanes.
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show timeDilation;
 
@@ -48,7 +49,10 @@ class Arrangement extends StatelessWidget {
   final Map<String, bool> mutes;
   final ValueChanged<String> onSelect;
   final ValueChanged<String> onToggleMute;
-  final double playStep;
+
+  /// The play head position, as a listenable so that moving it repaints only
+  /// the head — not the reorderable lane list under it (audit C22).
+  final ValueListenable<double> playStep;
   final int steps;
   final Map<String, PitchRange> ranges;
 
@@ -130,24 +134,28 @@ class Arrangement extends StatelessWidget {
           height: lanesHeight,
           child: LayoutBuilder(
             builder: (context, c) {
-              final x = (playStep / steps) * c.maxWidth;
               void seek(Offset p) =>
                   onSeek?.call((p.dx / c.maxWidth * steps).clamp(0, steps.toDouble()));
-              final line = Stack(
-                children: [
-                  Positioned(
-                    left: x,
-                    top: 0,
-                    bottom: 0,
-                    child: Container(
-                      width: 2,
-                      decoration: BoxDecoration(
-                        color: LT.t1.withValues(alpha: 0.9),
-                        boxShadow: [BoxShadow(color: LT.t1, blurRadius: 6)],
+              // Only the head listens to the clock, so the lane list below is
+              // not rebuilt every frame (audit C22).
+              final line = ValueListenableBuilder<double>(
+                valueListenable: playStep,
+                builder: (context, ps, _) => Stack(
+                  children: [
+                    Positioned(
+                      left: (ps / steps) * c.maxWidth,
+                      top: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 2,
+                        decoration: BoxDecoration(
+                          color: LT.t1.withValues(alpha: 0.9),
+                          boxShadow: [BoxShadow(color: LT.t1, blurRadius: 6)],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               );
               if (onSeek == null) return IgnorePointer(child: line);
               // Horizontal drag scrubs; taps still fall through to lane rows
@@ -177,8 +185,8 @@ class _Row extends StatelessWidget {
     required this.onToggleMute,
     required this.steps,
     required this.range,
+    required this.playStep,
     this.reorderIndex,
-    this.playStep = 0,
     this.onMoveClip,
   });
 
@@ -195,7 +203,8 @@ class _Row extends StatelessWidget {
   /// handle for reordering.
   final int? reorderIndex;
 
-  final double playStep;
+  /// Only read at drag time (to snap a clip to the head) — never in build.
+  final ValueListenable<double> playStep;
   final void Function(int clipIndex, int newStartStep)? onMoveClip;
 
   @override
@@ -332,7 +341,7 @@ class _VocalLane extends StatefulWidget {
   final TrackMeta meta;
   final TrackData data;
   final int steps;
-  final double playStep;
+  final ValueListenable<double> playStep;
   final void Function(int clipIndex, int newStartStep) onMove;
 
   @override
@@ -377,7 +386,7 @@ class _VocalLaneState extends State<_VocalLane> {
 
   int _snap(int raw, int dur, List<VocalClip> clips, int self) {
     final thresh = (widget.steps * 0.03).ceil().clamp(1, 3);
-    final targets = <int>[0, widget.steps, widget.playStep.round()];
+    final targets = <int>[0, widget.steps, widget.playStep.value.round()];
     for (var i = 0; i < clips.length; i++) {
       if (i == self) continue;
       targets..add(clips[i].startStep)..add(clips[i].startStep + _durOf(clips[i]));
