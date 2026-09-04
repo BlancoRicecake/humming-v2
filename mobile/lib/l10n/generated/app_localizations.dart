@@ -3390,6 +3390,12 @@ abstract class L10n {
   /// **'오토튠은 연결이 필요해요'**
   String get ltEditorAutotuneFailed;
 
+  /// 보컬 레인에 테이크가 여러 개일 때 오토튀 진행 표시
+  ///
+  /// In ko, this message translates to:
+  /// **'테이크 {done}/{total} 보정 중'**
+  String ltEditorAutotuneProgress(int done, int total);
+
   /// 허밍 변환 성공 토스트
   ///
   /// In ko, this message translates to:

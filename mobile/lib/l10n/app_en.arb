@@ -624,6 +624,10 @@
   "ltEditorAutotuneStrong": "Strong",
   "ltEditorAutotuneStrongSub": "Hard snap — the classic effect",
   "ltEditorAutotuneFailed": "Autotune needs a connection",
+  "ltEditorAutotuneProgress": "Tuning take {done} of {total}",
+  "@ltEditorAutotuneProgress": {
+    "placeholders": {"done": {"type": "int"}, "total": {"type": "int"}}
+  },
   "ltEditorHumAdded": "{count, plural, one{Added 1 note from your hum} other{Added {count} notes from your hum}}",
   "@ltEditorHumAdded": {"placeholders": {"count": {"type": "int"}}},
   "ltEditorHumErrTooLong": "Recording too long",

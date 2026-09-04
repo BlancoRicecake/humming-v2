@@ -1961,77 +1961,107 @@ class _EditScreenState extends State<EditScreen>
     );
   }
 
+  /// Autotune EVERY take on the vocal lane, not just the first one.
+  ///
+  /// A lane can hold several clips (one per overdub) and each is a separate
+  /// file. Tuning only `vocalPath` left the other takes dry with no indication
+  /// that they had been skipped (audit C16). Each clip keeps its own dry
+  /// original so Revert restores the whole lane.
   Future<void> _applyAutotune({
     required double strength,
     required double retuneMs,
   }) async {
     final vid = _vocalId;
     final t = _trackIn(_tracks, vid);
-    final name = t.vocalPath;
-    if (name == null) return;
+    final clips = t.effectiveClips;
+    if (clips.isEmpty) return;
     // blocking progress dialog for the server round-trip. Capture the root
     // navigator BEFORE any await — if this State unmounts mid-flight the
     // barrier dialog must still be popped or the app stays blocked forever.
     final nav = Navigator.of(context, rootNavigator: true);
     var dialogOpen = true;
+    final progress = ValueNotifier<int>(0);
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder:
-          (_) => const Center(child: CircularProgressIndicator(color: LT.pink)),
+      builder: (_) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: LT.pink),
+            if (clips.length > 1) ...[
+              const SizedBox(height: 12),
+              ValueListenableBuilder<int>(
+                valueListenable: progress,
+                builder: (c, done, _) => Text(
+                  L10n.of(c).ltEditorAutotuneProgress(done + 1, clips.length),
+                  style: const TextStyle(color: LT.t2, fontSize: 12),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
     try {
-      final res = await EngineApi().autotuneVocal(
-        LoopStorage.resolveVocal(name),
-        keyTonic: _keyRoot,
-        scale: _engineScale[_scale] ?? _scale,
-        strength: strength,
-        retuneMs: retuneMs,
-      );
-      final wav = parseWav(res.wav);
-      if (wav == null) throw Exception('bad audio from server');
-      var pcm =
-          wav.sampleRate == 44100
-              ? wav.samples
-              : resampleLinear(wav.samples, wav.sampleRate, 44100);
-      // aligned takes must keep their exact loop length for gapless looping —
-      // WORLD resynthesis can drift by a few ms, so trim/pad back to the
-      // original take's sample count.
-      if (t.vocalAligned) {
-        final orig = parseWav(
-          await File(LoopStorage.resolveVocal(name)).readAsBytes(),
+      // (clip, tuned basename, tuned peaks) for every take, computed before
+      // any state is touched so a failure part-way leaves the lane untouched.
+      final tuned = <(VocalClip, String, List<double>)>[];
+      for (final clip in clips) {
+        final res = await EngineApi().autotuneVocal(
+          LoopStorage.resolveVocal(clip.path),
+          keyTonic: _keyRoot,
+          scale: _engineScale[_scale] ?? _scale,
+          strength: strength,
+          retuneMs: retuneMs,
         );
-        if (orig != null && orig.samples.length != pcm.length) {
-          final fixed = Float32List(orig.samples.length);
-          for (var i = 0; i < fixed.length && i < pcm.length; i++) {
-            fixed[i] = pcm[i];
+        final wav = parseWav(res.wav);
+        if (wav == null) throw Exception('bad audio from server');
+        var pcm = wav.sampleRate == 44100
+            ? wav.samples
+            : resampleLinear(wav.samples, wav.sampleRate, 44100);
+        // aligned takes must keep their exact loop length for gapless looping —
+        // WORLD resynthesis can drift by a few ms, so trim/pad back to the
+        // original take's sample count.
+        if (t.vocalAligned) {
+          final orig = parseWav(
+            await File(LoopStorage.resolveVocal(clip.path)).readAsBytes(),
+          );
+          if (orig != null && orig.samples.length != pcm.length) {
+            final fixed = Float32List(orig.samples.length);
+            for (var i = 0; i < fixed.length && i < pcm.length; i++) {
+              fixed[i] = pcm[i];
+            }
+            pcm = fixed;
           }
-          pcm = fixed;
         }
+        final persisted = await LoopStorage.saveVocalBytes(
+          encodeWavMono16(pcm, 44100),
+          widget.song.id,
+          _sec.id,
+          suffix: '_tuned',
+        );
+        if (persisted == null) throw Exception('save failed');
+        tuned.add((clip, persisted, peaksFromPcm(pcm)));
+        progress.value = tuned.length;
       }
-      final persisted = await LoopStorage.saveVocalBytes(
-        encodeWavMono16(pcm, 44100),
-        widget.song.id,
-        _sec.id,
-        suffix: '_tuned',
-      );
-      if (persisted == null) throw Exception('save failed');
       if (!mounted) return;
       _pushUndo();
       setState(() {
-        t.vocalOrigPath ??= name; // keep the dry take for "Original"
-        t.vocalPath = persisted;
-        t.clip = peaksFromPcm(pcm);
-        // keep the multi-take lane's first clip in sync with the tuned take.
-        final lane = t.clips;
-        if (lane != null && lane.isNotEmpty) {
-          lane.first.origPath ??= name;
-          lane.first.path = persisted;
-          lane.first.peaks = t.clip ?? lane.first.peaks;
+        for (final entry in tuned) {
+          final clip = entry.$1;
+          clip.origPath ??= clip.path; // keep the dry take for "Original"
+          clip.path = entry.$2;
+          clip.peaks = entry.$3;
         }
+        // legacy single-take fields mirror the first clip
+        final first = tuned.first;
+        t.vocalOrigPath ??= first.$1.origPath;
+        t.vocalPath = first.$2;
+        t.clip = first.$3;
       });
       _vocalMix.remove(_sec.id);
-      _audio.prepareVocal(LoopStorage.resolveVocal(persisted));
+      _audio.prepareVocal(LoopStorage.resolveVocal(tuned.first.$2));
     } catch (e) {
       debugPrint('[autotune] failed: $e');
       if (mounted) {
@@ -2052,6 +2082,7 @@ class _EditScreenState extends State<EditScreen>
         dialogOpen = false;
         nav.pop(); // progress dialog
       }
+      progress.dispose();
     }
   }
 
@@ -2078,32 +2109,39 @@ class _EditScreenState extends State<EditScreen>
     if (first != null) _audio.prepareVocal(LoopStorage.resolveVocal(first));
   }
 
+  /// Restore the dry take on every clip that has one (audit C16 — the whole
+  /// lane is tuned, so the whole lane reverts).
   Future<void> _revertAutotune() async {
     final t = _trackIn(_tracks, _vocalId);
-    final orig = t.vocalOrigPath;
-    if (orig == null) return;
-    List<double>? peaks;
-    try {
-      final wav = parseWav(
-        await File(LoopStorage.resolveVocal(orig)).readAsBytes(),
-      );
-      if (wav != null) peaks = peaksFromPcm(wav.samples);
-    } catch (_) {}
+    final clips = t.effectiveClips.where((c) => c.origPath != null).toList();
+    if (clips.isEmpty) return;
+    // re-read the dry peaks before touching state
+    final peaksFor = <VocalClip, List<double>>{};
+    for (final c in clips) {
+      try {
+        final wav = parseWav(
+          await File(LoopStorage.resolveVocal(c.origPath!)).readAsBytes(),
+        );
+        if (wav != null) peaksFor[c] = peaksFromPcm(wav.samples);
+      } catch (_) {}
+    }
     if (!mounted) return;
     _pushUndo();
     setState(() {
-      t.vocalPath = orig;
-      t.vocalOrigPath = null;
-      if (peaks != null) t.clip = peaks;
-      final lane = t.clips;
-      if (lane != null && lane.isNotEmpty) {
-        lane.first.path = orig;
-        lane.first.origPath = null;
-        if (peaks != null) lane.first.peaks = peaks;
+      for (final c in clips) {
+        c.path = c.origPath!;
+        c.origPath = null;
+        final p = peaksFor[c];
+        if (p != null) c.peaks = p;
       }
+      final first = t.effectiveClips.first;
+      t.vocalPath = first.path;
+      t.vocalOrigPath = null;
+      final p = peaksFor[first];
+      if (p != null) t.clip = p;
     });
     _vocalMix.remove(_sec.id);
-    _audio.prepareVocal(LoopStorage.resolveVocal(orig));
+    _audio.prepareVocal(LoopStorage.resolveVocal(t.effectiveClips.first.path));
   }
 
   // Play the loop (clock + clicks) from the downbeat so the user hums in time.

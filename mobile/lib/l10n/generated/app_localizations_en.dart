@@ -1893,6 +1893,11 @@ class L10nEn extends L10n {
   String get ltEditorAutotuneFailed => 'Autotune needs a connection';
 
   @override
+  String ltEditorAutotuneProgress(int done, int total) {
+    return 'Tuning take $done of $total';
+  }
+
+  @override
   String ltEditorHumAdded(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

@@ -738,6 +738,11 @@
   "@ltEditorAutotuneStrongSub": {"description": "오토튠 강한 보정 프리셋 설명 (하드 스냅 효과)"},
   "ltEditorAutotuneFailed": "오토튠은 연결이 필요해요",
   "@ltEditorAutotuneFailed": {"description": "오토튠 서버 요청 실패 스낵바"},
+  "ltEditorAutotuneProgress": "테이크 {done}/{total} 보정 중",
+  "@ltEditorAutotuneProgress": {
+    "description": "보컬 레인에 테이크가 여러 개일 때 오토튀 진행 표시",
+    "placeholders": {"done": {"type": "int"}, "total": {"type": "int"}}
+  },
   "ltEditorHumAdded": "허밍에서 노트 {count}개를 넣었어요",
   "@ltEditorHumAdded": {"description": "허밍 변환 성공 토스트", "placeholders": {"count": {"type": "int"}}},
   "ltEditorHumErrTooLong": "녹음이 너무 길어요",

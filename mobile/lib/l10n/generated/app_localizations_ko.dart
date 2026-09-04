@@ -1851,6 +1851,11 @@ class L10nKo extends L10n {
   String get ltEditorAutotuneFailed => '오토튠은 연결이 필요해요';
 
   @override
+  String ltEditorAutotuneProgress(int done, int total) {
+    return '테이크 $done/$total 보정 중';
+  }
+
+  @override
   String ltEditorHumAdded(int count) {
     return '허밍에서 노트 $count개를 넣었어요';
   }
