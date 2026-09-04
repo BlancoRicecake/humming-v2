@@ -200,6 +200,32 @@ except ImportError:
     logger.warning("slowapi not installed — no per-IP limit on /analyze")
     limiter = None  # type: ignore
 
+def _apply(decorators):
+    def wrap(fn):
+        for d in reversed(decorators):
+            fn = d(fn)
+        return fn
+    return wrap
+
+
+def _limit(spec: str):
+    """Per-IP rate limit, or a no-op when slowapi is unavailable.
+
+    Every CPU- or bandwidth-heavy endpoint needs one: they are deliberately
+    unauthenticated (the app works signed-out) and one machine with one shared
+    CPU serves them all, so an unbounded caller is both a denial of service and
+    a bandwidth bill. Limits are generous next to real app usage — a session
+    hums a handful of times, renders a few auditions, downloads a font once.
+    """
+    if limiter is None:
+        return _apply([])
+    return _apply([limiter.limit(spec)])
+
+
+# Multi-second pYIN / WORLD work.
+_analyze_decorators = [limiter.limit("10/minute")] if limiter is not None else []
+
+
 
 # --- Body-size cap middleware -----------------------------------------------
 class BodySizeLimitMiddleware:
@@ -302,7 +328,8 @@ def list_samples() -> List[dict]:
 
 
 @app.get("/samples/{slug}")
-def get_sample(slug: str):
+@_limit("30/minute")
+def get_sample(request: Request, slug: str):
     table = _scan_samples()
     if slug not in table:
         raise HTTPException(404, f"unknown sample slug: {slug}")
@@ -326,7 +353,8 @@ def list_soundfonts() -> List[dict]:
 
 
 @app.get("/soundfonts/{entry_id}")
-def get_soundfont(entry_id: str):
+@_limit("6/minute")
+def get_soundfont(request: Request, entry_id: str):
     path = soundfonts_mod.entry_file(entry_id)
     if path is None:
         raise HTTPException(404, f"unknown soundfont: {entry_id}")
@@ -366,19 +394,6 @@ _autotune_sem = _dsp_sem  # legacy name
 # ~30 MB; catalog fonts up to hundreds of MB) — never run two at once.
 _render_sem = asyncio.Semaphore(1)
 
-_analyze_decorators = []
-if limiter is not None:
-    _analyze_decorators.append(limiter.limit("10/minute"))
-
-
-def _apply(decorators):
-    def wrap(fn):
-        for d in reversed(decorators):
-            fn = d(fn)
-        return fn
-    return wrap
-
-
 @app.post("/analyze", response_model=AnalyzeResponse)
 @_apply(_analyze_decorators)
 async def analyze(
@@ -416,7 +431,12 @@ async def analyze(
 
 
 @app.post("/process_vocal")
-async def process_vocal_ep(audio: UploadFile = File(...), denoise: str = Form("1")):
+@_limit("10/minute")
+async def process_vocal_ep(
+    request: Request,
+    audio: UploadFile = File(...),
+    denoise: str = Form("1"),
+):
     """보컬 트랙 — 악기 변환 없이 목소리 그대로. 가벼운 정리 후 정리된 WAV(base64) +
     표시용 파형 peaks + duration 반환. (믹스는 클라이언트에서 악기 믹스와 동시재생)"""
     raw = await _read_upload_capped(audio, _settings.max_body_bytes)
@@ -440,7 +460,9 @@ async def process_vocal_ep(audio: UploadFile = File(...), denoise: str = Form("1
 
 
 @app.post("/process_fx")
+@_limit("20/minute")
 async def process_fx_ep(
+    request: Request,
     audio: UploadFile = File(...),
     fx_type: str = Form(...),
     params: str = Form("{}"),
@@ -526,7 +548,8 @@ async def autotune_ep(
 
 
 @app.post("/assist")
-async def assist(payload: dict):
+@_limit("60/minute")
+async def assist(request: Request, payload: dict):
     """Fast re-run of Auto Key + Pitch Assistant on already-analyzed notes.
 
     No audio / no pYIN — operates purely on the notes' ``pitch_raw``. Powers
@@ -613,7 +636,8 @@ def soundfont_presets():
 
 
 @app.post("/render_demo")
-async def render_demo(payload: dict):
+@_limit("30/minute")
+async def render_demo(request: Request, payload: dict):
     """Render the fixed audition phrase through one SF2 preset → WAV."""
     sample_rate = _render_sample_rate(payload)
     bank = int(payload.get("bank") or 0)
@@ -673,7 +697,8 @@ def _resolve_audition_source(source: str, payload: dict) -> Tuple[str, int, int]
 
 
 @app.post("/audition_render")
-async def audition_render(payload: dict):
+@_limit("60/minute")
+async def audition_render(request: Request, payload: dict):
     """Render the per-track-type audition phrase through a GM / catalog /
     sentinel sound → WAV. The sound is selected by ``source``; see
     _resolve_audition_source."""
@@ -719,7 +744,8 @@ def guitar_lab_sounds():
 
 
 @app.post("/guitar_lab_render")
-async def guitar_lab_render(payload: dict):
+@_limit("60/minute")
+async def guitar_lab_render(request: Request, payload: dict):
     """Render a strummed guitar chord with the lab's articulation params → WAV.
 
     Body: ``{source, bank/program | soundfont_id, ...articulation params}``.
@@ -775,7 +801,8 @@ async def guitar_lab_render(payload: dict):
 
 
 @app.post("/render_audio")
-async def render_audio(payload: dict):
+@_limit("20/minute")
+async def render_audio(request: Request, payload: dict):
     """단일 트랙 notes → SoundFont 합성 WAV.
 
     역할 (Task 6-6, 2026-05-31): **WAV bounce / 호환 보조 전용**.
@@ -810,7 +837,8 @@ async def render_audio(payload: dict):
 
 
 @app.post("/render_mix")
-async def render_mix(payload: dict):
+@_limit("10/minute")
+async def render_mix(request: Request, payload: dict):
     """여러 트랙을 하나의 WAV로 믹스 렌더.
 
     역할 (Task 6-6, 2026-05-31): **WAV export / 공유 전용**.
@@ -846,7 +874,8 @@ async def render_mix(payload: dict):
 
 
 @app.post("/export_midi")
-async def export_midi(payload: dict):
+@_limit("30/minute")
+async def export_midi(request: Request, payload: dict):
     """MIDI 파일 빌드.
 
     두 가지 페이로드 형식을 지원 (하위호환):
