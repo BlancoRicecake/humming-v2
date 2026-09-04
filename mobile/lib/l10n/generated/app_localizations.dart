@@ -3137,6 +3137,744 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'문의하기'**
   String get ltSettingsContact;
+
+  /// Songs 홈 로고 아래 태그라인
+  ///
+  /// In ko, this message translates to:
+  /// **'탭으로 만드는 비트'**
+  String get ltSongsTagline;
+
+  /// Songs 홈 헤더의 새 곡 만들기 버튼
+  ///
+  /// In ko, this message translates to:
+  /// **'새 곡'**
+  String get ltSongsNewSong;
+
+  /// 그리드 마지막의 점선 카드 — 새 곡 시작
+  ///
+  /// In ko, this message translates to:
+  /// **'새 루프 만들기'**
+  String get ltSongsNewCard;
+
+  /// 곡 카드 아래 요약 (키 · 스케일 · BPM · 마디 수)
+  ///
+  /// In ko, this message translates to:
+  /// **'{key} {scale} · {bpm} BPM · {bars}마디'**
+  String ltSongCardMeta(String key, String scale, int bpm, int bars);
+
+  /// 스케일 이름 — 펜타토닉 (마이너 펜타토닉)
+  ///
+  /// In ko, this message translates to:
+  /// **'펜타토닉'**
+  String get ltScalePenta;
+
+  /// 스케일 이름 — 도리안 모드
+  ///
+  /// In ko, this message translates to:
+  /// **'도리안'**
+  String get ltScaleDorian;
+
+  /// 키/스케일 선택 시트 제목
+  ///
+  /// In ko, this message translates to:
+  /// **'키 & 스케일'**
+  String get ltKeySheetTitle;
+
+  /// 키 시트 — 루트음 그리드 섹션 라벨
+  ///
+  /// In ko, this message translates to:
+  /// **'루트'**
+  String get ltKeyRoot;
+
+  /// 키 시트 — 스케일 그리드 섹션 라벨
+  ///
+  /// In ko, this message translates to:
+  /// **'스케일'**
+  String get ltKeyScale;
+
+  /// 키 시트 하단 안내 문구
+  ///
+  /// In ko, this message translates to:
+  /// **'키에 맞는 음만 패드에 나와요 — 틀린 음을 누를 일이 없어요.'**
+  String get ltKeyHint;
+
+  /// 믹서 시트 제목 겸 에디터 믹서 버튼 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'믹서'**
+  String get ltMixerTitle;
+
+  /// 악기 선택 시트 제목 — {track} 은 트랙 이름
+  ///
+  /// In ko, this message translates to:
+  /// **'{track} 악기'**
+  String ltInstrumentSheetTitle(String track);
+
+  /// 악기 시트 — 즐겨찾기 카테고리 칩
+  ///
+  /// In ko, this message translates to:
+  /// **'즐겨찾기'**
+  String get ltInstrumentFavorites;
+
+  /// 악기 시트 — 내려받는 카탈로그 사운드 카테고리 칩
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 사운드'**
+  String get ltInstrumentCloudSounds;
+
+  /// 트랜스포트 — 카운트인 토글 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'카운트인'**
+  String get ltTransportCountIn;
+
+  /// 트랜스포트 — 루프 아이콘 툴팁 (항상 켜져 있음)
+  ///
+  /// In ko, this message translates to:
+  /// **'루프 (항상 켜짐)'**
+  String get ltTransportLoopAlwaysOn;
+
+  /// 트랜스포트 — 현재 트랙 지우기 버튼 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙 비우기'**
+  String get ltTransportClearTrack;
+
+  /// 트랜스포트 — 스윙 슬라이더 라벨
+  ///
+  /// In ko, this message translates to:
+  /// **'스윙'**
+  String get ltTransportSwing;
+
+  /// BPM 직접 입력 모달 제목
+  ///
+  /// In ko, this message translates to:
+  /// **'BPM 설정'**
+  String get ltTransportSetBpm;
+
+  /// 섹션 바 맨 앞 라벨 — 곡 구성
+  ///
+  /// In ko, this message translates to:
+  /// **'곡'**
+  String get ltSectionsLabel;
+
+  /// 섹션 바 — 곡 전체 재생 버튼
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 재생'**
+  String get ltSectionPlaySong;
+
+  /// 섹션 바 — 곡 전체 재생 중지 버튼
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 정지'**
+  String get ltSectionStopSong;
+
+  /// 어레인지 하단 + 트랙 추가 행 라벨 (좁은 칩이라 짧게)
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙'**
+  String get ltArrangeAddTrack;
+
+  /// 에디터 상단 — 뒤로가기 버튼 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'뒤로'**
+  String get ltEditorBack;
+
+  /// 에디터 — 되돌리기 버튼 툴팁 / 스낵바 액션
+  ///
+  /// In ko, this message translates to:
+  /// **'실행 취소'**
+  String get ltEditorUndo;
+
+  /// 에디터 — 다시 실행 버튼 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 실행'**
+  String get ltEditorRedo;
+
+  /// 에디터 저장 표시 — 방금 저장 완료
+  ///
+  /// In ko, this message translates to:
+  /// **'저장됨'**
+  String get ltEditorSaved;
+
+  /// 에디터 저장 표시 — 저장되지 않은 변경 있음
+  ///
+  /// In ko, this message translates to:
+  /// **'저장 안 됨'**
+  String get ltEditorUnsaved;
+
+  /// 섹션 칩 롱프레스 메뉴 제목
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 {name}'**
+  String ltEditorSectionMenuTitle(String name);
+
+  /// 섹션 메뉴 — 섹션 순서 왼쪽으로
+  ///
+  /// In ko, this message translates to:
+  /// **'왼쪽으로 이동'**
+  String get ltEditorMoveLeft;
+
+  /// 섹션 메뉴 — 섹션 순서 오른쪽으로
+  ///
+  /// In ko, this message translates to:
+  /// **'오른쪽으로 이동'**
+  String get ltEditorMoveRight;
+
+  /// 트랙 지운 뒤 스낵바
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙을 비웠어요'**
+  String get ltEditorTrackCleared;
+
+  /// 보컬 레인에 자리가 없어 새 테이크가 겹쳐 배치될 때 토스트
+  ///
+  /// In ko, this message translates to:
+  /// **'레인이 가득 찼어요 — 새 테이크는 맨 앞에서 겹쳐 시작해요'**
+  String get ltEditorLaneFull;
+
+  /// 카탈로그 악기 다운로드 실패 스낵바
+  ///
+  /// In ko, this message translates to:
+  /// **'사운드를 받지 못했어요 — 연결을 확인해주세요'**
+  String get ltEditorSoundDownloadFailed;
+
+  /// 카탈로그 악기 다운로드 완료 스낵바
+  ///
+  /// In ko, this message translates to:
+  /// **'악기 준비 완료'**
+  String get ltEditorSoundReady;
+
+  /// 오토튠 프리셋 모달 제목 / 보컬 서피스 오토튠 버튼 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'오토튠'**
+  String get ltEditorAutotuneTitle;
+
+  /// 오토튠 모달 설명 — 곡의 키/스케일 표시
+  ///
+  /// In ko, this message translates to:
+  /// **'{key} {scale} 에 맞춰 음정을 잡아줘요. 원본 테이크는 그대로 남아요.'**
+  String ltEditorAutotuneSub(String key, String scale);
+
+  /// 오토튠 프리셋 — 약한 보정
+  ///
+  /// In ko, this message translates to:
+  /// **'자연스럽게'**
+  String get ltEditorAutotuneNatural;
+
+  /// 오토튠 약한 보정 프리셋 설명
+  ///
+  /// In ko, this message translates to:
+  /// **'살짝만 보정해서 원래 느낌을 살려요'**
+  String get ltEditorAutotuneNaturalSub;
+
+  /// 오토튠 프리셋 — 강한 보정
+  ///
+  /// In ko, this message translates to:
+  /// **'강하게'**
+  String get ltEditorAutotuneStrong;
+
+  /// 오토튠 강한 보정 프리셋 설명 (하드 스냅 효과)
+  ///
+  /// In ko, this message translates to:
+  /// **'딱 붙는 그 소리'**
+  String get ltEditorAutotuneStrongSub;
+
+  /// 오토튠 서버 요청 실패 스낵바
+  ///
+  /// In ko, this message translates to:
+  /// **'오토튠은 연결이 필요해요'**
+  String get ltEditorAutotuneFailed;
+
+  /// 허밍 변환 성공 토스트
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍에서 노트 {count}개를 넣었어요'**
+  String ltEditorHumAdded(int count);
+
+  /// 허밍 변환 실패 — 파일이 너무 큼 (413)
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음이 너무 길어요'**
+  String get ltEditorHumErrTooLong;
+
+  /// 허밍 변환 실패 — 요청 과다 (429)
+  ///
+  /// In ko, this message translates to:
+  /// **'서버가 혼잡해요. 잠시 후 다시 시도해주세요'**
+  String get ltEditorHumErrBusy;
+
+  /// 허밍 변환 실패 — 연결 타임아웃(콜드 스타트)
+  ///
+  /// In ko, this message translates to:
+  /// **'서버를 깨우는 중이에요. 다시 시도해주세요'**
+  String get ltEditorHumErrWaking;
+
+  /// 허밍 변환 실패 — 일반 오류
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍을 변환하지 못했어요'**
+  String get ltEditorHumErrGeneric;
+
+  /// 허밍 변환 실패 — 감지된 음이 없음
+  ///
+  /// In ko, this message translates to:
+  /// **'노트를 찾지 못했어요 — 조금 더 크게 불러보세요'**
+  String get ltEditorHumErrNoNotes;
+
+  /// 입력 모드 토글 — 패드 연주
+  ///
+  /// In ko, this message translates to:
+  /// **'패드'**
+  String get ltEditorModePads;
+
+  /// 입력 모드 토글 — 스텝 그리드 편집
+  ///
+  /// In ko, this message translates to:
+  /// **'그리드'**
+  String get ltEditorModeGrid;
+
+  /// 파워코드(루트+5도) 모드 토글
+  ///
+  /// In ko, this message translates to:
+  /// **'파워'**
+  String get ltEditorPowerChord;
+
+  /// 옥타브 스테퍼 − 버튼 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브 내리기'**
+  String get ltEditorOctaveDown;
+
+  /// 옥타브 스테퍼 + 버튼 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브 올리기'**
+  String get ltEditorOctaveUp;
+
+  /// 허밍을 노트로 바꾸는 버튼
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍 → MIDI'**
+  String get ltEditorHumToMidi;
+
+  /// 드럼 그리드 사용 힌트 (대문자로 표시됨)
+  ///
+  /// In ko, this message translates to:
+  /// **'셀을 탭해서 켜고 끄기'**
+  String get ltEditorHintGridDrums;
+
+  /// 멜로디 그리드 사용 힌트 (대문자로 표시됨)
+  ///
+  /// In ko, this message translates to:
+  /// **'탭 · 드래그로 길이 조절 · 자동 병합'**
+  String get ltEditorHintGridPitched;
+
+  /// 패드 모드 힌트 — 녹음을 켜고 패드를 치라는 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 후 탭'**
+  String get ltEditorHintPads;
+
+  /// 허밍 녹음 모달 제목
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍 → MIDI · {track}'**
+  String ltHumModalTitle(String track);
+
+  /// 허밍 모달 — 카운트인 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'준비하세요 — 박자에 맞춰 흥얼거려요.'**
+  String get ltHumCountIn;
+
+  /// 허밍 모달 — 녹음 중 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'떠오르는 멜로디를 흥얼거려요 — 키와 박자에 맞춰 정리해드려요.'**
+  String get ltHumListen;
+
+  /// 허밍 모달 — 변환 중 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'노트로 변환 중…'**
+  String get ltHumConverting;
+
+  /// 허밍 모달 — 변환 완료 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'완료! 노트를 넣었어요.'**
+  String get ltHumDone;
+
+  /// 허밍 모달 — 지금 바로 변환 버튼
+  ///
+  /// In ko, this message translates to:
+  /// **'변환'**
+  String get ltHumConvert;
+
+  /// 녹음기 시작 실패
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음을 시작할 수 없어요'**
+  String get ltRecErrUnavailable;
+
+  /// 전화 등 시스템 인터럽트로 녹음이 끊김
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음이 중단됐어요 — 다시 시도해주세요'**
+  String get ltRecErrInterrupted;
+
+  /// 녹음 파일이 만들어지지 않음
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음된 소리가 없어요'**
+  String get ltRecErrNoAudio;
+
+  /// 녹음 처리 중 일반 오류
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음에 실패했어요'**
+  String get ltRecErrFailed;
+
+  /// 정렬 후 남은 소리가 거의 없을 때
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음이 너무 짧아요'**
+  String get ltRecErrTooShort;
+
+  /// 입력 레벨이 너무 낮아 녹음을 쓸 수 없을 때
+  ///
+  /// In ko, this message translates to:
+  /// **'소리가 너무 작아요'**
+  String get ltRecErrTooQuiet;
+
+  /// 녹음 파일 저장(복사) 실패
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음을 저장하지 못했어요'**
+  String get ltRecSaveFailed;
+
+  /// 보컬 녹음 모달 제목
+  ///
+  /// In ko, this message translates to:
+  /// **'보컬 녹음'**
+  String get ltVocalRecTitle;
+
+  /// 이어폰 없이 녹음할 때 카운트인 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'이어폰이 없어요 — 루프가 마이크에 들어가지 않게 무음으로 녹음해요.'**
+  String get ltVocalRecCountInNoHeadset;
+
+  /// 이어폰 착용 시 카운트인 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'준비하세요 — 루프에 맞춰 불러주세요.'**
+  String get ltVocalRecCountIn;
+
+  /// 이어폰 없이 녹음 중 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'한 루프 녹음 중 — 기기 소리는 꺼져 있어요.'**
+  String get ltVocalRecListenMuted;
+
+  /// 이어폰 착용 시 녹음 중 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'한 루프 녹음 중 — 같이 불러주세요.'**
+  String get ltVocalRecListen;
+
+  /// 보컬 녹음 완료 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'완료! 보컬을 녹음했어요.'**
+  String get ltVocalRecDone;
+
+  /// 녹음 모달 — 실시간 오토튠 모니터링 토글
+  ///
+  /// In ko, this message translates to:
+  /// **'실시간 오토튠'**
+  String get ltVocalLiveAutotune;
+
+  /// 녹음 중 실시간 오토튠이 켜져 있음을 알리는 배지
+  ///
+  /// In ko, this message translates to:
+  /// **'실시간 오토튠 ON'**
+  String get ltVocalLiveAutotuneOn;
+
+  /// 보컬 서피스 — 테이크가 있는 상태
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음됨'**
+  String get ltVocalRecorded;
+
+  /// 보컬 서피스 — 녹음 버튼 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'탭해서 녹음'**
+  String get ltVocalTapToRecord;
+
+  /// 보컬 서피스 — 곡 전체에 한 번에 녹음
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 전체 녹음'**
+  String get ltVocalRecOverSong;
+
+  /// 보컬 서피스 — 곡 전체 테이크 다시 녹음
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 전체 다시 녹음'**
+  String get ltVocalReRecOverSong;
+
+  /// 보컬 서피스 — 곡 전체 테이크 삭제
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 보컬 지우기'**
+  String get ltVocalClearSongTake;
+
+  /// 보컬 서피스 — 클립 편집기 열기 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'편집'**
+  String get ltVocalEdit;
+
+  /// 보컬 서피스 — 현재 테이크 지우기 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'지우기'**
+  String get ltVocalClear;
+
+  /// 보컬 클립 편집기 화면 제목
+  ///
+  /// In ko, this message translates to:
+  /// **'보컬 편집기'**
+  String get ltVocalEditorTitle;
+
+  /// 보컬 편집기 부제 — 테이크 수 · BPM · 마디
+  ///
+  /// In ko, this message translates to:
+  /// **'테이크 {takes}개 · {bpm} BPM · {bars}마디'**
+  String ltVocalEditorMeta(int takes, int bpm, int bars);
+
+  /// 보컬 편집기 — 클립이 하나도 없을 때
+  ///
+  /// In ko, this message translates to:
+  /// **'편집할 테이크가 없어요'**
+  String get ltVocalEditorNoTake;
+
+  /// 보컬 편집기 테이크 칩
+  ///
+  /// In ko, this message translates to:
+  /// **'테이크 {n}'**
+  String ltVocalEditorTake(int n);
+
+  /// 테이크 칩에 붙는 적용된 이펙트 개수 배지
+  ///
+  /// In ko, this message translates to:
+  /// **'FX {n}'**
+  String ltVocalEditorFxCount(int n);
+
+  /// 파형 위 안내 — 선택 전
+  ///
+  /// In ko, this message translates to:
+  /// **'드래그해서 구간 선택'**
+  String get ltVocalEditorDragHint;
+
+  /// 파형 위 안내 — 선택 후 (자르기 버튼 라벨과 맞출 것)
+  ///
+  /// In ko, this message translates to:
+  /// **'구간 선택됨 · 자르기 탭'**
+  String get ltVocalEditorDragSet;
+
+  /// 파형 우측 편집 요약 — 트림 적용됨
+  ///
+  /// In ko, this message translates to:
+  /// **'잘림'**
+  String get ltVocalEditorTrimmed;
+
+  /// 편집 요약 — 페이드 인 길이
+  ///
+  /// In ko, this message translates to:
+  /// **'인 {ms}ms'**
+  String ltVocalEditorFadeInReadout(int ms);
+
+  /// 편집 요약 — 페이드 아웃 길이
+  ///
+  /// In ko, this message translates to:
+  /// **'아웃 {ms}ms'**
+  String ltVocalEditorFadeOutReadout(int ms);
+
+  /// 보컬 편집기 — 기본 편집 도구 그룹 제목
+  ///
+  /// In ko, this message translates to:
+  /// **'편집'**
+  String get ltVocalEditorEditGroup;
+
+  /// 보컬 편집기 — 사운드 가공 그룹 제목
+  ///
+  /// In ko, this message translates to:
+  /// **'이펙트'**
+  String get ltVocalEditorEffectsGroup;
+
+  /// 보컬 편집기 — 편집값 초기화
+  ///
+  /// In ko, this message translates to:
+  /// **'되돌리기'**
+  String get ltVocalEditorReset;
+
+  /// 이펙트가 서버에서 처리됨을 알리는 작은 태그
+  ///
+  /// In ko, this message translates to:
+  /// **'서버'**
+  String get ltVocalEditorServerTag;
+
+  /// 선택 구간만 남기기 버튼
+  ///
+  /// In ko, this message translates to:
+  /// **'자르기'**
+  String get ltVocalEditorTrim;
+
+  /// 페이드 인 길이 순환 버튼
+  ///
+  /// In ko, this message translates to:
+  /// **'페이드 인 {ms}'**
+  String ltVocalEditorFadeIn(int ms);
+
+  /// 페이드 아웃 길이 순환 버튼
+  ///
+  /// In ko, this message translates to:
+  /// **'페이드 아웃 {ms}'**
+  String ltVocalEditorFadeOut(int ms);
+
+  /// 게인 1dB 내리기
+  ///
+  /// In ko, this message translates to:
+  /// **'게인 −'**
+  String get ltVocalEditorGainDown;
+
+  /// 게인 1dB 올리기
+  ///
+  /// In ko, this message translates to:
+  /// **'게인 +'**
+  String get ltVocalEditorGainUp;
+
+  /// 피크 기준 자동 음량 맞추기
+  ///
+  /// In ko, this message translates to:
+  /// **'노멀라이즈'**
+  String get ltVocalEditorNormalize;
+
+  /// 서버 이펙트 처리 실패 토스트
+  ///
+  /// In ko, this message translates to:
+  /// **'사운드 가공에 실패했어요'**
+  String get ltVocalEditorProcessFailed;
+
+  /// 편집 결과 미리듣기 버튼 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'미리듣기 (편집본)'**
+  String get ltVocalEditorPreview;
+
+  /// 클립 시작 위치를 한 스텝 앞으로
+  ///
+  /// In ko, this message translates to:
+  /// **'앞으로 당기기'**
+  String get ltVocalEditorEarlier;
+
+  /// 클립 시작 위치를 한 스텝 뒤로
+  ///
+  /// In ko, this message translates to:
+  /// **'뒤로 밀기'**
+  String get ltVocalEditorLater;
+
+  /// 클립 시작 스텝 표시
+  ///
+  /// In ko, this message translates to:
+  /// **'스텝 {n}'**
+  String ltVocalEditorStep(int n);
+
+  /// 선택한 테이크 삭제 툴팁
+  ///
+  /// In ko, this message translates to:
+  /// **'테이크 삭제'**
+  String get ltVocalEditorDeleteTake;
+
+  /// 서버 이펙트 처리 중 상태 표시
+  ///
+  /// In ko, this message translates to:
+  /// **'{fx} 처리 중…'**
+  String ltVocalEditorFxProcessing(String fx);
+
+  /// 적용된 이펙트 체인 항목 (탭하면 제거)
+  ///
+  /// In ko, this message translates to:
+  /// **'{index}. {fx}'**
+  String ltVocalEditorFxChainItem(int index, String fx);
+
+  /// 이펙트 이름 — 이퀄라이저
+  ///
+  /// In ko, this message translates to:
+  /// **'EQ'**
+  String get ltFxEq;
+
+  /// 이펙트 이름 — 리버브
+  ///
+  /// In ko, this message translates to:
+  /// **'리버브'**
+  String get ltFxReverb;
+
+  /// 이펙트 이름 — 컴프레서 (줄임말이 관용)
+  ///
+  /// In ko, this message translates to:
+  /// **'컴프'**
+  String get ltFxComp;
+
+  /// 이펙트 이름 — 딜레이
+  ///
+  /// In ko, this message translates to:
+  /// **'딜레이'**
+  String get ltFxDelay;
+
+  /// 이펙트 이름 — 길이(속도) 늘이기/줄이기
+  ///
+  /// In ko, this message translates to:
+  /// **'속도'**
+  String get ltFxStretch;
+
+  /// 이펙트 이름 — 피치 이동
+  ///
+  /// In ko, this message translates to:
+  /// **'피치'**
+  String get ltFxPitch;
+
+  /// 이펙트 버튼 — 템포 느리게 (길이 늘이기)
+  ///
+  /// In ko, this message translates to:
+  /// **'느리게'**
+  String get ltFxSlower;
+
+  /// 이펙트 버튼 — 템포 빠르게 (길이 줄이기)
+  ///
+  /// In ko, this message translates to:
+  /// **'빠르게'**
+  String get ltFxFaster;
+
+  /// 이펙트 버튼 — 2반음 올리기
+  ///
+  /// In ko, this message translates to:
+  /// **'피치 +2'**
+  String get ltFxPitchUp;
+
+  /// 이펙트 버튼 — 2반음 내리기
+  ///
+  /// In ko, this message translates to:
+  /// **'피치 −2'**
+  String get ltFxPitchDown;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

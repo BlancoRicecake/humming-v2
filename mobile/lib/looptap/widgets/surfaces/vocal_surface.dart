@@ -5,6 +5,7 @@
 // This surface just shows the committed clip and triggers the modal.
 import 'package:flutter/material.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 
@@ -41,6 +42,7 @@ class VocalSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final wave = (clip != null && clip!.isNotEmpty) ? clip! : List.filled(64, 0.05);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -70,7 +72,7 @@ class VocalSurface extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                clip != null ? 'Recorded' : 'Tap to record',
+                clip != null ? l.ltVocalRecorded : l.ltVocalTapToRecord,
                 style: LTType.mono(size: 13, weight: FontWeight.w700, color: LT.t2),
               ),
               if (onRecordSong != null) ...[
@@ -78,7 +80,9 @@ class VocalSurface extends StatelessWidget {
                 GestureDetector(
                   onTap: onRecordSong,
                   child: Text(
-                    onClearSong != null ? 'Re-rec over song' : 'Rec over song',
+                    onClearSong != null
+                        ? l.ltVocalReRecOverSong
+                        : l.ltVocalRecOverSong,
                     style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.pink),
                   ),
                 ),
@@ -88,7 +92,7 @@ class VocalSurface extends StatelessWidget {
                 GestureDetector(
                   onTap: onClearSong,
                   child: Text(
-                    'Clear song vocal',
+                    l.ltVocalClearSongTake,
                     style: LTType.mono(size: 10, weight: FontWeight.w600, color: LT.t3),
                   ),
                 ),
@@ -129,17 +133,25 @@ class VocalSurface extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (onEdit != null) ...[
-                  IconBtn(icon: LtIcons.edit, tooltip: 'Edit', size: 40, onTap: onEdit!),
+                  IconBtn(icon: LtIcons.edit, tooltip: l.ltVocalEdit, size: 40, onTap: onEdit!),
                   const SizedBox(height: 8),
                 ],
                 if (onAutotune != null)
-                  IconBtn(icon: LtIcons.autoFix, tooltip: 'Autotune', size: 40, onTap: onAutotune!),
+                  IconBtn(
+                      icon: LtIcons.autoFix,
+                      tooltip: l.ltEditorAutotuneTitle,
+                      size: 40,
+                      onTap: onAutotune!),
                 if (onRevert != null) ...[
                   const SizedBox(height: 8),
-                  IconBtn(icon: LtIcons.restore, tooltip: 'Original', size: 40, onTap: onRevert!),
+                  IconBtn(
+                      icon: LtIcons.restore,
+                      tooltip: l.editTransportOriginal,
+                      size: 40,
+                      onTap: onRevert!),
                 ],
                 if (onAutotune != null || onRevert != null) const SizedBox(height: 8),
-                IconBtn(icon: LtIcons.delete, tooltip: 'Clear', size: 40, onTap: onClear),
+                IconBtn(icon: LtIcons.delete, tooltip: l.ltVocalClear, size: 40, onTap: onClear),
               ],
             ),
           ],

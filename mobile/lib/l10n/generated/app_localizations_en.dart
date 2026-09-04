@@ -1753,4 +1753,429 @@ class L10nEn extends L10n {
 
   @override
   String get ltSettingsContact => 'Contact support';
+
+  @override
+  String get ltSongsTagline => 'Tap-to-make beats';
+
+  @override
+  String get ltSongsNewSong => 'New song';
+
+  @override
+  String get ltSongsNewCard => 'Start a new loop';
+
+  @override
+  String ltSongCardMeta(String key, String scale, int bpm, int bars) {
+    return '$key $scale · $bpm BPM · $bars bars';
+  }
+
+  @override
+  String get ltScalePenta => 'Penta';
+
+  @override
+  String get ltScaleDorian => 'Dorian';
+
+  @override
+  String get ltKeySheetTitle => 'Key & scale';
+
+  @override
+  String get ltKeyRoot => 'Root';
+
+  @override
+  String get ltKeyScale => 'Scale';
+
+  @override
+  String get ltKeyHint =>
+      'Only in-key notes show on the pads — you can\'t play a wrong note.';
+
+  @override
+  String get ltMixerTitle => 'Mixer';
+
+  @override
+  String ltInstrumentSheetTitle(String track) {
+    return '$track instrument';
+  }
+
+  @override
+  String get ltInstrumentFavorites => 'Favorites';
+
+  @override
+  String get ltInstrumentCloudSounds => 'Cloud sounds';
+
+  @override
+  String get ltTransportCountIn => 'Count-in';
+
+  @override
+  String get ltTransportLoopAlwaysOn => 'Loop (always on)';
+
+  @override
+  String get ltTransportClearTrack => 'Clear track';
+
+  @override
+  String get ltTransportSwing => 'Swing';
+
+  @override
+  String get ltTransportSetBpm => 'Set BPM';
+
+  @override
+  String get ltSectionsLabel => 'Song';
+
+  @override
+  String get ltSectionPlaySong => 'Play song';
+
+  @override
+  String get ltSectionStopSong => 'Stop song';
+
+  @override
+  String get ltArrangeAddTrack => 'Track';
+
+  @override
+  String get ltEditorBack => 'Back';
+
+  @override
+  String get ltEditorUndo => 'Undo';
+
+  @override
+  String get ltEditorRedo => 'Redo';
+
+  @override
+  String get ltEditorSaved => 'Saved';
+
+  @override
+  String get ltEditorUnsaved => 'Unsaved';
+
+  @override
+  String ltEditorSectionMenuTitle(String name) {
+    return 'Section $name';
+  }
+
+  @override
+  String get ltEditorMoveLeft => 'Move left';
+
+  @override
+  String get ltEditorMoveRight => 'Move right';
+
+  @override
+  String get ltEditorTrackCleared => 'Track cleared';
+
+  @override
+  String get ltEditorLaneFull =>
+      'Lane is full — the new take starts at the beginning (overlapping)';
+
+  @override
+  String get ltEditorSoundDownloadFailed =>
+      'Couldn\'t download the sound — check your connection';
+
+  @override
+  String get ltEditorSoundReady => 'Instrument ready';
+
+  @override
+  String get ltEditorAutotuneTitle => 'Autotune';
+
+  @override
+  String ltEditorAutotuneSub(String key, String scale) {
+    return 'Snaps your vocal to $key $scale. The original take is kept.';
+  }
+
+  @override
+  String get ltEditorAutotuneNatural => 'Natural';
+
+  @override
+  String get ltEditorAutotuneNaturalSub =>
+      'Gentle correction, keeps your style';
+
+  @override
+  String get ltEditorAutotuneStrong => 'Strong';
+
+  @override
+  String get ltEditorAutotuneStrongSub => 'Hard snap — the classic effect';
+
+  @override
+  String get ltEditorAutotuneFailed => 'Autotune needs a connection';
+
+  @override
+  String ltEditorHumAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Added $count notes from your hum',
+      one: 'Added 1 note from your hum',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ltEditorHumErrTooLong => 'Recording too long';
+
+  @override
+  String get ltEditorHumErrBusy => 'Server busy, try again shortly';
+
+  @override
+  String get ltEditorHumErrWaking => 'Server is waking up, try again';
+
+  @override
+  String get ltEditorHumErrGeneric => 'Couldn\'t convert your hum';
+
+  @override
+  String get ltEditorHumErrNoNotes => 'No notes detected — try humming louder';
+
+  @override
+  String get ltEditorModePads => 'Pads';
+
+  @override
+  String get ltEditorModeGrid => 'Grid';
+
+  @override
+  String get ltEditorPowerChord => 'Power';
+
+  @override
+  String get ltEditorOctaveDown => 'Octave down';
+
+  @override
+  String get ltEditorOctaveUp => 'Octave up';
+
+  @override
+  String get ltEditorHumToMidi => 'Hum to MIDI';
+
+  @override
+  String get ltEditorHintGridDrums => 'tap cells to toggle';
+
+  @override
+  String get ltEditorHintGridPitched => 'tap · drag to lengthen · auto-merge';
+
+  @override
+  String get ltEditorHintPads => 'rec, then tap';
+
+  @override
+  String ltHumModalTitle(String track) {
+    return 'Hum to MIDI · $track';
+  }
+
+  @override
+  String get ltHumCountIn => 'Get ready — hum on the beat.';
+
+  @override
+  String get ltHumListen => 'Hum your idea — we\'ll snap it in-key, in time.';
+
+  @override
+  String get ltHumConverting => 'Converting to notes…';
+
+  @override
+  String get ltHumDone => 'Done! Notes added.';
+
+  @override
+  String get ltHumConvert => 'Convert';
+
+  @override
+  String get ltRecErrUnavailable => 'Recording unavailable';
+
+  @override
+  String get ltRecErrInterrupted => 'Recording was interrupted — try again';
+
+  @override
+  String get ltRecErrNoAudio => 'No audio captured';
+
+  @override
+  String get ltRecErrFailed => 'Recording failed';
+
+  @override
+  String get ltRecErrTooShort => 'Recording was too short';
+
+  @override
+  String get ltRecErrTooQuiet => 'Recording is too quiet';
+
+  @override
+  String get ltRecSaveFailed => 'Couldn\'t save the recording';
+
+  @override
+  String get ltVocalRecTitle => 'Record vocal';
+
+  @override
+  String get ltVocalRecCountInNoHeadset =>
+      'No earphones — recording silently so the loop stays out of the mic.';
+
+  @override
+  String get ltVocalRecCountIn => 'Get ready — sing with the loop.';
+
+  @override
+  String get ltVocalRecListenMuted =>
+      'Recording one loop — device audio is muted.';
+
+  @override
+  String get ltVocalRecListen => 'Recording one loop — sing along.';
+
+  @override
+  String get ltVocalRecDone => 'Done! Vocal recorded.';
+
+  @override
+  String get ltVocalLiveAutotune => 'Live autotune';
+
+  @override
+  String get ltVocalLiveAutotuneOn => 'LIVE AUTOTUNE';
+
+  @override
+  String get ltVocalRecorded => 'Recorded';
+
+  @override
+  String get ltVocalTapToRecord => 'Tap to record';
+
+  @override
+  String get ltVocalRecOverSong => 'Rec over song';
+
+  @override
+  String get ltVocalReRecOverSong => 'Re-rec over song';
+
+  @override
+  String get ltVocalClearSongTake => 'Clear song vocal';
+
+  @override
+  String get ltVocalEdit => 'Edit';
+
+  @override
+  String get ltVocalClear => 'Clear';
+
+  @override
+  String get ltVocalEditorTitle => 'Vocal editor';
+
+  @override
+  String ltVocalEditorMeta(int takes, int bpm, int bars) {
+    String _temp0 = intl.Intl.pluralLogic(
+      takes,
+      locale: localeName,
+      other: '$takes takes',
+      one: '1 take',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      bars,
+      locale: localeName,
+      other: '$bars bars',
+      one: '1 bar',
+    );
+    return '$_temp0 · $bpm BPM · $_temp1';
+  }
+
+  @override
+  String get ltVocalEditorNoTake => 'No take to edit';
+
+  @override
+  String ltVocalEditorTake(int n) {
+    return 'Take $n';
+  }
+
+  @override
+  String ltVocalEditorFxCount(int n) {
+    return '$n fx';
+  }
+
+  @override
+  String get ltVocalEditorDragHint => 'Drag to select a region';
+
+  @override
+  String get ltVocalEditorDragSet => 'Drag set · tap Trim';
+
+  @override
+  String get ltVocalEditorTrimmed => 'trimmed';
+
+  @override
+  String ltVocalEditorFadeInReadout(int ms) {
+    return 'in ${ms}ms';
+  }
+
+  @override
+  String ltVocalEditorFadeOutReadout(int ms) {
+    return 'out ${ms}ms';
+  }
+
+  @override
+  String get ltVocalEditorEditGroup => 'Edit';
+
+  @override
+  String get ltVocalEditorEffectsGroup => 'Effects';
+
+  @override
+  String get ltVocalEditorReset => 'Reset';
+
+  @override
+  String get ltVocalEditorServerTag => 'server';
+
+  @override
+  String get ltVocalEditorTrim => 'Trim';
+
+  @override
+  String ltVocalEditorFadeIn(int ms) {
+    return 'Fade in $ms';
+  }
+
+  @override
+  String ltVocalEditorFadeOut(int ms) {
+    return 'Fade out $ms';
+  }
+
+  @override
+  String get ltVocalEditorGainDown => 'Gain −';
+
+  @override
+  String get ltVocalEditorGainUp => 'Gain +';
+
+  @override
+  String get ltVocalEditorNormalize => 'Normalize';
+
+  @override
+  String get ltVocalEditorProcessFailed => 'Sound processing failed';
+
+  @override
+  String get ltVocalEditorPreview => 'Preview (edited)';
+
+  @override
+  String get ltVocalEditorEarlier => 'Earlier';
+
+  @override
+  String get ltVocalEditorLater => 'Later';
+
+  @override
+  String ltVocalEditorStep(int n) {
+    return 'step $n';
+  }
+
+  @override
+  String get ltVocalEditorDeleteTake => 'Delete take';
+
+  @override
+  String ltVocalEditorFxProcessing(String fx) {
+    return '$fx…';
+  }
+
+  @override
+  String ltVocalEditorFxChainItem(int index, String fx) {
+    return '$index. $fx';
+  }
+
+  @override
+  String get ltFxEq => 'EQ';
+
+  @override
+  String get ltFxReverb => 'Reverb';
+
+  @override
+  String get ltFxComp => 'Comp';
+
+  @override
+  String get ltFxDelay => 'Delay';
+
+  @override
+  String get ltFxStretch => 'Stretch';
+
+  @override
+  String get ltFxPitch => 'Pitch';
+
+  @override
+  String get ltFxSlower => 'Slower';
+
+  @override
+  String get ltFxFaster => 'Faster';
+
+  @override
+  String get ltFxPitchUp => 'Pitch +2';
+
+  @override
+  String get ltFxPitchDown => 'Pitch −2';
 }

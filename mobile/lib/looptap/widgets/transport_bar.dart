@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../l10n/generated/app_localizations.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
 import 'sheets/lt_modal.dart';
@@ -52,6 +53,7 @@ class TransportBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     return Row(
       children: [
         // ── left: options ──
@@ -65,11 +67,11 @@ class TransportBar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconBtn(icon: LtIcons.straighten, active: metro, tooltip: 'Metronome', onTap: () => onMetro(!metro)),
+                IconBtn(icon: LtIcons.straighten, active: metro, tooltip: l.metronomeTitle, onTap: () => onMetro(!metro)),
                 const SizedBox(width: 8),
-                IconBtn(icon: LtIcons.timer, active: countIn, tooltip: 'Count-in', onTap: () => onCountIn(!countIn)),
+                IconBtn(icon: LtIcons.timer, active: countIn, tooltip: l.ltTransportCountIn, onTap: () => onCountIn(!countIn)),
                 const SizedBox(width: 8),
-                const IconBtn(icon: LtIcons.repeat, active: true, tooltip: 'Loop (always on)'),
+                IconBtn(icon: LtIcons.repeat, active: true, tooltip: l.ltTransportLoopAlwaysOn),
                 const SizedBox(width: 12),
                 _BpmStepper(bpm: bpm, onBpm: onBpm),
               ],
@@ -84,7 +86,7 @@ class TransportBar extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconBtn(icon: LtIcons.stop, size: 34, tooltip: 'Stop', onTap: onStop),
+            IconBtn(icon: LtIcons.stop, size: 34, tooltip: l.pendingStop, onTap: onStop),
             const SizedBox(width: 12),
             // play
             GestureDetector(
@@ -149,7 +151,7 @@ class TransportBar extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        LtLabel('Swing', color: swing > 0 ? LT.lime : LT.t3),
+                        LtLabel(l.ltTransportSwing, color: swing > 0 ? LT.lime : LT.t3),
                         const SizedBox(width: 6),
                         Text('${(swing * 100).round()}%',
                             style: LTType.mono(size: 10, color: LT.t3)),
@@ -180,7 +182,7 @@ class TransportBar extends StatelessWidget {
                 const SizedBox(width: 10),
                 _BarsToggle(bars: bars, onBars: onBars),
                 const SizedBox(width: 10),
-                IconBtn(icon: LtIcons.backspace, tooltip: 'Clear track', onTap: onClear),
+                IconBtn(icon: LtIcons.backspace, tooltip: l.ltTransportClearTrack, onTap: onClear),
               ],
             ),
           ),
@@ -360,11 +362,12 @@ class _BpmInputState extends State<_BpmInput> {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Set BPM', style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1)),
+        Text(l.ltTransportSetBpm, style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1)),
         const SizedBox(height: 14),
         TextField(
           controller: widget.ctrl,
@@ -407,7 +410,7 @@ class _BpmInputState extends State<_BpmInput> {
                     borderRadius: BorderRadius.circular(LTRadius.pill),
                     border: Border.all(color: LT.border),
                   ),
-                  child: Text('Cancel', style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t2)),
+                  child: Text(l.cancel, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t2)),
                 ),
               ),
             ),
@@ -422,7 +425,7 @@ class _BpmInputState extends State<_BpmInput> {
                     color: LT.lime,
                     borderRadius: BorderRadius.circular(LTRadius.pill),
                   ),
-                  child: Text('Set', style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg)),
+                  child: Text(l.apply, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg)),
                 ),
               ),
             ),

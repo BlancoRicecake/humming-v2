@@ -2,10 +2,22 @@
 // "Only in-key notes show on the pads — you can't play a wrong note."
 import 'package:flutter/material.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../music/theory.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import 'lt_modal.dart';
+
+/// Localized display name for a `kScales` id. The scale table lives in
+/// music/theory.dart (no BuildContext there), so the label is resolved here and
+/// shared by the key sheet, the editor's key pill and the song cards.
+String ltScaleLabel(L10n l, String scale) => switch (scale) {
+      'minor' => l.keyPickerMinor,
+      'major' => l.keyPickerMajor,
+      'pentatonic' => l.ltScalePenta,
+      'dorian' => l.ltScaleDorian,
+      _ => scale,
+    };
 
 Future<void> showKeySheet(
   BuildContext context, {
@@ -43,13 +55,14 @@ class _KeySheetState extends State<_KeySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('Key & scale', style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1)),
+        Text(l.ltKeySheetTitle, style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1)),
         const SizedBox(height: 14),
-        const LtLabel('Root'),
+        LtLabel(l.ltKeyRoot),
         const SizedBox(height: 8),
         GridView.count(
           crossAxisCount: 6,
@@ -68,7 +81,7 @@ class _KeySheetState extends State<_KeySheet> {
           ],
         ),
         const SizedBox(height: 16),
-        const LtLabel('Scale'),
+        LtLabel(l.ltKeyScale),
         const SizedBox(height: 8),
         GridView.count(
           crossAxisCount: 2,
@@ -80,7 +93,7 @@ class _KeySheetState extends State<_KeySheet> {
           children: [
             for (final s in kScales.keys)
               _PickButton(
-                label: kScales[s]!.label,
+                label: ltScaleLabel(l, s),
                 selected: s == _scale,
                 tinted: true,
                 onTap: () => _pick(_root, s),
@@ -88,8 +101,7 @@ class _KeySheetState extends State<_KeySheet> {
           ],
         ),
         const SizedBox(height: 14),
-        Text("Only in-key notes show on the pads — you can't play a wrong note.",
-            style: LTType.inter(size: 11, color: LT.t3)),
+        Text(l.ltKeyHint, style: LTType.inter(size: 11, color: LT.t3)),
       ],
     );
   }

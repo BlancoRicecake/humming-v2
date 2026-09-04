@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../api/engine_api.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../audio/loop_audio.dart';
 import '../../models/loop_models.dart';
 import '../../music/theory.dart';
@@ -212,12 +213,25 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
     });
   }
 
+  /// Display name for an FX node type (the codes are persisted in the clip's
+  /// history, so they stay English on disk and are localized only here).
+  String _fxName(L10n l, String type) => switch (type) {
+        'eq' => l.ltFxEq,
+        'reverb' => l.ltFxReverb,
+        'comp' => l.ltFxComp,
+        'delay' => l.ltFxDelay,
+        'stretch' => l.ltFxStretch,
+        'pitch' => l.ltFxPitch,
+        _ => type,
+      };
+
   // ── server FX (bakes a new WAV + records an FxNode) ───────────────────────
   Future<void> _applyFx(String fxType, Map<String, dynamic> params) async {
     if (_busy) return;
+    final l = L10n.of(context);
     setState(() {
       _busy = true;
-      _status = '$fxType…';
+      _status = l.ltVocalEditorFxProcessing(_fxName(l, fxType));
     });
     try {
       final res = await EngineApi().processFx(
@@ -246,7 +260,11 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
       });
       await _loadSrc(persisted); // re-measures durSteps for the new file
     } catch (e) {
-      if (mounted) _toast(e is EngineApiException ? e.message : 'Sound processing failed');
+      if (mounted) {
+        _toast(e is EngineApiException
+            ? e.message
+            : L10n.of(context).ltVocalEditorProcessFailed);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -334,7 +352,9 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
       backgroundColor: LT.bg,
       body: SafeArea(
         child: _clips.isEmpty
-            ? const Center(child: Text('No take to edit', style: TextStyle(color: LT.t2)))
+            ? Center(
+                child: Text(L10n.of(context).ltVocalEditorNoTake,
+                    style: const TextStyle(color: LT.t2)))
             : Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
                 child: Column(
@@ -391,17 +411,19 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
         ),
       );
 
-  Widget _header() => Row(
+  Widget _header() {
+    final l = L10n.of(context);
+    return Row(
         children: [
-          IconBtn(icon: LtIcons.close, tooltip: 'Cancel', onTap: () => Navigator.of(context).pop()),
+          IconBtn(icon: LtIcons.close, tooltip: l.cancel, onTap: () => Navigator.of(context).pop()),
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Vocal editor',
+              Text(l.ltVocalEditorTitle,
                   style: LTType.inter(size: 17, weight: FontWeight.w800, color: LT.t1)),
-              Text('${_clips.length} take${_clips.length == 1 ? '' : 's'} · ${widget.bpm} BPM · ${widget.bars} bar${widget.bars == 1 ? '' : 's'}',
+              Text(l.ltVocalEditorMeta(_clips.length, widget.bpm, widget.bars),
                   style: LTType.mono(size: 11, weight: FontWeight.w600, color: LT.t3)),
             ],
           ),
@@ -413,11 +435,14 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
             Text(_status, style: LTType.mono(size: 12, weight: FontWeight.w600, color: LT.pink)),
             const SizedBox(width: 12),
           ],
-          Pill(label: 'Done', icon: LtIcons.checkCircle, tone: PillTone.lime, height: 40, onTap: _done),
+          Pill(label: l.done, icon: LtIcons.checkCircle, tone: PillTone.lime, height: 40, onTap: _done),
         ],
       );
+  }
 
-  Widget _clipLane() => SizedBox(
+  Widget _clipLane() {
+    final l = L10n.of(context);
+    return SizedBox(
         height: 38,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
@@ -445,7 +470,7 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Ms(LtIcons.mic, size: 13, color: sel ? LT.bg : LT.t2),
                   const SizedBox(width: 6),
-                  Text('Take ${i + 1}',
+                  Text(l.ltVocalEditorTake(i + 1),
                       style: LTType.inter(
                           size: 12, weight: FontWeight.w700, color: sel ? LT.bg : LT.t1)),
                   if (c.fx.isNotEmpty) ...[
@@ -456,7 +481,7 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
                         color: (sel ? LT.bg : LT.pink).withValues(alpha: 0.18),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text('${c.fx.length} fx',
+                      child: Text(l.ltVocalEditorFxCount(c.fx.length),
                           style: LTType.mono(
                               size: 9, weight: FontWeight.w700, color: sel ? LT.bg : LT.pink)),
                     ),
@@ -467,6 +492,7 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
           },
         ),
       );
+  }
 
   Widget _waveCard() {
     final src = _curSrc;
@@ -516,7 +542,9 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
               bottom: 8,
               child: Row(children: [
                 Text(
-                  (_selA != null && _selB != null) ? 'Drag set · tap Trim' : 'Drag to select a region',
+                  (_selA != null && _selB != null)
+                      ? L10n.of(context).ltVocalEditorDragSet
+                      : L10n.of(context).ltVocalEditorDragHint,
                   style: LTType.mono(size: 10, weight: FontWeight.w600, color: LT.t3),
                 ),
                 const Spacer(),
@@ -530,29 +558,39 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
   }
 
   Widget _readout() {
+    final l = L10n.of(context);
     final parts = <String>[];
-    if (_clip.trimEnd != -1 || _clip.trimStart != 0) parts.add('trimmed');
-    if (_clip.fadeInMs != 0) parts.add('in ${_clip.fadeInMs}ms');
-    if (_clip.fadeOutMs != 0) parts.add('out ${_clip.fadeOutMs}ms');
+    if (_clip.trimEnd != -1 || _clip.trimStart != 0) {
+      parts.add(l.ltVocalEditorTrimmed);
+    }
+    if (_clip.fadeInMs != 0) {
+      parts.add(l.ltVocalEditorFadeInReadout(_clip.fadeInMs));
+    }
+    if (_clip.fadeOutMs != 0) {
+      parts.add(l.ltVocalEditorFadeOutReadout(_clip.fadeOutMs));
+    }
     if (_clip.gain != 1.0) parts.add('${_gainDb()}dB');
     if (parts.isEmpty) return const SizedBox.shrink();
     return Text(parts.join(' · '),
         style: LTType.mono(size: 10, weight: FontWeight.w700, color: LT.pink));
   }
 
-  Widget _editGroup() => _group(
-        'Edit',
+  Widget _editGroup() {
+    final l = L10n.of(context);
+    return _group(
+        l.ltVocalEditorEditGroup,
         Wrap(
           spacing: 6,
           runSpacing: 6,
           children: [
-            _tool('Trim', LtIcons.straighten, (_selA != null && _selB != null) ? _trimToSelection : null),
-            _tool('Fade in ${_clip.fadeInMs}', LtIcons.chevronRight, () => _bumpFade(fadeIn: true)),
-            _tool('Fade out ${_clip.fadeOutMs}', LtIcons.chevronLeft, () => _bumpFade(fadeIn: false)),
-            _tool('Gain −', LtIcons.remove, () => _bumpGain(-1)),
+            _tool(l.ltVocalEditorTrim, LtIcons.straighten,
+                (_selA != null && _selB != null) ? _trimToSelection : null),
+            _tool(l.ltVocalEditorFadeIn(_clip.fadeInMs), LtIcons.chevronRight, () => _bumpFade(fadeIn: true)),
+            _tool(l.ltVocalEditorFadeOut(_clip.fadeOutMs), LtIcons.chevronLeft, () => _bumpFade(fadeIn: false)),
+            _tool(l.ltVocalEditorGainDown, LtIcons.remove, () => _bumpGain(-1)),
             _tool('${_gainDb()} dB', LtIcons.volumeUp, null),
-            _tool('Gain +', LtIcons.add, () => _bumpGain(1)),
-            _tool('Normalize', LtIcons.tune, _curSrc == null ? null : _normalize),
+            _tool(l.ltVocalEditorGainUp, LtIcons.add, () => _bumpGain(1)),
+            _tool(l.ltVocalEditorNormalize, LtIcons.tune, _curSrc == null ? null : _normalize),
           ],
         ),
         trailing: GestureDetector(
@@ -560,13 +598,17 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             const Ms(LtIcons.undo, size: 13, color: LT.t3),
             const SizedBox(width: 4),
-            Text('Reset', style: LTType.mono(size: 10, weight: FontWeight.w700, color: LT.t3)),
+            Text(l.ltVocalEditorReset,
+                style: LTType.mono(size: 10, weight: FontWeight.w700, color: LT.t3)),
           ]),
         ),
       );
+  }
 
-  Widget _effectsGroup() => _group(
-        'Effects',
+  Widget _effectsGroup() {
+    final l = L10n.of(context);
+    return _group(
+        l.ltVocalEditorEffectsGroup,
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -574,14 +616,14 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
               spacing: 6,
               runSpacing: 6,
               children: [
-                _fxBtn('EQ', 'eq', {'low': 3.0, 'mid': 0.0, 'high': 4.0}),
-                _fxBtn('Reverb', 'reverb', {'wet': 0.3, 'decay': 1.4}),
-                _fxBtn('Comp', 'comp', {'threshold': -18.0, 'ratio': 3.0}),
-                _fxBtn('Delay', 'delay', {'time': 300.0, 'feedback': 0.35, 'wet': 0.3}),
-                _fxBtn('Slower', 'stretch', {'ratio': 1.2}),
-                _fxBtn('Faster', 'stretch', {'ratio': 0.85}),
-                _fxBtn('Pitch +2', 'pitch', {'semitones': 2.0}),
-                _fxBtn('Pitch −2', 'pitch', {'semitones': -2.0}),
+                _fxBtn(l.ltFxEq, 'eq', {'low': 3.0, 'mid': 0.0, 'high': 4.0}),
+                _fxBtn(l.ltFxReverb, 'reverb', {'wet': 0.3, 'decay': 1.4}),
+                _fxBtn(l.ltFxComp, 'comp', {'threshold': -18.0, 'ratio': 3.0}),
+                _fxBtn(l.ltFxDelay, 'delay', {'time': 300.0, 'feedback': 0.35, 'wet': 0.3}),
+                _fxBtn(l.ltFxSlower, 'stretch', {'ratio': 1.2}),
+                _fxBtn(l.ltFxFaster, 'stretch', {'ratio': 0.85}),
+                _fxBtn(l.ltFxPitchUp, 'pitch', {'semitones': 2.0}),
+                _fxBtn(l.ltFxPitchDown, 'pitch', {'semitones': -2.0}),
               ],
             ),
             if (_clip.fx.isNotEmpty) ...[
@@ -592,11 +634,14 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
             ],
           ],
         ),
-        trailing: Text('server',
+        trailing: Text(l.ltVocalEditorServerTag,
             style: LTType.mono(size: 9, weight: FontWeight.w700, color: LT.t3)),
       );
+  }
 
-  Widget _fxChain() => Wrap(
+  Widget _fxChain() {
+    final l = L10n.of(context);
+    return Wrap(
         spacing: 6,
         runSpacing: 6,
         children: [
@@ -611,7 +656,7 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
                   border: Border.all(color: LT.pink.withValues(alpha: 0.4)),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text('${i + 1}. ${_clip.fx[i].type}',
+                  Text(l.ltVocalEditorFxChainItem(i + 1, _fxName(l, _clip.fx[i].type)),
                       style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.t1)),
                   const SizedBox(width: 6),
                   const Ms(LtIcons.close, size: 13, color: LT.pink),
@@ -620,6 +665,7 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
             ),
         ],
       );
+  }
 
   Widget _tool(String label, IconData icon, VoidCallback? onTap) => Opacity(
         opacity: onTap == null ? 0.4 : 1,
@@ -638,7 +684,9 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
         ),
       );
 
-  Widget _transport() => Container(
+  Widget _transport() {
+    final l = L10n.of(context);
+    return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: LT.surface,
@@ -647,9 +695,13 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
         ),
         child: Row(
           children: [
-            IconBtn(icon: LtIcons.playArrow, tooltip: 'Preview (edited)', size: 46, onTap: () => _preview()),
+            IconBtn(
+                icon: LtIcons.playArrow,
+                tooltip: l.ltVocalEditorPreview,
+                size: 46,
+                onTap: () => _preview()),
             const SizedBox(width: 8),
-            IconBtn(icon: LtIcons.stop, tooltip: 'Stop', size: 46, onTap: _audio.stopVocal),
+            IconBtn(icon: LtIcons.stop, tooltip: l.pendingStop, size: 46, onTap: _audio.stopVocal),
             const SizedBox(width: 8),
             Pill(label: 'A / B', icon: LtIcons.restore, height: 42, onTap: () => _preview(dryOriginal: true)),
             const Spacer(),
@@ -661,22 +713,36 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
                 border: Border.all(color: LT.border),
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                IconBtn(icon: LtIcons.chevronLeft, tooltip: 'Earlier', size: 38, onTap: () => _nudgeStart(-1)),
+                IconBtn(
+                    icon: LtIcons.chevronLeft,
+                    tooltip: l.ltVocalEditorEarlier,
+                    size: 38,
+                    onTap: () => _nudgeStart(-1)),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text('step ${_clip.startStep}',
+                  child: Text(l.ltVocalEditorStep(_clip.startStep),
                       style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.t1)),
                 ),
-                IconBtn(icon: LtIcons.chevronRight, tooltip: 'Later', size: 38, onTap: () => _nudgeStart(1)),
+                IconBtn(
+                    icon: LtIcons.chevronRight,
+                    tooltip: l.ltVocalEditorLater,
+                    size: 38,
+                    onTap: () => _nudgeStart(1)),
               ]),
             ),
             if (_clips.length > 1) ...[
               const SizedBox(width: 8),
-              IconBtn(icon: LtIcons.delete, tooltip: 'Delete take', size: 42, color: LT.danger, onTap: () => _deleteClip(_sel)),
+              IconBtn(
+                  icon: LtIcons.delete,
+                  tooltip: l.ltVocalEditorDeleteTake,
+                  size: 42,
+                  color: LT.danger,
+                  onTap: () => _deleteClip(_sel)),
             ],
           ],
         ),
       );
+  }
 
   String _gainDb() {
     final db = 20 * _log10(_clip.gain <= 0 ? 0.0001 : _clip.gain);

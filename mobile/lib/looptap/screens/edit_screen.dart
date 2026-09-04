@@ -16,6 +16,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/engine_api.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../../models/models.dart' as eng;
 import '../audio/loop_audio.dart';
 import '../models/loop_models.dart';
@@ -636,6 +637,7 @@ class _EditScreenState extends State<EditScreen>
   }
 
   Future<void> _openAddTrack() async {
+    final l = L10n.of(context);
     final type = await showDialog<String>(
       context: context,
       builder:
@@ -654,7 +656,7 @@ class _EditScreenState extends State<EditScreen>
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Add track',
+                        l.addTrackTitle,
                         style: LTType.inter(
                           size: 16,
                           weight: FontWeight.w800,
@@ -904,6 +906,7 @@ class _EditScreenState extends State<EditScreen>
 
   // long-press a section chip → Duplicate / Move left / Move right
   Future<void> _openSectionMenu(int idx) async {
+    final l = L10n.of(context);
     await showLtModal(
       context,
       width: 300,
@@ -914,7 +917,7 @@ class _EditScreenState extends State<EditScreen>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Section ${_sections[idx].name}',
+                  l.ltEditorSectionMenuTitle(_sections[idx].name),
                   style: LTType.inter(
                     size: 15,
                     weight: FontWeight.w800,
@@ -922,13 +925,13 @@ class _EditScreenState extends State<EditScreen>
                   ),
                 ),
                 const SizedBox(height: 14),
-                _menuRow(LtIcons.layers, 'Duplicate', () {
+                _menuRow(LtIcons.layers, l.projectOptionDuplicate, () {
                   Navigator.of(context).pop();
                   _duplicateSection(idx);
                 }),
                 _menuRow(
                   LtIcons.arrowBack,
-                  'Move left',
+                  l.ltEditorMoveLeft,
                   idx > 0
                       ? () {
                         Navigator.of(context).pop();
@@ -938,7 +941,7 @@ class _EditScreenState extends State<EditScreen>
                 ),
                 _menuRow(
                   LtIcons.playArrow,
-                  'Move right',
+                  l.ltEditorMoveRight,
                   idx < _sections.length - 1
                       ? () {
                         Navigator.of(context).pop();
@@ -1419,9 +1422,10 @@ class _EditScreenState extends State<EditScreen>
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: const Text('Track cleared'),
+          content: Text(L10n.of(context).ltEditorTrackCleared),
           duration: const Duration(seconds: 4),
-          action: SnackBarAction(label: 'Undo', onPressed: _undoAction),
+          action: SnackBarAction(
+              label: L10n.of(context).ltEditorUndo, onPressed: _undoAction),
         ),
       );
   }
@@ -1447,9 +1451,9 @@ class _EditScreenState extends State<EditScreen>
     if (!mounted) return false;
     if (persisted == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Couldn\'t save the recording'),
-          duration: Duration(milliseconds: 1600),
+        SnackBar(
+          content: Text(L10n.of(context).ltRecSaveFailed),
+          duration: const Duration(milliseconds: 1600),
         ),
       );
       return false;
@@ -1495,7 +1499,7 @@ class _EditScreenState extends State<EditScreen>
     });
     _vocalMix.remove(_sec.id); // section mix is stale → rebounce on next play
     if (laneWasFull) {
-      _toast('Lane is full — the new take starts at the beginning (overlapping)'); // TODO(l10n)
+      _toast(L10n.of(context).ltEditorLaneFull);
     }
     return true;
   }
@@ -1685,14 +1689,15 @@ class _EditScreenState extends State<EditScreen>
           SoundfontCatalog.instance.ensureDownloaded(program).then((path) {
             if (!mounted) return;
             if (path == null) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('사운드를 받지 못했어요 — 연결을 확인해주세요'),
-                  duration: Duration(milliseconds: 1800)));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(L10n.of(context).ltEditorSoundDownloadFailed),
+                  duration: const Duration(milliseconds: 1800)));
               return;
             }
             _applyInstrument(id, ch, program);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('악기 준비 완료'), duration: Duration(milliseconds: 1300)));
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(L10n.of(context).ltEditorSoundReady),
+                duration: const Duration(milliseconds: 1300)));
           });
           return;
         }
@@ -1839,9 +1844,9 @@ class _EditScreenState extends State<EditScreen>
     if (!mounted) return false;
     if (persisted == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Couldn't save the recording"),
-          duration: Duration(milliseconds: 1600),
+        SnackBar(
+          content: Text(L10n.of(context).ltRecSaveFailed),
+          duration: const Duration(milliseconds: 1600),
         ),
       );
       return false;
@@ -1872,6 +1877,7 @@ class _EditScreenState extends State<EditScreen>
   // ── autotune (server-side WORLD vocoder; non-destructive) ─────────
   void _openAutotune() {
     if (_playing) _stopAll();
+    final l = L10n.of(context);
     showLtModal(
       context,
       width: 400,
@@ -1884,7 +1890,7 @@ class _EditScreenState extends State<EditScreen>
               Ms(LtIcons.autoFix, size: 18, color: LT.pink),
               const SizedBox(width: 8),
               Text(
-                'Autotune',
+                l.ltEditorAutotuneTitle,
                 style: LTType.inter(
                   size: 16,
                   weight: FontWeight.w800,
@@ -1895,20 +1901,20 @@ class _EditScreenState extends State<EditScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            'Snaps your vocal to $_keyRoot $_scale. The original take is kept.',
+            l.ltEditorAutotuneSub(_keyRoot, ltScaleLabel(l, _scale)),
             textAlign: TextAlign.center,
             style: LTType.inter(size: 12, color: LT.t2),
           ),
           const SizedBox(height: 18),
           _autotunePresetRow(
-            'Natural',
-            'Gentle correction, keeps your style',
+            l.ltEditorAutotuneNatural,
+            l.ltEditorAutotuneNaturalSub,
             () => _applyAutotune(strength: 0.7, retuneMs: 120),
           ),
           const SizedBox(height: 10),
           _autotunePresetRow(
-            'Strong',
-            'Hard snap — the classic effect',
+            l.ltEditorAutotuneStrong,
+            l.ltEditorAutotuneStrongSub,
             () => _applyAutotune(strength: 1.0, retuneMs: 40),
           ),
         ],
@@ -2029,8 +2035,9 @@ class _EditScreenState extends State<EditScreen>
     } catch (e) {
       debugPrint('[autotune] failed: $e');
       if (mounted) {
-        final message =
-            e is EngineApiException ? e.message : 'Autotune needs a connection';
+        final message = e is EngineApiException
+            ? e.message
+            : L10n.of(context).ltEditorAutotuneFailed;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
@@ -2201,7 +2208,7 @@ class _EditScreenState extends State<EditScreen>
         count = out.length;
       }
       ok = true;
-      _toast('Added $count notes from your hum');
+      _toast(L10n.of(context).ltEditorHumAdded(count));
       // Clarity: 분석 성공 + 분기(드럼/멜로딕) 태깅. noteCount 는 이벤트로 분포 확인.
       ClarityService.instance.event('analyze_completed');
       ClarityService.instance.tag('analyze_role', drums ? 'drum' : 'melodic');
@@ -2216,10 +2223,10 @@ class _EditScreenState extends State<EditScreen>
         ..hideCurrentSnackBar();
       final shown = ctl.showSnackBar(
         SnackBar(
-          content: Text(_humErrorMessage(e)),
+          content: Text(_humErrorMessage(L10n.of(context), e)),
           duration: const Duration(seconds: 6),
           action: SnackBarAction(
-            label: 'Retry', // TODO(l10n)
+            label: L10n.of(context).retry,
             onPressed: () => _humConvert(audioPath),
           ),
         ),
@@ -2235,19 +2242,19 @@ class _EditScreenState extends State<EditScreen>
   /// User-facing reason a hum conversion failed. DioException → status-aware
   /// hints (413 too long, 429 busy, connect timeout = cold server); a run that
   /// simply found no notes says so; anything else is generic.
-  String _humErrorMessage(Object e) {
+  String _humErrorMessage(L10n l, Object e) {
     if (e is DioException) {
       final code = e.response?.statusCode;
-      if (code == 413) return 'Recording too long'; // TODO(l10n)
-      if (code == 429) return 'Server busy, try again shortly'; // TODO(l10n)
+      if (code == 413) return l.ltEditorHumErrTooLong;
+      if (code == 429) return l.ltEditorHumErrBusy;
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.connectionError) {
-        return 'Server is waking up, try again'; // TODO(l10n)
+        return l.ltEditorHumErrWaking;
       }
-      return "Couldn't convert your hum"; // TODO(l10n)
+      return l.ltEditorHumErrGeneric;
     }
-    if (e is StateError) return 'No notes detected — try humming louder'; // TODO(l10n)
-    return "Couldn't convert your hum"; // TODO(l10n)
+    if (e is StateError) return l.ltEditorHumErrNoNotes;
+    return l.ltEditorHumErrGeneric;
   }
 
   /// Best-effort delete of a temp recording handed to us by a modal.
@@ -2423,14 +2430,14 @@ class _EditScreenState extends State<EditScreen>
 
   /// Save indicator 텍스트 — "Saved" (방금) / "Saved · 13:42" (시간 표시) /
   /// "Unsaved" (dirty).
-  String _saveLabel() {
-    if (_savedFlash) return 'Saved';
-    if (_dirty) return 'Unsaved';
+  String _saveLabel(L10n l) {
+    if (_savedFlash) return l.ltEditorSaved;
+    if (_dirty) return l.ltEditorUnsaved;
     final t = _savedAt;
     if (t == null) return '';
     final hh = t.hour.toString().padLeft(2, '0');
     final mm = t.minute.toString().padLeft(2, '0');
-    return 'Saved · $hh:$mm';
+    return l.editSaveAt('$hh:$mm');
   }
 
   // ── build ─────────────────────────────────────────────────────────
@@ -2566,6 +2573,7 @@ class _EditScreenState extends State<EditScreen>
   }
 
   Widget _topBar() {
+    final l = L10n.of(context);
     // 좌측 그룹(뒤로/제목/undo/redo)과 우측 그룹(mixer/key/saved/save/export) 으로
     // 분리. Spacer 가 둘 사이를 벌리되, 작은 폰(iPhone SE 등)에선 좌·우 그룹의
     // 자연 너비 합이 부모 폭을 넘기 때문에 각 그룹을 Flexible+FittedBox(scaleDown)
@@ -2582,7 +2590,7 @@ class _EditScreenState extends State<EditScreen>
         IconBtn(
           icon: LtIcons.arrowBack,
           size: btnSize,
-          tooltip: 'Back',
+          tooltip: l.ltEditorBack,
           onTap: _backWithSave,
         ),
         const SizedBox(width: 8),
@@ -2628,8 +2636,8 @@ class _EditScreenState extends State<EditScreen>
             child: AnimatedSwitcher(
               duration: LTMotion.state,
               child: Text(
-                _saveLabel(),
-                key: ValueKey(_saveLabel()),
+                _saveLabel(l),
+                key: ValueKey(_saveLabel(l)),
                 style: LTType.mono(
                   size: 11,
                   weight: FontWeight.w600,
@@ -2640,26 +2648,26 @@ class _EditScreenState extends State<EditScreen>
           ),
         ),
         const SizedBox(width: 8),
-        _undoRedoBtn(LtIcons.undo, 'Undo', _undo.isNotEmpty, _undoAction),
+        _undoRedoBtn(LtIcons.undo, l.ltEditorUndo, _undo.isNotEmpty, _undoAction),
         const SizedBox(width: 6),
-        _undoRedoBtn(LtIcons.redo, 'Redo', _redo.isNotEmpty, _redoAction),
+        _undoRedoBtn(LtIcons.redo, l.ltEditorRedo, _redo.isNotEmpty, _redoAction),
         const SizedBox(width: 8),
         IconBtn(
           icon: LtIcons.save,
           size: btnSize,
-          tooltip: 'Save',
+          tooltip: l.save,
           onTap: _saveNow,
         ),
         const SizedBox(width: 8),
         IconBtn(
           icon: LtIcons.tune,
           size: btnSize,
-          tooltip: 'Mixer',
+          tooltip: l.ltMixerTitle,
           onTap: _openMixer,
         ),
         const SizedBox(width: 8),
         Pill(
-          label: '$_keyRoot ${(kScales[_scale] ?? kScales['minor']!).label}',
+          label: '$_keyRoot ${ltScaleLabel(l, _scale)}',
           icon: LtIcons.musicNote,
           height: pillH,
           fontSize: pillFS,
@@ -2673,7 +2681,7 @@ class _EditScreenState extends State<EditScreen>
           icon: LtIcons.iosShare,
           size: btnSize,
           active: true,
-          tooltip: 'Export',
+          tooltip: l.projectOptionExport,
           onTap: _exportOrPaywall,
         ),
       ],
@@ -2824,13 +2832,16 @@ class _EditScreenState extends State<EditScreen>
         if (pitched) _octaveStepper(),
         if (trackById(_activeType).kind != TrackKind.vocal) ...[
           const SizedBox(width: 8),
-          Pill(label: 'Hum to MIDI', icon: LtIcons.graphicEq, onTap: _openHum),
+          Pill(
+              label: L10n.of(context).ltEditorHumToMidi,
+              icon: LtIcons.graphicEq,
+              onTap: _openHum),
         ],
         const SizedBox(width: 8),
         if (_inputMode == 'grid' && _meta.kind == TrackKind.drums)
-          hintSlot('tap cells to toggle')
+          hintSlot(L10n.of(context).ltEditorHintGridDrums)
         else if (_inputMode == 'grid' && pitched)
-          hintSlot('tap · drag to lengthen · auto-merge')
+          hintSlot(L10n.of(context).ltEditorHintGridPitched)
         else
           // Pads 모드의 짧은 hint — 자연 너비 그대로. 빨간 점과 텍스트 간격이
           // hintSlot 의 110dp 고정폭 안에 갇히면 멀어지므로 원래 LtLabel 사용.
@@ -2846,7 +2857,7 @@ class _EditScreenState extends State<EditScreen>
                 ),
               ),
               const SizedBox(width: 5),
-              const LtLabel('rec, then tap', color: LT.t3),
+              LtLabel(L10n.of(context).ltEditorHintPads, color: LT.t3),
             ],
           ),
       ],
@@ -2901,7 +2912,9 @@ class _EditScreenState extends State<EditScreen>
                   borderRadius: BorderRadius.circular(LTRadius.pill),
                 ),
                 child: Text(
-                  v == 'pads' ? 'Pads' : 'Grid',
+                  v == 'pads'
+                      ? L10n.of(context).ltEditorModePads
+                      : L10n.of(context).ltEditorModeGrid,
                   style: LTType.inter(
                     size: 11,
                     weight: FontWeight.w700,
@@ -2919,7 +2932,7 @@ class _EditScreenState extends State<EditScreen>
   // Independent per track so melody and melody-fill can differ. Enabling chord
   // mode clears power mode (the two are mutually exclusive).
   Widget _chordToggle() => _chordKindToggle(
-    label: 'Chord',
+    label: L10n.of(context).chordModeChord,
     on: _chordOn,
     onTap: () => setState(() {
       final next = !_chordOn;
@@ -2931,7 +2944,7 @@ class _EditScreenState extends State<EditScreen>
   // Power-chord toggle (root + 5th + octave, no third). Mutually exclusive with
   // the chord toggle — enabling it clears chord mode.
   Widget _powerToggle() => _chordKindToggle(
-    label: 'Power',
+    label: L10n.of(context).ltEditorPowerChord,
     on: _powerOn,
     onTap: () => setState(() {
       final next = !_powerOn;
@@ -2975,7 +2988,7 @@ class _EditScreenState extends State<EditScreen>
         IconBtn(
           icon: LtIcons.remove,
           size: 30,
-          tooltip: 'Octave down',
+          tooltip: L10n.of(context).ltEditorOctaveDown,
           onTap: () => _setOctave(_octave - 1),
         ),
         SizedBox(
@@ -2989,7 +3002,7 @@ class _EditScreenState extends State<EditScreen>
         IconBtn(
           icon: LtIcons.add,
           size: 30,
-          tooltip: 'Octave up',
+          tooltip: L10n.of(context).ltEditorOctaveUp,
           onTap: () => _setOctave(_octave + 1),
         ),
       ],

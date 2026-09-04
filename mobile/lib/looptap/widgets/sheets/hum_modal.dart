@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../../audio/container.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../../audio/headset.dart';
 import '../../../audio/synth.dart';
 import '../../../services/clarity_service.dart';
@@ -79,7 +80,9 @@ class _HumModal extends StatefulWidget {
 class _HumModalState extends State<_HumModal> {
   final AudioRecorder _rec = AudioRecorder();
   String _phase = 'countin'; // countin | listen | converting | done | error
-  String _errorMsg = '';
+  // Error CODE (not text) — the message is localized in build(), so _fail can
+  // run after an await without touching context.
+  String _errorCode = '';
   int _ms = 0;
   int _count = 0; // count-in beats remaining (overlay)
   bool _backingOn = false;
@@ -133,7 +136,7 @@ class _HumModalState extends State<_HumModal> {
     if (_closed || !mounted) return;
     if (!granted) {
       _permissionDenied = true;
-      _fail('Microphone permission needed');
+      _fail('permission');
       return;
     }
     _startCountIn();
@@ -241,7 +244,7 @@ class _HumModalState extends State<_HumModal> {
       // Capture exactly one loop pass, then convert automatically.
       _autoStop = Timer(Duration(milliseconds: _loopMs), _finish);
     } catch (e) {
-      _fail('Recording unavailable');
+      _fail('unavailable');
     }
   }
 
@@ -252,14 +255,21 @@ class _HumModalState extends State<_HumModal> {
     }
   }
 
-  void _fail(String msg) {
+  void _fail(String code) {
     _stopBacking();
     if (!mounted) return;
     setState(() {
       _phase = 'error';
-      _errorMsg = msg;
+      _errorCode = code;
     });
   }
+
+  String _errorText(L10n l) => switch (_errorCode) {
+        'permission' => l.editMicPermNeededTitle,
+        'unavailable' => l.ltRecErrUnavailable,
+        'interrupted' => l.ltRecErrInterrupted,
+        _ => l.ltRecErrNoAudio,
+      };
 
   /// record left the session in .playAndRecord; restore .playback and rebuild
   /// the output pipe so pad taps / playback are clean after the hum. Runs once
@@ -287,7 +297,7 @@ class _HumModalState extends State<_HumModal> {
     _deleteQuiet(path);
     await _restoreOutput();
     _finishing = false;
-    _fail('Recording was interrupted — try again'); // TODO(l10n)
+    _fail('interrupted');
   }
 
   static void _deleteQuiet(String? path) {
@@ -313,7 +323,7 @@ class _HumModalState extends State<_HumModal> {
     await _restoreOutput();
     if (path == null) {
       _finishing = false;
-      _fail('No audio captured');
+      _fail('noaudio');
       return;
     }
     if (mounted) setState(() => _phase = 'converting');
@@ -346,13 +356,14 @@ class _HumModalState extends State<_HumModal> {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final time = '0:${(_ms ~/ 1000).toString().padLeft(2, '0')}';
     final subtitle = switch (_phase) {
-      'countin' => 'Get ready — hum on the beat.',
-      'listen' => "Hum your idea — we'll snap it in-key, in time.",
-      'converting' => 'Converting to notes…',
-      'error' => _errorMsg,
-      _ => 'Done! Notes added.',
+      'countin' => l.ltHumCountIn,
+      'listen' => l.ltHumListen,
+      'converting' => l.ltHumConverting,
+      'error' => _errorText(l),
+      _ => l.ltHumDone,
     };
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -362,7 +373,7 @@ class _HumModalState extends State<_HumModal> {
           children: [
             Ms(LtIcons.graphicEq, size: 18, color: widget.accent),
             const SizedBox(width: 8),
-            Text('Hum to MIDI · ${widget.trackLabel}',
+            Text(l.ltHumModalTitle(widget.trackLabel),
                 style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
           ],
         ),
@@ -414,25 +425,24 @@ class _HumModalState extends State<_HumModal> {
                   padding: const EdgeInsets.symmetric(horizontal: 26),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(color: widget.accent, borderRadius: BorderRadius.circular(999)),
-                  child: Text('Convert', style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg)),
+                  child: Text(l.ltHumConvert, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg)),
                 ),
               ),
               const SizedBox(width: 14),
-              _ghostBtn('Cancel', _cancel),
+              _ghostBtn(l.cancel, _cancel),
             ],
           )
         else if (_phase == 'countin')
-          _ghostBtn('Cancel', _cancel)
+          _ghostBtn(l.cancel, _cancel)
         else if (_phase == 'error')
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (_permissionDenied) ...[
-                // TODO(l10n)
-                _solidBtn('Open Settings', () => openAppSettings()),
+                _solidBtn(l.editOpenSettings, () => openAppSettings()),
                 const SizedBox(width: 8),
               ],
-              _ghostBtn('Close', _cancel),
+              _ghostBtn(l.close, _cancel),
             ],
           ),
       ],

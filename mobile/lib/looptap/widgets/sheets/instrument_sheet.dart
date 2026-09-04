@@ -4,6 +4,7 @@
 // before closing. The chosen GM program persists on the song.
 import 'package:flutter/material.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../music/instruments.dart';
 import '../../music/soundfont_catalog.dart';
 import '../../state/loop_prefs.dart';
@@ -47,7 +48,10 @@ class _InstrumentSheet extends StatefulWidget {
 
 class _InstrumentSheetState extends State<_InstrumentSheet> {
   late int _program = widget.currentProgram;
-  late int _categoryIndex;
+  /// null until the first build picks the category holding the current
+  /// program (resolved there, not in initState, because the category labels
+  /// come from L10n).
+  int? _categoryIndex;
   late Set<int> _favorites;
 
   String get _favoriteKey => instrumentFavoriteKeyForTrack(widget.trackId);
@@ -57,11 +61,9 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
     super.initState();
     _favorites =
         LoopPrefs.instance.favoritesForInstrumentRole(_favoriteKey).toSet();
-    _categoryIndex = _initialCategoryIndex();
   }
 
-  int _initialCategoryIndex() {
-    final categories = _categories();
+  int _initialCategoryIndex(List<InstrumentCategory> categories) {
     final i = categories.indexWhere(
       (category) => category.instruments.any(
         (inst) => inst.program == widget.currentProgram,
@@ -84,7 +86,7 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
   // guitars land in the "Guitars" tab) instead of a generic bucket.
   static const Map<String, String> _catalogToGmCategory = {'Guitar': 'Guitars'};
 
-  List<InstrumentCategory> _categories() {
+  List<InstrumentCategory> _categories(L10n l) {
     final gm = instrumentCategoriesForTrack(widget.trackId);
     final gmNames = {for (final c in gm) c.label};
     // Group catalog instruments: those whose category maps onto a GM group name
@@ -106,7 +108,7 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
           InstrumentCategory(c.label, [...c.instruments, ...merged[c.label]!])
         else
           c,
-      if (cloud.isNotEmpty) InstrumentCategory('Cloud sounds', cloud),
+      if (cloud.isNotEmpty) InstrumentCategory(l.ltInstrumentCloudSounds, cloud),
     ];
     if (_favorites.isEmpty) return base;
     final favorites = [
@@ -116,7 +118,7 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
         if (_favorites.contains(inst.program)) inst,
     ];
     if (favorites.isEmpty) return base;
-    return [InstrumentCategory('Favorites', favorites), ...base];
+    return [InstrumentCategory(l.ltInstrumentFavorites, favorites), ...base];
   }
 
   // Runtime-catalog instruments matching this track's role.
@@ -142,16 +144,18 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final categories = _categories();
-    final categoryIndex =
-        _categoryIndex.clamp(0, categories.length - 1).toInt();
+    final l = L10n.of(context);
+    final categories = _categories(l);
+    final categoryIndex = (_categoryIndex ?? _initialCategoryIndex(categories))
+        .clamp(0, categories.length - 1)
+        .toInt();
     final category = categories[categoryIndex];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          '${widget.trackLabel} instrument',
+          l.ltInstrumentSheetTitle(widget.trackLabel),
           style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1),
         ),
         const SizedBox(height: 12),

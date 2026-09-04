@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../../audio/autotune_monitor.dart';
 import '../../../audio/headset.dart';
 import '../../../audio/synth.dart';
@@ -103,7 +104,9 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
 
   final AudioRecorder _rec = AudioRecorder();
   String _phase = 'countin'; // countin | listen | saving | done | error
-  String _errorMsg = '';
+  // Error CODE (not text): _fail runs after awaits and from an isolate result,
+  // so the message is localized in build() instead. See _errorText.
+  String _errorCode = '';
   int _ms = 0;
   int _count = 0;
   bool _backingOn = false;
@@ -169,7 +172,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     if (_closed || !mounted) return;
     if (!granted) {
       _permissionDenied = true;
-      _fail('Microphone permission needed');
+      _fail('permission');
       return;
     }
     _startCountIn();
@@ -325,7 +328,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
         _finish,
       );
     } catch (_) {
-      _fail('Recording unavailable');
+      _fail('unavailable');
     }
   }
 
@@ -336,12 +339,23 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     }
   }
 
-  void _fail(String msg) {
+  String _errorText(L10n l) => switch (_errorCode) {
+    'permission' => l.editMicPermNeededTitle,
+    'unavailable' => l.ltRecErrUnavailable,
+    'interrupted' => l.ltRecErrInterrupted,
+    'noaudio' => l.ltRecErrNoAudio,
+    'tooShort' => l.ltRecErrTooShort,
+    'tooQuiet' => l.ltRecErrTooQuiet,
+    'saveFailed' => l.ltRecSaveFailed,
+    _ => l.ltRecErrFailed,
+  };
+
+  void _fail(String code) {
     _stopBacking();
     if (!mounted) return;
     setState(() {
       _phase = 'error';
-      _errorMsg = msg;
+      _errorCode = code;
     });
   }
 
@@ -381,7 +395,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     _deleteQuiet(path);
     await releaseAutotuneMonitorSession();
     await _restoreOutput();
-    _fail('Recording was interrupted — try again'); // TODO(l10n)
+    _fail('interrupted');
   }
 
   Future<void> _finish() async {
@@ -404,7 +418,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     await releaseAutotuneMonitorSession();
     await _restoreOutput();
     if (path == null) {
-      _fail('No audio captured');
+      _fail('noaudio');
       return;
     }
     final loopSamples = (widget.bars * 4 * _samplesPerBeat(widget.bpm)).round();
@@ -427,7 +441,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     // The raw capture is consumed — the aligned copy is all that's needed now.
     _deleteQuiet(path);
     if (out == null) {
-      _fail('Recording failed');
+      _fail('failed');
       return;
     }
     if (out.error != null) {
@@ -444,7 +458,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     _deleteQuiet(out.path); // temp aligned file — copied or rejected either way
     if (!mounted) return;
     if (!committed) {
-      _fail("Couldn't save the recording");
+      _fail('saveFailed');
       return;
     }
     setState(() => _phase = 'done');
@@ -475,7 +489,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
         return (
           path: '',
           peaks: const <double>[],
-          error: 'Recording was too short',
+          error: 'tooShort',
         );
       }
       // drop the mic lead-in, then trim/zero-pad to exactly one loop
@@ -499,7 +513,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
         return (
           path: '',
           peaks: const <double>[],
-          error: 'Recording is too quiet',
+          error: 'tooQuiet',
         );
       }
       final dst = a['dst'] as String;
@@ -531,19 +545,20 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     final time = '0:${(_ms ~/ 1000).toString().padLeft(2, '0')}';
     final subtitle = switch (_phase) {
       'countin' =>
         widget.headset == HeadsetRoute.none
-            ? 'No earphones — recording silently so the loop stays out of the mic.'
-            : 'Get ready — sing with the loop.',
+            ? l.ltVocalRecCountInNoHeadset
+            : l.ltVocalRecCountIn,
       'listen' =>
         widget.headset == HeadsetRoute.none
-            ? 'Recording one loop — device audio is muted.'
-            : 'Recording one loop — sing along.',
-      'saving' => 'Saving…',
-      'error' => _errorMsg,
-      _ => 'Done! Vocal recorded.',
+            ? l.ltVocalRecListenMuted
+            : l.ltVocalRecListen,
+      'saving' => l.editSaveSaving,
+      'error' => _errorText(l),
+      _ => l.ltVocalRecDone,
     };
     // System back must go through the same cleanup as Cancel — a raw pop
     // would leave the recorder/monitor/backing running.
@@ -561,7 +576,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
               Ms(LtIcons.mic, size: 18, color: widget.accent),
               const SizedBox(width: 8),
               Text(
-                'Record vocal',
+                l.ltVocalRecTitle,
                 style: LTType.inter(
                   size: 16,
                   weight: FontWeight.w800,
@@ -591,7 +606,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Live autotune',
+                  l.ltVocalLiveAutotune,
                   style: LTType.inter(
                     size: 12,
                     weight: FontWeight.w700,
@@ -613,7 +628,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
           if (_monitorActive && _phase == 'listen') ...[
             const SizedBox(height: 8),
             Text(
-              'LIVE AUTOTUNE',
+              l.ltVocalLiveAutotuneOn,
               style: LTType.mono(
                 size: 10,
                 weight: FontWeight.w800,
@@ -695,23 +710,22 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
                   ),
                 ),
                 const SizedBox(width: 14),
-                _ghostBtn('Cancel', _cancel),
+                _ghostBtn(l.cancel, _cancel),
                 const SizedBox(width: 8),
-                _solidBtn('Stop', _finish),
+                _solidBtn(l.pendingStop, _finish),
               ],
             )
           else if (_phase == 'countin')
-            _ghostBtn('Cancel', _cancel)
+            _ghostBtn(l.cancel, _cancel)
           else if (_phase == 'error')
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (_permissionDenied) ...[
-                  // TODO(l10n)
-                  _solidBtn('Open Settings', () => openAppSettings()),
+                  _solidBtn(l.editOpenSettings, () => openAppSettings()),
                   const SizedBox(width: 8),
                 ],
-                _ghostBtn('Close', _cancel),
+                _ghostBtn(l.close, _cancel),
               ],
             ),
         ],

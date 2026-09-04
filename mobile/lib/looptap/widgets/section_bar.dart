@@ -4,6 +4,7 @@
 // Far right: Play song / Stop song.
 import 'package:flutter/material.dart';
 
+import '../../l10n/generated/app_localizations.dart';
 import '../models/loop_models.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
@@ -40,7 +41,7 @@ class SectionBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
       child: Row(
         children: [
-          const LtLabel('Song'),
+          LtLabel(L10n.of(context).ltSectionsLabel),
           const SizedBox(width: 10),
           Expanded(
             child: SizedBox(
@@ -251,7 +252,10 @@ class _PlaySongButton extends StatelessWidget {
             Ms(songMode ? LtIcons.stop : LtIcons.playlistPlay,
                 size: 16, color: songMode ? LT.bg : LT.lime, fill: 1),
             const SizedBox(width: 6),
-            Text(songMode ? 'Stop song' : 'Play song',
+            Text(
+                songMode
+                    ? L10n.of(context).ltSectionStopSong
+                    : L10n.of(context).ltSectionPlaySong,
                 style: LTType.inter(size: 12, weight: FontWeight.w800, color: songMode ? LT.bg : LT.t1)),
           ],
         ),

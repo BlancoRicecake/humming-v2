@@ -280,7 +280,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                         overflow: TextOverflow.ellipsis,
                         style: LTType.inter(size: 18, weight: FontWeight.w800, color: LT.t1)),
                   ),
-                  IconBtn(icon: LtIcons.close, tooltip: 'Close', onTap: () => Navigator.of(context).pop()),
+                  IconBtn(icon: LtIcons.close, tooltip: l.close, onTap: () => Navigator.of(context).pop()),
                 ],
               ),
               const SizedBox(height: 8),

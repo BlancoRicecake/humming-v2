@@ -1715,4 +1715,406 @@ class L10nKo extends L10n {
 
   @override
   String get ltSettingsContact => '문의하기';
+
+  @override
+  String get ltSongsTagline => '탭으로 만드는 비트';
+
+  @override
+  String get ltSongsNewSong => '새 곡';
+
+  @override
+  String get ltSongsNewCard => '새 루프 만들기';
+
+  @override
+  String ltSongCardMeta(String key, String scale, int bpm, int bars) {
+    return '$key $scale · $bpm BPM · $bars마디';
+  }
+
+  @override
+  String get ltScalePenta => '펜타토닉';
+
+  @override
+  String get ltScaleDorian => '도리안';
+
+  @override
+  String get ltKeySheetTitle => '키 & 스케일';
+
+  @override
+  String get ltKeyRoot => '루트';
+
+  @override
+  String get ltKeyScale => '스케일';
+
+  @override
+  String get ltKeyHint => '키에 맞는 음만 패드에 나와요 — 틀린 음을 누를 일이 없어요.';
+
+  @override
+  String get ltMixerTitle => '믹서';
+
+  @override
+  String ltInstrumentSheetTitle(String track) {
+    return '$track 악기';
+  }
+
+  @override
+  String get ltInstrumentFavorites => '즐겨찾기';
+
+  @override
+  String get ltInstrumentCloudSounds => '클라우드 사운드';
+
+  @override
+  String get ltTransportCountIn => '카운트인';
+
+  @override
+  String get ltTransportLoopAlwaysOn => '루프 (항상 켜짐)';
+
+  @override
+  String get ltTransportClearTrack => '트랙 비우기';
+
+  @override
+  String get ltTransportSwing => '스윙';
+
+  @override
+  String get ltTransportSetBpm => 'BPM 설정';
+
+  @override
+  String get ltSectionsLabel => '곡';
+
+  @override
+  String get ltSectionPlaySong => '곡 재생';
+
+  @override
+  String get ltSectionStopSong => '곡 정지';
+
+  @override
+  String get ltArrangeAddTrack => '트랙';
+
+  @override
+  String get ltEditorBack => '뒤로';
+
+  @override
+  String get ltEditorUndo => '실행 취소';
+
+  @override
+  String get ltEditorRedo => '다시 실행';
+
+  @override
+  String get ltEditorSaved => '저장됨';
+
+  @override
+  String get ltEditorUnsaved => '저장 안 됨';
+
+  @override
+  String ltEditorSectionMenuTitle(String name) {
+    return '섹션 $name';
+  }
+
+  @override
+  String get ltEditorMoveLeft => '왼쪽으로 이동';
+
+  @override
+  String get ltEditorMoveRight => '오른쪽으로 이동';
+
+  @override
+  String get ltEditorTrackCleared => '트랙을 비웠어요';
+
+  @override
+  String get ltEditorLaneFull => '레인이 가득 찼어요 — 새 테이크는 맨 앞에서 겹쳐 시작해요';
+
+  @override
+  String get ltEditorSoundDownloadFailed => '사운드를 받지 못했어요 — 연결을 확인해주세요';
+
+  @override
+  String get ltEditorSoundReady => '악기 준비 완료';
+
+  @override
+  String get ltEditorAutotuneTitle => '오토튠';
+
+  @override
+  String ltEditorAutotuneSub(String key, String scale) {
+    return '$key $scale 에 맞춰 음정을 잡아줘요. 원본 테이크는 그대로 남아요.';
+  }
+
+  @override
+  String get ltEditorAutotuneNatural => '자연스럽게';
+
+  @override
+  String get ltEditorAutotuneNaturalSub => '살짝만 보정해서 원래 느낌을 살려요';
+
+  @override
+  String get ltEditorAutotuneStrong => '강하게';
+
+  @override
+  String get ltEditorAutotuneStrongSub => '딱 붙는 그 소리';
+
+  @override
+  String get ltEditorAutotuneFailed => '오토튠은 연결이 필요해요';
+
+  @override
+  String ltEditorHumAdded(int count) {
+    return '허밍에서 노트 $count개를 넣었어요';
+  }
+
+  @override
+  String get ltEditorHumErrTooLong => '녹음이 너무 길어요';
+
+  @override
+  String get ltEditorHumErrBusy => '서버가 혼잡해요. 잠시 후 다시 시도해주세요';
+
+  @override
+  String get ltEditorHumErrWaking => '서버를 깨우는 중이에요. 다시 시도해주세요';
+
+  @override
+  String get ltEditorHumErrGeneric => '허밍을 변환하지 못했어요';
+
+  @override
+  String get ltEditorHumErrNoNotes => '노트를 찾지 못했어요 — 조금 더 크게 불러보세요';
+
+  @override
+  String get ltEditorModePads => '패드';
+
+  @override
+  String get ltEditorModeGrid => '그리드';
+
+  @override
+  String get ltEditorPowerChord => '파워';
+
+  @override
+  String get ltEditorOctaveDown => '옥타브 내리기';
+
+  @override
+  String get ltEditorOctaveUp => '옥타브 올리기';
+
+  @override
+  String get ltEditorHumToMidi => '허밍 → MIDI';
+
+  @override
+  String get ltEditorHintGridDrums => '셀을 탭해서 켜고 끄기';
+
+  @override
+  String get ltEditorHintGridPitched => '탭 · 드래그로 길이 조절 · 자동 병합';
+
+  @override
+  String get ltEditorHintPads => '녹음 후 탭';
+
+  @override
+  String ltHumModalTitle(String track) {
+    return '허밍 → MIDI · $track';
+  }
+
+  @override
+  String get ltHumCountIn => '준비하세요 — 박자에 맞춰 흥얼거려요.';
+
+  @override
+  String get ltHumListen => '떠오르는 멜로디를 흥얼거려요 — 키와 박자에 맞춰 정리해드려요.';
+
+  @override
+  String get ltHumConverting => '노트로 변환 중…';
+
+  @override
+  String get ltHumDone => '완료! 노트를 넣었어요.';
+
+  @override
+  String get ltHumConvert => '변환';
+
+  @override
+  String get ltRecErrUnavailable => '녹음을 시작할 수 없어요';
+
+  @override
+  String get ltRecErrInterrupted => '녹음이 중단됐어요 — 다시 시도해주세요';
+
+  @override
+  String get ltRecErrNoAudio => '녹음된 소리가 없어요';
+
+  @override
+  String get ltRecErrFailed => '녹음에 실패했어요';
+
+  @override
+  String get ltRecErrTooShort => '녹음이 너무 짧아요';
+
+  @override
+  String get ltRecErrTooQuiet => '소리가 너무 작아요';
+
+  @override
+  String get ltRecSaveFailed => '녹음을 저장하지 못했어요';
+
+  @override
+  String get ltVocalRecTitle => '보컬 녹음';
+
+  @override
+  String get ltVocalRecCountInNoHeadset =>
+      '이어폰이 없어요 — 루프가 마이크에 들어가지 않게 무음으로 녹음해요.';
+
+  @override
+  String get ltVocalRecCountIn => '준비하세요 — 루프에 맞춰 불러주세요.';
+
+  @override
+  String get ltVocalRecListenMuted => '한 루프 녹음 중 — 기기 소리는 꺼져 있어요.';
+
+  @override
+  String get ltVocalRecListen => '한 루프 녹음 중 — 같이 불러주세요.';
+
+  @override
+  String get ltVocalRecDone => '완료! 보컬을 녹음했어요.';
+
+  @override
+  String get ltVocalLiveAutotune => '실시간 오토튠';
+
+  @override
+  String get ltVocalLiveAutotuneOn => '실시간 오토튠 ON';
+
+  @override
+  String get ltVocalRecorded => '녹음됨';
+
+  @override
+  String get ltVocalTapToRecord => '탭해서 녹음';
+
+  @override
+  String get ltVocalRecOverSong => '곡 전체 녹음';
+
+  @override
+  String get ltVocalReRecOverSong => '곡 전체 다시 녹음';
+
+  @override
+  String get ltVocalClearSongTake => '곡 보컬 지우기';
+
+  @override
+  String get ltVocalEdit => '편집';
+
+  @override
+  String get ltVocalClear => '지우기';
+
+  @override
+  String get ltVocalEditorTitle => '보컬 편집기';
+
+  @override
+  String ltVocalEditorMeta(int takes, int bpm, int bars) {
+    return '테이크 $takes개 · $bpm BPM · $bars마디';
+  }
+
+  @override
+  String get ltVocalEditorNoTake => '편집할 테이크가 없어요';
+
+  @override
+  String ltVocalEditorTake(int n) {
+    return '테이크 $n';
+  }
+
+  @override
+  String ltVocalEditorFxCount(int n) {
+    return 'FX $n';
+  }
+
+  @override
+  String get ltVocalEditorDragHint => '드래그해서 구간 선택';
+
+  @override
+  String get ltVocalEditorDragSet => '구간 선택됨 · 자르기 탭';
+
+  @override
+  String get ltVocalEditorTrimmed => '잘림';
+
+  @override
+  String ltVocalEditorFadeInReadout(int ms) {
+    return '인 ${ms}ms';
+  }
+
+  @override
+  String ltVocalEditorFadeOutReadout(int ms) {
+    return '아웃 ${ms}ms';
+  }
+
+  @override
+  String get ltVocalEditorEditGroup => '편집';
+
+  @override
+  String get ltVocalEditorEffectsGroup => '이펙트';
+
+  @override
+  String get ltVocalEditorReset => '되돌리기';
+
+  @override
+  String get ltVocalEditorServerTag => '서버';
+
+  @override
+  String get ltVocalEditorTrim => '자르기';
+
+  @override
+  String ltVocalEditorFadeIn(int ms) {
+    return '페이드 인 $ms';
+  }
+
+  @override
+  String ltVocalEditorFadeOut(int ms) {
+    return '페이드 아웃 $ms';
+  }
+
+  @override
+  String get ltVocalEditorGainDown => '게인 −';
+
+  @override
+  String get ltVocalEditorGainUp => '게인 +';
+
+  @override
+  String get ltVocalEditorNormalize => '노멀라이즈';
+
+  @override
+  String get ltVocalEditorProcessFailed => '사운드 가공에 실패했어요';
+
+  @override
+  String get ltVocalEditorPreview => '미리듣기 (편집본)';
+
+  @override
+  String get ltVocalEditorEarlier => '앞으로 당기기';
+
+  @override
+  String get ltVocalEditorLater => '뒤로 밀기';
+
+  @override
+  String ltVocalEditorStep(int n) {
+    return '스텝 $n';
+  }
+
+  @override
+  String get ltVocalEditorDeleteTake => '테이크 삭제';
+
+  @override
+  String ltVocalEditorFxProcessing(String fx) {
+    return '$fx 처리 중…';
+  }
+
+  @override
+  String ltVocalEditorFxChainItem(int index, String fx) {
+    return '$index. $fx';
+  }
+
+  @override
+  String get ltFxEq => 'EQ';
+
+  @override
+  String get ltFxReverb => '리버브';
+
+  @override
+  String get ltFxComp => '컴프';
+
+  @override
+  String get ltFxDelay => '딜레이';
+
+  @override
+  String get ltFxStretch => '속도';
+
+  @override
+  String get ltFxPitch => '피치';
+
+  @override
+  String get ltFxSlower => '느리게';
+
+  @override
+  String get ltFxFaster => '빠르게';
+
+  @override
+  String get ltFxPitchUp => '피치 +2';
+
+  @override
+  String get ltFxPitchDown => '피치 −2';
 }

@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show timeDilation;
 
+import '../../l10n/generated/app_localizations.dart';
 import '../models/loop_models.dart';
 import '../music/theory.dart';
 import '../theme/atoms.dart';
@@ -300,7 +301,7 @@ class _AddTrackRow extends StatelessWidget {
                   children: [
                     const Ms(LtIcons.add, size: 13, color: LT.t2),
                     const SizedBox(width: 3),
-                    Text('Track',
+                    Text(L10n.of(context).ltArrangeAddTrack,
                         style: LTType.inter(size: 10, weight: FontWeight.w700, color: LT.t2)),
                   ],
                 ),

@@ -5,11 +5,11 @@ import 'package:provider/provider.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import '../models/loop_models.dart';
-import '../music/theory.dart';
 import '../state/loop_store.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
 import '../widgets/sheets/account_sheet.dart';
+import '../widgets/sheets/key_sheet.dart' show ltScaleLabel;
 import '../widgets/sheets/paywall_sheet.dart';
 import '../widgets/sheets/settings_sheet.dart';
 import 'edit_screen.dart';
@@ -82,6 +82,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     return Row(
       children: [
         // logo — HumTrack app icon (lime hummingbird), rounded to match the badge
@@ -109,7 +110,7 @@ class _Header extends StatelessWidget {
                 ],
               ),
             ),
-            const LtLabel('Tap-to-make beats', color: LT.t3),
+            LtLabel(l.ltSongsTagline, color: LT.t3),
           ],
         ),
         const Spacer(),
@@ -117,11 +118,11 @@ class _Header extends StatelessWidget {
           _ProBadge(onTap: () => showAccountSheet(context)),
           const SizedBox(width: 10),
         ],
-        IconBtn(icon: LtIcons.settings, size: 40, tooltip: 'Settings', onTap: () => showSettingsSheet(context)),
+        IconBtn(icon: LtIcons.settings, size: 40, tooltip: l.ltSettingsTitle, onTap: () => showSettingsSheet(context)),
         const SizedBox(width: 10),
         _MyPageButton(),
         const SizedBox(width: 10),
-        Pill(label: 'New song', icon: LtIcons.add, tone: PillTone.lime, height: 40, fontSize: 14, horizontalPadding: 18, onTap: onNew),
+        Pill(label: l.ltSongsNewSong, icon: LtIcons.add, tone: PillTone.lime, height: 40, fontSize: 14, horizontalPadding: 18, onTap: onNew),
       ],
     );
   }
@@ -322,7 +323,7 @@ class _SongCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scaleLabel = kScales[song.scale]?.label ?? song.scale;
+    final l = L10n.of(context);
     return Stack(
       children: [
         GestureDetector(
@@ -369,7 +370,9 @@ class _SongCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t1)),
                 const SizedBox(height: 6),
-                Text('${song.key} $scaleLabel · ${song.bpm} BPM · ${song.bars} bars',
+                Text(
+                    l.ltSongCardMeta(song.key, ltScaleLabel(l, song.scale),
+                        song.bpm, song.bars),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: LTType.mono(size: 10, color: LT.t3)),
@@ -474,7 +477,7 @@ class _NewCard extends StatelessWidget {
           children: [
             const Ms(LtIcons.add, size: 28, color: LT.t2),
             const SizedBox(height: 8),
-            Text('Start a new loop',
+            Text(L10n.of(context).ltSongsNewCard,
                 style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t2)),
           ],
         ),

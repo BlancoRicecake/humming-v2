@@ -2,6 +2,7 @@
 // (tap = mute), name, volume slider (track color), % readout (or — when muted).
 import 'package:flutter/material.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../music/theory.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
@@ -49,6 +50,7 @@ class _MixerSheet extends StatefulWidget {
 class _MixerSheetState extends State<_MixerSheet> {
   @override
   Widget build(BuildContext context) {
+    final l = L10n.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -57,7 +59,7 @@ class _MixerSheetState extends State<_MixerSheet> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Mixer',
+              l.ltMixerTitle,
               style: LTType.inter(
                 size: 15,
                 weight: FontWeight.w800,
@@ -66,7 +68,7 @@ class _MixerSheetState extends State<_MixerSheet> {
             ),
             IconBtn(
               icon: LtIcons.close,
-              tooltip: 'Close',
+              tooltip: l.close,
               onTap: () => Navigator.of(context).pop(),
             ),
           ],
