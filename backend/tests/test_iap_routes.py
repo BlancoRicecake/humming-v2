@@ -6,10 +6,13 @@ ordering, Google pending payments, webhook auth.
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app import deps
@@ -288,12 +291,31 @@ def test_apple_webhook_never_transfers_between_users(client, db, chain):
 # --- Google -----------------------------------------------------------------
 @pytest.fixture
 def google(monkeypatch):
+    """Stub for BOTH Play endpoints.
+
+    * ``calls["v2"]`` → the ``purchases.subscriptionsv2`` resource (primary).
+    * ``calls["resource"]`` → the deprecated v3 resource.
+
+    With no ``v2`` set, v2 reports itself unavailable (as a 404 would), so a
+    test that only sets ``resource`` exercises the v3 fallback path — which is
+    how the pre-migration Google tests below keep their meaning.
+    """
     calls = {}
+
+    async def fake_v2(token):
+        calls["last_v2"] = token
+        if "v2" not in calls:
+            raise iap_mod._GoogleV2Unavailable("404 (test: no v2 resource)")
+        res = calls["v2"]
+        if isinstance(res, Exception):
+            raise res
+        return res
 
     async def fake_verify(product_id, token):
         calls["last"] = (product_id, token)
         return calls["resource"]
 
+    monkeypatch.setattr(iap_mod, "_google_verify_subscription_v2", fake_v2)
     monkeypatch.setattr(iap_mod, "_google_verify_subscription", fake_verify)
     return calls
 
@@ -396,6 +418,286 @@ def google_fixture_verify(calls):
     async def fake_verify(product_id, token):
         return calls["resource"]
     return fake_verify
+
+
+# --- Google subscriptionsv2 (B11b) ------------------------------------------
+def rfc3339(dt: datetime) -> str:
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def gline(product="humtrack_pro_monthly_v2", *, days=30, auto_renew=True,
+          prepaid=False, base_plan="monthly", offer_id=None, **over):
+    """One ``lineItems[]`` entry of a subscriptionsv2 resource."""
+    now = datetime.now(timezone.utc)
+    li = {
+        "productId": product,
+        "expiryTime": rfc3339(now + timedelta(days=days)),
+        "offerDetails": {"basePlanId": base_plan},
+    }
+    if offer_id:
+        li["offerDetails"]["offerId"] = offer_id
+    if prepaid:
+        li["prepaidPlan"] = {"allowExtendAfterTime": rfc3339(now + timedelta(days=days))}
+    else:
+        # proto3 JSON omits false booleans — auto-renew off is an EMPTY object.
+        li["autoRenewingPlan"] = {"autoRenewEnabled": True} if auto_renew else {}
+    li.update(over)
+    return li
+
+
+def gv2(state="ACTIVE", *, items=None, ack=True, **over):
+    now = datetime.now(timezone.utc)
+    d = {
+        "subscriptionState": "SUBSCRIPTION_STATE_%s" % state,
+        "latestOrderId": "GPA.1",
+        "startTime": rfc3339(now - timedelta(days=1)),
+        "acknowledgementState": ("ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED" if ack
+                                 else "ACKNOWLEDGEMENT_STATE_PENDING"),
+        "lineItems": [gline()] if items is None else items,
+    }
+    d.update(over)
+    return d
+
+
+@pytest.mark.parametrize("state,expected,pro", [
+    ("ACTIVE", "active", True),
+    ("IN_GRACE_PERIOD", "active", True),
+    ("CANCELED", "cancelled", True),
+    ("ON_HOLD", "expired", False),
+    ("PAUSED", "expired", False),
+    ("EXPIRED", "expired", False),
+    ("PENDING", "expired", False),
+    ("PENDING_PURCHASE_CANCELED", "expired", False),
+    ("UNSPECIFIED", "expired", False),
+])
+def test_google_v2_state_mapping(state, expected, pro):
+    """Every subscriptionState → status + entitlement. Note the expiry is in
+    the FUTURE for all of them: ON_HOLD/PAUSED must not grant Pro anyway."""
+    status_v, expires_at = iap_mod._google_status_v2(gv2(state))
+    assert status_v == expected
+    assert deps.subscription_is_pro({"status": status_v, "expires_at": expires_at}) is pro
+
+
+def test_google_v2_state_accepts_bare_enum_name():
+    assert iap_mod._google_status_v2({"subscriptionState": "ACTIVE",
+                                      "lineItems": [gline()]})[0] == "active"
+
+
+def test_google_v2_parses_nanosecond_timestamps():
+    dt = iap_mod._parse_rfc3339("2026-09-04T12:34:56.123456789Z")
+    assert dt is not None and dt.microsecond == 123456 and dt.tzinfo is not None
+    assert iap_mod._parse_rfc3339("2026-09-04T12:34:56Z").hour == 12
+    assert iap_mod._parse_rfc3339("2026-09-04T12:34:56.123Z").microsecond == 123000
+    assert iap_mod._parse_rfc3339(None) is None
+    assert iap_mod._parse_rfc3339("not-a-time") is None
+
+
+def test_google_v2_verify_active_and_token_addressed(client, db, google):
+    google["v2"] = gv2()
+    r = verify_google(client)
+    assert r.status_code == 200 and r.json()["pro"] is True
+    row = db.sub(USER_A)
+    assert row["purchase_token"] == "tok-1" and row["transaction_id"] == "GPA.1"
+    assert row["original_purchase_at"]
+    assert google["last_v2"] == "tok-1"   # v2 is addressed by token ALONE
+    assert "last" not in google           # v3 was never called
+
+
+def test_google_v2_upgrade_updates_stored_product(client, db, google):
+    """Client still posts the monthly productId; v2 reports the yearly plan
+    the user is actually on now — the stored product must follow v2."""
+    google["v2"] = gv2(items=[gline("humtrack_pro_yearly_v2", days=365, base_plan="yearly")])
+    j = verify_google(client).json()
+    assert j["product_id"] == "humtrack_pro_yearly_v2"
+    assert db.sub(USER_A)["product_id"] == "humtrack_pro_yearly_v2"
+
+
+def test_google_v2_auto_renew_off_is_cancelled_but_pro(client, db, google):
+    google["v2"] = gv2(items=[gline(auto_renew=False)])          # omitted flag
+    j = verify_google(client).json()
+    assert j["status"] == "cancelled" and j["pro"] is True
+
+
+def test_google_v2_auto_renew_explicit_false_is_cancelled_but_pro(client, db, google):
+    google["v2"] = gv2(items=[gline(autoRenewingPlan={"autoRenewEnabled": False})])
+    j = verify_google(client).json()
+    assert j["status"] == "cancelled" and j["pro"] is True
+
+
+def test_google_v2_grace_period_keeps_pro(client, db, google):
+    google["v2"] = gv2("IN_GRACE_PERIOD", items=[gline(days=2)])
+    j = verify_google(client).json()
+    assert j["status"] == "active" and j["pro"] is True and j["expires_at"]
+
+
+def test_google_v2_prepaid_plan_is_active_not_cancelled(client, db, google):
+    """A prepaid plan has no autoRenewingPlan — that is not a cancellation."""
+    google["v2"] = gv2(items=[gline(prepaid=True, days=14)])
+    j = verify_google(client).json()
+    assert j["status"] == "active" and j["pro"] is True
+
+
+def test_google_v2_expiry_is_max_across_line_items(client, db, google):
+    google["v2"] = gv2(items=[gline(days=10), gline("humtrack_addon", days=45),
+                              gline("humtrack_other", days=3)])
+    j = verify_google(client).json()
+    exp = iap_mod._parse_ts(j["expires_at"])
+    assert 44 <= (exp - datetime.now(timezone.utc)).days <= 45
+    # the furthest-expiring item also decides which product we record
+    assert j["product_id"] == "humtrack_addon"
+
+
+def test_google_v2_pending_payment_not_granted(client, db, google):
+    google["v2"] = gv2("PENDING")
+    assert verify_google(client).status_code == 409
+    assert db.sub(USER_A) is None
+
+
+def test_google_v2_canceled_before_expiry_is_pro_with_reason(client, db, google):
+    google["v2"] = gv2("CANCELED", canceledStateContext={
+        "userInitiatedCancellation": {"cancelTime": rfc3339(datetime.now(timezone.utc))}})
+    j = verify_google(client).json()
+    assert j["status"] == "cancelled" and j["pro"] is True
+    assert db.sub(USER_A)["cancel_reason"] == "user_initiated"
+
+
+def test_google_v2_canceled_past_expiry_is_expired(client, db, google):
+    google["v2"] = gv2("CANCELED", items=[gline(days=-1)])
+    j = verify_google(client).json()
+    assert j["status"] == "expired" and j["pro"] is False
+
+
+def test_google_v2_unavailable_falls_back_to_v3(client, db, google):
+    """v2 404 (unknown token / old plan type) → the deprecated v3 path still
+    verifies the purchase. A paying user must never be broken by the migration."""
+    google["resource"] = gsub()           # no "v2" key → fixture raises 404
+    r = verify_google(client)
+    assert r.status_code == 200 and r.json()["pro"] is True
+    assert google["last"] == ("humtrack_pro_monthly_v2", "tok-1")
+    row = db.sub(USER_A)
+    assert row["purchase_token"] == "tok-1" and row["product_id"] == "humtrack_pro_monthly_v2"
+
+
+def test_google_v2_without_line_items_falls_back_to_v3(client, db, google):
+    google["v2"] = {"subscriptionState": "SUBSCRIPTION_STATE_ACTIVE"}   # no lineItems
+    google["resource"] = gsub()
+    r = verify_google(client)
+    assert r.status_code == 200 and r.json()["pro"] is True
+    assert google["last"][1] == "tok-1"
+
+
+def test_google_v2_fallback_keeps_v3_trial_and_pending_semantics(client, db, google):
+    google["resource"] = gsub(paymentState=2)
+    assert verify_google(client).json()["status"] == "trial"
+    google["resource"] = gsub(paymentState=0)
+    assert verify_google(client, USER_B).status_code == 409
+
+
+def test_google_v2_unacknowledged_purchase_logs_warning(client, db, google, caplog):
+    google["v2"] = gv2(ack=False)
+    with caplog.at_level(logging.WARNING, logger="humming.iap"):
+        assert verify_google(client).status_code == 200
+    assert any("UNACKNOWLEDGED" in r.getMessage() for r in caplog.records)
+    # and the raw purchase token is never logged
+    assert not any("tok-1" in r.getMessage() for r in caplog.records)
+
+
+def test_google_v2_webhook_expires_bound_user(client, db, google):
+    google["v2"] = gv2()
+    assert verify_google(client).status_code == 200
+    google["v2"] = gv2("EXPIRED", items=[gline(days=-1)])
+    r = client.post("/iap/webhook/google?token=hook-secret", json=google_push(ntype=13))
+    assert r.status_code == 200, r.text
+    assert db.sub(USER_A)["status"] == "expired"
+    assert not deps.subscription_is_pro(db.sub(USER_A))
+    assert db.tables["iap_notifications"][0]["processed_at"]
+
+
+def test_google_v2_webhook_plan_change_follows_linked_token(client, db, google):
+    google["v2"] = gv2()
+    verify_google(client, token="old-tok")
+    google["v2"] = gv2(linkedPurchaseToken="old-tok", latestOrderId="GPA.2",
+                       items=[gline("humtrack_pro_yearly_v2", days=365, base_plan="yearly")])
+    r = client.post("/iap/webhook/google?token=hook-secret", json=google_push(token="new-tok"))
+    assert r.status_code == 200 and r.json()["status"] == "active"
+    row = db.sub(USER_A)
+    assert row["purchase_token"] == "new-tok"
+    assert row["product_id"] == "humtrack_pro_yearly_v2"   # upgrade recorded
+    assert row["transaction_id"] == "GPA.2"
+
+
+def test_google_v2_webhook_stale_event_ignored(client, db, google):
+    google["v2"] = gv2()
+    verify_google(client)
+    old = ms(datetime.now(timezone.utc) - timedelta(days=2))
+    google["v2"] = gv2("EXPIRED", items=[gline(days=-1)])
+    body = google_push(ntype=13, eventTimeMillis=str(ms(datetime.now(timezone.utc))))
+    assert client.post("/iap/webhook/google?token=hook-secret", json=body).status_code == 200
+    google["v2"] = gv2()
+    r = client.post("/iap/webhook/google?token=hook-secret",
+                    json=google_push(ntype=4, eventTimeMillis=str(old)))
+    assert r.status_code == 200 and r.json()["outcome"] == "stale"
+    assert db.sub(USER_A)["status"] == "expired"
+
+
+def test_google_v2_webhook_unbound_token_uses_external_account_id(client, db, google):
+    google["v2"] = gv2(externalAccountIdentifiers={"obfuscatedExternalAccountId": USER_B})
+    r = client.post("/iap/webhook/google?token=hook-secret", json=google_push(token="fresh"))
+    assert r.status_code == 200 and r.json()["status"] == "active"
+    assert db.sub(USER_B)["purchase_token"] == "fresh"
+
+
+def test_google_v2_endpoint_url_and_error_mapping(monkeypatch, env):
+    """The v2 request carries no productId, 404 signals fallback, 5xx does not."""
+    monkeypatch.setenv("GOOGLE_PACKAGE_NAME", "com.example.humtrack")
+    get_settings.cache_clear()
+
+    async def fake_token():
+        return "access-token"
+
+    monkeypatch.setattr(iap_mod, "_google_access_token", fake_token)
+    seen = {}
+
+    class Resp:
+        def __init__(self, status, payload=None):
+            self.status_code, self._payload, self.text = status, payload or {}, "body"
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        status = 200
+        payload = {"subscriptionState": "SUBSCRIPTION_STATE_ACTIVE"}
+
+        def __init__(self, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, headers=None):
+            seen["url"], seen["headers"] = url, headers
+            return Resp(FakeClient.status, FakeClient.payload)
+
+    monkeypatch.setattr(iap_mod.httpx, "AsyncClient", FakeClient)
+
+    assert asyncio.run(iap_mod._google_verify_subscription_v2("tok-9")) == FakeClient.payload
+    assert seen["url"].endswith("/purchases/subscriptionsv2/tokens/tok-9")
+    assert "/purchases/subscriptions/" not in seen["url"]   # no productId in path
+    assert seen["headers"]["Authorization"] == "Bearer access-token"
+
+    for status in (400, 404):
+        FakeClient.status = status
+        with pytest.raises(iap_mod._GoogleV2Unavailable):
+            asyncio.run(iap_mod._google_verify_subscription_v2("tok-9"))
+
+    FakeClient.status = 500
+    with pytest.raises(HTTPException) as ei:
+        asyncio.run(iap_mod._google_verify_subscription_v2("tok-9"))
+    assert ei.value.status_code == 502
 
 
 # --- deploy-before-migrate safety -------------------------------------------

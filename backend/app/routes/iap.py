@@ -42,12 +42,14 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import secrets
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import anyio
 import httpx
@@ -55,6 +57,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..apple_jws import AppleJWSError, decode_apple_jws
 from ..deps import (
+    PRO_STATUSES,
     CurrentUser,
     fetch_subscription,
     get_current_user,
@@ -458,6 +461,8 @@ async def _google_access_token() -> str:
 
 
 async def _google_verify_subscription(product_id: str, purchase_token: str) -> dict:
+    """DEPRECATED ``purchases.subscriptions`` (v3). Kept only as the fallback
+    behind ``_google_resolve_subscription`` — see the v2 section below."""
     s = get_settings()
     if not s.google_package_name:
         raise HTTPException(503, "Google package name not configured")
@@ -498,6 +503,257 @@ def _google_status(sub: dict, now: Optional[datetime] = None) -> Tuple[SubStatus
     if cancel:
         return "cancelled", expiry
     return "active", expiry
+
+
+# --- Google Play: purchases.subscriptionsv2 ---------------------------------
+# ``purchases.subscriptions`` (above) is deprecated by Google and cannot
+# describe newer plan types (multi-line-item subscriptions, prepaid plans).
+# ``subscriptionsv2`` is addressed by purchase token ALONE — which also means a
+# stale stored product_id can no longer break a lookup after an upgrade /
+# downgrade. v2 is the primary path; v3 stays as a fallback (see
+# ``_google_resolve_subscription``) so a v2 hiccup never blocks a paying user.
+_GOOGLE_V2_STATE_PREFIX = "SUBSCRIPTION_STATE_"
+
+
+class _GoogleV2Unavailable(Exception):
+    """v2 could not answer for this token → fall back to the v3 resource."""
+
+
+@dataclass
+class _GoogleSub:
+    """API-version-agnostic view of a Play subscription.
+
+    Both ``_google_from_v2`` and ``_google_from_v3`` produce this, so the
+    routes never branch on which endpoint answered.
+    """
+    status: SubStatus
+    expires_at: Optional[datetime] = None
+    product_id: Optional[str] = None           # the CURRENT product (v2 only)
+    order_id: Optional[str] = None
+    linked_purchase_token: Optional[str] = None
+    start_at: Optional[datetime] = None
+    pending: bool = False                      # payment pending → grant nothing
+    trial: bool = False
+    cancel_reason: Optional[str] = None
+    external_account_id: Optional[str] = None
+    acknowledged: bool = True
+    api: str = "v2"
+
+
+def _mask_token(token: Optional[str]) -> str:
+    """Purchase tokens are credentials — never log one whole."""
+    t = str(token or "")
+    return ("..." + t[-6:]) if len(t) > 6 else "..."
+
+
+def _parse_rfc3339(v) -> Optional[datetime]:
+    """Parse a v2 timestamp (v3 used ms-epoch strings instead).
+
+    Google emits nanosecond precision; ``datetime.fromisoformat`` on 3.11
+    accepts only 3 or 6 fractional digits, so trim the excess first.
+    """
+    if not v:
+        return None
+    s = str(v).strip()
+    m = re.match(r"^(.*\.\d{6})\d+([Zz+\-].*)?$", s)
+    if m:
+        s = m.group(1) + (m.group(2) or "")
+    return _parse_ts(s)
+
+
+def _google_v2_state(sub: dict) -> str:
+    st = str(sub.get("subscriptionState") or "").strip().upper()
+    if st.startswith(_GOOGLE_V2_STATE_PREFIX):
+        st = st[len(_GOOGLE_V2_STATE_PREFIX):]
+    return st or "UNSPECIFIED"
+
+
+def _google_v2_line_items(sub: dict) -> List[dict]:
+    return [li for li in (sub.get("lineItems") or []) if isinstance(li, dict)]
+
+
+def _google_v2_expiry(sub: dict) -> Optional[datetime]:
+    """Furthest ``lineItems[].expiryTime`` — a subscription can carry several
+    line items (base plan + add-ons, prepaid top-up alongside a plan) and
+    access lasts until the last of them lapses."""
+    stamps = [t for t in (_parse_rfc3339(li.get("expiryTime"))
+                          for li in _google_v2_line_items(sub)) if t]
+    return max(stamps) if stamps else None
+
+
+def _google_v2_governing_item(sub: dict) -> Optional[dict]:
+    """The line item that decides entitlement: the one expiring last."""
+    items = _google_v2_line_items(sub)
+    dated = [(t, li) for t, li in ((_parse_rfc3339(li.get("expiryTime")), li)
+                                   for li in items) if t]
+    if dated:
+        return max(dated, key=lambda pair: pair[0])[1]
+    return items[0] if items else None
+
+
+def _google_status_v2(sub: dict, now: Optional[datetime] = None) -> Tuple[SubStatus, Optional[datetime]]:
+    """Map a ``subscriptionsv2`` resource → our SubStatus + effective expiry.
+
+    ACTIVE           → active; ``cancelled`` when the governing plan has
+                       auto-renew off (still entitled until expiry — same
+                       semantics as the Apple path's autoRenewStatus == 0)
+    IN_GRACE_PERIOD  → active (Google extends expiryTime through the grace)
+    CANCELED         → cancelled while the expiry is in the future, else expired
+    ON_HOLD / PAUSED / EXPIRED / PENDING / UNSPECIFIED → expired (no access)
+    """
+    now = now or _now_utc()
+    state = _google_v2_state(sub)
+    expiry = _google_v2_expiry(sub)
+    item = _google_v2_governing_item(sub) or {}
+
+    if state == "ACTIVE":
+        plan = item.get("autoRenewingPlan")
+        if isinstance(plan, dict) and not plan.get("autoRenewEnabled", False):
+            # proto3 JSON omits false, so an autoRenewingPlan without the flag
+            # means auto-renew is OFF. Prepaid plans carry no autoRenewingPlan
+            # at all and stay "active" — nothing was cancelled.
+            return "cancelled", expiry
+        return "active", expiry
+    if state == "IN_GRACE_PERIOD":
+        if expiry and expiry <= now:
+            logger.warning("google v2: IN_GRACE_PERIOD with a past expiry (%s) — "
+                           "entitlement will read as lapsed", _iso(expiry))
+        return "active", expiry
+    if state == "CANCELED":
+        return ("cancelled", expiry) if (expiry and expiry > now) else ("expired", expiry)
+    # ON_HOLD, PAUSED, EXPIRED, PENDING, PENDING_PURCHASE_CANCELED, UNSPECIFIED
+    return "expired", expiry
+
+
+def _google_v2_cancel_reason(sub: dict, status: SubStatus) -> Optional[str]:
+    if status not in ("cancelled", "expired"):
+        return None
+    ctx = sub.get("canceledStateContext") or {}
+    for key, label in (("userInitiatedCancellation", "user_initiated"),
+                       ("systemInitiatedCancellation", "system_initiated"),
+                       ("developerInitiatedCancellation", "developer_initiated"),
+                       ("replacementCancellation", "replacement")):
+        if key in ctx:
+            return label
+    return _google_v2_state(sub).lower()
+
+
+def _google_from_v2(sub: dict) -> _GoogleSub:
+    status_v, expires_at = _google_status_v2(sub)
+    item = _google_v2_governing_item(sub) or {}
+    ext = sub.get("externalAccountIdentifiers") or {}
+    ack = str(sub.get("acknowledgementState") or "").upper()
+    return _GoogleSub(
+        status=status_v,
+        expires_at=expires_at,
+        # The product the user is on *now*: after an upgrade / downgrade this
+        # differs from what the client (or the notification) sent us.
+        product_id=str(item.get("productId") or "") or None,
+        order_id=str(sub.get("latestOrderId") or "") or None,
+        linked_purchase_token=str(sub.get("linkedPurchaseToken") or "") or None,
+        start_at=_parse_rfc3339(sub.get("startTime")),
+        pending=_google_v2_state(sub) == "PENDING",
+        trial=False,  # v2 does not flag free trials on the subscription resource
+        cancel_reason=_google_v2_cancel_reason(sub, status_v),
+        external_account_id=(ext.get("obfuscatedExternalAccountId")
+                             or ext.get("externalAccountId")
+                             or sub.get("obfuscatedExternalAccountId")
+                             or sub.get("externalAccountId")),
+        acknowledged=ack.endswith("ACKNOWLEDGED"),
+        api="v2",
+    )
+
+
+def _google_from_v3(sub: dict) -> _GoogleSub:
+    status_v, expires_at = _google_status(sub)
+    pay = sub.get("paymentState")
+    return _GoogleSub(
+        status=status_v,
+        expires_at=expires_at,
+        product_id=None,  # the v3 resource does not carry the productId
+        order_id=str(sub.get("orderId") or "") or None,
+        linked_purchase_token=str(sub.get("linkedPurchaseToken") or "") or None,
+        start_at=_ms_to_dt(int(sub.get("startTimeMillis") or 0) or None),
+        pending=pay == 0,
+        trial=pay == 2,
+        cancel_reason=str(sub.get("cancelReason")) if sub.get("cancelReason") is not None else None,
+        external_account_id=(sub.get("obfuscatedExternalAccountId")
+                             or sub.get("externalAccountId")),
+        acknowledged=sub.get("acknowledgementState", 1) == 1,
+        api="v3",
+    )
+
+
+async def _google_verify_subscription_v2(purchase_token: str) -> dict:
+    """GET ``purchases.subscriptionsv2`` — addressed by purchase token alone.
+
+    Raises ``_GoogleV2Unavailable`` when v2 does not know the token / rejects
+    the request (404/400) or the transport failed, so the caller can fall back
+    to v3. Genuine upstream failures still raise HTTPException.
+    """
+    s = get_settings()
+    if not s.google_package_name:
+        raise HTTPException(503, "Google package name not configured")
+    token = await _google_access_token()
+    url = (
+        f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+        f"{s.google_package_name}/purchases/subscriptionsv2/tokens/{purchase_token}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+    except httpx.HTTPError as e:
+        raise _GoogleV2Unavailable(f"transport error: {e}") from e
+    if r.status_code == 200:
+        return r.json()
+    body = r.text[:200]
+    if r.status_code in (400, 404):
+        raise _GoogleV2Unavailable(f"{r.status_code} {body}")
+    logger.warning("Google verify v2 %s → %s %s",
+                   _mask_token(purchase_token), r.status_code, body)
+    raise HTTPException(502 if r.status_code >= 500 else 400, "google verify failed")
+
+
+def _google_log_state(sub: _GoogleSub, purchase_token: str) -> None:
+    if sub.acknowledged or sub.status not in PRO_STATUSES:
+        return
+    # Google auto-refunds a purchase that is never acknowledged within 3 days.
+    # We deliberately do NOT acknowledge server-side (the client's
+    # completePurchase does it) — this makes a regression there visible.
+    logger.warning("google: entitled subscription %s (%s) is UNACKNOWLEDGED — "
+                   "Google refunds it after 3 days unless the client acknowledges",
+                   _mask_token(purchase_token), sub.api)
+
+
+async def _google_resolve_subscription(product_id: Optional[str],
+                                       purchase_token: str) -> _GoogleSub:
+    """Resolve a Play purchase token to our subscription view.
+
+    v2 first; on 404/400/transport error — or a v2 body without ``lineItems``,
+    which leaves nothing to derive an expiry from — fall back to the deprecated
+    v3 resource. Loudly, but without ever failing a live purchase.
+    """
+    reason: Optional[str] = None
+    try:
+        raw = await _google_verify_subscription_v2(purchase_token)
+        if _google_v2_line_items(raw):
+            resolved = _google_from_v2(raw)
+            _google_log_state(resolved, purchase_token)
+            return resolved
+        reason = "response has no lineItems"
+    except _GoogleV2Unavailable as e:
+        reason = str(e)
+
+    if not product_id:
+        logger.warning("google: subscriptionsv2 unavailable (%s) and no productId "
+                       "for the v3 fallback", reason)
+        raise HTTPException(400, "google verify failed")
+    logger.warning("google: subscriptionsv2 unavailable for %s (%s) — falling back to "
+                   "the deprecated v3 purchases.subscriptions",
+                   _mask_token(purchase_token), reason)
+    resolved = _google_from_v3(await _google_verify_subscription(product_id, purchase_token))
+    _google_log_state(resolved, purchase_token)
+    return resolved
 
 
 # --- routes -----------------------------------------------------------------
@@ -620,22 +876,24 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
     purchase_token = body.get("purchaseToken")
     if not (product_id and purchase_token):
         raise HTTPException(400, "google: productId/purchaseToken required")
-    sub = await _google_verify_subscription(product_id, purchase_token)
-    if sub.get("paymentState") == 0:
-        # Pending (e.g. deferred payment / SCA). Nothing to grant yet; the
-        # RTDN webhook will land once payment completes.
+    sub = await _google_resolve_subscription(product_id, purchase_token)
+    if sub.pending:
+        # Pending (e.g. deferred payment / SCA; v2 SUBSCRIPTION_STATE_PENDING).
+        # Nothing to grant yet; the RTDN webhook lands once payment completes.
         raise HTTPException(409, "google: payment pending")
-    status_v, expires_at = _google_status(sub)
-    trial_end = expires_at if sub.get("paymentState") == 2 else None
-    original = _ms_to_dt(int(sub.get("startTimeMillis") or 0) or None)
-    cancel_reason = str(sub.get("cancelReason")) if sub.get("cancelReason") is not None else None
+    status_v, expires_at = sub.status, sub.expires_at
+    # v2 knows the product the user is on now — an upgrade monthly→yearly must
+    # update product_id, not keep whatever the client sent.
+    product_id = sub.product_id or product_id
+    trial_end = expires_at if sub.trial else None
+    original = sub.start_at
     _upsert_subscription(
         sb, user_id=user.id, store="play_store", product_id=product_id,
         status=status_v, expires_at=expires_at, trial_ends_at=trial_end,
         original_purchase_at=original, last_renewed_at=original,
-        cancel_reason=cancel_reason,
+        cancel_reason=sub.cancel_reason,
         purchase_token=str(purchase_token),
-        transaction_id=str(sub.get("orderId") or "") or None,
+        transaction_id=sub.order_id,
     )
     return IapVerifyResponse(
         status=status_v, product_id=product_id, expires_at=expires_at,
@@ -834,26 +1092,26 @@ async def google_webhook(request: Request):
         return {"ok": True}
 
     try:
-        detail = await _google_verify_subscription(product_id, purchase_token)
-        status_v, expires_at = _google_status(detail)
+        detail = await _google_resolve_subscription(product_id, purchase_token)
+        status_v, expires_at = detail.status, detail.expires_at
         bound = _find_by_binding(sb, "play_store", "purchase_token", str(purchase_token))
-        if not bound and detail.get("linkedPurchaseToken"):
+        if not bound and detail.linked_purchase_token:
+            # Plan change: the new token replaces the one we have on file.
             bound = _find_by_binding(sb, "play_store", "purchase_token",
-                                     str(detail["linkedPurchaseToken"]))
-        user_id = ((bound or {}).get("user_id")
-                   or detail.get("obfuscatedExternalAccountId")
-                   or detail.get("externalAccountId"))
+                                     detail.linked_purchase_token)
+        user_id = (bound or {}).get("user_id") or detail.external_account_id
         if not user_id:
             logger.warning("google webhook: purchaseToken not bound to a user — skipped")
             _mark_notification(sb, msg_id, error="no_user")
             return {"ok": True, "skipped": "no_user"}
         row, outcome = _upsert_subscription(
-            sb, user_id=user_id, store="play_store", product_id=product_id,
+            sb, user_id=user_id, store="play_store",
+            product_id=detail.product_id or product_id,
             status=status_v, expires_at=expires_at,
             trial_ends_at=expires_at if status_v == "trial" else None,
-            cancel_reason=str(detail.get("cancelReason")) if detail.get("cancelReason") is not None else None,
+            cancel_reason=detail.cancel_reason,
             purchase_token=str(purchase_token),
-            transaction_id=str(detail.get("orderId") or "") or None,
+            transaction_id=detail.order_id,
             event_at=_ms_to_dt(int(data.get("eventTimeMillis") or 0) or None),
             allow_transfer=False,
         )

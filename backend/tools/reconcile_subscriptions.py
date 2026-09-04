@@ -96,13 +96,18 @@ async def _check_apple(row: dict) -> Tuple[Optional[str], Optional[datetime], Op
 
 
 async def _check_google(row: dict) -> Tuple[Optional[str], Optional[datetime], Optional[dict]]:
+    """Ask Google for the current state (subscriptionsv2, falling back to v3).
+
+    v2 is addressed by purchase token alone, so a row whose stored product_id
+    is stale after a plan change is still resolvable.
+    """
     token = row.get("purchase_token")
-    product = row.get("product_id")
-    if not (token and product):
+    if not token:
         return None, None, None
-    sub = await iap_mod._google_verify_subscription(str(product), str(token))
-    status, expires_at = iap_mod._google_status(sub)
-    return status, expires_at, sub
+    sub = await iap_mod._google_resolve_subscription(row.get("product_id"), str(token))
+    # A pending payment is not an entitlement — treat it as expired here, the
+    # same way the webhook does.
+    return sub.status, sub.expires_at, {"productId": sub.product_id}
 
 
 async def reconcile(*, apply: bool, window_days: Optional[int]) -> int:
