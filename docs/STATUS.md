@@ -1,6 +1,12 @@
 # Humming V2 (SoundLab) — 현황 (STATUS)
 
-> 최종 갱신: 2026-06-07 · 작업 경로: `c:\Users\jlion\Documents\Humtrack\Humming V2`
+> 최종 갱신: **2026-09-04** · 저장소: `c:\src\humming-v2`
+>
+> ⚠️ **2026-09 재개 감사 이후 변경점은 [audit-2026-09-03.md](audit-2026-09-03.md) 가 기준이다.** 아래 본문은 2026-06-07 시점의 사운드랩(엔진) 설계 기록이며, 다음 두 가지는 그것과 달라졌다:
+> - **학습 피치 보정은 기본 OFF** (`learned_pitch_correction`). 켜면 멜로딕 노트의 절반이 반음 올라간다 — 측정값과 근거는 audit §4.6.
+> - **`5.비트` 가 percussive 로 분기되는 것은 `as_drums=True` 일 때뿐**이다 (기본 옵션은 12개 pitched 노트). 자동 percussive 폴백은 제거됨.
+>
+> 운영 문서: 배포 [DEPLOY-RUNBOOK-2026-09.md](DEPLOY-RUNBOOK-2026-09.md) · Mac 작업 [MAC-WORKORDER-2026-09.md](MAC-WORKORDER-2026-09.md)
 > **단일 기준 현황 문서** (구 `MVP_SNAPSHOT.md` 통합). 워크스페이스 전체 지도 = [PROJECT_MAP.md](../PROJECT_MAP.md). 실험 기록 = [experiments/](experiments/).
 > 한 줄 요약: **chunk 분할 + pYIN 피치 파이프라인 안정화(사용자 만족)** + Auto Key / Pitch Assistant / 역할 악기 팔레트·코드 모드 구현. Basic Pitch는 평가 후 미채택(§9.2).
 
