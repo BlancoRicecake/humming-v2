@@ -239,6 +239,7 @@ class SoundfontCatalog {
       await EngineApi().downloadSoundfontToFile(
         e.id,
         part.path,
+        expectedBytes: e.bytes,
         onProgress: (recv, total) {
           final t = total > 0 ? total : e.bytes;
           if (t > 0) _setProgress(slot, (recv / t).clamp(0.0, 1.0));
@@ -265,12 +266,14 @@ class SoundfontCatalog {
       await part.rename(f.path);
       return f.path;
     } catch (err) {
-      debugPrint('[soundfont] download ${e.id} failed: $err');
-      if (await part.exists()) {
-        try {
-          await part.delete();
-        } catch (_) {}
-      }
+      // Keep the .part file: the next attempt resumes from its length with a
+      // Range request instead of re-fetching a 300MB font from zero (audit
+      // A16b). It is never mistaken for a finished download — only the
+      // size + sha256 verified rename below produces the real file. A
+      // *corrupt* part is deleted above, before we get here.
+      final partial = await part.exists() ? await part.length() : 0;
+      debugPrint('[soundfont] download ${e.id} failed at $partial bytes '
+          '(will resume): $err');
       return null;
     } finally {
       _setProgress(slot, null);

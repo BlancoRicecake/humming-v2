@@ -2,6 +2,8 @@
 // 개발 중에는 로컬 dev 머신(LAN)에 연결. 실기기는 --dart-define 로 URL 주입:
 //   flutter run --dart-define=ENGINE_URL=http://192.168.0.x:8000
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
@@ -90,17 +92,78 @@ class EngineApi {
   /// 메모리에 통째로 올리지 않음 — 수백 MB 폰트 OOM 방지). [onProgress] 는
   /// (받은 바이트, 전체 바이트); 전체를 모르면 total <= 0. 대용량 대비 receiveTimeout
   /// 을 이 호출만 길게 잡는다.
+  ///
+  /// **이어받기**: [savePath] 에 파일이 이미 있으면 그 크기부터 `Range` 로 요청해
+  /// append 한다 (300MB 폰트가 90% 에서 끊겼을 때 처음부터 다시 받지 않도록 —
+  /// audit A16b). 서버가 206 이 아닌 200 으로 답하면(Range 미지원) 파일을 비우고
+  /// 처음부터 받는다. [expectedBytes] 를 주면 이미 다 받은 파일은 요청 없이 반환.
   Future<void> downloadSoundfontToFile(
     String id,
     String savePath, {
     void Function(int received, int total)? onProgress,
+    int expectedBytes = 0,
   }) async {
-    await _dio.download(
+    final target = File(savePath);
+    var start = 0;
+    if (await target.exists()) {
+      start = await target.length();
+      // 이미 완전한 파일 — 서버를 부르지 않는다.
+      if (expectedBytes > 0 && start >= expectedBytes) {
+        onProgress?.call(start, expectedBytes);
+        return;
+      }
+    }
+
+    final r = await _dio.get<ResponseBody>(
       '/soundfonts/$id',
-      savePath,
-      onReceiveProgress: onProgress,
-      options: Options(receiveTimeout: const Duration(minutes: 20)),
+      options: Options(
+        responseType: ResponseType.stream,
+        receiveTimeout: const Duration(minutes: 20),
+        headers: start > 0 ? {'range': 'bytes=$start-'} : null,
+        // 416 = 서버 파일이 더 짧다(교체됐다) → 아래에서 처음부터 다시.
+        validateStatus: (s) => s != null && (s == 200 || s == 206 || s == 416),
+      ),
     );
+
+    if (r.statusCode == 416) {
+      if (await target.exists()) await target.delete();
+      return downloadSoundfontToFile(id, savePath,
+          onProgress: onProgress, expectedBytes: expectedBytes);
+    }
+    // 206 이면 이어쓰기, 200 이면 서버가 Range 를 무시한 것이므로 처음부터.
+    final resuming = r.statusCode == 206 && start > 0;
+    if (!resuming) start = 0;
+
+    final total = _totalBytesOf(r, fallback: expectedBytes, from: start);
+    final sink = target.openWrite(
+        mode: resuming ? FileMode.writeOnlyAppend : FileMode.writeOnly);
+    var received = start;
+    try {
+      await for (final chunk in r.data!.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress?.call(received, total);
+      }
+      await sink.flush();
+    } finally {
+      await sink.close();
+    }
+  }
+
+  /// 전체 크기 추정: `Content-Range: bytes a-b/TOTAL` → TOTAL,
+  /// 아니면 Content-Length + 이미 받은 [from], 아니면 [fallback].
+  int _totalBytesOf(Response<dynamic> r, {required int fallback, required int from}) {
+    final cr = r.headers.value('content-range');
+    if (cr != null) {
+      final slash = cr.lastIndexOf('/');
+      if (slash >= 0) {
+        final t = int.tryParse(cr.substring(slash + 1).trim());
+        if (t != null && t > 0) return t;
+      }
+    }
+    final cl = int.tryParse(r.headers.value('content-length') ?? '');
+    if (cl != null && cl > 0) return cl + from;
+    return fallback;
   }
 
   /// 녹음 파일 경로 → 분석 결과(notes, 추천 key, 보정 개수 …).
