@@ -1,0 +1,11 @@
+# Test deps — CI (.github/workflows/ci-backend.yml) and local `pytest tests`.
+#
+# Deliberately NOT requirements-dev.txt: that one pulls torchcrepe → torch (CPU,
+# ~2GB) for the CREPE-vs-pYIN A/B experiments. The test suite never touches it —
+# app/pitch.py imports torch/torchcrepe lazily inside _TorchCrepe and no test
+# exercises that backend. Verified 2026-09-04: requirements.txt + pytest (no
+# torch) + ffmpeg on PATH → 153 passed, 11 skipped.
+#
+# Same pinning convention as requirements.txt: known-good floor, < next major.
+-r requirements.txt
+pytest>=8,<10

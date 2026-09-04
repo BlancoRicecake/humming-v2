@@ -47,11 +47,32 @@ npm install
 npm run dev   # http://localhost:5173, /api/* → 127.0.0.1:8000 프록시
 ```
 
-## 회귀 테스트
+## 회귀 테스트 (CI와 동일)
+GitHub Actions가 **바뀐 영역만** 자동으로 돌린다 — `backend/**` → [`ci-backend.yml`](.github/workflows/ci-backend.yml), `mobile/**` → [`ci-mobile.yml`](.github/workflows/ci-mobile.yml). 둘 다 main 푸시 + PR 트리거이고, 검증 전용(배포/시크릿 없음)이다. 아래 명령이 CI가 실행하는 것과 동일하니 푸시 전에 로컬에서 통과시킬 것.
+
+### 백엔드 — pytest (153 tests)
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest tests/ -v
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements-test.txt   # = requirements.txt + pytest
+.\.venv\Scripts\python -m pytest tests -q
 ```
+기대 결과: **`153 passed, 11 skipped`**.
+- **ffmpeg 바이너리가 PATH에 있어야 한다.** `tests/test_autotune.py::test_endpoint_undecodable_upload_is_400`이 디코드 실패 경로를 타므로, 없으면 이 테스트 하나만 `500 {"detail":"ffmpeg binary not available on server"}`로 실패한다. Windows는 `winget install Gyan.FFmpeg`, CI(ubuntu)는 `apt-get install -y ffmpeg`.
+- **`requirements-dev.txt`는 테스트에 쓰지 말 것.** torchcrepe → torch(CPU, ~2GB)를 끌어오는데 테스트는 이를 전혀 import하지 않는다(CREPE A/B 실험 전용).
+- skip 11개는 `tests/test_cloud_sync.py` — `TEST_USER_JWT` 등 **라이브 Supabase 자격증명**이 있어야 돈다. CI는 자격증명을 주지 않으므로 skip이 정상 상태다.
+
+### 모바일 — analyze + flutter test (132 tests)
+```powershell
+cd mobile
+flutter pub get
+flutter analyze --no-fatal-infos
+flutter test
+```
+기대 결과: **`4 issues found`(전부 info) + `All tests passed!`**.
+- Flutter **3.47.1 stable** 기준(CI가 핀으로 박아둔 버전). `pubspec.lock`이 Dart `>=3.10.0-0`을 요구한다.
+- `flutter analyze`는 **기본값이 `--fatal-infos`**라 알려진 deprecation info 4건만으로도 exit 1이 된다. `--no-fatal-infos`를 붙여야 하며, warning/error는 그대로 fatal이다(에러 0 유지가 기준선).
+- `flutter analyze`가 `mobile/analysis_options.yaml`에 `analyzer: exclude:` 블록을, `pub get`이 `pubspec.lock`을 자동으로 고쳐 쓸 수 있다 — **커밋하지 말 것**(`git checkout -- mobile/analysis_options.yaml mobile/pubspec.lock`).
 
 ## 하드 제약
 유료 API ✗ · 클라우드 ✗(전부 localhost) · 모델 학습 ✗(기성 pretrained/DSP만) · 디버그 시각화 우선. 상세·근거는 [`docs/STATUS.md`](docs/STATUS.md).

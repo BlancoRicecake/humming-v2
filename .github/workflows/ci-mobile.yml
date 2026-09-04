@@ -1,0 +1,65 @@
+name: CI Mobile
+
+# 검증 전용 워크플로 — 빌드 산출물/서명/배포 없음, 레포에 아무것도 쓰지 않는다.
+# (flutter 가 워크스페이스의 pubspec.lock / analysis_options.yaml 을 건드려도
+#  일회성 러너 안에서 끝나고 push 하지 않는다.)
+# mobile/ 이 바뀐 main 푸시와 PR 에서만 돈다.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/ci-mobile.yml'
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/ci-mobile.yml'
+
+# 같은 ref 에 새 커밋이 오면 진행 중이던 런은 취소.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-test:
+    name: analyze + flutter test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 버전 고정 이유: analyzer 의 deprecation info 목록이 SDK 버전마다 달라져
+      # 핀이 없으면 어느 날 갑자기 warning 승격으로 빌드가 깨진다. 개발 머신과
+      # 동일한 3.47.1 (Dart 3.13.1) — mobile/pubspec.lock 은 dart >=3.10.0-0 요구.
+      # 올릴 때는 로컬에서 analyze + test 를 먼저 통과시킨 뒤 이 값을 바꾼다.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.1
+          # SDK + ~/.pub-cache 둘 다 캐시. pub 캐시 키는 lockfile 해시로 고정.
+          cache: true
+          pub-cache-key: flutter-pub-${{ runner.os }}-${{ hashFiles('mobile/pubspec.lock') }}
+
+      - name: Flutter version
+        run: flutter --version
+
+      # pubspec.yaml 의 dependency_overrides 가 flutter_midi_pro 포크(GitHub)를
+      # 가리키므로 이 스텝은 네트워크가 필요하다 (hosted runner 는 문제 없음).
+      - name: flutter pub get
+        run: flutter pub get
+
+      # flutter analyze 는 기본값이 --fatal-infos 라 알려진 info 4 건만으로도
+      # exit 1 이 된다. info 는 통과시키되 warning/error 는 그대로 fatal 유지.
+      - name: flutter analyze
+        run: flutter analyze --no-fatal-infos
+
+      # 132 tests.
+      - name: flutter test
+        run: flutter test
