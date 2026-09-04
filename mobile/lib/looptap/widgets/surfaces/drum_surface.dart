@@ -5,18 +5,41 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../theme/atoms.dart';
 import '../../theme/pad_scale.dart';
 import '../../theme/tokens.dart';
 import 'pad_fx.dart';
 
 class DrumSpec {
-  const DrumSpec(this.kind, this.label, this.short, this.color);
+  const DrumSpec(this.kind, this.short, this.color);
   final String kind;
-  final String label;
+
+  /// 2-letter lane/pad code (HH, SN, KK…). A glyph, not prose — never translated.
   final String short;
   final Color color;
 }
+
+/// Localized display name for a drum kind. The specs below are `const` (no
+/// BuildContext), so the spoken name lives in the ARB and is resolved here from
+/// an [L10n] the widget hands in.
+String drumLabel(L10n l, String kind) => switch (kind) {
+      'hihat' => l.ltDrumHihat,
+      'snare' => l.ltDrumSnare,
+      'shaker' => l.ltDrumShaker,
+      'tambourine' => l.ltDrumTambourine,
+      'clap' => l.ltDrumClap,
+      'cowbell' => l.ltDrumCowbell,
+      'maracas' => l.ltDrumMaracas,
+      'claves' => l.ltDrumClaves,
+      'rimshot' => l.ltDrumRimshot,
+      'woodhi' => l.ltDrumWoodblockHi,
+      'woodlo' => l.ltDrumWoodblockLo,
+      'ride' => l.ltDrumRide,
+      'crash' => l.ltDrumCrash,
+      'triangle' => l.ltDrumTriangle,
+      _ => l.ltDrumKick, // matches the kDrumSpecs['kick'] fallback below
+    };
 
 /// All known drum/percussion kinds → display spec. Main kit (HH/SN/KK) plus the
 /// beat-fill decoration kit (shaker/tambourine/clap). A track renders the subset
@@ -25,28 +48,28 @@ class DrumSpec {
 // MIRROR of kDrumNote (loop_audio.dart): every kind here must have a note there
 // (and in midi_export _drumNote). See [drum_mirror_test].
 const Map<String, DrumSpec> kDrumSpecs = {
-  'hihat': DrumSpec('hihat', 'HI-HAT', 'HH', LT.blue),
-  'snare': DrumSpec('snare', 'SNARE', 'SN', LT.lime),
-  'kick': DrumSpec('kick', 'KICK', 'KK', LT.amber),
-  'shaker': DrumSpec('shaker', 'SHAKER', 'SH', LT.blue),
-  'tambourine': DrumSpec('tambourine', 'TAMB', 'TB', LT.lime),
-  'clap': DrumSpec('clap', 'CLAP', 'CL', LT.amber),
-  'cowbell': DrumSpec('cowbell', 'COWBELL', 'CB', LT.amber),
-  'maracas': DrumSpec('maracas', 'MARACAS', 'MA', LT.blue),
-  'claves': DrumSpec('claves', 'CLAVES', 'CV', LT.lime),
-  'rimshot': DrumSpec('rimshot', 'RIMSHOT', 'RS', LT.pink),
-  'woodhi': DrumSpec('woodhi', 'WOODBLK+', 'WH', LT.lime),
-  'woodlo': DrumSpec('woodlo', 'WOODBLK-', 'WL', LT.amber),
-  'ride': DrumSpec('ride', 'RIDE', 'RD', LT.blue),
-  'crash': DrumSpec('crash', 'CRASH', 'CR', LT.pink),
-  'triangle': DrumSpec('triangle', 'TRIANGLE', 'TR', LT.lime),
+  'hihat': DrumSpec('hihat', 'HH', LT.blue),
+  'snare': DrumSpec('snare', 'SN', LT.lime),
+  'kick': DrumSpec('kick', 'KK', LT.amber),
+  'shaker': DrumSpec('shaker', 'SH', LT.blue),
+  'tambourine': DrumSpec('tambourine', 'TB', LT.lime),
+  'clap': DrumSpec('clap', 'CL', LT.amber),
+  'cowbell': DrumSpec('cowbell', 'CB', LT.amber),
+  'maracas': DrumSpec('maracas', 'MA', LT.blue),
+  'claves': DrumSpec('claves', 'CV', LT.lime),
+  'rimshot': DrumSpec('rimshot', 'RS', LT.pink),
+  'woodhi': DrumSpec('woodhi', 'WH', LT.lime),
+  'woodlo': DrumSpec('woodlo', 'WL', LT.amber),
+  'ride': DrumSpec('ride', 'RD', LT.blue),
+  'crash': DrumSpec('crash', 'CR', LT.pink),
+  'triangle': DrumSpec('triangle', 'TR', LT.lime),
 };
 
 /// Default main kit (top→bottom = HH/SN/KK).
 const List<DrumSpec> kDrums = [
-  DrumSpec('hihat', 'HI-HAT', 'HH', LT.blue),
-  DrumSpec('snare', 'SNARE', 'SN', LT.lime),
-  DrumSpec('kick', 'KICK', 'KK', LT.amber),
+  DrumSpec('hihat', 'HH', LT.blue),
+  DrumSpec('snare', 'SN', LT.lime),
+  DrumSpec('kick', 'KK', LT.amber),
 ];
 
 /// Build the spec list for a track's drum kinds (order = display order).
@@ -136,7 +159,7 @@ class _DrumPad extends StatelessWidget {
                     ),
                     SizedBox(width: sc.gap + 4),
                     Text(
-                      spec.label,
+                      drumLabel(L10n.of(context), spec.kind),
                       style: LTType.inter(
                         size: sc.sub,
                         weight: FontWeight.w800,
@@ -178,8 +201,8 @@ class _BeatGrid extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const LtLabel('Beat grid'),
-              LtLabel('$bars bars · 4/4', color: LT.t3),
+              LtLabel(L10n.of(context).ltDrumBeatGrid),
+              LtLabel(L10n.of(context).ltDrumGridMeta(bars), color: LT.t3),
             ],
           ),
           const SizedBox(height: 6),
@@ -279,8 +302,8 @@ class DrumGrid extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const LtLabel('Beat grid'),
-              LtLabel('$bars bars · 4/4 · tap to edit', color: LT.t3),
+              LtLabel(L10n.of(context).ltDrumBeatGrid),
+              LtLabel(L10n.of(context).ltDrumGridMetaEditable(bars), color: LT.t3),
             ],
           ),
           const SizedBox(height: 8),

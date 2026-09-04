@@ -374,6 +374,46 @@ class _EditScreenState extends State<EditScreen>
     return r;
   }
 
+  /// Fetch the catalog sounds this song needs. Small ones silently; large
+  /// ones only after the user agrees, since the GM fallback keeps playing
+  /// either way (audit C19b).
+  void _prefetchInstruments() {
+    final cat = SoundfontCatalog.instance;
+    final big = <int>{};
+    for (final p in _instruments.values.toSet()) {
+      if (!isDynamicSlot(p) || cat.isDownloaded(p)) continue;
+      if (cat.mayAutoDownload(p)) {
+        cat.ensureDownloaded(p); // fire-and-forget
+      } else {
+        big.add(p);
+      }
+    }
+    if (big.isEmpty) return;
+    // Ask once, after the first frame so a snack bar has a Scaffold.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final l = L10n.of(context);
+      final label = big.length == 1
+          ? (cat.bySlot(big.first)?.label ?? '')
+          : '${big.length}';
+      final size = big.length == 1 ? cat.sizeLabel(big.first) : null;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 8),
+        content: Text(size == null
+            ? l.ltEditorSoundDownloadAsk(label)
+            : l.ltEditorSoundDownloadAskSized(label, size)),
+        action: SnackBarAction(
+          label: l.ltEditorSoundDownloadNow,
+          onPressed: () {
+            for (final p in big) {
+              SoundfontCatalog.instance.ensureDownloaded(p);
+            }
+          },
+        ),
+      ));
+    });
+  }
+
   // ── auto-save 상태 ────────────────────────────────────────────────
   // 12초마다 silent autosave (LoopStore.upsert 가 idempotent — dirty 추적 정밀도
   // 가 낮은 데이터플로우 회피용 always-save 패턴).
@@ -398,12 +438,11 @@ class _EditScreenState extends State<EditScreen>
     });
     _applyDrumKits();
     _audio.prewarm();
-    // Pre-download any runtime-catalog instruments this song uses so live
+    // Pre-download the runtime-catalog instruments this song uses so live
     // playback + export resolve the real SF2 (else they fall back to GM until
-    // fetched). Fire-and-forget; _bindChannel re-checks at play time.
-    for (final p in _instruments.values) {
-      if (isDynamicSlot(p)) SoundfontCatalog.instance.ensureDownloaded(p);
-    }
+    // fetched). Small fonts go in the background; a large one (200-400MB) asks
+    // first rather than spending the user's data plan silently (audit C19b).
+    _prefetchInstruments();
     // pre-load the section's vocal so the first ▶ starts it without the
     // source-load latency
     final vp = _tracks['vocal']?.vocalPath;

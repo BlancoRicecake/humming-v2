@@ -7,6 +7,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../music/theory.dart';
 import '../../theme/pad_scale.dart';
 import '../../theme/tokens.dart';
@@ -171,6 +172,7 @@ class _NotePadsState extends State<NotePads> with SingleTickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     final n = widget.ladder.length;
+    final l = L10n.of(context);
     return LayoutBuilder(
       builder: (ctx, c) {
         _padW = c.maxWidth / widget.visibleCount;
@@ -192,7 +194,7 @@ class _NotePadsState extends State<NotePads> with SingleTickerProviderStateMixin
                           child: _LivePad(
                             rung: widget.ladder[i],
                             label: widget.ladder[i].name,
-                            sub: 'deg ${widget.ladder[i].degree + 1}',
+                            sub: l.ltPadsDegree(widget.ladder[i].degree + 1),
                             lit: widget.litMidis.contains(widget.ladder[i].midi),
                             accent: widget.accent,
                             onDown: widget.onDown,

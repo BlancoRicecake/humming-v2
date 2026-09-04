@@ -106,6 +106,31 @@ class SoundfontCatalog {
   List<SoundfontEntry> get all => _bySlot.values.toList(growable: false);
   SoundfontEntry? bySlot(int slot) => _bySlot[slot];
 
+  /// Largest font we will fetch without asking (audit C19b). Catalog fonts run
+  /// 200-400MB; pulling that over a phone plan because a song happened to
+  /// reference it is not ours to decide. Below this the wait is short enough
+  /// that a prompt would be the bigger annoyance.
+  static const int autoDownloadMaxBytes = 30 * 1024 * 1024;
+
+  /// True when [slot] may be fetched in the background without asking: either
+  /// the manifest says it is small, or the size is unknown (older manifests
+  /// carry bytes = 0, and those entries predate the large FreePats fonts).
+  bool mayAutoDownload(int slot) {
+    final e = _bySlot[slot];
+    if (e == null) return false;
+    return e.bytes <= 0 || e.bytes <= autoDownloadMaxBytes;
+  }
+
+  /// Human-readable size for a prompt ("312 MB"), or null when unknown.
+  String? sizeLabel(int slot) {
+    final b = _bySlot[slot]?.bytes ?? 0;
+    if (b <= 0) return null;
+    if (b >= 1024 * 1024 * 1024) {
+      return '${(b / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+    return '${(b / (1024 * 1024)).round()} MB';
+  }
+
   Future<Directory> _folder() async {
     if (_dir != null) return _dir!;
     final docs = await getApplicationDocumentsDirectory();

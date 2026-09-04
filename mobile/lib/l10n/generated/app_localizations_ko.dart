@@ -1825,6 +1825,19 @@ class L10nKo extends L10n {
   String get ltEditorSoundDownloadFailed => '사운드를 받지 못했어요 — 연결을 확인해주세요';
 
   @override
+  String ltEditorSoundDownloadAsk(String name) {
+    return '이 곳에 쓰인 사운드 $name을(를) 받을까요? 받기 전에는 기본 악기로 들려요.';
+  }
+
+  @override
+  String ltEditorSoundDownloadAskSized(String name, String size) {
+    return '이 곳에 쓰인 사운드 $name을(를) 받을까요? $size 이며, 받기 전에는 기본 악기로 들려요.';
+  }
+
+  @override
+  String get ltEditorSoundDownloadNow => '받기';
+
+  @override
   String get ltEditorSoundReady => '악기 준비 완료';
 
   @override
@@ -1901,6 +1914,72 @@ class L10nKo extends L10n {
 
   @override
   String get ltEditorHintPads => '녹음 후 탭';
+
+  @override
+  String get ltDrumBeatGrid => '비트 그리드';
+
+  @override
+  String ltDrumGridMeta(int bars) {
+    return '$bars마디 · 4/4';
+  }
+
+  @override
+  String ltDrumGridMetaEditable(int bars) {
+    return '$bars마디 · 4/4 · 탭해서 편집';
+  }
+
+  @override
+  String get ltDrumHihat => '하이햇';
+
+  @override
+  String get ltDrumSnare => '스네어';
+
+  @override
+  String get ltDrumKick => '킥';
+
+  @override
+  String get ltDrumShaker => '셰이커';
+
+  @override
+  String get ltDrumTambourine => '탬버린';
+
+  @override
+  String get ltDrumClap => '클랩';
+
+  @override
+  String get ltDrumCowbell => '카우벨';
+
+  @override
+  String get ltDrumMaracas => '마라카스';
+
+  @override
+  String get ltDrumClaves => '클라베스';
+
+  @override
+  String get ltDrumRimshot => '림샷';
+
+  @override
+  String get ltDrumWoodblockHi => '우드블럭+';
+
+  @override
+  String get ltDrumWoodblockLo => '우드블럭−';
+
+  @override
+  String get ltDrumRide => '라이드';
+
+  @override
+  String get ltDrumCrash => '크래시';
+
+  @override
+  String get ltDrumTriangle => '트라이앵글';
+
+  @override
+  String get ltFillPadSound => '패드 사운드';
+
+  @override
+  String ltPadsDegree(int n) {
+    return '$n도';
+  }
 
   @override
   String ltHumModalTitle(String track) {

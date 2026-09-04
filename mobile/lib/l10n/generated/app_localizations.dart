@@ -3342,6 +3342,24 @@ abstract class L10n {
   /// **'사운드를 받지 못했어요 — 연결을 확인해주세요'**
   String get ltEditorSoundDownloadFailed;
 
+  /// 용량 큰 카탈로그 사운드 자동 다운로드 동의 (크기 미상)
+  ///
+  /// In ko, this message translates to:
+  /// **'이 곳에 쓰인 사운드 {name}을(를) 받을까요? 받기 전에는 기본 악기로 들려요.'**
+  String ltEditorSoundDownloadAsk(String name);
+
+  /// 용량 큰 카탈로그 사운드 자동 다운로드 동의 (크기 표시)
+  ///
+  /// In ko, this message translates to:
+  /// **'이 곳에 쓰인 사운드 {name}을(를) 받을까요? {size} 이며, 받기 전에는 기본 악기로 들려요.'**
+  String ltEditorSoundDownloadAskSized(String name, String size);
+
+  /// 사운드 다운로드 동의 버튼
+  ///
+  /// In ko, this message translates to:
+  /// **'받기'**
+  String get ltEditorSoundDownloadNow;
+
   /// 카탈로그 악기 다운로드 완료 스낵바
   ///
   /// In ko, this message translates to:
@@ -3485,6 +3503,126 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'녹음 후 탭'**
   String get ltEditorHintPads;
+
+  /// 드럼 서피스 — 가운데 비트 그리드 섹션 라벨 (대문자로 표시됨)
+  ///
+  /// In ko, this message translates to:
+  /// **'비트 그리드'**
+  String get ltDrumBeatGrid;
+
+  /// 드럼 서피스 — 비트 그리드 오른쪽 마디/박자 표시 (읽기 전용)
+  ///
+  /// In ko, this message translates to:
+  /// **'{bars}마디 · 4/4'**
+  String ltDrumGridMeta(int bars);
+
+  /// 드럼 그리드 모드 — 마디/박자 표시 + 셀을 탭해 편집하라는 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'{bars}마디 · 4/4 · 탭해서 편집'**
+  String ltDrumGridMetaEditable(int bars);
+
+  /// 드럼 패드 이름 — 하이햇 (약어 HH 는 그대로)
+  ///
+  /// In ko, this message translates to:
+  /// **'하이햇'**
+  String get ltDrumHihat;
+
+  /// 드럼 패드 이름 — 스네어 (약어 SN)
+  ///
+  /// In ko, this message translates to:
+  /// **'스네어'**
+  String get ltDrumSnare;
+
+  /// 드럼 패드 이름 — 킥 (약어 KK)
+  ///
+  /// In ko, this message translates to:
+  /// **'킥'**
+  String get ltDrumKick;
+
+  /// 드럼 패드 이름 — 셰이커 (약어 SH)
+  ///
+  /// In ko, this message translates to:
+  /// **'셰이커'**
+  String get ltDrumShaker;
+
+  /// 드럼 패드 이름 — 탬버린 (약어 TB)
+  ///
+  /// In ko, this message translates to:
+  /// **'탬버린'**
+  String get ltDrumTambourine;
+
+  /// 드럼 패드 이름 — 박수 소리 (약어 CL)
+  ///
+  /// In ko, this message translates to:
+  /// **'클랩'**
+  String get ltDrumClap;
+
+  /// 드럼 패드 이름 — 카우벨 (약어 CB)
+  ///
+  /// In ko, this message translates to:
+  /// **'카우벨'**
+  String get ltDrumCowbell;
+
+  /// 드럼 패드 이름 — 마라카스 (약어 MA)
+  ///
+  /// In ko, this message translates to:
+  /// **'마라카스'**
+  String get ltDrumMaracas;
+
+  /// 드럼 패드 이름 — 클라베스 (약어 CV)
+  ///
+  /// In ko, this message translates to:
+  /// **'클라베스'**
+  String get ltDrumClaves;
+
+  /// 드럼 패드 이름 — 림샷 (약어 RS)
+  ///
+  /// In ko, this message translates to:
+  /// **'림샷'**
+  String get ltDrumRimshot;
+
+  /// 드럼 패드 이름 — 높은 우드블럭 (약어 WH). + 는 높은 쪽을 뜻하는 기호
+  ///
+  /// In ko, this message translates to:
+  /// **'우드블럭+'**
+  String get ltDrumWoodblockHi;
+
+  /// 드럼 패드 이름 — 낮은 우드블럭 (약어 WL). − 는 낮은 쪽을 뜻하는 기호
+  ///
+  /// In ko, this message translates to:
+  /// **'우드블럭−'**
+  String get ltDrumWoodblockLo;
+
+  /// 드럼 패드 이름 — 라이드 심벌 (약어 RD)
+  ///
+  /// In ko, this message translates to:
+  /// **'라이드'**
+  String get ltDrumRide;
+
+  /// 드럼 패드 이름 — 크래시 심벌 (약어 CR)
+  ///
+  /// In ko, this message translates to:
+  /// **'크래시'**
+  String get ltDrumCrash;
+
+  /// 드럼 패드 이름 — 트라이앵글 (약어 TR)
+  ///
+  /// In ko, this message translates to:
+  /// **'트라이앵글'**
+  String get ltDrumTriangle;
+
+  /// 비트 필 런치패드 — 패드 소리 고르는 시트 제목
+  ///
+  /// In ko, this message translates to:
+  /// **'패드 사운드'**
+  String get ltFillPadSound;
+
+  /// 노트 패드 아래 작은 표시 — 스케일 몇 번째 음인지 (1도 = 루트)
+  ///
+  /// In ko, this message translates to:
+  /// **'{n}도'**
+  String ltPadsDegree(int n);
 
   /// 허밍 녹음 모달 제목
   ///

@@ -615,6 +615,15 @@
   "ltEditorTrackCleared": "Track cleared",
   "ltEditorLaneFull": "Lane is full — the new take starts at the beginning (overlapping)",
   "ltEditorSoundDownloadFailed": "Couldn't download the sound — check your connection",
+  "ltEditorSoundDownloadAsk": "Download the sound {name} used here? Until then it plays with a basic instrument.",
+  "@ltEditorSoundDownloadAsk": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "ltEditorSoundDownloadAskSized": "Download the sound {name} used here? It is {size}; until then it plays with a basic instrument.",
+  "@ltEditorSoundDownloadAskSized": {
+    "placeholders": {"name": {"type": "String"}, "size": {"type": "String"}}
+  },
+  "ltEditorSoundDownloadNow": "Download",
   "ltEditorSoundReady": "Instrument ready",
   "ltEditorAutotuneTitle": "Autotune",
   "ltEditorAutotuneSub": "Snaps your vocal to {key} {scale}. The original take is kept.",
@@ -644,6 +653,32 @@
   "ltEditorHintGridDrums": "tap cells to toggle",
   "ltEditorHintGridPitched": "tap · drag to lengthen · auto-merge",
   "ltEditorHintPads": "rec, then tap",
+
+  "ltDrumBeatGrid": "Beat grid",
+  "ltDrumGridMeta": "{bars, plural, one{1 bar} other{{bars} bars}} · 4/4",
+  "@ltDrumGridMeta": {"placeholders": {"bars": {"type": "int"}}},
+  "ltDrumGridMetaEditable": "{bars, plural, one{1 bar} other{{bars} bars}} · 4/4 · tap to edit",
+  "@ltDrumGridMetaEditable": {"placeholders": {"bars": {"type": "int"}}},
+  "ltDrumHihat": "HI-HAT",
+  "ltDrumSnare": "SNARE",
+  "ltDrumKick": "KICK",
+  "ltDrumShaker": "SHAKER",
+  "ltDrumTambourine": "TAMB",
+  "ltDrumClap": "CLAP",
+  "ltDrumCowbell": "COWBELL",
+  "ltDrumMaracas": "MARACAS",
+  "ltDrumClaves": "CLAVES",
+  "ltDrumRimshot": "RIMSHOT",
+  "ltDrumWoodblockHi": "WOODBLK+",
+  "ltDrumWoodblockLo": "WOODBLK-",
+  "ltDrumRide": "RIDE",
+  "ltDrumCrash": "CRASH",
+  "ltDrumTriangle": "TRIANGLE",
+
+  "ltFillPadSound": "Pad sound",
+
+  "ltPadsDegree": "deg {n}",
+  "@ltPadsDegree": {"placeholders": {"n": {"type": "int"}}},
 
   "ltHumModalTitle": "Hum to MIDI · {track}",
   "@ltHumModalTitle": {"placeholders": {"track": {"type": "String"}}},

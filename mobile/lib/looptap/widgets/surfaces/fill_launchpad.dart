@@ -7,11 +7,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../music/theory.dart' show kFillPalette;
 import '../../theme/atoms.dart';
 import '../../theme/pad_scale.dart';
 import '../../theme/tokens.dart';
-import 'drum_surface.dart' show DrumSpec, kDrumSpecs;
+import 'drum_surface.dart' show DrumSpec, drumLabel, kDrumSpecs;
 import 'pad_fx.dart';
 
 class FillLaunchpad extends StatelessWidget {
@@ -78,6 +79,7 @@ class _FillPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final label = drumLabel(L10n.of(context), spec.kind);
     return LayoutBuilder(
       builder: (ctx, c) {
         // Keep pads square in the wide landscape row: size to the smaller axis.
@@ -95,7 +97,7 @@ class _FillPad extends StatelessWidget {
                     idle: LT.surface2,
                     lit: lit, // flash on its own hits during playback
                     onDown: () => onHit(spec.kind),
-                    builder: _padBody,
+                    builder: (active) => _padBody(active, label),
                   ),
                 ),
                 // "has recorded notes" dot (top-left) — disappears on clear, so
@@ -139,7 +141,9 @@ class _FillPad extends StatelessWidget {
     );
   }
 
-  Widget _padBody(bool active) => LayoutBuilder(
+  // [label] is resolved by build() — this body runs inside PadFx's builder,
+  // which has no BuildContext of its own.
+  Widget _padBody(bool active, String label) => LayoutBuilder(
         builder: (ctx, c) {
           final sc = PadScale(math.min(c.maxWidth, c.maxHeight));
           return Center(
@@ -161,7 +165,7 @@ class _FillPad extends StatelessWidget {
                     ),
                     SizedBox(height: sc.gap),
                     Text(
-                      spec.label,
+                      label,
                       style: LTType.inter(
                         size: sc.sub,
                         weight: FontWeight.w800,
@@ -196,7 +200,7 @@ class FillPaletteSheet extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'Pad sound',
+          L10n.of(context).ltFillPadSound,
           style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1),
         ),
         const SizedBox(height: 14),
@@ -246,7 +250,7 @@ class _PaletteChip extends StatelessWidget {
             Text(spec.short,
                 style: LTType.inter(size: 13, weight: FontWeight.w900, color: fg)),
             const SizedBox(width: 8),
-            Text(spec.label,
+            Text(drumLabel(L10n.of(context), spec.kind),
                 style: LTType.inter(
                     size: 11,
                     weight: FontWeight.w800,

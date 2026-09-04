@@ -1866,6 +1866,19 @@ class L10nEn extends L10n {
       'Couldn\'t download the sound — check your connection';
 
   @override
+  String ltEditorSoundDownloadAsk(String name) {
+    return 'Download the sound $name used here? Until then it plays with a basic instrument.';
+  }
+
+  @override
+  String ltEditorSoundDownloadAskSized(String name, String size) {
+    return 'Download the sound $name used here? It is $size; until then it plays with a basic instrument.';
+  }
+
+  @override
+  String get ltEditorSoundDownloadNow => 'Download';
+
+  @override
   String get ltEditorSoundReady => 'Instrument ready';
 
   @override
@@ -1949,6 +1962,84 @@ class L10nEn extends L10n {
 
   @override
   String get ltEditorHintPads => 'rec, then tap';
+
+  @override
+  String get ltDrumBeatGrid => 'Beat grid';
+
+  @override
+  String ltDrumGridMeta(int bars) {
+    String _temp0 = intl.Intl.pluralLogic(
+      bars,
+      locale: localeName,
+      other: '$bars bars',
+      one: '1 bar',
+    );
+    return '$_temp0 · 4/4';
+  }
+
+  @override
+  String ltDrumGridMetaEditable(int bars) {
+    String _temp0 = intl.Intl.pluralLogic(
+      bars,
+      locale: localeName,
+      other: '$bars bars',
+      one: '1 bar',
+    );
+    return '$_temp0 · 4/4 · tap to edit';
+  }
+
+  @override
+  String get ltDrumHihat => 'HI-HAT';
+
+  @override
+  String get ltDrumSnare => 'SNARE';
+
+  @override
+  String get ltDrumKick => 'KICK';
+
+  @override
+  String get ltDrumShaker => 'SHAKER';
+
+  @override
+  String get ltDrumTambourine => 'TAMB';
+
+  @override
+  String get ltDrumClap => 'CLAP';
+
+  @override
+  String get ltDrumCowbell => 'COWBELL';
+
+  @override
+  String get ltDrumMaracas => 'MARACAS';
+
+  @override
+  String get ltDrumClaves => 'CLAVES';
+
+  @override
+  String get ltDrumRimshot => 'RIMSHOT';
+
+  @override
+  String get ltDrumWoodblockHi => 'WOODBLK+';
+
+  @override
+  String get ltDrumWoodblockLo => 'WOODBLK-';
+
+  @override
+  String get ltDrumRide => 'RIDE';
+
+  @override
+  String get ltDrumCrash => 'CRASH';
+
+  @override
+  String get ltDrumTriangle => 'TRIANGLE';
+
+  @override
+  String get ltFillPadSound => 'Pad sound';
+
+  @override
+  String ltPadsDegree(int n) {
+    return 'deg $n';
+  }
 
   @override
   String ltHumModalTitle(String track) {
