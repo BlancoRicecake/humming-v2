@@ -1,7 +1,17 @@
 # HumTrack 이용약관 (Terms of Service)
 
-**시행일**: 2026-06-04
-**최종개정**: 2026-06-03
+<!-- 운영자 필독 (시행 전 조치): 아래 시행일 2026-10-06 은 이용약관 제3조 제3항의
+     "회원에게 불리한 변경 또는 중대한 변경의 경우 30일 전 고지" 를 보수적으로 적용한 날짜입니다.
+     ⚠ 이번 개정에는 **개인정보처리방침 개정**(세션 리플레이·오류 리포팅 등 분석 도구 고지 정정)이
+     포함됩니다. 세션 리플레이는 신규 고지 항목이므로 개인정보처리방침 제10조의 30일 사전 고지
+     대상이며, 고지를 생략하거나 기간을 단축할 수 없습니다.
+     본 개정본을 배포·게시할 때 시행일 30일 전까지 반드시 다음 두 가지를 모두 이행해야 합니다:
+       (1) 앱 내 공지 게시,  (2) 등록 회원 이메일 발송.
+     Operator: this revision includes a PRIVACY amendment (session replay and error-reporting
+     disclosure), so notice cannot be skipped or shortened. In-app notice AND email to
+     registered members must go out at least 30 days before the effective date (2026-10-06). -->
+**시행일**: 2026-10-06
+**최종개정**: 2026-09-04
 본 약관은 한국어 본문과 영문 본문(English below)을 함께 제공하며, 두 언어 본문은 동등하게 유효합니다. 해석상 차이가 발생하는 경우, 대한민국 거주 회원에 대해서는 한국어본이, 그 외 회원에 대해서는 영문본이 우선합니다.
 
 ---
@@ -36,14 +46,12 @@
 1. **무료 플랜(Free)**:
    - 보컬 녹음 및 AI 분석 (로그인 없이도 사용 가능)
    - 분석 결과의 로컬 기기 저장 (Documents 디렉터리, OS 자동 백업에 포함)
-   - 메트로놈, 박자 보정 등 기본 편집 기능
-   - **MIDI/WAV 내보내기 ❌, 클라우드 동기화 ❌**
+   - 메트로놈, 박자 보정, 오토튠, 편집·섹션 배열, 기기 내 재생 등 제작 기능 전체 (워터마크·품질 제한 없음)
+   - **곡 저장은 4곡까지, WAV/MIDI/스템 내보내기 ❌**
 2. **HumTrack Pro (구독)**:
    - 무료 기능 전체
-   - MIDI/WAV 무제한 내보내기
-   - 5GB 클라우드 동기화 (Cloudflare R2 + Supabase)
-   - 보컬 클라우드 영구 보관 (제8조 보유 기간 적용)
-   - 우선 분석 처리
+   - 곡 무제한 저장 (무료 플랜은 4곡까지)
+   - WAV / MIDI / 스템 무제한 내보내기
 3. 회사는 안정적 서비스 제공을 위해 정기·비정기 점검을 시행할 수 있으며, 사전 또는 사후 공지합니다.
 4. 회사는 서비스의 일부 기능을 신설·변경·중단할 수 있으며, 중대한 변경 시 사전 공지합니다.
 
@@ -71,17 +79,17 @@
    - AI / 머신러닝 모델 학습
    - 제3자에 대한 판매·재라이선싱
    - 회사의 마케팅·홍보 자료 (회원의 사전 명시적 동의 없는 한)
-3. 회사는 서비스 제공 목적(저장·전송·재생·동기화·분석 처리)에 한하여 콘텐츠를 처리할 수 있는 비독점적·한정적·전 세계적·로열티 없는 라이선스만을 보유하며, 본 라이선스는 콘텐츠 또는 계정 삭제 시 즉시 종료됩니다.
+3. 회사는 서비스 제공 목적(전송·분석 처리)에 한하여 콘텐츠를 처리할 수 있는 비독점적·한정적·전 세계적·로열티 없는 라이선스만을 보유하며, 본 라이선스는 콘텐츠 또는 계정 삭제 시 즉시 종료됩니다.
 4. 회원은 자신이 업로드·생성한 콘텐츠가 제3자의 저작권·초상권·상표권 등을 침해하지 않음을 보증하며, 위반으로 발생한 분쟁의 책임은 해당 회원이 부담합니다.
 
 ### 제8조 (콘텐츠 보유 및 파기)
-1. **무료 사용자 보컬**: 분석 endpoint 에서 메모리 기반으로 처리 후 **분석 완료 즉시 폐기**합니다. 서버 디스크에 기록되지 않습니다.
-2. **Pro 회원 클라우드 작업물**: 구독 상태(활성/만료)와 무관하게 **회원이 작업물을 직접 삭제하거나 회원 탈퇴할 때까지 영구 보관**합니다. 만료 후에는 신규 업로드 및 동기화가 잠금되며, 기존 작업물의 다운로드 및 삭제만 가능합니다. 재구독 시 동기화가 즉시 재활성화됩니다.
+1. **보컬 오디오 (무료·Pro 공통)**: 분석·보컬 처리·오토튠·이펙트 endpoint 에서 메모리 기반으로 처리 후 **처리 완료 즉시 폐기**합니다. 서버 디스크에 기록되지 않습니다.
+2. **회원의 작업물 (곡, 보컬, MIDI, 프로젝트 메타)**: **회원의 기기 내부(Documents 디렉터리)에만 저장**되며, 회사 서버에 업로드·보관되지 않습니다. 따라서 회사는 회원의 작업물을 보유하지 않고, 작업물의 삭제·백업은 회원이 기기에서 직접 수행합니다. 구독이 만료되어도 기기에 저장된 곡은 삭제되지 않으며, Pro 전용 기능(곡 무제한 저장, WAV/MIDI/스템 내보내기)만 잠깁니다. 기기 분실·초기화 등 로컬 저장 데이터의 손실에 대해서는 제10조 제2항이 적용됩니다.
 3. **휴면 계정 정책 (예정)**: 별도 정책이 향후 도입될 수 있으며, 도입 시 시행일 30일 전 앱 내 공지 및 가입 이메일을 통해 사전 고지합니다. 도입 시 예정 흐름:
    - **휴면 전환**: 마지막 로그인일로부터 1년(12개월) 미접속 시 휴면 계정으로 전환. 데이터는 격리 보존되며, 로그인 시 즉시 복원.
-   - **데이터 영구 삭제**: 휴면 전환 후 추가 1년(12개월) 미접속 시 30일 전 이메일 사전 고지 후 클라우드 데이터(R2 + Supabase) 영구 삭제.
+   - **데이터 영구 삭제**: 휴면 전환 후 추가 1년(12개월) 미접속 시 30일 전 이메일 사전 고지 후 회사가 보유한 계정 데이터(Supabase Auth 계정 정보 및 구독·영수증 기록) 영구 삭제. 회원 기기에 저장된 곡은 회사가 보유하지 않으므로 영향을 받지 않습니다.
    - **Pro 활성 구독자는 휴면 전환 제외** — 결제 활성 상태인 동안에는 미접속과 무관하게 활성 계정으로 유지.
-3. **계정 정보**: 회원 탈퇴 요청 시 Supabase Auth, Supabase Postgres, Cloudflare R2 의 모든 관련 데이터가 cascade 영구 삭제됩니다. SLA: 영업일 기준 3일 이내 접수 확인, 72시간 이내 전면 삭제.
+3. **계정 정보**: 회원 탈퇴 요청 시 Supabase Auth 계정, Supabase Postgres 의 구독·영수증 기록, 그리고 Cloudflare R2 에 해당 회원 prefix 로 남아 있는 객체가 있는 경우 이를 포함한 모든 관련 데이터가 cascade 영구 삭제됩니다. SLA: 영업일 기준 3일 이내 접수 확인, 72시간 이내 전면 삭제.
 4. **IAP 영수증 / 결제 webhook 알림 로그**: 90일 보관 후 폐기. 단, 「전자상거래법」 및 「전자금융거래법」상 보존 의무가 적용되는 영수증 데이터는 해당 법정 기간(5년) 동안 보관 후 폐기합니다.
 
 ### 제9조 (회원의 의무 및 금지행위)
@@ -146,8 +154,8 @@ We may revise these Terms in compliance with applicable law. We will provide not
 - Purchases by minors may be voidable under applicable law. Refunds in such cases are processed through Apple / Google.
 
 ### Article 5. The Service
-- **Free**: humming recording, AI analysis, local storage, basic editing. No MIDI/WAV export, no cloud sync.
-- **HumTrack Pro**: everything in Free, plus unlimited MIDI/WAV export, 5 GB cloud sync (Cloudflare R2 + Supabase), permanent vocal cloud storage (subject to Article 8 retention), and priority analysis.
+- **Free**: humming recording, AI analysis, autotune, full editing and section arrangement, on-device playback, and local storage — with no watermark and no quality cap. Up to 4 saved songs; no WAV/MIDI/stem export.
+- **HumTrack Pro**: everything in Free, plus unlimited saved songs (the Free plan keeps 4) and unlimited WAV / MIDI / stem export.
 
 ### Article 6. Subscription and Auto-Renewal
 - Pro is sold **exclusively** via Apple App Store or Google Play in-app purchase. We do not collect, store, or process your payment card data; Apple and Google do.
@@ -166,13 +174,13 @@ We may revise these Terms in compliance with applicable law. We will provide not
 - You represent that your Content does not infringe any third-party rights.
 
 ### Article 8. Retention and Deletion
-- **Free vocal recordings**: processed in memory only by the analysis endpoint and **discarded immediately** upon completion. Not written to server disk.
-- **Pro cloud content**: retained **permanently until you delete the content or your account**, regardless of subscription state. After expiration, new uploads/syncs are locked but existing content remains downloadable and deletable. Resubscription instantly reactivates sync.
+- **Vocal audio (Free and Pro alike)**: processed in memory only by the analysis, vocal-processing, autotune, and effects endpoints and **discarded immediately** upon completion. Not written to server disk.
+- **Your work (songs, vocals, MIDI, project metadata)**: stored **only on your device** (the app's Documents directory). It is never uploaded to or retained on our servers, so we hold no copy of it; deleting and backing it up happens on your device. When a subscription expires, songs already on your device are not deleted — only the Pro-only features (unlimited saved songs, WAV/MIDI/stem export) lock. Loss of local data (lost or reset device) is governed by Article 10.
 - **Dormant account policy (planned)**: a separate dormant-account policy may be introduced. We will provide notice 30 days before the effective date via in-app and email. Planned flow:
   - **Dormant transition**: 1 year (12 months) of inactivity from last login triggers dormant status. Data is isolated and preserved; logging in restores the account instantly.
-  - **Permanent data deletion**: an additional 1 year (12 months) of inactivity in dormant status, with 30 days' email notice, leads to permanent deletion of cloud data (R2 + Supabase).
+  - **Permanent data deletion**: an additional 1 year (12 months) of inactivity in dormant status, with 30 days' email notice, leads to permanent deletion of the account data we hold (Supabase Auth account record and subscription/receipt rows). Songs stored on your device are unaffected — we hold no copy of them.
   - **Active Pro subscribers are exempt** — active subscription preserves account regardless of inactivity.
-- **Account data**: on deletion request, all Supabase Auth, Supabase Postgres, and Cloudflare R2 records are cascade-deleted. **SLA: confirmation within 3 business days, full deletion within 72 hours.**
+- **Account data**: on deletion request, your Supabase Auth account, your Supabase Postgres subscription and receipt rows, and any objects remaining under your prefix in Cloudflare R2 are cascade-deleted. **SLA: confirmation within 3 business days, full deletion within 72 hours.**
 - **IAP receipt webhook logs**: retained 90 days, except where Korean Electronic Commerce Act / Electronic Financial Transactions Act require 5-year retention of billing receipts.
 
 ### Article 9. Prohibited Conduct
@@ -209,6 +217,7 @@ You may close your account anytime via Settings → Delete Account. Closing the 
 | 1.0-draft | 2026-06-02 | 1차 초안 작성 (Humming 명의) |
 | 1.1-draft | 2026-06-03 | HumTrack 리브랜딩 반영, 가격 KRW 로 정정, 30일 grace 명시, 갱신 7일 전 고지 의무 추가, 미성년자 결제 조항 추가, Apple Sign In relay email 처리, 통신판매업자 표시사항 추가 |
 | 1.2-draft | 2026-06-03 | Pro 영구 보관 정책 적용 (30일 grace 제거), 휴면 계정 정책 명시 (1년 미접속 휴면 + 추가 1년 후 데이터 삭제, Pro 활성 예외), 사업자 정보 채움 (에르모세아르 / 대표 김동현 / 사업자등록 106-16-34319 / 통신판매업 2024-용인기흥-2437 / 주소 / 연락처), EU 대리인 현 시점 미지정 명시 (사용자 임계 도달 시 추후 지정), "단독 개발자" 표기 제거 (소규모 운영) |
+| 1.3-draft | 2026-09-04 | **Pro 혜택 정의 정정** — Pro 혜택을 실제 제공 기능(무제한 곡 저장 · WAV/MIDI/스템 내보내기)으로 정정하고, 미구현 상태였던 클라우드 동기화(5GB)·보컬 클라우드 영구 보관·우선 분석 조항을 삭제. 제5조 무료 플랜 한도를 "곡 4개 저장"으로 명시(녹음·분석·오토튠·편집·배열·재생은 무료, 워터마크·품질 제한 없음). 제8조 보유 조항을 "작업물은 회원 기기에만 저장, 서버 미보관"으로 정정하고 휴면 시 삭제 대상을 계정 데이터로 한정. 계정 삭제 약속(72시간 cascade 삭제, 영업일 3일 SLA)과 고지 의무는 변경 없이 유지. 시행일 2026-10-06 (제3조 제3항 30일 사전 고지 적용). / **Pro tier corrected** to the benefits actually shipped — unlimited saved songs and WAV/MIDI/stem export — with the never-implemented 5 GB cloud sync, permanent vocal cloud storage and priority-analysis provisions removed; Article 8 retention corrected to reflect that member work is stored only on the device and never on our servers. Deletion commitments and notice obligations unchanged. Effective 2026-10-06 after 30 days' notice. |
 
 ## 연락처
 

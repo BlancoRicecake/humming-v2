@@ -1,8 +1,18 @@
 # HumTrack 환불 정책 (Refund Policy)
 
-**시행일**: 2026-06-04
-**최종개정**: 2026-06-03
-**상태**: 1.2-draft — 사업자 정보 + 정책 사실관계 확정. 변호사 자문은 출시 후 진행 가능.
+<!-- 운영자 필독 (시행 전 조치): 아래 시행일 2026-10-06 은 이용약관 제3조 제3항의
+     "회원에게 불리한 변경 또는 중대한 변경의 경우 30일 전 고지" 를 보수적으로 적용한 날짜입니다.
+     ⚠ 이번 개정에는 **개인정보처리방침 개정**(세션 리플레이·오류 리포팅 등 분석 도구 고지 정정)이
+     포함됩니다. 세션 리플레이는 신규 고지 항목이므로 개인정보처리방침 제10조의 30일 사전 고지
+     대상이며, 고지를 생략하거나 기간을 단축할 수 없습니다.
+     본 개정본을 배포·게시할 때 시행일 30일 전까지 반드시 다음 두 가지를 모두 이행해야 합니다:
+       (1) 앱 내 공지 게시,  (2) 등록 회원 이메일 발송.
+     Operator: this revision includes a PRIVACY amendment (session replay and error-reporting
+     disclosure), so notice cannot be skipped or shortened. In-app notice AND email to
+     registered members must go out at least 30 days before the effective date (2026-10-06). -->
+**시행일**: 2026-10-06
+**최종개정**: 2026-09-04
+**상태**: 1.3-draft — 사업자 정보 + 정책 사실관계 확정. 변호사 자문은 출시 후 진행 가능.
 
 본 문서는 한국어 본문과 영문 본문(English below)을 함께 제공하며, 두 언어 본문은 동등하게 유효합니다.
 
@@ -40,7 +50,7 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
 
 1. 디지털콘텐츠는 원칙적으로 결제일로부터 **7일 이내 청약철회**가 가능합니다.
 2. 단, 「전자상거래법」 제17조 제2항 및 시행령 제21조에 따라 **이용 개시 시 청약철회권이 제한**될 수 있는 경우가 있습니다. HumTrack 의 경우:
-   - **분석 endpoint 를 1회라도 실행**한 경우, 또는 **MIDI/WAV export, 클라우드 동기화** 등 Pro 전용 기능을 1회라도 사용한 경우 청약철회권이 제한될 수 있습니다.
+   - **분석 endpoint 를 1회라도 실행**한 경우, 또는 **WAV/MIDI/스템 내보내기** 등 Pro 전용 기능을 1회라도 사용한 경우 청약철회권이 제한될 수 있습니다.
    - 회사는 결제 직후 첫 Pro 기능 사용 직전에 위 사실을 사용자에게 명확히 표시(consent surface)합니다. 사용자가 "즉시 사용에 동의하며 철회권이 제한됨을 확인"하는 명시적 동의를 제공하기 전에는 Pro 기능을 활성화하지 않습니다.
 3. **7일 무료 체험 (Introductory Offer)**:
    - 체험 기간 중에는 결제가 발생하지 않으므로 환불 대상이 아닙니다.
@@ -76,7 +86,7 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
 회사는 자체 결제를 운영하지 않으므로 환불 처리는 스토어가 1차적으로 담당합니다. 다만 다음의 경우 회사는 회원과 스토어 간 환불 절차를 적극 지원하며, 필요한 경우 스토어 처리가 불가능한 영역에 한해 회사가 별도 보상(예: 추가 무료 기간 부여)을 검토할 수 있습니다:
 
 1. **결제 오류**: 동일 기간 중복 결제, 명백한 시스템 오류로 인한 부당 청구
-2. **회사 측 서비스 장애**: 회사 측 원인으로 **연속 7일 이상** Pro 핵심 기능(클라우드 동기화, MIDI/WAV export) 사용 불가
+2. **회사 측 서비스 장애**: 회사 측 원인으로 **연속 7일 이상** 핵심 기능(허밍 분석, 또는 Pro 전용 기능인 WAV/MIDI/스템 내보내기·곡 무제한 저장) 사용 불가
 3. **회사가 약관을 중대하게 위반**한 경우
 
 요청 채널: `heobusy@gmail.com`
@@ -95,8 +105,9 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
 ### 8. 환불 시 데이터 보존
 
 환불 여부와 무관하게:
-- 회원이 명시적으로 **계정 삭제** 또는 **개별 작업물 삭제**를 요청하지 않는 한 클라우드 데이터(R2 + Supabase)는 자동 삭제되지 않습니다.
-- 구독이 환불·취소되어 만료된 경우에도 **클라우드 작업물은 그대로 보존됩니다**. 다만 만료 상태에서는 신규 업로드 및 동기화가 잠금되며, **기존 작업물의 다운로드 및 삭제만 가능**합니다. 재구독 시 동기화가 즉시 재활성화됩니다.
+- 회원의 곡·보컬·MIDI 등 작업물은 **회원의 기기 내부에만 저장**되며, 환불·해지로 인해 삭제되지 않습니다. 회사는 이를 서버에 보관하지 않으므로 삭제하거나 복구할 수 없습니다.
+- 구독이 환불·취소되어 만료된 경우 **Pro 전용 기능(곡 무제한 저장, WAV/MIDI/스템 내보내기)만 잠기며**, 이미 기기에 저장된 곡은 그대로 열람·편집·재생할 수 있습니다. 재구독 시 Pro 기능이 즉시 재활성화됩니다.
+- 회사가 보유하는 계정 기록(Supabase Auth 계정 정보, 구독·영수증 기록)은 회원이 앱 내 "설정 → 계정 삭제"를 요청할 경우 72시간 이내 영구 삭제됩니다.
 - 향후 휴면 계정 정책이 도입될 경우 시행일 30일 전 본 정책 개정을 통해 사전 고지합니다 (예정: 1년 미접속 시 휴면 전환, 휴면 후 1년 추가 미접속 시 30일 사전 고지 후 데이터 영구 삭제).
 
 ---
@@ -123,7 +134,7 @@ Canceling your subscription stops the **next** renewal; it does **not** trigger 
 
 **Korea (Electronic Commerce Act)**:
 - 7-day withdrawal for digital content **not yet used**.
-- Withdrawal may be limited once you actively use Pro features (analysis, MIDI/WAV export, cloud sync). We require explicit consent at the first Pro use confirming you acknowledge this limitation.
+- Withdrawal may be limited once you run the analysis endpoint or use a Pro-only feature (WAV/MIDI/stem export). We require explicit consent at the first Pro use confirming you acknowledge this limitation.
 - The 7-day free trial is not a paid charge. If you have not used Pro features after the first charge, request a refund within 7 days.
 
 **EU (Directive 2011/83/EU)**:
@@ -141,7 +152,7 @@ Purchases by minors under 19 (Korea) without parental consent may be voidable un
 ### 6. Company-Initiated Refund Review
 We do not run our own billing. Where store-level refunds fall short, we may **supplement** with goodwill compensation (e.g., extra free time) for:
 1. Duplicate or erroneous charges.
-2. Service outage caused by us lasting **7+ consecutive days** affecting core Pro features (cloud sync, MIDI/WAV export).
+2. Service outage caused by us lasting **7+ consecutive days** affecting core features (humming analysis, or the Pro-only WAV/MIDI/stem export and unlimited saved songs).
 3. Material breach of these Terms by us.
 
 Submit to `heobusy@gmail.com` with store receipt ID, timestamp, evidence. **SLA: first response within 5 business days; final decision within 14 days.**
@@ -155,7 +166,7 @@ Submit to `heobusy@gmail.com` with store receipt ID, timestamp, evidence. **SLA:
 - Apple Family Sharing, Apple ID balance top-ups, and similar store-policy-governed payments.
 
 ### 8. Data is Not Auto-Deleted on Refund
-Refund or cancellation does **not** delete your data. Cloud data (R2 + Supabase) is **retained permanently** regardless of subscription state; only you can delete it (per-project delete or account deletion). After expiration, new uploads/syncs are locked but existing content remains downloadable and deletable. A future dormant-account policy may be introduced with 30 days' prior notice (planned: 1 year of inactivity triggers dormant transition; an additional 1 year of inactivity, plus 30 days' final notice, leads to permanent data deletion). To erase immediately, use Settings → Delete Account.
+Refund or cancellation does **not** delete your data. Your songs, vocals and MIDI are stored **only on your device**; we hold no copy of them, so a refund or cancellation cannot remove them. When a subscription ends, only the Pro-only features (unlimited saved songs, WAV/MIDI/stem export) lock — songs already saved on your device remain viewable, editable and playable, and resubscribing reactivates Pro immediately. The account record we do hold (Supabase Auth account, subscription and receipt rows) is permanently deleted within 72 hours of a Settings → Delete Account request. A future dormant-account policy may be introduced with 30 days' prior notice (planned: 1 year of inactivity triggers dormant transition; an additional 1 year of inactivity, plus 30 days' final notice, leads to permanent deletion of that account data).
 
 ---
 
@@ -166,6 +177,7 @@ Refund or cancellation does **not** delete your data. Cloud data (R2 + Supabase)
 | 1.0-draft | 2026-06-02 | 1차 초안 (Humming 명의) |
 | 1.1-draft | 2026-06-03 | HumTrack 리브랜딩, "회사 직접 환불 ❌, 스토어 1차" 명확화 — 회사 환불은 goodwill 보충으로 위치 재정의, 7일 전 갱신 고지 의무 명시, 미성년자 결제 취소 추가, 청약철회권 제한 trigger 를 "Pro 기능 1회 사용" 으로 명확화 + 동의 surface 절차 명시 |
 | 1.2-draft | 2026-06-03 | 환불 시 데이터 보존 정책 정정 — Pro 영구 보관, 만료 시 신규 업로드 잠금 + 다운로드/삭제 가능, 휴면 정책 (1+1년) 사전 고지, 사업자 정보 채움 |
+| 1.3-draft | 2026-09-04 | **Pro 혜택 정의 정정 반영** — 청약철회권 제한 사유 및 서비스 장애 보상 조건에서 미구현 기능인 "클라우드 동기화" 를 삭제하고 실제 Pro 혜택(WAV/MIDI/스템 내보내기, 곡 무제한 저장)으로 정정. 제8조를 "작업물은 회원 기기에만 저장 · 환불·해지로 삭제되지 않음 · 만료 시 Pro 기능만 잠김" 으로 정정. 환불 권리와 SLA(영업일 5일 1차 회신, 14일 최종 결정)는 변경 없이 유지. 시행일 2026-10-06 (30일 사전 고지 적용). / **Aligned with the corrected Pro tier**: removed the never-implemented "cloud sync" from the withdrawal-limitation list and the service-outage compensation clause, replacing it with the real Pro benefits (WAV/MIDI/stem export, unlimited saved songs); Section 8 corrected to say your work lives on your device and is untouched by a refund. Refund rights and SLAs unchanged. Effective 2026-10-06 after 30 days' notice. |
 
 ## 연락처
 
