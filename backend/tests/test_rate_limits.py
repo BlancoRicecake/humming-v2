@@ -50,3 +50,22 @@ def test_soundfont_download_is_rate_limited(client):
 def test_render_mix_is_rate_limited(client):
     seen = [_post(client, "/render_mix", ip="6.6.6.6").status_code for _ in range(11)]
     assert 429 in seen
+
+
+@pytest.mark.skipif(limiter is None, reason="slowapi not installed")
+def test_adding_request_did_not_break_body_binding(client):
+    """The rate-limit decorator forced a `request: Request` parameter onto
+    several handlers. FastAPI must still bind the JSON body, not swallow it."""
+    note = {"start": 0.0, "end": 0.5, "duration": 0.5, "pitch": 60, "pitch_raw": 60.0,
+            "pitch_hz": 261.6, "velocity": 100, "confidence": 1.0, "voiced_ratio": 1.0,
+            "kind": "pitched"}
+    r = client.post("/assist", json={"notes": [note], "options": {}})
+    assert r.status_code == 200 and len(r.json()["notes"]) == 1
+
+    r = client.post("/export_midi", json={"notes": [note], "program": 0, "tempo_bpm": 120})
+    assert r.status_code == 200 and r.content[:4] == b"MThd"
+
+    r = client.post("/export_midi",
+                    json={"tracks": [{"notes": [note], "program": 0, "channel": 0}],
+                          "tempo_bpm": 90})
+    assert r.status_code == 200 and r.content[:4] == b"MThd"
