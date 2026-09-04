@@ -56,7 +56,25 @@ class AnalyzeOptions(BaseModel):
     # Stage 7 — key/scale (instrument lives client-side in Stage 8)
     auto_key: bool = True                 # detect key from the hummed pitches
     pitch_assistant: bool = True          # auto-correct off-scale notes to in-key
-    learned_pitch_correction: bool = True # conservative HumTrans-trained +/-1 semitone fixer
+    # HumTrans-trained +/-1 semitone fixer. DEFAULT OFF since 2026-09-04.
+    #
+    # It was defaulted on, but `models/` was never copied into the Docker image,
+    # so every production analysis since launch has run without it. Measuring
+    # the two against the five reference samples before shipping the models
+    # (see docs/audit-2026-09-03.md 4.6) showed it is not the "conservative"
+    # nudge its docstring describes:
+    #   - 41 of 78 melodic notes (53%) shift, 40 of them +1 semitone, 1 down;
+    #   - mean(pitch - pitch_raw) goes -0.05 -> +0.45 semitones, i.e. away from
+    #     the measured pitch, and sharp on all five samples;
+    #   - notes landing >0.5 semitone from what the singer actually sang go
+    #     from 10% to 45%.
+    # Cause is at least partly stacking: it applies its delta to the pitch the
+    # assistant already snapped (analyze.py), so the two corrections add up to
+    # ~1.4 semitones on single notes. Turning the default on is a product
+    # change that would transpose half the notes in every existing project, so
+    # it stays opt-in until the model is retrained/re-validated against
+    # ground truth. The drum classifier and offset model are unaffected.
+    learned_pitch_correction: bool = False
     learned_offset_correction: bool = False # opt-in until full-dev validation passes
     # Aggressive mode: when a key is present, snap EVERY off-scale note to the
     # nearest in-key pitch (raises the correction cap past a semitone). Default
