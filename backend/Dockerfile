@@ -70,7 +70,7 @@ for name in sorted(os.listdir(base)):
     with open(p, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
-    out[f"{name}:{st.st_size}:{st.st_mtime_ns}"] = h.hexdigest()
+    out[f"{name}:{st.st_size}"] = h.hexdigest()  # no mtime: see app/soundfonts.py _key
 with open(os.path.join(base, ".sha256.json"), "w") as f:
     json.dump(out, f, indent=0, sort_keys=True)
 print(f"sha256 sidecar: {len(out)} soundfont(s)")

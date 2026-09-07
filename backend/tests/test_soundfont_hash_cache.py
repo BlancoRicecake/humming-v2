@@ -59,15 +59,44 @@ def test_restart_uses_sidecar_without_hashing(catalog_dir, monkeypatch):
     assert calls == [], "digests must come from the sidecar, not be recomputed"
 
 
-def test_changed_file_is_rehashed(catalog_dir):
+def test_changed_size_is_rehashed(catalog_dir):
     before = sf.load_catalog()[0]["sha256"]
-    p = catalog_dir / "a.sf2"
-    p.write_bytes(b"C" * 5000)  # same size, new content and mtime
-    import os
-    os.utime(p, ns=(p.stat().st_atime_ns, p.stat().st_mtime_ns + 10_000_000))
+    (catalog_dir / "a.sf2").write_bytes(b"C" * 5001)  # different size → new key
     after = sf.load_catalog()[0]["sha256"]
     assert after != before
-    assert after == hashlib.sha256(b"C" * 5000).hexdigest()
+    assert after == hashlib.sha256(b"C" * 5001).hexdigest()
+
+
+def test_key_ignores_mtime(catalog_dir):
+    """The key must survive a Docker layer round-trip, which drops mtime
+    precision — v33 keyed on mtime_ns and never hit the sidecar in prod."""
+    import os
+    p = catalog_dir / "a.sf2"
+    k1 = sf._key(p)
+    os.utime(p, ns=(p.stat().st_atime_ns, p.stat().st_mtime_ns + 123_456_789))
+    assert sf._key(p) == k1
+    assert k1 == "a.sf2:5000"
+
+
+def test_concurrent_first_hash_computes_once(catalog_dir, monkeypatch):
+    """A request arriving during the startup warm-up must wait for that
+    digest, not hash the same file a second time."""
+    import threading
+    calls = []
+    real = hashlib.sha256
+
+    def spy(*a, **k):
+        calls.append(1)
+        return real(*a, **k)
+
+    monkeypatch.setattr(sf.hashlib, "sha256", spy)
+    p = catalog_dir / "a.sf2"
+    ts = [threading.Thread(target=sf._sha256, args=(p,)) for _ in range(4)]
+    for th in ts:
+        th.start()
+    for th in ts:
+        th.join()
+    assert len(calls) == 1
 
 
 def test_corrupt_sidecar_is_ignored(catalog_dir):

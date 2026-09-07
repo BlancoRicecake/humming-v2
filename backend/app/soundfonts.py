@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -67,8 +68,13 @@ def _key(path: Path) -> Optional[str]:
         st = path.stat()
     except OSError:
         return None
-    # name-relative (not absolute) so the sidecar survives the dir moving
-    return f"{path.name}:{st.st_size}:{st.st_mtime_ns}"
+    # name + size only. mtime is deliberately NOT part of the key: it does not
+    # survive the Docker layer round-trip (tar stores seconds; the build-time
+    # stat had nanoseconds), which is exactly why the first sidecar shipped in
+    # v33 never matched and every boot still hashed 1GB. Fonts are immutable
+    # inside an image and the manifest sha256 is what the client verifies, so
+    # a same-size silent edit is not a failure mode we need to detect here.
+    return f"{path.name}:{st.st_size}"
 
 
 def _load_sidecar(base: Path) -> None:
@@ -96,19 +102,27 @@ def _save_sidecar(base: Path) -> None:
         pass
 
 
+_HASH_LOCK = threading.Lock()
+
+
 def _sha256(path: Path) -> str:
     _load_sidecar(path.parent)
     key = _key(path)
     if key is not None and key in _HASH_CACHE:
         return _HASH_CACHE[key]
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    digest = h.hexdigest()
-    if key is not None:
-        _HASH_CACHE[key] = digest
-        _save_sidecar(path.parent)
+    # One hasher at a time. Without this the startup warm-up thread and the
+    # first request both chewed through the same 1GB on one shared CPU.
+    with _HASH_LOCK:
+        if key is not None and key in _HASH_CACHE:  # computed while we waited
+            return _HASH_CACHE[key]
+        h = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        digest = h.hexdigest()
+        if key is not None:
+            _HASH_CACHE[key] = digest
+            _save_sidecar(path.parent)
     return digest
 
 
