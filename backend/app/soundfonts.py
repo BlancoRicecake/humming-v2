@@ -51,25 +51,72 @@ _ROLES = {"melody", "bass", "drums"}
 # Hashing a soundfont is O(file size); the guitar-lab fonts are hundreds of MB
 # and load_catalog() runs on every audition/render request. Cache by
 # (path, size, mtime_ns) so a file is only re-hashed when it actually changes.
+#
+# The in-memory cache alone meant every machine boot paid ~50s on the first
+# /soundfonts request (1GB of hashing), and Fly stops the idle machine daily.
+# So the digests are ALSO persisted to SIDECAR next to the fonts — written at
+# image build time (Dockerfile) and after any computation — keyed the same
+# way, so an unchanged file is never hashed twice across restarts either.
 _HASH_CACHE: Dict[str, str] = {}
+SIDECAR = ".sha256.json"
+_sidecar_loaded_for: Optional[Path] = None
+
+
+def _key(path: Path) -> Optional[str]:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    # name-relative (not absolute) so the sidecar survives the dir moving
+    return f"{path.name}:{st.st_size}:{st.st_mtime_ns}"
+
+
+def _load_sidecar(base: Path) -> None:
+    global _sidecar_loaded_for
+    if _sidecar_loaded_for == base:
+        return
+    _sidecar_loaded_for = base
+    try:
+        data = json.loads((base / SIDECAR).read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            _HASH_CACHE.update({str(k): str(v) for k, v in data.items()
+                                if isinstance(v, str) and len(v) == 64})
+    except (OSError, ValueError):
+        pass
+
+
+def _save_sidecar(base: Path) -> None:
+    """Best-effort persist. The image dir is owned by the app user, so this
+    works in production; a read-only mount just keeps the in-memory cache."""
+    try:
+        tmp = base / (SIDECAR + ".tmp")
+        tmp.write_text(json.dumps(_HASH_CACHE, indent=0, sort_keys=True), encoding="utf-8")
+        tmp.replace(base / SIDECAR)
+    except OSError:
+        pass
 
 
 def _sha256(path: Path) -> str:
-    try:
-        st = path.stat()
-        key = f"{path}:{st.st_size}:{st.st_mtime_ns}"
-    except OSError:
-        key = None
+    _load_sidecar(path.parent)
+    key = _key(path)
     if key is not None and key in _HASH_CACHE:
         return _HASH_CACHE[key]
     h = hashlib.sha256()
     with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
+        for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     digest = h.hexdigest()
     if key is not None:
         _HASH_CACHE[key] = digest
+        _save_sidecar(path.parent)
     return digest
+
+
+def warm_hashes() -> int:
+    """Hash every catalog font now (populating the sidecar). Returns the number
+    of entries. Called at image build time and, as a fallback, in a background
+    thread at startup so the first request never waits on 1GB of hashing."""
+    return len(load_catalog())
 
 
 def _read_catalog_file() -> List[dict]:

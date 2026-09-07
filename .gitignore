@@ -23,6 +23,7 @@ backend/bin/fluidsynth.zip
 # deploy artifacts, not source: deploy them to the server's soundfonts/ dir
 # out-of-band. catalog.json (the manifest) stays tracked.
 backend/soundfonts/*.sf2
+backend/soundfonts/.sha256.json
 
 # personal local Claude Code settings (agents are kept, local settings are not)
 .claude/settings.local.json

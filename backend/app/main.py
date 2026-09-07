@@ -161,6 +161,19 @@ async def _lifespan(_app: FastAPI):
         _config_status()
     except Exception:
         logger.exception("config status probe failed")
+    # Warm the soundfont sha256 cache off the request path. With the sidecar
+    # baked into the image this is instant; without it (local dev) it hashes
+    # in the background so the first /soundfonts call still does not wait.
+    import threading
+
+    def _warm():
+        try:
+            n = soundfonts_mod.warm_hashes()
+            logger.info("soundfont catalog warmed: %d entr%s", n, "y" if n == 1 else "ies")
+        except Exception:
+            logger.exception("soundfont warm-up failed")
+
+    threading.Thread(target=_warm, name="sf2-warm", daemon=True).start()
     yield
 
 

@@ -53,6 +53,28 @@ RUN apt-get update \
 # in. Kept as its own layer BEFORE the app source so app-only deploys reuse the
 # cached ~1GB layer instead of rebuilding it.
 COPY soundfonts ./soundfonts
+# Pre-compute the catalog sha256 sidecar so a fresh machine never hashes 1GB
+# on its first /soundfonts request (was ~50s, every morning after Fly stopped
+# the idle machine). Standalone script on purpose: this layer must not depend
+# on app/ or it would rebuild on every code change.
+RUN python - <<'PY'
+import hashlib, json, os
+base = "soundfonts"
+out = {}
+for name in sorted(os.listdir(base)):
+    if not name.endswith(".sf2"):
+        continue
+    p = os.path.join(base, name)
+    st = os.stat(p)
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    out[f"{name}:{st.st_size}:{st.st_mtime_ns}"] = h.hexdigest()
+with open(os.path.join(base, ".sha256.json"), "w") as f:
+    json.dump(out, f, indent=0, sort_keys=True)
+print(f"sha256 sidecar: {len(out)} soundfont(s)")
+PY
 
 # --- app source ------------------------------------------------------------
 COPY app ./app
