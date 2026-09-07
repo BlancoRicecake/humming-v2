@@ -1,6 +1,6 @@
 # HumTrack 개인정보처리방침 (Privacy Policy)
 
-<!-- 운영자 필독 (시행 전 조치): 아래 시행일 2026-10-06 은 이용약관 제3조 제3항의
+<!-- 운영자 필독 (시행 전 조치): 아래 시행일 2026-10-20 은 이용약관 제3조 제3항의
      "회원에게 불리한 변경 또는 중대한 변경의 경우 30일 전 고지" 를 보수적으로 적용한 날짜입니다.
      ⚠ 이번 개정에는 **개인정보처리방침 개정**(세션 리플레이·오류 리포팅 등 분석 도구 고지 정정)이
      포함됩니다. 세션 리플레이는 신규 고지 항목이므로 개인정보처리방침 제10조의 30일 사전 고지
@@ -9,8 +9,8 @@
        (1) 앱 내 공지 게시,  (2) 등록 회원 이메일 발송.
      Operator: this revision includes a PRIVACY amendment (session replay and error-reporting
      disclosure), so notice cannot be skipped or shortened. In-app notice AND email to
-     registered members must go out at least 30 days before the effective date (2026-10-06). -->
-**시행일**: 2026-10-06
+     registered members must go out at least 30 days before the effective date (2026-10-20). -->
+**시행일**: 2026-10-20
 **최종개정**: 2026-09-04
 **상태**: 1.3-draft — 사업자 정보 + 정책 사실관계 확정. 변호사 자문 권장 5건은 출시 후 진행 가능.
 
@@ -224,7 +224,7 @@ We give 30 days' in-app and email notice for material changes. Minor edits are r
 | 1.0-draft | 2026-06-02 | 1차 초안 (Humming 명의) |
 | 1.1-draft | 2026-06-03 | HumTrack 리브랜딩, Fly.io iad 명시, Sentry/PostHog 를 "(예정)" 으로 명확히 표시, 30일 grace + 90일 webhook 로그 보유 명시, CCPA "no sale" 명시 강화, ATT 미사용 명시, OAuth sub 항목 추가, EU Rep TODO 항목 추가, SCC 2021/914/EU 명시 |
 | 1.2-draft | 2026-06-03 | Pro 영구 보관으로 보유 기간 정정 (30일 grace 제거), 휴면 계정 정책 명시 (1+1년 모델), 사업자 정보 채움 (에르모세아르 / 대표 김동현 / 106-16-34319 / 주소 / 연락처), EU 대리인 미지정 결정 명시 (옵션 3 — 사용자 임계 도달 시 추후 지정), "단독 개발자" 표기 제거 |
-| 1.3-draft | 2026-09-04 | **처리 사실관계 정정** — Pro 사용자의 보컬·작업물이 Cloudflare R2 / Supabase 에 저장·영구 보관된다는 기재를 삭제. 실제로는 곡·보컬·MIDI 가 회원 기기에만 저장되며 서버에 업로드되지 않음. 서버가 처리하는 것은 분석(/analyze)·보컬 처리(/process_vocal)·오토튠(/autotune)·이펙트(/process_fx) 요청 오디오(메모리 처리 후 즉시 폐기)와 계정 정보(Supabase Auth) · 구독 기록(스토어·상품·상태·만료일·스토어 거래 ID)임을 명시. 수탁자 표 및 5GB quota·마지막 동기화 시각 항목 정정. 계정 삭제 약속(72시간 cascade 삭제, 영업일 3일 SLA)과 이용자 권리는 변경 없이 유지. 시행일 2026-10-06 (30일 사전 고지 적용). / **Corrected the processing facts**: removed the claim that Pro vocals and projects are stored in Cloudflare R2 / Supabase and retained permanently — songs, vocals and MIDI live only on the member's device. Server-side we process audio in memory for /analyze, /process_vocal, /autotune and /process_fx (discarded immediately) and store account data (Supabase Auth) plus the subscription row (store, product, status, expiry, store transaction id). Subprocessor table corrected. Deletion commitments and user rights unchanged. Effective 2026-10-06 after 30 days' notice. |
+| 1.3-draft | 2026-09-04 | **처리 사실관계 정정** — Pro 사용자의 보컬·작업물이 Cloudflare R2 / Supabase 에 저장·영구 보관된다는 기재를 삭제. 실제로는 곡·보컬·MIDI 가 회원 기기에만 저장되며 서버에 업로드되지 않음. 서버가 처리하는 것은 분석(/analyze)·보컬 처리(/process_vocal)·오토튠(/autotune)·이펙트(/process_fx) 요청 오디오(메모리 처리 후 즉시 폐기)와 계정 정보(Supabase Auth) · 구독 기록(스토어·상품·상태·만료일·스토어 거래 ID)임을 명시. 수탁자 표 및 5GB quota·마지막 동기화 시각 항목 정정. 계정 삭제 약속(72시간 cascade 삭제, 영업일 3일 SLA)과 이용자 권리는 변경 없이 유지. 시행일 2026-10-20 (30일 사전 고지 적용). / **Corrected the processing facts**: removed the claim that Pro vocals and projects are stored in Cloudflare R2 / Supabase and retained permanently — songs, vocals and MIDI live only on the member's device. Server-side we process audio in memory for /analyze, /process_vocal, /autotune and /process_fx (discarded immediately) and store account data (Supabase Auth) plus the subscription row (store, product, status, expiry, store transaction id). Subprocessor table corrected. Deletion commitments and user rights unchanged. Effective 2026-10-20 after 30 days' notice. |
 | 1.3-draft | 2026-09-04 | **분석·진단 도구 고지를 실제 탑재 상태에 맞게 정정** — Sentry 를 "(예정)" 에서 활성으로 변경(앱·백엔드 모두 가동 중, 오류·크래시 리포팅, 서버 `send_default_pii=False` · 앱 `sendDefaultPii = false`, 로그인 사용자는 Supabase 사용자 ID(불투명 UUID)로만 식별). **Microsoft Clarity(세션 리플레이·히트맵) 고지를 신규 추가** — 수집 항목 표, 설명 문단(마스킹 범위 및 Supabase 사용자 ID 전달 사실 포함), 처리 목적, 수탁자 표 4곳 모두. 실제로 사용하지 않는 **PostHog 를 수집 항목·처리 목적·수탁자 표·"예정 항목" 안내에서 전면 삭제**. 「예정 항목 표시」 안내를 「분석·진단 도구 안내」로 교체. 세션 리플레이는 신규 고지 항목이므로 제10조에 따라 시행일 30일 전 사전 고지 필요. / **Analytics disclosure corrected to match what the app actually ships**: Sentry moved from "(Planned)" to active (live in both the app and the backend; error and crash reporting; `send_default_pii=False` on the server and `sendDefaultPii = false` in the app; signed-in users identified only by an opaque Supabase user ID). **Microsoft Clarity (session replay and heatmaps) newly disclosed** across all four places — collection table, explanatory paragraph (masking scope and the fact that the Supabase user ID is passed), purposes, and subprocessor table. **PostHog, which processes nothing, removed entirely** from the collection table, purposes, subprocessor table and the "planned services" note. Session replay is a new disclosure, so the 30-day prior notice under Section 10 applies. |
 
 ## 연락처

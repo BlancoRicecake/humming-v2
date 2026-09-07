@@ -1,6 +1,6 @@
 # HumTrack 이용약관 (Terms of Service)
 
-<!-- 운영자 필독 (시행 전 조치): 아래 시행일 2026-10-06 은 이용약관 제3조 제3항의
+<!-- 운영자 필독 (시행 전 조치): 아래 시행일 2026-10-20 은 이용약관 제3조 제3항의
      "회원에게 불리한 변경 또는 중대한 변경의 경우 30일 전 고지" 를 보수적으로 적용한 날짜입니다.
      ⚠ 이번 개정에는 **개인정보처리방침 개정**(세션 리플레이·오류 리포팅 등 분석 도구 고지 정정)이
      포함됩니다. 세션 리플레이는 신규 고지 항목이므로 개인정보처리방침 제10조의 30일 사전 고지
@@ -9,8 +9,8 @@
        (1) 앱 내 공지 게시,  (2) 등록 회원 이메일 발송.
      Operator: this revision includes a PRIVACY amendment (session replay and error-reporting
      disclosure), so notice cannot be skipped or shortened. In-app notice AND email to
-     registered members must go out at least 30 days before the effective date (2026-10-06). -->
-**시행일**: 2026-10-06
+     registered members must go out at least 30 days before the effective date (2026-10-20). -->
+**시행일**: 2026-10-20
 **최종개정**: 2026-09-04
 본 약관은 한국어 본문과 영문 본문(English below)을 함께 제공하며, 두 언어 본문은 동등하게 유효합니다. 해석상 차이가 발생하는 경우, 대한민국 거주 회원에 대해서는 한국어본이, 그 외 회원에 대해서는 영문본이 우선합니다.
 
@@ -217,7 +217,7 @@ You may close your account anytime via Settings → Delete Account. Closing the 
 | 1.0-draft | 2026-06-02 | 1차 초안 작성 (Humming 명의) |
 | 1.1-draft | 2026-06-03 | HumTrack 리브랜딩 반영, 가격 KRW 로 정정, 30일 grace 명시, 갱신 7일 전 고지 의무 추가, 미성년자 결제 조항 추가, Apple Sign In relay email 처리, 통신판매업자 표시사항 추가 |
 | 1.2-draft | 2026-06-03 | Pro 영구 보관 정책 적용 (30일 grace 제거), 휴면 계정 정책 명시 (1년 미접속 휴면 + 추가 1년 후 데이터 삭제, Pro 활성 예외), 사업자 정보 채움 (에르모세아르 / 대표 김동현 / 사업자등록 106-16-34319 / 통신판매업 2024-용인기흥-2437 / 주소 / 연락처), EU 대리인 현 시점 미지정 명시 (사용자 임계 도달 시 추후 지정), "단독 개발자" 표기 제거 (소규모 운영) |
-| 1.3-draft | 2026-09-04 | **Pro 혜택 정의 정정** — Pro 혜택을 실제 제공 기능(무제한 곡 저장 · WAV/MIDI/스템 내보내기)으로 정정하고, 미구현 상태였던 클라우드 동기화(5GB)·보컬 클라우드 영구 보관·우선 분석 조항을 삭제. 제5조 무료 플랜 한도를 "곡 4개 저장"으로 명시(녹음·분석·오토튠·편집·배열·재생은 무료, 워터마크·품질 제한 없음). 제8조 보유 조항을 "작업물은 회원 기기에만 저장, 서버 미보관"으로 정정하고 휴면 시 삭제 대상을 계정 데이터로 한정. 계정 삭제 약속(72시간 cascade 삭제, 영업일 3일 SLA)과 고지 의무는 변경 없이 유지. 시행일 2026-10-06 (제3조 제3항 30일 사전 고지 적용). / **Pro tier corrected** to the benefits actually shipped — unlimited saved songs and WAV/MIDI/stem export — with the never-implemented 5 GB cloud sync, permanent vocal cloud storage and priority-analysis provisions removed; Article 8 retention corrected to reflect that member work is stored only on the device and never on our servers. Deletion commitments and notice obligations unchanged. Effective 2026-10-06 after 30 days' notice. |
+| 1.3-draft | 2026-09-04 | **Pro 혜택 정의 정정** — Pro 혜택을 실제 제공 기능(무제한 곡 저장 · WAV/MIDI/스템 내보내기)으로 정정하고, 미구현 상태였던 클라우드 동기화(5GB)·보컬 클라우드 영구 보관·우선 분석 조항을 삭제. 제5조 무료 플랜 한도를 "곡 4개 저장"으로 명시(녹음·분석·오토튠·편집·배열·재생은 무료, 워터마크·품질 제한 없음). 제8조 보유 조항을 "작업물은 회원 기기에만 저장, 서버 미보관"으로 정정하고 휴면 시 삭제 대상을 계정 데이터로 한정. 계정 삭제 약속(72시간 cascade 삭제, 영업일 3일 SLA)과 고지 의무는 변경 없이 유지. 시행일 2026-10-20 (제3조 제3항 30일 사전 고지 적용). / **Pro tier corrected** to the benefits actually shipped — unlimited saved songs and WAV/MIDI/stem export — with the never-implemented 5 GB cloud sync, permanent vocal cloud storage and priority-analysis provisions removed; Article 8 retention corrected to reflect that member work is stored only on the device and never on our servers. Deletion commitments and notice obligations unchanged. Effective 2026-10-20 after 30 days' notice. |
 
 ## 연락처
 

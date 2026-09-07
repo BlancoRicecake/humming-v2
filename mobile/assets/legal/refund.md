@@ -1,6 +1,6 @@
 # HumTrack 환불 정책 (Refund Policy)
 
-<!-- 운영자 필독 (시행 전 조치): 아래 시행일 2026-10-06 은 이용약관 제3조 제3항의
+<!-- 운영자 필독 (시행 전 조치): 아래 시행일 2026-10-20 은 이용약관 제3조 제3항의
      "회원에게 불리한 변경 또는 중대한 변경의 경우 30일 전 고지" 를 보수적으로 적용한 날짜입니다.
      ⚠ 이번 개정에는 **개인정보처리방침 개정**(세션 리플레이·오류 리포팅 등 분석 도구 고지 정정)이
      포함됩니다. 세션 리플레이는 신규 고지 항목이므로 개인정보처리방침 제10조의 30일 사전 고지
@@ -9,8 +9,8 @@
        (1) 앱 내 공지 게시,  (2) 등록 회원 이메일 발송.
      Operator: this revision includes a PRIVACY amendment (session replay and error-reporting
      disclosure), so notice cannot be skipped or shortened. In-app notice AND email to
-     registered members must go out at least 30 days before the effective date (2026-10-06). -->
-**시행일**: 2026-10-06
+     registered members must go out at least 30 days before the effective date (2026-10-20). -->
+**시행일**: 2026-10-20
 **최종개정**: 2026-09-04
 **상태**: 1.3-draft — 사업자 정보 + 정책 사실관계 확정. 변호사 자문은 출시 후 진행 가능.
 
@@ -176,7 +176,7 @@ Refund or cancellation does **not** delete your data. Your songs, vocals and MID
 | 1.0-draft | 2026-06-02 | 1차 초안 (Humming 명의) |
 | 1.1-draft | 2026-06-03 | HumTrack 리브랜딩, "회사 직접 환불 ❌, 스토어 1차" 명확화 — 회사 환불은 goodwill 보충으로 위치 재정의, 7일 전 갱신 고지 의무 명시, 미성년자 결제 취소 추가, 청약철회권 제한 trigger 를 "Pro 기능 1회 사용" 으로 명확화 + 동의 surface 절차 명시 |
 | 1.2-draft | 2026-06-03 | 환불 시 데이터 보존 정책 정정 — Pro 영구 보관, 만료 시 신규 업로드 잠금 + 다운로드/삭제 가능, 휴면 정책 (1+1년) 사전 고지, 사업자 정보 채움 |
-| 1.3-draft | 2026-09-04 | **Pro 혜택 정의 정정 반영** — 청약철회권 제한 사유 및 서비스 장애 보상 조건에서 미구현 기능인 "클라우드 동기화" 를 삭제하고 실제 Pro 혜택(WAV/MIDI/스템 내보내기, 곡 무제한 저장)으로 정정. 제8조를 "작업물은 회원 기기에만 저장 · 환불·해지로 삭제되지 않음 · 만료 시 Pro 기능만 잠김" 으로 정정. 환불 권리와 SLA(영업일 5일 1차 회신, 14일 최종 결정)는 변경 없이 유지. 시행일 2026-10-06 (30일 사전 고지 적용). / **Aligned with the corrected Pro tier**: removed the never-implemented "cloud sync" from the withdrawal-limitation list and the service-outage compensation clause, replacing it with the real Pro benefits (WAV/MIDI/stem export, unlimited saved songs); Section 8 corrected to say your work lives on your device and is untouched by a refund. Refund rights and SLAs unchanged. Effective 2026-10-06 after 30 days' notice. |
+| 1.3-draft | 2026-09-04 | **Pro 혜택 정의 정정 반영** — 청약철회권 제한 사유 및 서비스 장애 보상 조건에서 미구현 기능인 "클라우드 동기화" 를 삭제하고 실제 Pro 혜택(WAV/MIDI/스템 내보내기, 곡 무제한 저장)으로 정정. 제8조를 "작업물은 회원 기기에만 저장 · 환불·해지로 삭제되지 않음 · 만료 시 Pro 기능만 잠김" 으로 정정. 환불 권리와 SLA(영업일 5일 1차 회신, 14일 최종 결정)는 변경 없이 유지. 시행일 2026-10-20 (30일 사전 고지 적용). / **Aligned with the corrected Pro tier**: removed the never-implemented "cloud sync" from the withdrawal-limitation list and the service-outage compensation clause, replacing it with the real Pro benefits (WAV/MIDI/stem export, unlimited saved songs); Section 8 corrected to say your work lives on your device and is untouched by a refund. Refund rights and SLAs unchanged. Effective 2026-10-20 after 30 days' notice. |
 
 ## 연락처
 
