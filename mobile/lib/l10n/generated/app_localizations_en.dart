@@ -1465,6 +1465,16 @@ class L10nEn extends L10n {
   }
 
   @override
+  String payLapsedTrial(String date) {
+    return 'Your free trial ended on $date. Subscribe to keep going.';
+  }
+
+  @override
+  String payLapsedSub(String date) {
+    return 'Your subscription ended on $date. Resubscribe to pick up where you left off.';
+  }
+
+  @override
   String get payPlanYearly => 'Yearly';
 
   @override

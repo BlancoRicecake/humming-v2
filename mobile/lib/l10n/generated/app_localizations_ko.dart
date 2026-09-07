@@ -1445,6 +1445,16 @@ class L10nKo extends L10n {
   }
 
   @override
+  String payLapsedTrial(String date) {
+    return '무료 체험이 $date에 끝났어요. 계속 쓰려면 구독이 필요해요.';
+  }
+
+  @override
+  String payLapsedSub(String date) {
+    return '구독이 $date에 만료됐어요. 다시 구독하면 바로 이어서 쓸 수 있어요.';
+  }
+
+  @override
   String get payPlanYearly => '연간';
 
   @override

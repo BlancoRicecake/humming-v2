@@ -80,6 +80,23 @@ class LoopStore extends ChangeNotifier {
   /// [proActive] 만 쓴다.
   String? get proStatus => _proStatus;
   String? get proProductId => _proProductId;
+
+  /// When the user HAD Pro and it lapsed: the lapse date, else null. Lets the
+  /// paywall and account sheet say "your trial ended on …" instead of showing
+  /// a cold paywall to someone whose trial silently expired (there are dozens
+  /// of such rows in production — store webhooks never reached us).
+  DateTime? get proLapsedAt {
+    if (proActive) return null;
+    final at = _renewsAt;
+    if (at == null || !at.isBefore(DateTime.now())) return null;
+    return switch (_proStatus) {
+      'trial' || 'active' || 'cancelled' || 'expired' => at,
+      _ => null,
+    };
+  }
+
+  /// True when the lapsed entitlement was a free trial (vs a paid period).
+  bool get proLapsedWasTrial => _proStatus == 'trial';
   bool get authEnabled => AuthService.instance.enabled;
   bool get iapEnabled => IapService.instance.enabled;
   AuthError? get lastAuthError => AuthService.instance.lastError;

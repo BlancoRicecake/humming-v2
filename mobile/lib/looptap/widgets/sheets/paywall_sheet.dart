@@ -10,6 +10,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
@@ -91,6 +92,9 @@ class _PaywallSheet extends StatefulWidget {
   @override
   State<_PaywallSheet> createState() => _PaywallSheetState();
 }
+
+String _fmtDate(BuildContext context, DateTime d) =>
+    DateFormat.yMMMd(Localizations.localeOf(context).toString()).format(d.toLocal());
 
 class _PaywallSheetState extends State<_PaywallSheet> {
   bool _busy = false;
@@ -279,6 +283,17 @@ class _PaywallSheetState extends State<_PaywallSheet> {
                 ),
               ],
             ),
+          ),
+        ],
+        // 체험/구독이 끝나서 온 사용자에게는 이유를 먼저 말한다 — 조용히
+        // 만료된 뒤 처음 보는 화면이 차가운 결제창이면 안 된다.
+        if (store.proLapsedAt != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            store.proLapsedWasTrial
+                ? l.payLapsedTrial(_fmtDate(context, store.proLapsedAt!))
+                : l.payLapsedSub(_fmtDate(context, store.proLapsedAt!)),
+            style: LTType.inter(size: 12, weight: FontWeight.w600, color: LT.t1, height: 1.4),
           ),
         ],
         const SizedBox(height: 14),

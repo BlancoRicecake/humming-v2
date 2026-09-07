@@ -206,7 +206,13 @@ class _AccountSheetState extends State<_AccountSheet> {
         _AccRow(
           icon: LtIcons.workspacePremium,
           title: l.acctUpgrade,
-          sub: l.acctProBenefits,
+          sub: store.proLapsedAt == null
+              ? l.acctProBenefits
+              : (store.proLapsedWasTrial
+                  ? l.payLapsedTrial(DateFormat.yMMMd(Localizations.localeOf(context).toString())
+                      .format(store.proLapsedAt!.toLocal()))
+                  : l.payLapsedSub(DateFormat.yMMMd(Localizations.localeOf(context).toString())
+                      .format(store.proLapsedAt!.toLocal()))),
           onTap: () => showPaywallSheet(context),
         ),
       _AccRow(

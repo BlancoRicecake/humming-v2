@@ -2658,6 +2658,18 @@ abstract class L10n {
   /// **'무제한 곡 만들기 (무료 플랜은 {n}곡까지) · WAV / MIDI / 스템 내보내기.'**
   String payBenefits(int n);
 
+  /// 체험 만료 후 결제창/계정 시트 안내 — 왜 결제창이 뗴는지
+  ///
+  /// In ko, this message translates to:
+  /// **'무료 체험이 {date}에 끝났어요. 계속 쓰려면 구독이 필요해요.'**
+  String payLapsedTrial(String date);
+
+  /// 구독 만료 후 결제창/계정 시트 안내
+  ///
+  /// In ko, this message translates to:
+  /// **'구독이 {date}에 만료됐어요. 다시 구독하면 바로 이어서 쓸 수 있어요.'**
+  String payLapsedSub(String date);
+
   /// No description provided for @payPlanYearly.
   ///
   /// In ko, this message translates to:

@@ -481,6 +481,10 @@
 
   "payTitle": "HumTrack Pro",
   "payBenefits": "Unlimited songs (free plan keeps {n}) · WAV / MIDI / stems export.",
+  "payLapsedTrial": "Your free trial ended on {date}. Subscribe to keep going.",
+  "@payLapsedTrial": {"placeholders": {"date": {"type": "String"}}},
+  "payLapsedSub": "Your subscription ended on {date}. Resubscribe to pick up where you left off.",
+  "@payLapsedSub": {"placeholders": {"date": {"type": "String"}}},
   "payPlanYearly": "Yearly",
   "payPlanMonthly": "Monthly",
   "payPerMonthEquiv": "{price} / month",

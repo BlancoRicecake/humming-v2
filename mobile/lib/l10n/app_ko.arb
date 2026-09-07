@@ -548,6 +548,16 @@
   "payTitle": "HumTrack Pro",
   "payBenefits": "무제한 곡 만들기 (무료 플랜은 {n}곡까지) · WAV / MIDI / 스템 내보내기.",
   "@payBenefits": {"placeholders": {"n": {"type": "int"}}},
+  "payLapsedTrial": "무료 체험이 {date}에 끝났어요. 계속 쓰려면 구독이 필요해요.",
+  "@payLapsedTrial": {
+    "description": "체험 만료 후 결제창/계정 시트 안내 — 왜 결제창이 뗴는지",
+    "placeholders": {"date": {"type": "String"}}
+  },
+  "payLapsedSub": "구독이 {date}에 만료됐어요. 다시 구독하면 바로 이어서 쓸 수 있어요.",
+  "@payLapsedSub": {
+    "description": "구독 만료 후 결제창/계정 시트 안내",
+    "placeholders": {"date": {"type": "String"}}
+  },
   "payPlanYearly": "연간",
   "payPlanMonthly": "월간",
   "payPerMonthEquiv": "월 {price} 꼴",
