@@ -18,8 +18,9 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "8.9.1" apply false
-    id("org.jetbrains.kotlin.android") version "2.1.0" apply false
+    // Minimum supported toolchain for the pinned Flutter 3.47.1 SDK.
+    id("com.android.application") version "8.11.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
 }
 
 include(":app")

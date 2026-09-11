@@ -113,7 +113,7 @@ import UIKit
                                arguments: ["began": true, "shouldResume": false])
         case .ended:
           var shouldResume = false
-          if let optValue = info[AVAudioSessionInterruptionOptionsKey] as? UInt {
+          if let optValue = info[AVAudioSessionInterruptionOptionKey] as? UInt {
             shouldResume = AVAudioSession.InterruptionOptions(rawValue: optValue).contains(.shouldResume)
           }
           if shouldResume {

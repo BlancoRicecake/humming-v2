@@ -2211,4 +2211,26 @@ class L10nKo extends L10n {
 
   @override
   String get ltFxPitchDown => '피치 −2';
+
+  @override
+  String get ltSongSaveFailed =>
+      '변경 사항을 저장하지 못했어요. 기기의 저장 공간을 확인하고 다시 시도해 주세요.';
+
+  @override
+  String get policyNoticeTitle => '약관 개정 안내';
+
+  @override
+  String policyNoticeEffective(String date) {
+    return '시행일: $date';
+  }
+
+  @override
+  String get policyNoticeRead => '내용 보기';
+
+  @override
+  String get policyNoticeAcknowledge => '확인했어요';
+
+  @override
+  String get policyNoticeBody =>
+      '이용약관·개인정보처리방침·환불정책을 개정합니다.\n\nPro 혜택을 실제 제공 기능인 곡 무제한 저장과 WAV·MIDI·스템 내보내기로 정정합니다. 기존에 안내했던 클라우드 동기화·보컬 영구 보관·우선 분석은 제공되지 않았습니다. 혼란을 드려 죄송합니다.\n\n사용 중인 Microsoft Clarity(세션 리플레이·히트맵)와 Sentry(오류·크래시 진단)를 개인정보처리방침에 명시합니다.\n\n작업물은 기기에 저장됩니다. 구독이 만료되어도 저장된 곡은 열람·편집·재생할 수 있습니다. 자세한 내용과 문의 방법은 아래 문서에서 확인해 주세요.';
 }

@@ -1,4 +1,7 @@
 What's new
 
-- Improved app stability and fixed minor issues.
-- Under-the-hood improvements for a smoother, more reliable experience.
+- Preserve edits and vocal files when saving fails, with clearer feedback and retry support.
+- Keep full-song vocal recordings when duplicating a song.
+- Improve backup recovery and autosave reliability.
+- Improve recording and playback interruptions, subscription status checks, and Korean export filenames.
+- Expand Korean translations and add an in-app policy update notice.

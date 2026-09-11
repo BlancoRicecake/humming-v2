@@ -21,6 +21,7 @@ import '../../state/loop_prefs.dart';
 import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
+import '../policy_notice.dart';
 import 'lt_modal.dart';
 
 /// Support contact — same address published in the legal docs.
@@ -153,6 +154,12 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         ),
         const SizedBox(height: 6),
         _SectionLabel(l.ltSettingsLegalSection),
+        _Row(
+          icon: LtIcons.info,
+          title: l.policyNoticeTitle,
+          sub: l.policyNoticeEffective(policyEffectiveDate),
+          onTap: () => showPolicyNotice(context),
+        ),
         _Row(
           icon: LtIcons.privacyTip,
           title: l.privacyTitle,

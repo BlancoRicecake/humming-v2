@@ -1,6 +1,6 @@
 name: CI Mobile
 
-# 검증 전용 워크플로 — 빌드 산출물/서명/배포 없음, 레포에 아무것도 쓰지 않는다.
+# 검증 전용 워크플로 — 테스트 + Android 디버그 컴파일, 업로드/배포 없음.
 # (flutter 가 워크스페이스의 pubspec.lock / analysis_options.yaml 을 건드려도
 #  일회성 러너 안에서 끝나고 push 하지 않는다.)
 # mobile/ 이 바뀐 main 푸시와 PR 에서만 돈다.
@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   analyze-test:
-    name: analyze + flutter test
+    name: analyze + test + Android build
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -34,6 +34,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
       # 버전 고정 이유: analyzer 의 deprecation info 목록이 SDK 버전마다 달라져
       # 핀이 없으면 어느 날 갑자기 warning 승격으로 빌드가 깨진다. 개발 머신과
@@ -50,6 +55,9 @@ jobs:
       - name: Flutter version
         run: flutter --version
 
+      - name: Use JDK 17 for Android
+        run: flutter config --jdk-dir="$JAVA_HOME"
+
       # pubspec.yaml 의 dependency_overrides 가 flutter_midi_pro 포크(GitHub)를
       # 가리키므로 이 스텝은 네트워크가 필요하다 (hosted runner 는 문제 없음).
       - name: flutter pub get
@@ -60,6 +68,10 @@ jobs:
       - name: flutter analyze
         run: flutter analyze --no-fatal-infos
 
-      # 132 tests.
       - name: flutter test
         run: flutter test
+
+      # Dart checks do not compile Kotlin/C++ or validate the Android toolchain.
+      # Debug signing only; no release keys, store access or artifact upload.
+      - name: Android debug build
+        run: flutter build apk --debug --no-pub --target-platform android-arm64

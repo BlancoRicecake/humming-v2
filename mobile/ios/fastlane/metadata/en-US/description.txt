@@ -9,17 +9,15 @@ A mobile DAW and music production app built for beginners, songwriters, beat mak
 - Export to MIDI · WAV
 - Local save — start instantly, no login required
 
-[ HumTrack Pro ($3.49/mo or $33.49/yr · 7-day free trial) ]
+[ HumTrack Pro ($3.49/mo or $33.49/yr · 7-day free trial for eligible subscribers) ]
 - Unlimited export (MIDI · WAV · stems)
-- 5GB Cloud sync across all your devices
-- Permanent vocal backup
-- Priority analysis
+- Unlimited saved songs (free plan: up to 4 songs)
 
 [ Privacy ]
 - No ads
-- No user tracking, no advertising identifiers
+- Microsoft Clarity for usage analytics; Sentry for error diagnostics
 - Vocal recordings are never used to train AI
-- Account deletion removes all your data
+- Your work stays on your device; cloud sync is not available
 
 Contact: heobusy@gmail.com
 Terms: https://hum-track.com/terms

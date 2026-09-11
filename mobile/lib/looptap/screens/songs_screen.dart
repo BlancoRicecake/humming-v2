@@ -8,6 +8,8 @@ import '../models/loop_models.dart';
 import '../state/loop_store.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
+import '../widgets/save_error.dart';
+import '../widgets/policy_notice.dart';
 import '../widgets/sheets/account_sheet.dart';
 import '../widgets/sheets/key_sheet.dart' show ltScaleLabel;
 import '../widgets/sheets/paywall_sheet.dart';
@@ -58,6 +60,7 @@ class SongsScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Header(onNew: () => _new(context)),
+              if (store.loaded) const PolicyNoticeBanner(),
               const SizedBox(height: 18),
               Expanded(
                 child: !store.loaded
@@ -262,7 +265,11 @@ class _Grid extends StatelessWidget {
       ),
     );
     if (newTitle != null && newTitle.trim().isNotEmpty && newTitle != song.title) {
-      await store.rename(song.id, newTitle);
+      try {
+        await store.rename(song.id, newTitle);
+      } catch (_) {
+        if (context.mounted) showSongSaveError(context);
+      }
     }
   }
 
@@ -274,7 +281,11 @@ class _Grid extends StatelessWidget {
       if (!context.mounted) return;
       if (!context.read<LoopStore>().proActive) return;
     }
-    await store.duplicate(song);
+    try {
+      await store.duplicate(song);
+    } catch (_) {
+      if (context.mounted) showSongSaveError(context);
+    }
   }
 
   Future<void> _deleteSong(BuildContext context, Song song) async {
@@ -302,7 +313,11 @@ class _Grid extends StatelessWidget {
       ),
     );
     if (ok == true) {
-      await store.delete(song.id);
+      try {
+        await store.delete(song.id);
+      } catch (_) {
+        if (context.mounted) showSongSaveError(context);
+      }
     }
   }
 }

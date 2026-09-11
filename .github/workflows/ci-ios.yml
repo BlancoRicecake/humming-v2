@@ -1,0 +1,107 @@
+name: iOS Cloud Build
+
+# Explicitly requested builds only. A build/ios/* branch also allows the first
+# run before this workflow has been merged into the default branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['build/ios/**']
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/ci-ios.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: iOS release compile (unsigned)
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/mobile/ios/Gemfile
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Xcode and iOS SDK
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          sdk="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iOS SDK: $sdk"
+          test "${sdk%%.*}" -ge 26
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.1'
+          cache: true
+          pub-cache-key: flutter-pub-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mobile/pubspec.lock') }}
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler: '2.6.2'
+          bundler-cache: true
+          working-directory: mobile/ios
+
+      - name: Prepare Flutter dependencies
+        run: |
+          flutter --version
+          flutter precache --ios
+          flutter pub get
+
+      # The production Google plist deliberately stays out of git. Xcode must
+      # still find its resource during compile-only checks. Never distribute
+      # this unsigned build; it has no production auth/analytics configuration.
+      - name: Prepare compile-only Google resource
+        run: |
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+          path = Path("ios/Runner/GoogleService-Info.plist")
+          with path.open("wb") as output:
+              plistlib.dump({"BUNDLE_ID": "com.humtrack.app", "CI_COMPILE_ONLY": True}, output)
+          PY
+
+      - name: Validate fastlane syntax
+        run: |
+          ruby -c ios/fastlane/Fastfile
+          ruby -c android/fastlane/Fastfile
+          bundle exec ruby tool/release_support_test.rb
+          (cd ios && bundle exec fastlane hello)
+          (cd android && bundle exec fastlane lanes)
+
+      - name: Compile iOS release
+        run: bundle exec flutter build ios --release --no-codesign --no-pub
+
+      - name: Record result
+        run: |
+          {
+            echo '### HumTrack iOS compile passed'
+            echo "Commit: $GITHUB_SHA"
+            echo "$(xcodebuild -version | tr '\n' ' ')"
+            echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+            echo 'Unsigned release compile only. No TestFlight or App Store upload.'
+            echo 'Production configuration and iPhone testing are separate release checks.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-compile-diagnostics
+          path: |
+            mobile/build/ios/**/*.xcresult
+            mobile/ios/Podfile.lock
+          retention-days: 7
+          if-no-files-found: ignore

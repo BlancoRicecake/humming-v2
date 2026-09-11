@@ -65,12 +65,16 @@ class LoopStorage {
   // still on disk and still theirs — sweeping would delete them.
   static int _skippedOnLoad = 0;
   static int get skippedOnLoad => _skippedOnLoad;
+  static bool _hasPreservedCorruption = false;
 
   static Future<List<Song>> load() async {
     _loadFailed = false;
     _skippedOnLoad = 0;
     File? f;
     try {
+      _hasPreservedCorruption = await (await _folder()).list().any(
+        (entry) => entry.uri.pathSegments.last.startsWith('songs.json.corrupt-'),
+      );
       f = await _file();
       final bak = await _bakFile();
       if (!await f.exists()) {
@@ -80,11 +84,13 @@ class LoopStorage {
           debugPrint('[looptap] songs.json missing, restoring from .bak');
           final r = await _decodeFile(bak);
           if (r != null) return r;
+          _loadFailed = true;
         }
+        _loadFailed = _loadFailed || _hasPreservedCorruption;
         return [];
       }
       final raw = await f.readAsString();
-      if (raw.trim().isEmpty) return [];
+      if (raw.trim().isEmpty) throw const FormatException('Empty songs file');
       final r = Song.decodeListLenient(raw);
       _skippedOnLoad = r.skipped;
       if (r.skipped > 0) {
@@ -138,6 +144,7 @@ class LoopStorage {
       } else {
         await f.copy(dest);
       }
+      _hasPreservedCorruption = true;
       debugPrint('[looptap] preserved unreadable songs file as ${dest.split('/').last}');
     } catch (e) {
       debugPrint('[looptap] could not preserve corrupt songs file: $e');
@@ -146,12 +153,23 @@ class LoopStorage {
 
   /// Atomic save: write the whole payload to a temp file, then swap it in.
   /// The previous songs.json survives as songs.json.bak.
-  static Future<void> save(List<Song> songs) async {
+  static Future<void> _saveQueue = Future<void>.value();
+
+  static Future<void> save(List<Song> songs) {
+    // Snapshot before waiting: callers may keep editing while an earlier save
+    // is in flight. Only one writer may use songs.json.tmp at a time.
+    final payload = Song.encodeList(songs);
+    final result = _saveQueue.then((_) => _savePayload(payload));
+    _saveQueue = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return result;
+  }
+
+  static Future<void> _savePayload(String payload) async {
     try {
       final f = await _file();
       final tmp = await _tmpFile();
       final bak = await _bakFile();
-      await tmp.writeAsString(Song.encodeList(songs), flush: true);
+      await tmp.writeAsString(payload, flush: true);
       if (await f.exists()) {
         if (await bak.exists()) await bak.delete();
         await f.rename(bak.path);
@@ -159,6 +177,7 @@ class LoopStorage {
       await tmp.rename(f.path);
     } catch (e) {
       debugPrint('[looptap] save failed: $e');
+      rethrow; // Do not report success or allow cleanup of unsaved changes.
     }
   }
 
@@ -244,7 +263,7 @@ class LoopStorage {
     // a failed load leaves [songs] silently empty — sweeping then would
     // mass-delete takes that are still referenced by the unreadable file.
     // Likewise a partial load: the skipped songs' takes are still theirs.
-    if (_loadFailed || _skippedOnLoad > 0) return;
+    if (_loadFailed || _skippedOnLoad > 0 || _hasPreservedCorruption) return;
     try {
       final vocals = Directory('${(await _folder()).path}/vocals');
       if (!await vocals.exists()) return;

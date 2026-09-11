@@ -122,8 +122,12 @@ class LoopStore extends ChangeNotifier {
     _songs.sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
     _loaded = true;
     if (seedNow) {
-      await _persist();
-      await LoopStorage.markSeeded();
+      try {
+        await _persist();
+        await LoopStorage.markSeeded();
+      } catch (e) {
+        debugPrint('[looptap] could not save demo songs: $e');
+      }
     } else if (!seededBefore && loaded.isNotEmpty) {
       // pre-marker install that already has songs — record it so a later
       // delete-all doesn't bring the demos back.
@@ -442,6 +446,25 @@ class LoopStore extends ChangeNotifier {
   // ── songs ──────────────────────────────────────────────────────────
   Future<void> _persist() => LoopStorage.save(_songs);
 
+  Future<void> _songChanges = Future<void>.value();
+
+  Future<void> _changeSongs(Future<void> Function() change) {
+    final result = _songChanges.then((_) => change());
+    _songChanges = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return result;
+  }
+
+  Future<void> _commitSongs(List<Song> next) async {
+    next.sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
+    await LoopStorage.save(next);
+    // Publish only a successfully saved library. Failed deletes/renames must
+    // leave both the UI and the cleanup reference set intact.
+    _songs
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+  }
+
   Song createNew() {
     final s = Song(
       id: 'lt${DateTime.now().millisecondsSinceEpoch}',
@@ -451,31 +474,30 @@ class LoopStore extends ChangeNotifier {
     return s;
   }
 
-  Future<void> upsert(Song song) async {
-    song.updatedAt = DateTime.now();
-    final i = _songs.indexWhere((s) => s.id == song.id);
-    if (i >= 0) {
-      _songs[i] = song;
-    } else {
-      _songs.insert(0, song);
-    }
-    _songs.sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
-    await _persist();
-    notifyListeners();
+  Future<void> upsert(Song song) {
+    final snapshot = Song.fromJson(song.toJson())..updatedAt = DateTime.now();
+    return _changeSongs(() async {
+      final next = List<Song>.of(_songs);
+      final i = next.indexWhere((s) => s.id == snapshot.id);
+      if (i >= 0) {
+        next[i] = snapshot;
+      } else {
+        next.insert(0, snapshot);
+      }
+      await _commitSongs(next);
+    });
   }
 
-  Future<void> delete(String id) async {
-    _songs.removeWhere((s) => s.id == id);
-    await _persist();
+  Future<void> delete(String id) => _changeSongs(() async {
+    await _commitSongs(_songs.where((s) => s.id != id).toList());
     // reference-based sweep (NOT prefix delete): a duplicated song shares the
     // source song's vocal files, so only drop files nothing references.
     await LoopStorage.sweepVocals(_songs);
-    notifyListeners();
-  }
+  });
 
   /// Drop vocal files no song references anymore. Call when an editor session
   /// ends (its undo stack — the last holder of stale paths — is gone).
-  Future<void> sweepVocals() => LoopStorage.sweepVocals(_songs);
+  Future<void> sweepVocals() => _changeSongs(() => LoopStorage.sweepVocals(_songs));
 
   /// 새 ID 로 deep-copy + " (copy)" suffix. 새 노래는 grid 맨 앞으로.
   Future<Song> duplicate(Song src) async {
@@ -492,6 +514,10 @@ class LoopStore extends ChangeNotifier {
       instruments: Map.of(src.instruments),
       sections: src.sections.map((s) => s.deepCopy()).toList(),
       wave: List<double>.of(src.wave),
+      songVocalPath: src.songVocalPath,
+      songVocalPeaks: src.songVocalPeaks == null ? null : List<double>.of(src.songVocalPeaks!),
+      songVocalBpm: src.songVocalBpm,
+      songVocalBars: src.songVocalBars,
       updatedAt: DateTime.now(),
     );
     await upsert(dup);
@@ -499,12 +525,15 @@ class LoopStore extends ChangeNotifier {
   }
 
   /// 제목만 변경. id 는 보존.
-  Future<void> rename(String id, String newTitle) async {
+  Future<void> rename(String id, String newTitle) => _changeSongs(() async {
     final i = _songs.indexWhere((s) => s.id == id);
     if (i < 0) return;
-    _songs[i].title = newTitle.trim().isEmpty ? 'Untitled loop' : newTitle.trim();
-    await upsert(_songs[i]);
-  }
+    final next = List<Song>.of(_songs);
+    next[i] = Song.fromJson(_songs[i].toJson())
+      ..title = newTitle.trim().isEmpty ? 'Untitled loop' : newTitle.trim()
+      ..updatedAt = DateTime.now();
+    await _commitSongs(next);
+  });
 
   // ── 3 demo songs (parallels index.html seeds) ─────────────────────
   List<Song> _seed() {

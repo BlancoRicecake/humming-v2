@@ -2284,4 +2284,26 @@ class L10nEn extends L10n {
 
   @override
   String get ltFxPitchDown => 'Pitch −2';
+
+  @override
+  String get ltSongSaveFailed =>
+      'Couldn\'t save your changes. Check your device\'s available storage and try again.';
+
+  @override
+  String get policyNoticeTitle => 'Updated policies';
+
+  @override
+  String policyNoticeEffective(String date) {
+    return 'Effective: $date';
+  }
+
+  @override
+  String get policyNoticeRead => 'Read details';
+
+  @override
+  String get policyNoticeAcknowledge => 'Got it';
+
+  @override
+  String get policyNoticeBody =>
+      'We are updating our Terms of Service, Privacy Policy and Refund Policy.\n\nWe are correcting Pro\'s description to reflect its actual benefits: unlimited saved songs and WAV, MIDI and stem export. The previously advertised cloud sync, permanent vocal backup and priority analysis were never provided. We are sorry for the confusion.\n\nOur Privacy Policy now discloses the tools already in use: Microsoft Clarity (session replay and heatmaps) and Sentry (error and crash diagnostics).\n\nYour work is saved on your device. Saved songs remain available to view, edit and play after your subscription expires. Read the documents below for details and contact information.';
 }

@@ -1,5 +1,8 @@
 # Mac 작업지시서 — 2026-09 앱 릴리스
 
+> 개인 Mac 없이 [클라우드 Mac 빌드](IOS-CLOUD-BUILD.md)로 iOS 컴파일을
+> 검증할 수 있다. 아래 로컬 Mac 명령과 실기기 체크리스트는 계속 사용할 수 있다.
+
 > 그대로 위에서 아래로 실행하면 된다. 각 단계는 **명령 → 기대 결과 → 실패 시** 순서.
 > 선행 조건: [DEPLOY-RUNBOOK-2026-09.md](DEPLOY-RUNBOOK-2026-09.md) 의 백엔드 배포가 **이미 끝나 있어야 한다.**
 > 이번 빌드는 네이티브 코드(Swift/Kotlin)가 바뀌었고 **Windows 에서는 한 번도 컴파일된 적이 없다.** 3번(컴파일)이 이 작업의 핵심 관문이다.
@@ -60,11 +63,17 @@ cd mobile
 flutter --version                # 3.47.x stable 이면 OK
 flutter clean
 flutter pub get                  # Mac 에서는 정상 동작 (Windows 는 symlink 제약으로 불가했음)
-flutter analyze                  # 기대: 0 errors (info 4개는 알려진 것)
-flutter test                     # 기대: 132+ passed
+flutter analyze --no-fatal-infos  # 기대: 0 errors (info 4개는 알려진 것)
+flutter test                     # 기대: 143+ passed
 ```
 
 이어서 **양 플랫폼 실제 컴파일**:
+
+Android 빌드에는 **JDK 17**을 사용한다 (`flutter doctor -v`에서 사용 중인
+Java 확인). Flutter 3.47.1에 맞춰 Gradle 8.14.3 / AGP 8.11.1 /
+Kotlin 2.2.20으로 갱신했다. Android Studio의 Java 25가 자동 선택되면
+호환되지 않으므로 빌드 머신에서 `flutter config --jdk-dir=<JDK 17 경로>`로
+실제 설치된 JDK를 지정한다.
 
 ```bash
 flutter build ios --release --no-codesign

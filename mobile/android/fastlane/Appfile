@@ -1,2 +1,2 @@
-json_key_file("../../backend/secrets/google_play_service_account.json")
+json_key_file(ENV["GOOGLE_PLAY_JSON_KEY_FILE"] || File.expand_path("../../../backend/secrets/google_play_service_account.json", __dir__))
 package_name("com.humtrack.app")
