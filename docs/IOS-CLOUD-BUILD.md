@@ -4,8 +4,11 @@
 개인 Mac 없이 Windows에서 코드를 올리고 iOS 컴파일 결과를 확인할 수 있다.
 Flutter는 모바일 CI와 같은 3.47.1, CocoaPods/fastlane은 `ios/Gemfile.lock`을 따른다.
 
-2026-09-11 현재: 워크플로를 로컬에 준비했고 actionlint 1.7.12 검사에 통과했다.
-HumTrack의 클라우드 실행 결과는 아직 없다. 걱정관리소의 검증 근거는
+2026-09-12: 빌드 전용 브랜치에서 [iOS 컴파일이 성공했다](https://github.com/BlancoRicecake/humming-v2/actions/runs/34621122474).
+첫 실행에서 발견한 Swift 상수명 오류를 수정했고, Xcode 26.6 / iOS SDK 26.5로
+서명 없는 릴리스 앱(64 MB)을 빌드했다. 서명/스토어 배포 경로는
+[양 플랫폼 업데이트 문서](MOBILE-RELEASE-2026-09-12.md)를 따른다.
+걱정관리소의 검증 근거는
 [2026-09-10 TestFlight 성공 실행](https://github.com/BlancoRicecake/worry_sorter/actions/runs/34441198485)이다
 (Xcode 26.6 / iOS SDK 26.5).
 
@@ -40,7 +43,7 @@ HumTrack에 연결할 값:
 로컬 Mac의 `backend/.env.secrets` 및 별도 보관한 키를 사용한다. 키나 암호를
 소스에 넣지 않는다. GitHub 시크릿에는 저장만 가능하며 기존 값은 조회할 수 없다.
 
-서명 워크플로를 연결할 때는 임시 키체인에 기존 p12를 설치하고,
+서명 워크플로는 임시 키체인에 기존 p12를 설치하고,
 `build_app`의 아카이브 `xcargs`에 `-allowProvisioningUpdates`와
 `-authenticationKeyPath / -authenticationKeyID / -authenticationKeyIssuerID`를
 넘긴다. 걱정관리소와 같이 API 키로 프로비저닝을 처리한다.

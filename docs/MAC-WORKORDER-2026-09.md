@@ -97,16 +97,20 @@ flutter build apk --release
 ## 4. 버전 올리기
 
 ```bash
-# mobile/pubspec.yaml — 현재 1.0.5+31
-sed -i '' 's/^version: 1.0.5+31$/version: 1.0.6+32/' pubspec.yaml
-grep '^version:' pubspec.yaml       # 기대: version: 1.0.6+32
+# 2026-09-12 준비 버전. Apple 최신 업로드는 이미 32이므로 재사용하지 않는다.
+grep '^version:' pubspec.yaml       # 기대: version: 1.0.6+33
 ```
+
+Play의 전체 트랙 번호를 조회한 후 33보다 높아야 하면 pubspec과 Android
+changelog 파일명을 함께 올린다. 자세한 실행 경로는
+[양 플랫폼 배포](MOBILE-RELEASE-2026-09-12.md)를 따른다.
 
 ---
 
 ## 5. 릴리스 노트
 
-이번 빌드는 사용자에게 보이는 변화가 크다 (한국어 UI, 결제 안정성, 오디오 인터럽션, 내보내기 정확도). 아래를 그대로 넣어도 되고 다듬어도 된다.
+9월 12일 저장·복제 수정까지 포함한 한국어/영어 릴리스 노트를 이미 파일에
+반영했다. 아래는 기존 초안이며, 현재 파일을 이 초안으로 덮어쓰지 않는다.
 
 ```bash
 cat > ios/fastlane/metadata/ko/release_notes.txt <<'EOF'
@@ -133,9 +137,7 @@ What's new
 - Song data is saved more safely, so work survives an unexpected quit.
 EOF
 
-# Android (버전 코드 = 32)
-cp ios/fastlane/metadata/ko/release_notes.txt android/fastlane/metadata/android/ko-KR/changelogs/32.txt
-cp ios/fastlane/metadata/en-US/release_notes.txt android/fastlane/metadata/android/en-US/changelogs/32.txt
+# Android changelogs/33.txt는 별도로 500자 이내로 작성되어 있다.
 ```
 
 > Play 는 changelog 500자 제한이 있다. 넘치면 항목을 줄인다.
@@ -151,7 +153,7 @@ bundle exec fastlane beta
 
 `fastlane beta` 가 하는 일: dart-define 주입 → `flutter build ios --release --no-codesign` → `build_app` → TestFlight 업로드 (처리 완료까지 대기).
 
-**기대**: 업로드 성공, App Store Connect 에 빌드 1.0.6(32) 등장.
+**기대**: 업로드 성공, App Store Connect 에 빌드 1.0.6(33) 등장.
 
 "What to Test" 문구를 이번 빌드에 맞게 바꾸려면:
 

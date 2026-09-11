@@ -96,9 +96,9 @@ jobs:
           import base64, os, plistlib
           from pathlib import Path
           root = Path(os.environ['RUNNER_TEMP'])
-          (root / 'humtrack-dist.p12').write_bytes(base64.b64decode(os.environ['P12'], validate=True))
-          Path(os.environ['ASC_KEY_FILEPATH']).write_bytes(base64.b64decode(os.environ['P8'], validate=True))
-          data = base64.b64decode(os.environ['GOOGLE_PLIST'], validate=True)
+          (root / 'humtrack-dist.p12').write_bytes(base64.b64decode(''.join(os.environ['P12'].split()), validate=True))
+          Path(os.environ['ASC_KEY_FILEPATH']).write_bytes(base64.b64decode(''.join(os.environ['P8'].split()), validate=True))
+          data = base64.b64decode(''.join(os.environ['GOOGLE_PLIST'].split()), validate=True)
           config = plistlib.loads(data)
           if config.get('BUNDLE_ID') != 'com.humtrack.app' or not config.get('CLIENT_ID') or config.get('CI_COMPILE_ONLY'):
               raise SystemExit('Google plist must contain the production HumTrack iOS client')
@@ -207,13 +207,20 @@ jobs:
           import base64, json, os
           from pathlib import Path
           key = Path(os.environ['RUNNER_TEMP']) / 'humtrack-upload.jks'
-          key.write_bytes(base64.b64decode(os.environ['UPLOAD_KEY'], validate=True))
+          key.write_bytes(base64.b64decode(''.join(os.environ['UPLOAD_KEY'].split()), validate=True))
           account = json.loads(os.environ['PLAY_JSON'])
           if account.get('type') != 'service_account':
               raise SystemExit('Play JSON must contain a service account')
           Path(os.environ['GOOGLE_PLAY_JSON_KEY_FILE']).write_text(json.dumps(account))
           def escape(value):
-              return ''.join('\\u%04x' % ord(c) if ord(c) > 126 else {'\\': '\\\\', '\n': '\\n', '\r': '\\r', '\t': '\\t', ' ': '\\ '}.get(c, c) for c in value)
+              result = []
+              for char in value:
+                  if ord(char) < 32 or ord(char) > 126:
+                      units = char.encode('utf-16-be')
+                      result.extend('\\u%04x' % int.from_bytes(units[i:i+2], 'big') for i in range(0, len(units), 2))
+                  else:
+                      result.append({'\\': '\\\\', ' ': '\\ '}.get(char, char))
+              return ''.join(result)
           properties = {'storeFile': str(key), 'storePassword': os.environ['STORE_PASSWORD'], 'keyAlias': os.environ['KEY_ALIAS'], 'keyPassword': os.environ['KEY_PASSWORD']}
           Path('mobile/android/key.properties').write_text('\n'.join(k + '=' + escape(v) for k, v in properties.items()) + '\n')
           PY
