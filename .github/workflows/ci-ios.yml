@@ -74,7 +74,12 @@ jobs:
           PY
 
       - name: Validate fastlane syntax
-        run: ruby -c ios/fastlane/Fastfile
+        run: |
+          ruby -c ios/fastlane/Fastfile
+          ruby -c android/fastlane/Fastfile
+          bundle exec ruby tool/release_support_test.rb
+          (cd ios && bundle exec fastlane hello)
+          (cd android && bundle exec fastlane lanes)
 
       - name: Compile iOS release
         run: bundle exec flutter build ios --release --no-codesign --no-pub

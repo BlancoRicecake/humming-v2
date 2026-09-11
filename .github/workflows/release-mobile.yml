@@ -1,0 +1,240 @@
+name: Mobile Store Release
+
+# Publishing is always an explicit dispatch; pushing code never releases an app.
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform
+        type: choice
+        default: both
+        options: [both, ios, android]
+      destination:
+        description: Build only, internal testing, or production review
+        type: choice
+        default: build
+        options: [build, internal, production]
+      build_number:
+        description: Optional build number override (otherwise pubspec.yaml)
+        type: string
+      replace_pending_ios_release:
+        description: Replace the existing pending Apple review/release with this new build
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: humtrack-store-release
+  cancel-in-progress: false
+
+jobs:
+  ios:
+    if: inputs.platform == 'both' || inputs.platform == 'ios'
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/mobile/ios/Gemfile
+      HUMTRACK_BUILD_NUMBER: ${{ inputs.build_number }}
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: '120'
+      FASTLANE_SKIP_UPDATE_CHECK: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required release secrets
+        env:
+          IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          GOOGLE_SERVICE_INFO_PLIST_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
+          HUMTRACK_DART_DEFINES_JSON: ${{ secrets.HUMTRACK_DART_DEFINES_JSON }}
+        run: |
+          python3 - <<'PY'
+          import os
+          required = ['IOS_DIST_CERT_P12', 'IOS_DIST_CERT_PASSWORD', 'ASC_API_KEY_P8', 'ASC_KEY_ID', 'ASC_ISSUER_ID', 'GOOGLE_SERVICE_INFO_PLIST_BASE64', 'HUMTRACK_DART_DEFINES_JSON']
+          missing = [key for key in required if not os.environ.get(key)]
+          if missing:
+              raise SystemExit('Missing release secrets: ' + ', '.join(missing))
+          PY
+          echo "ASC_KEY_FILEPATH=$RUNNER_TEMP/humtrack-app-store.p8" >> "$GITHUB_ENV"
+          xcodebuild -version
+          sdk="$(xcrun --sdk iphoneos --show-sdk-version)"
+          test "${sdk%%.*}" -ge 26
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.1'
+          cache: true
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler: '2.6.2'
+          bundler-cache: true
+          working-directory: mobile/ios
+      - name: Check release helpers and app tests
+        working-directory: mobile
+        run: |
+          bundle exec ruby tool/release_support_test.rb
+          ruby -c ios/fastlane/Fastfile
+          flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter test
+      - name: Install existing signing identity and Google configuration
+        env:
+          P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          P12_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          P8: ${{ secrets.ASC_API_KEY_P8 }}
+          GOOGLE_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import base64, os, plistlib
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          (root / 'humtrack-dist.p12').write_bytes(base64.b64decode(os.environ['P12'], validate=True))
+          Path(os.environ['ASC_KEY_FILEPATH']).write_bytes(base64.b64decode(os.environ['P8'], validate=True))
+          data = base64.b64decode(os.environ['GOOGLE_PLIST'], validate=True)
+          config = plistlib.loads(data)
+          if config.get('BUNDLE_ID') != 'com.humtrack.app' or not config.get('CLIENT_ID') or config.get('CI_COMPILE_ONLY'):
+              raise SystemExit('Google plist must contain the production HumTrack iOS client')
+          Path('mobile/ios/Runner/GoogleService-Info.plist').write_bytes(data)
+          PY
+          keychain="$RUNNER_TEMP/humtrack-build.keychain-db"
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          security default-keychain -s "$keychain"
+          security import "$RUNNER_TEMP/humtrack-dist.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          security find-identity -v -p codesigning "$keychain"
+      - name: Build or publish iOS
+        working-directory: mobile/ios
+        env:
+          DESTINATION: ${{ inputs.destination }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          HUMTRACK_DART_DEFINES_JSON: ${{ secrets.HUMTRACK_DART_DEFINES_JSON }}
+          HUMTRACK_AUTOMATIC_RELEASE: 'true'
+          HUMTRACK_REPLACE_PENDING_RELEASE: ${{ inputs.replace_pending_ios_release }}
+        run: |
+          case "$DESTINATION" in
+            build) bundle exec fastlane build ;;
+            internal) bundle exec fastlane beta ;;
+            production) bundle exec fastlane release ;;
+            *) exit 1 ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HumTrack-iOS-${{ github.run_number }}
+          path: mobile/build/export/HumTrack.ipa
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/humtrack-build.keychain-db" || true
+          rm -f "$RUNNER_TEMP/humtrack-dist.p12" "$ASC_KEY_FILEPATH" mobile/ios/Runner/GoogleService-Info.plist
+
+  android:
+    if: inputs.platform == 'both' || inputs.platform == 'android'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/mobile/ios/Gemfile
+      HUMTRACK_BUILD_NUMBER: ${{ inputs.build_number }}
+      LANG: en_US.UTF-8
+      FASTLANE_SKIP_UPDATE_CHECK: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required release secrets
+        env:
+          ANDROID_UPLOAD_KEY_BASE64: ${{ secrets.ANDROID_UPLOAD_KEY_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          HUMTRACK_DART_DEFINES_JSON: ${{ secrets.HUMTRACK_DART_DEFINES_JSON }}
+        run: |
+          python3 - <<'PY'
+          import os
+          required = ['ANDROID_UPLOAD_KEY_BASE64', 'ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD', 'GOOGLE_PLAY_SERVICE_ACCOUNT_JSON', 'HUMTRACK_DART_DEFINES_JSON']
+          missing = [key for key in required if not os.environ.get(key)]
+          if missing:
+              raise SystemExit('Missing release secrets: ' + ', '.join(missing))
+          PY
+          echo "GOOGLE_PLAY_JSON_KEY_FILE=$RUNNER_TEMP/humtrack-play.json" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.1'
+          cache: true
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler: '2.6.2'
+          bundler-cache: true
+          working-directory: mobile/ios
+      - name: Check release helpers and app tests
+        working-directory: mobile
+        run: |
+          bundle exec ruby tool/release_support_test.rb
+          ruby -c android/fastlane/Fastfile
+          flutter config --jdk-dir="$JAVA_HOME"
+          flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter test
+      - name: Install HumTrack Android upload credentials
+        env:
+          UPLOAD_KEY: ${{ secrets.ANDROID_UPLOAD_KEY_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          umask 077
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          key = Path(os.environ['RUNNER_TEMP']) / 'humtrack-upload.jks'
+          key.write_bytes(base64.b64decode(os.environ['UPLOAD_KEY'], validate=True))
+          account = json.loads(os.environ['PLAY_JSON'])
+          if account.get('type') != 'service_account':
+              raise SystemExit('Play JSON must contain a service account')
+          Path(os.environ['GOOGLE_PLAY_JSON_KEY_FILE']).write_text(json.dumps(account))
+          def escape(value):
+              return ''.join('\\u%04x' % ord(c) if ord(c) > 126 else {'\\': '\\\\', '\n': '\\n', '\r': '\\r', '\t': '\\t', ' ': '\\ '}.get(c, c) for c in value)
+          properties = {'storeFile': str(key), 'storePassword': os.environ['STORE_PASSWORD'], 'keyAlias': os.environ['KEY_ALIAS'], 'keyPassword': os.environ['KEY_PASSWORD']}
+          Path('mobile/android/key.properties').write_text('\n'.join(k + '=' + escape(v) for k, v in properties.items()) + '\n')
+          PY
+      - name: Build or publish Android
+        working-directory: mobile/android
+        env:
+          DESTINATION: ${{ inputs.destination }}
+          HUMTRACK_DART_DEFINES_JSON: ${{ secrets.HUMTRACK_DART_DEFINES_JSON }}
+        run: |
+          case "$DESTINATION" in
+            build) bundle exec fastlane build ;;
+            internal) bundle exec fastlane internal ;;
+            production) bundle exec fastlane release ;;
+            *) exit 1 ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HumTrack-Android-${{ github.run_number }}
+          path: mobile/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove temporary signing material
+        if: always()
+        run: rm -f "$GOOGLE_PLAY_JSON_KEY_FILE" "$RUNNER_TEMP/humtrack-upload.jks" mobile/android/key.properties

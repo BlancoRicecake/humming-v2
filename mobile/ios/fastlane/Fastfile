@@ -1,144 +1,118 @@
-# HumTrack iOS Fastfile
-# Loaded env vars from fastlane/.env.default (commit-safe template)
-# Actual secrets go to fastlane/.env.secrets (gitignored) or shell env.
+# HumTrack iOS distribution on a local Mac or an ephemeral CI runner.
+require "shellwords"
+require_relative "../../tool/release_support"
 
 default_platform(:ios)
-
-ASC_KEY_ID       = ENV["ASC_KEY_ID"]
-ASC_ISSUER_ID    = ENV["ASC_ISSUER_ID"]
-ASC_KEY_FILEPATH = ENV["ASC_KEY_FILEPATH"]
-
-SCHEME      = "Runner"
-WORKSPACE   = "Runner.xcworkspace"
-EXPORT_METHOD = "app-store"
-
-# Flutter dart-define 키 (Android Fastfile 과 동일하게 유지).
-DEFINE_KEYS = %w[SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL CLARITY_PROJECT_ID SENTRY_DSN_MOBILE]
-
-def collect_dart_defines
-  env = {}
-  # 1) backend/.env.secrets 를 기본값(base)으로 먼저 읽는다.
-  secrets_path = File.expand_path("../../../backend/.env.secrets", __dir__)
-  if File.exist?(secrets_path)
-    File.readlines(secrets_path).each do |line|
-      line.strip!
-      next if line.start_with?("#") || line.empty?
-      k, v = line.split("=", 2)
-      env[k] = v if DEFINE_KEYS.include?(k) && !v.nil? && !v.empty?
-    end
-  end
-  # 2) 셸/CI 환경변수가 있으면 키 단위로 덮어쓴다 — 부분 주입도 안전
-  #    (예: CI 가 SUPABASE_URL 만 ENV 로 줘도 나머지 키는 파일 값을 유지).
-  DEFINE_KEYS.each do |k|
-    v = ENV[k]
-    env[k] = v unless v.nil? || v.empty?
-  end
-  env
-end
-
-def flutter_prebuild_cmd
-  defines = collect_dart_defines
-  UI.message "dart-defines: #{defines.keys.join(", ")}"
-  args = defines.map { |k, v| "--dart-define=#{k}=#{v}" }.join(" ")
-  "cd .. && flutter clean && flutter pub get && flutter build ios --release --no-codesign -t lib/main.dart #{args}"
-end
+IOS_DIR = File.join(HumTrackRelease::MOBILE, "ios")
+IOS_METADATA = File.join(IOS_DIR, "fastlane/metadata")
+APP_IDENTIFIER = "com.humtrack.app"
+APPLE_TEAM = "V7XPTJL83T"
 
 def asc_api_key
-  unless ASC_KEY_ID && ASC_ISSUER_ID && ASC_KEY_FILEPATH
-    UI.user_error!(
-      "Missing ASC API env. Set ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_FILEPATH " \
-      "(see fastlane/.env.default)."
-    )
-  end
+  missing = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_FILEPATH].select { |key| ENV.fetch(key, "").empty? }
+  UI.user_error!("Missing ASC configuration: #{missing.join(', ')}") unless missing.empty?
+  path = File.expand_path(ENV.fetch("ASC_KEY_FILEPATH"), IOS_DIR)
+  UI.user_error!("App Store Connect private key file is missing") unless File.file?(path)
   app_store_connect_api_key(
-    key_id: ASC_KEY_ID,
-    issuer_id: ASC_ISSUER_ID,
-    key_filepath: ASC_KEY_FILEPATH,
-    duration: 1200,
-    in_house: false,
+    key_id: ENV.fetch("ASC_KEY_ID"), issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_filepath: path, duration: 1200, in_house: false,
   )
 end
 
+def prepare_ios_release
+  defines = HumTrackRelease.defines
+  HumTrackRelease.require_google_plist!
+  version, number = HumTrackRelease.version
+  UI.message("Building HumTrack #{version} (#{number}); configuration: #{defines.keys.join(', ')}")
+  Dir.chdir(HumTrackRelease::MOBILE) do
+    sh("flutter", "precache", "--ios")
+    sh("flutter", "pub", "get")
+    HumTrackRelease.with_defines(defines) do |path|
+      sh("flutter", "build", "ios", "--release", "--no-codesign", "--no-pub",
+         "--build-name=#{version}", "--build-number=#{number}", "--dart-define-from-file=#{path}")
+    end
+  end
+end
+
 platform :ios do
-  before_all do
-    # No-op placeholder. ASC key is loaded lazily per-lane to avoid failing
-    # `fastlane lanes` when secrets are absent.
-  end
-
-  desc "Print available lanes (sanity)"
+  desc "Print lanes without requiring credentials"
   lane :hello do
-    UI.message("HumTrack fastlane is wired up.")
+    UI.message("HumTrack iOS: doctor, build, beta, release, submit_release, sync_metadata")
   end
 
-  desc "Build and upload to TestFlight"
+  desc "Verify Apple API access and report the latest uploaded build"
+  lane :doctor do
+    latest = latest_testflight_build_number(api_key: asc_api_key, app_identifier: APP_IDENTIFIER, initial_build_number: 0)
+    UI.success("App Store Connect access verified; latest build #{latest}")
+  end
+
+  desc "Build a signed App Store IPA without uploading it"
+  lane :build do
+    api_key = asc_api_key
+    _, number = HumTrackRelease.version
+    latest = latest_testflight_build_number(api_key: api_key, app_identifier: APP_IDENTIFIER, initial_build_number: 0)
+    UI.user_error!("Build #{number} must exceed the latest uploaded build #{latest}") if number <= latest
+    prepare_ios_release
+    auth_args = [
+      "-allowProvisioningUpdates",
+      "-authenticationKeyPath", File.expand_path(ENV.fetch("ASC_KEY_FILEPATH"), IOS_DIR),
+      "-authenticationKeyID", ENV.fetch("ASC_KEY_ID"),
+      "-authenticationKeyIssuerID", ENV.fetch("ASC_ISSUER_ID"),
+    ].shelljoin
+    build_app(
+      workspace: File.join(IOS_DIR, "Runner.xcworkspace"), scheme: "Runner", configuration: "Release",
+      export_method: "app-store", export_options: {teamID: APPLE_TEAM, signingStyle: "automatic"},
+      output_directory: File.join(HumTrackRelease::MOBILE, "build/export"), output_name: "HumTrack.ipa",
+      xcargs: auth_args, clean: false,
+      # fastlane adds API authentication to exportArchive itself.
+      # Do not duplicate those arguments in export_xcargs.
+    )
+  end
+
+  desc "Build and upload to TestFlight, waiting for Apple processing"
   lane :beta do
-    api_key = asc_api_key
-    sh(flutter_prebuild_cmd)
-    build_app(
-      workspace: WORKSPACE,
-      scheme: SCHEME,
-      export_method: EXPORT_METHOD,
-      clean: false,
-    )
-    # "What to Test" note. Attaching a changelog requires the build to finish
-    # processing, so we wait (skip_waiting_for_build_processing: false).
-    # Override per-run with TF_CHANGELOG.
-    changelog = ENV["TF_CHANGELOG"] || <<~NOTE.strip
-      iOS: fixed crackling/distorted synth audio during and after hum recording
-      (output buffer underrun). Please verify the backing and pad sounds stay
-      clean while recording a hum and right after it stops.
-    NOTE
+    build
     upload_to_testflight(
-      api_key: api_key,
-      changelog: changelog,
-      skip_waiting_for_build_processing: false,
-      distribute_external: false,
-      skip_submission: true,
+      api_key: asc_api_key, app_identifier: APP_IDENTIFIER,
+      ipa: File.join(HumTrackRelease::MOBILE, "build/export/HumTrack.ipa"),
+      changelog: ENV["TF_CHANGELOG"] || File.read(File.join(IOS_METADATA, "en-US/release_notes.txt")),
+      skip_waiting_for_build_processing: false, distribute_external: false, skip_submission: true,
     )
   end
 
-  desc "Build and submit for App Store review"
-  lane :release do
-    api_key = asc_api_key
-    sh(flutter_prebuild_cmd)
-    build_app(
-      workspace: WORKSPACE,
-      scheme: SCHEME,
-      export_method: EXPORT_METHOD,
-      clean: false,
-    )
+  desc "Submit this exact, already uploaded build with the current store text"
+  lane :submit_release do
+    version, number = HumTrackRelease.version
     upload_to_app_store(
-      api_key: api_key,
-      submit_for_review: true,
-      automatic_release: false,
-      force: true,
-      skip_screenshots: false,
-      overwrite_screenshots: true,
-      precheck_include_in_app_purchases: false,
+      api_key: asc_api_key, app_identifier: APP_IDENTIFIER,
+      app_version: version, build_number: number.to_s,
+      skip_binary_upload: true, skip_screenshots: true, metadata_path: IOS_METADATA,
+      submit_for_review: true, automatic_release: ENV["HUMTRACK_AUTOMATIC_RELEASE"] == "true",
+      reject_if_possible: ENV["HUMTRACK_REPLACE_PENDING_RELEASE"] == "true",
+      force: true, precheck_include_in_app_purchases: false,
     )
   end
 
-  desc "Sync App Store metadata (descriptions, keywords, etc) without binary"
+  desc "Build, upload, wait for processing, then submit for App Store review"
+  lane :release do
+    beta
+    submit_release
+  end
+
+  desc "Sync store text without a binary or review submission"
   lane :sync_metadata do
-    api_key = asc_api_key
     deliver(
-      api_key: api_key,
-      skip_binary_upload: true,
-      skip_screenshots: true,
-      skip_metadata: false,
-      force: true,
-      precheck_include_in_app_purchases: false,
-      run_precheck_before_submit: false,
+      api_key: asc_api_key, app_identifier: APP_IDENTIFIER, metadata_path: IOS_METADATA,
+      skip_binary_upload: true, skip_screenshots: true, skip_metadata: false,
+      force: true, precheck_include_in_app_purchases: false, run_precheck_before_submit: false,
     )
   end
 
-  desc "Sync IAP products via custom Python script (App Store Connect API)"
   lane :sync_iap do
-    sh("python3 ../../infra/scripts/asc_create_iap.py")
+    sh("python3", File.join(HumTrackRelease::ROOT, "infra/scripts/asc_create_iap.py"))
   end
 
-  desc "Sync Play Console subscriptions via custom Python script (Android Publisher API)"
   lane :sync_play_iap do
-    sh("python3 ../../infra/scripts/play_create_iap.py")
+    sh("python3", File.join(HumTrackRelease::ROOT, "infra/scripts/play_create_iap.py"))
   end
 end
