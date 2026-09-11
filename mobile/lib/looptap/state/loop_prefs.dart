@@ -14,11 +14,17 @@ class LoopPrefs {
   LoopPrefs._();
   static final LoopPrefs instance = LoopPrefs._();
 
+  @visibleForTesting
+  static Directory? rootOverride;
+
   /// Buzz on pad hits / step edits.
   final ValueNotifier<bool> haptics = ValueNotifier<bool>(true);
 
   /// Play a click while recording (metronome).
   final ValueNotifier<bool> metro = ValueNotifier<bool>(true);
+
+  /// The policy notice the user has read; changing the notice ID shows it again.
+  final ValueNotifier<String?> acknowledgedPolicyNotice = ValueNotifier(null);
 
   /// Mic/recorder lead-in compensation used to align vocal takes to the loop.
   final ValueNotifier<int> vocalLatencyMs = ValueNotifier<int>(
@@ -32,7 +38,7 @@ class LoopPrefs {
   bool _loaded = false;
 
   static Future<File> _file() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = rootOverride ?? await getApplicationDocumentsDirectory();
     final folder = Directory('${dir.path}/looptap');
     if (!await folder.exists()) await folder.create(recursive: true);
     return File('${folder.path}/prefs.json');
@@ -50,6 +56,9 @@ class LoopPrefs {
       final m = (jsonDecode(raw) as Map);
       if (m['haptics'] is bool) haptics.value = m['haptics'] as bool;
       if (m['metro'] is bool) metro.value = m['metro'] as bool;
+      if (m['acknowledgedPolicyNotice'] is String) {
+        acknowledgedPolicyNotice.value = m['acknowledgedPolicyNotice'] as String;
+      }
       if (m['vocalLatencyMs'] is num) {
         vocalLatencyMs.value =
             (m['vocalLatencyMs'] as num).toInt().clamp(0, 250).toInt();
@@ -77,6 +86,7 @@ class LoopPrefs {
         jsonEncode({
           'haptics': haptics.value,
           'metro': metro.value,
+          'acknowledgedPolicyNotice': acknowledgedPolicyNotice.value,
           'vocalLatencyMs': vocalLatencyMs.value,
           'instrumentFavorites': instrumentFavorites.value,
         }),
@@ -88,6 +98,11 @@ class LoopPrefs {
 
   Future<void> setHaptics(bool v) async {
     haptics.value = v;
+    await _persist();
+  }
+
+  Future<void> acknowledgePolicyNotice(String id) async {
+    acknowledgedPolicyNotice.value = id;
     await _persist();
   }
 

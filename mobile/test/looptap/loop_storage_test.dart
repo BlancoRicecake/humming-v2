@@ -123,6 +123,59 @@ void main() {
     expect(LoopStorage.loadFailed, isFalse);
   });
 
+  test('empty primary file recovers the backup and preserves newer vocals', () async {
+    await LoopStorage.save([song('a')]);
+    await LoopStorage.save([song('a'), song('b')]);
+    await LoopStorage.ensureDirs();
+    final take = File('${root.path}/looptap/vocals/newer.wav');
+    await take.writeAsBytes([1, 2, 3]);
+    await songsFile().writeAsString('   ');
+
+    final loaded = await LoopStorage.load();
+    expect(loaded.map((s) => s.id), ['a']);
+    expect(LoopStorage.loadFailed, isFalse);
+    await LoopStorage.sweepVocals(loaded);
+    expect(await take.exists(), isTrue);
+    await LoopStorage.save(loaded);
+    await LoopStorage.load();
+    await LoopStorage.sweepVocals(loaded);
+    expect(await take.exists(), isTrue);
+  });
+
+  test('empty file without backup remains a failed load on next launch', () async {
+    await LoopStorage.ensureDirs();
+    await songsFile().writeAsString('');
+    expect(await LoopStorage.load(), isEmpty);
+    expect(LoopStorage.loadFailed, isTrue);
+    expect(await LoopStorage.load(), isEmpty);
+    expect(LoopStorage.loadFailed, isTrue);
+  });
+
+  test('missing primary and unreadable backup are not a new library', () async {
+    await LoopStorage.ensureDirs();
+    await bakFile().writeAsString('');
+    expect(await LoopStorage.load(), isEmpty);
+    expect(LoopStorage.loadFailed, isTrue);
+  });
+
+  test('valid empty library does not resurrect the backup', () async {
+    await LoopStorage.save([song('a')]);
+    await LoopStorage.save([]);
+    expect(await LoopStorage.load(), isEmpty);
+    expect(LoopStorage.loadFailed, isFalse);
+  });
+
+  test('overlapping saves finish in order with a complete backup', () async {
+    await Future.wait([
+      LoopStorage.save([song('a')]),
+      LoopStorage.save([song('a'), song('b')]),
+      LoopStorage.save([song('a'), song('b'), song('c')]),
+    ]);
+    expect((await LoopStorage.load()).map((s) => s.id), ['a', 'b', 'c']);
+    final backup = Song.decodeList(await bakFile().readAsString());
+    expect(backup.map((s) => s.id), ['a', 'b']);
+  });
+
   test('seed marker persists', () async {
     expect(await LoopStorage.seeded(), isFalse);
     await LoopStorage.markSeeded();

@@ -34,6 +34,7 @@ import '../theme/atoms.dart';
 import '../theme/pad_scale.dart';
 import '../theme/tokens.dart';
 import '../widgets/arrangement.dart';
+import '../widgets/save_error.dart';
 import '../widgets/section_bar.dart';
 import '../widgets/sheets/hum_modal.dart';
 import '../widgets/sheets/paywall_sheet.dart';
@@ -483,19 +484,20 @@ class _EditScreenState extends State<EditScreen>
   }
 
   Future<void> _autoSaveTick() async {
-    if (!mounted) return;
+    if (!mounted || _leaving) return;
     try {
       final store = context.read<LoopStore>();
       // an untouched brand-new song doesn't earn a library slot yet (C15)
       if (_isPristineNew(store)) return;
       await store.upsert(_snapshot());
       if (!mounted) return;
+      _saveErrorShown = false;
       setState(() {
         _dirty = false;
         _savedAt = DateTime.now();
       });
     } catch (_) {
-      // 실패 시 다음 주기에 재시도.
+      _handleSaveFailure(); // Keep edits for the next save attempt.
     }
   }
 
@@ -2412,8 +2414,14 @@ class _EditScreenState extends State<EditScreen>
   }
 
   Future<void> _saveNow() async {
-    await context.read<LoopStore>().upsert(_snapshot());
+    try {
+      await context.read<LoopStore>().upsert(_snapshot());
+    } catch (_) {
+      _handleSaveFailure();
+      return;
+    }
     if (!mounted) return;
+    _saveErrorShown = false;
     setState(() {
       _dirty = false;
       _savedAt = DateTime.now();
@@ -2448,6 +2456,17 @@ class _EditScreenState extends State<EditScreen>
   // Leaving is in flight (back arrow / system back / edge swipe) — a second
   // request must not save + sweep + pop twice (C4).
   bool _leaving = false;
+  bool _saveErrorShown = false;
+
+  void _handleSaveFailure() {
+    if (!mounted) return;
+    setState(() {
+      _dirty = true;
+      _savedFlash = false;
+    });
+    if (!_saveErrorShown) showSongSaveError(context);
+    _saveErrorShown = true;
+  }
 
   Future<void> _backWithSave() async {
     if (_leaving) return;
@@ -2460,6 +2479,9 @@ class _EditScreenState extends State<EditScreen>
       await store.sweepVocals();
     } catch (e) {
       debugPrint('[edit] save on leave failed: $e');
+      _leaving = false;
+      _handleSaveFailure();
+      return; // Keep the editor and its undo history available for retry.
     }
     if (mounted) Navigator.of(context).pop();
   }

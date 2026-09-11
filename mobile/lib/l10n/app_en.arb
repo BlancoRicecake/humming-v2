@@ -765,5 +765,12 @@
   "ltFxSlower": "Slower",
   "ltFxFaster": "Faster",
   "ltFxPitchUp": "Pitch +2",
-  "ltFxPitchDown": "Pitch −2"
+  "ltFxPitchDown": "Pitch −2",
+  "ltSongSaveFailed": "Couldn't save your changes. Check your device's available storage and try again.",
+  "policyNoticeTitle": "Updated policies",
+  "policyNoticeEffective": "Effective: {date}",
+  "@policyNoticeEffective": {"placeholders": {"date": {"type": "String"}}},
+  "policyNoticeRead": "Read details",
+  "policyNoticeAcknowledge": "Got it",
+  "policyNoticeBody": "We are updating our Terms of Service, Privacy Policy and Refund Policy.\n\nWe are correcting Pro's description to reflect its actual benefits: unlimited saved songs and WAV, MIDI and stem export. The previously advertised cloud sync, permanent vocal backup and priority analysis were never provided. We are sorry for the confusion.\n\nOur Privacy Policy now discloses the tools already in use: Microsoft Clarity (session replay and heatmaps) and Sentry (error and crash diagnostics).\n\nYour work is saved on your device. Saved songs remain available to view, edit and play after your subscription expires. Read the documents below for details and contact information."
 }
