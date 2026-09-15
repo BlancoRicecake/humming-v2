@@ -83,8 +83,20 @@ platform :ios do
   desc "Submit this exact, already uploaded build with the current store text"
   lane :submit_release do
     version, number = HumTrackRelease.version
+    api_key = asc_api_key
+    app = Spaceship::ConnectAPI::App.find(APP_IDENTIFIER)
+    UI.user_error!("HumTrack is not accessible in App Store Connect") unless app
+    builds = Spaceship::ConnectAPI::Build.all(
+      app_id: app.id, version: version, build_number: number.to_s,
+      platform: "IOS", processing_states: "VALID", includes: "preReleaseVersion",
+    )
+    UI.user_error!("Processed iOS build #{version} (#{number}) is missing or expired") unless builds.any? { |build| !build.expired }
+    HumTrackRelease.prepare_app_store_version!(
+      app: app, version: version,
+      replace_pending: ENV["HUMTRACK_REPLACE_PENDING_RELEASE"] == "true",
+    )
     upload_to_app_store(
-      api_key: asc_api_key, app_identifier: APP_IDENTIFIER,
+      api_key: api_key, app_identifier: APP_IDENTIFIER,
       app_version: version, build_number: number.to_s,
       skip_binary_upload: true, skip_screenshots: true, metadata_path: IOS_METADATA,
       submit_for_review: true, automatic_release: ENV["HUMTRACK_AUTOMATIC_RELEASE"] == "true",

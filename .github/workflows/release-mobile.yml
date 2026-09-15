@@ -10,10 +10,10 @@ on:
         default: both
         options: [both, ios, android]
       destination:
-        description: Build only, internal testing, or production review
+        description: Build, internal testing, production review, or submit an existing iOS build
         type: choice
         default: build
-        options: [build, internal, production]
+        options: [build, internal, production, submit_ios]
       build_number:
         description: Optional build number override (otherwise pubspec.yaml)
         type: string
@@ -43,6 +43,14 @@ jobs:
       FASTLANE_SKIP_UPDATE_CHECK: 'true'
     steps:
       - uses: actions/checkout@v4
+      - name: Validate existing iOS submission input
+        if: inputs.destination == 'submit_ios'
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          test "$PLATFORM" = ios
+          test -n "$BUILD_NUMBER"
       - name: Check required release secrets
         env:
           IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
@@ -128,9 +136,11 @@ jobs:
             build) bundle exec fastlane build ;;
             internal) bundle exec fastlane beta ;;
             production) bundle exec fastlane release ;;
+            submit_ios) bundle exec fastlane submit_release ;;
             *) exit 1 ;;
           esac
       - uses: actions/upload-artifact@v4
+        if: always() && hashFiles('mobile/build/export/HumTrack.ipa') != ''
         with:
           name: HumTrack-iOS-${{ github.run_number }}
           path: mobile/build/export/HumTrack.ipa
@@ -237,6 +247,7 @@ jobs:
             *) exit 1 ;;
           esac
       - uses: actions/upload-artifact@v4
+        if: always() && hashFiles('mobile/build/app/outputs/bundle/release/app-release.aab') != ''
         with:
           name: HumTrack-Android-${{ github.run_number }}
           path: mobile/build/app/outputs/bundle/release/app-release.aab

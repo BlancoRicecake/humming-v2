@@ -49,6 +49,31 @@ module HumTrackRelease
     end
   end
 
+  # Deliver checks/creates the version before its reject_if_possible hook.
+  # An approved, unreleased version must become editable before that check.
+  def self.prepare_app_store_version!(app:, version:, replace_pending:, attempts: 20, wait: -> { sleep(15) })
+    versions = app.get_app_store_versions(filter: {platform: "IOS"}, includes: "appStoreVersionSubmission")
+    target = versions.find { |item| item.version_string == version }
+    return if target.nil?
+
+    state = target.app_version_state || target.app_store_state
+    editable = %w[PREPARE_FOR_SUBMISSION DEVELOPER_REJECTED REJECTED METADATA_REJECTED INVALID_BINARY]
+    return if editable.include?(state)
+
+    pending = %w[PENDING_APPLE_RELEASE PENDING_DEVELOPER_RELEASE IN_REVIEW WAITING_FOR_REVIEW]
+    raise ArgumentError, "App Store version #{version} cannot be replaced in state #{state}" unless pending.include?(state)
+    raise ArgumentError, "Replacing App Store version #{version} requires HUMTRACK_REPLACE_PENDING_RELEASE=true" unless replace_pending
+    raise ArgumentError, "App Store version #{version} has no cancellable submission" unless target.app_store_version_submission && target.can_reject?
+    raise ArgumentError, "Apple did not accept cancellation for version #{version}" unless target.reject!
+
+    attempts.times do |index|
+      current = app.get_edit_app_store_version(platform: "IOS")
+      return if current && current.version_string == version && editable.include?(current.app_version_state || current.app_store_state)
+      wait.call if index < attempts - 1
+    end
+    raise ArgumentError, "Apple has not made version #{version} editable yet; retry submission without uploading another build"
+  end
+
   def self.require_google_plist!
     path = File.join(MOBILE, "ios/Runner/GoogleService-Info.plist")
     raise ArgumentError, "Missing production GoogleService-Info.plist" unless File.file?(path)

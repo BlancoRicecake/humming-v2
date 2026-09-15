@@ -28,6 +28,8 @@ jobs:
     name: analyze + test + Android build
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/mobile/ios/Gemfile
     defaults:
       run:
         working-directory: mobile
@@ -39,6 +41,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler: '2.6.2'
+          bundler-cache: true
+          working-directory: mobile/ios
+
+      - name: Release helper regression tests
+        run: |
+          bundle exec ruby tool/release_support_test.rb
+          ruby -c ios/fastlane/Fastfile
+          ruby -c android/fastlane/Fastfile
 
       # 버전 고정 이유: analyzer 의 deprecation info 목록이 SDK 버전마다 달라져
       # 핀이 없으면 어느 날 갑자기 warning 승격으로 빌드가 깨진다. 개발 머신과

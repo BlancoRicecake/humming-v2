@@ -18,7 +18,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.humtrack.app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973" // share_plus 요구(역호환). flutter.ndkVersion 보다 우선.
+    ndkVersion = "28.2.13676358" // Required by jni; supports the other native plugins.
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
