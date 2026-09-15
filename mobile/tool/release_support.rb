@@ -63,8 +63,13 @@ module HumTrackRelease
     pending = %w[PENDING_APPLE_RELEASE PENDING_DEVELOPER_RELEASE IN_REVIEW WAITING_FOR_REVIEW]
     raise ArgumentError, "App Store version #{version} cannot be replaced in state #{state}" unless pending.include?(state)
     raise ArgumentError, "Replacing App Store version #{version} requires HUMTRACK_REPLACE_PENDING_RELEASE=true" unless replace_pending
-    raise ArgumentError, "App Store version #{version} has no cancellable submission" unless target.app_store_version_submission && target.can_reject?
-    raise ArgumentError, "Apple did not accept cancellation for version #{version}" unless target.reject!
+    submission = target.app_store_version_submission
+    raise ArgumentError, "App Store version #{version} has no cancellable submission" unless submission
+    raise ArgumentError, "Apple disallows cancellation for version #{version}" if submission.can_reject == false
+    # Public API responses can omit canReject. Fastlane's reject! treats nil as
+    # false, although the official DELETE endpoint accepts this pending version.
+    # The endpoint raises on rejection; a successful 204 can have no return value.
+    submission.delete!
 
     attempts.times do |index|
       current = app.get_edit_app_store_version(platform: "IOS")
