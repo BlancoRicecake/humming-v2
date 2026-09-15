@@ -3,11 +3,15 @@ require "tmpdir"
 require_relative "release_support"
 
 class ReleaseSupportTest < Minitest::Test
-  FakeVersion = Struct.new(:version_string, :app_version_state, :app_store_state, :app_store_version_submission, :rejected) do
-    def can_reject? = true
-    def reject!
-      self.rejected = true
+  FakeSubmission = Struct.new(:can_reject, :deleted) do
+    def delete!
+      self.deleted = true
+      nil
     end
+  end
+
+  FakeVersion = Struct.new(:version_string, :app_version_state, :app_store_state, :app_store_version_submission) do
+    def rejected = app_store_version_submission&.deleted
   end
 
   class FakeApp
@@ -20,7 +24,7 @@ class ReleaseSupportTest < Minitest::Test
   end
 
   def test_approved_version_is_cancelled_and_polled_until_editable
-    target = FakeVersion.new("1.0.6", "PENDING_DEVELOPER_RELEASE", nil, Object.new, false)
+    target = FakeVersion.new("1.0.6", "PENDING_DEVELOPER_RELEASE", nil, FakeSubmission.new(nil, false))
     editable = FakeVersion.new("1.0.6", "DEVELOPER_REJECTED")
     waits = 0
     app = FakeApp.new([target], [nil, editable])
@@ -30,15 +34,15 @@ class ReleaseSupportTest < Minitest::Test
   end
 
   def test_pending_version_is_unchanged_without_replace_permission
-    target = FakeVersion.new("1.0.6", "PENDING_DEVELOPER_RELEASE", nil, Object.new, false)
+    target = FakeVersion.new("1.0.6", "PENDING_DEVELOPER_RELEASE", nil, FakeSubmission.new(nil, false))
     app = FakeApp.new([target], [])
     assert_raises(ArgumentError) { HumTrackRelease.prepare_app_store_version!(app: app, version: "1.0.6", replace_pending: false) }
     refute target.rejected
   end
 
   def test_other_versions_and_live_releases_are_never_cancelled
-    other = FakeVersion.new("1.0.7", "PENDING_DEVELOPER_RELEASE", nil, Object.new, false)
-    live = FakeVersion.new("1.0.6", "READY_FOR_DISTRIBUTION", nil, Object.new, false)
+    other = FakeVersion.new("1.0.7", "PENDING_DEVELOPER_RELEASE", nil, FakeSubmission.new(nil, false))
+    live = FakeVersion.new("1.0.6", "READY_FOR_DISTRIBUTION", nil, FakeSubmission.new(nil, false))
     app = FakeApp.new([other, live], [])
     assert_raises(ArgumentError) { HumTrackRelease.prepare_app_store_version!(app: app, version: "1.0.6", replace_pending: true) }
     refute other.rejected
@@ -46,10 +50,17 @@ class ReleaseSupportTest < Minitest::Test
   end
 
   def test_cancellation_timeout_prevents_version_creation
-    target = FakeVersion.new("1.0.6", "PENDING_DEVELOPER_RELEASE", nil, Object.new, false)
+    target = FakeVersion.new("1.0.6", "PENDING_DEVELOPER_RELEASE", nil, FakeSubmission.new(nil, false))
     app = FakeApp.new([target], [nil, nil])
     error = assert_raises(ArgumentError) { HumTrackRelease.prepare_app_store_version!(app: app, version: "1.0.6", replace_pending: true, attempts: 2, wait: -> {}) }
     assert_includes error.message, "retry submission without uploading another build"
+  end
+
+  def test_explicit_cancellation_denial_is_respected
+    target = FakeVersion.new("1.0.6", "PENDING_DEVELOPER_RELEASE", nil, FakeSubmission.new(false, false))
+    app = FakeApp.new([target], [])
+    assert_raises(ArgumentError) { HumTrackRelease.prepare_app_store_version!(app: app, version: "1.0.6", replace_pending: true) }
+    refute target.rejected
   end
 
   def configuration
