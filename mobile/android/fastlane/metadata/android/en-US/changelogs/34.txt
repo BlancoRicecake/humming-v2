@@ -1,0 +1,5 @@
+- Preserve edits and vocal files when saving fails, with retry support.
+- Keep full-song vocals when duplicating songs.
+- Improve backup recovery and autosave reliability.
+- Improve audio interruptions, subscription status checks, and Korean export filenames.
+- Expand Korean translations and add an in-app policy update notice.

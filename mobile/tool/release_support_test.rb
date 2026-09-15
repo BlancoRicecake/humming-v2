@@ -3,6 +3,55 @@ require "tmpdir"
 require_relative "release_support"
 
 class ReleaseSupportTest < Minitest::Test
+  FakeVersion = Struct.new(:version_string, :app_version_state, :app_store_state, :app_store_version_submission, :rejected) do
+    def can_reject? = true
+    def reject!
+      self.rejected = true
+    end
+  end
+
+  class FakeApp
+    attr_reader :versions
+    def initialize(versions, edit_versions)
+      @versions, @edit_versions = versions, edit_versions
+    end
+    def get_app_store_versions(**) = @versions
+    def get_edit_app_store_version(**) = @edit_versions.shift
+  end
+
+  def test_approved_version_is_cancelled_and_polled_until_editable
+    target = FakeVersion.new("1.0.6", "PENDING_DEVELOPER_RELEASE", nil, Object.new, false)
+    editable = FakeVersion.new("1.0.6", "DEVELOPER_REJECTED")
+    waits = 0
+    app = FakeApp.new([target], [nil, editable])
+    HumTrackRelease.prepare_app_store_version!(app: app, version: "1.0.6", replace_pending: true, wait: -> { waits += 1 })
+    assert target.rejected
+    assert_equal 1, waits
+  end
+
+  def test_pending_version_is_unchanged_without_replace_permission
+    target = FakeVersion.new("1.0.6", "PENDING_DEVELOPER_RELEASE", nil, Object.new, false)
+    app = FakeApp.new([target], [])
+    assert_raises(ArgumentError) { HumTrackRelease.prepare_app_store_version!(app: app, version: "1.0.6", replace_pending: false) }
+    refute target.rejected
+  end
+
+  def test_other_versions_and_live_releases_are_never_cancelled
+    other = FakeVersion.new("1.0.7", "PENDING_DEVELOPER_RELEASE", nil, Object.new, false)
+    live = FakeVersion.new("1.0.6", "READY_FOR_DISTRIBUTION", nil, Object.new, false)
+    app = FakeApp.new([other, live], [])
+    assert_raises(ArgumentError) { HumTrackRelease.prepare_app_store_version!(app: app, version: "1.0.6", replace_pending: true) }
+    refute other.rejected
+    refute live.rejected
+  end
+
+  def test_cancellation_timeout_prevents_version_creation
+    target = FakeVersion.new("1.0.6", "PENDING_DEVELOPER_RELEASE", nil, Object.new, false)
+    app = FakeApp.new([target], [nil, nil])
+    error = assert_raises(ArgumentError) { HumTrackRelease.prepare_app_store_version!(app: app, version: "1.0.6", replace_pending: true, attempts: 2, wait: -> {}) }
+    assert_includes error.message, "retry submission without uploading another build"
+  end
+
   def configuration
     HumTrackRelease::DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
   end
