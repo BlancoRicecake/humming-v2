@@ -71,9 +71,10 @@ class LoopStore extends ChangeNotifier {
   bool get isSignedIn => _user != null;
   // Debug-only Pro override so paywall-gated features (export) can be exercised
   // without a real purchase. Stripped from release builds (kDebugMode == false),
-  // so store gating is unaffected in production. Flip to false to test the real
-  // paywall flow in debug.
-  static const bool _debugProOverride = false;
+  // so store gating is unaffected in production. Opt in only for local QA:
+  // --dart-define=HUMTRACK_QA_PRO=true (default false).
+  static const bool _debugProOverride =
+      bool.fromEnvironment('HUMTRACK_QA_PRO', defaultValue: false);
   bool get proActive => _pro == ProStatus.active || (kDebugMode && _debugProOverride);
   DateTime? get proRenewsAt => _renewsAt;
   /// 서버 status 문자열 (trial/active/cancelled/expired) — 표시용. Pro 판정은

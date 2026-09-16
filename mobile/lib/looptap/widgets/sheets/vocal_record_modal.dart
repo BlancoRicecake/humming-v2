@@ -119,6 +119,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
   // rebuilt the synth output under it) — gates the restore on stop. Mirrors
   // hum_modal (audit A5).
   bool _recStarted = false;
+  bool _checkingPermission = false;
   bool _permissionDenied = false; // error phase offers "Open Settings"
 
   int get _loopMs => (widget.bars * 4 * 60000 / widget.bpm).round();
@@ -163,11 +164,15 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
   /// Mic permission BEFORE the count-in — the OS prompt would otherwise pop
   /// mid-count and the take would start while the user is still answering it.
   Future<void> _requestPermissionThenCountIn() async {
+    if (_checkingPermission || _closed || !mounted) return;
+    _checkingPermission = true;
     bool granted;
     try {
       granted = await _rec.hasPermission();
     } catch (_) {
       granted = false;
+    } finally {
+      _checkingPermission = false;
     }
     if (_closed || !mounted) return;
     if (!granted) {
@@ -175,6 +180,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
       _fail('permission');
       return;
     }
+    _permissionDenied = false;
     _startCountIn();
   }
 
@@ -722,7 +728,9 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (_permissionDenied) ...[
-                  _solidBtn(l.editOpenSettings, () => openAppSettings()),
+                  _solidBtn(l.retry, _requestPermissionThenCountIn),
+                  const SizedBox(width: 8),
+                  _ghostBtn(l.editOpenSettings, () => openAppSettings()),
                   const SizedBox(width: 8),
                 ],
                 _ghostBtn(l.close, _cancel),

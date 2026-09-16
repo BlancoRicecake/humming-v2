@@ -561,7 +561,7 @@
   "@ltExportSaved": {"placeholders": {"filename": {"type": "String"}}},
   "ltExportVocalSkipped": "{count, plural, one{1 older-format vocal wasn't included in the mix} other{{count} older-format vocals weren't included in the mix}}",
   "@ltExportVocalSkipped": {"placeholders": {"count": {"type": "int"}}},
-  "ltExportFailed": "MIDI export failed",
+  "ltExportFailed": "File export failed.",
   "ltExportFooter": "Sections render in order (with their repeats). MIDI opens in any DAW. WAV & stems are audio rendered through the SoundFont.",
   "ltSettingsTitle": "Settings",
   "ltSettingsMetronome": "Metronome click",
@@ -645,7 +645,7 @@
   "@ltEditorHumAdded": {"placeholders": {"count": {"type": "int"}}},
   "ltEditorHumErrTooLong": "Recording too long",
   "ltEditorHumErrBusy": "Server busy, try again shortly",
-  "ltEditorHumErrWaking": "Server is waking up, try again",
+  "ltEditorHumErrWaking": "Could not reach the server. Check your internet connection and try again.",
   "ltEditorHumErrGeneric": "Couldn't convert your hum",
   "ltEditorHumErrNoNotes": "No notes detected — try humming louder",
   "ltEditorModePads": "Pads",
@@ -772,5 +772,9 @@
   "@policyNoticeEffective": {"placeholders": {"date": {"type": "String"}}},
   "policyNoticeRead": "Read details",
   "policyNoticeAcknowledge": "Got it",
-  "policyNoticeBody": "We are updating our Terms of Service, Privacy Policy and Refund Policy.\n\nWe are correcting Pro's description to reflect its actual benefits: unlimited saved songs and WAV, MIDI and stem export. The previously advertised cloud sync, permanent vocal backup and priority analysis were never provided. We are sorry for the confusion.\n\nOur Privacy Policy now discloses the tools already in use: Microsoft Clarity (session replay and heatmaps) and Sentry (error and crash diagnostics).\n\nYour work is saved on your device. Saved songs remain available to view, edit and play after your subscription expires. Read the documents below for details and contact information."
+  "policyNoticeBody": "We are updating our Terms of Service, Privacy Policy and Refund Policy.\n\nWe are correcting Pro's description to reflect its actual benefits: unlimited saved songs and WAV, MIDI and stem export. The previously advertised cloud sync, permanent vocal backup and priority analysis were never provided. We are sorry for the confusion.\n\nOur Privacy Policy now discloses the tools already in use: Microsoft Clarity (session replay and heatmaps) and Sentry (error and crash diagnostics).\n\nYour work is saved on your device. Saved songs remain available to view, edit and play after your subscription expires. Read the documents below for details and contact information.",
+  "ltExportShared": "File handed to the sharing app.",
+  "ltExportShareCancelled": "File created. Sharing was cancelled.",
+  "ltExportShareUnconfirmed": "File created. Sharing completion could not be confirmed.",
+  "ltExportShareFailed": "File created, but sharing could not open. Please try again."
 }

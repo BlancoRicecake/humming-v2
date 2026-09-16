@@ -1728,7 +1728,7 @@ class L10nEn extends L10n {
   }
 
   @override
-  String get ltExportFailed => 'MIDI export failed';
+  String get ltExportFailed => 'File export failed.';
 
   @override
   String get ltExportFooter =>
@@ -1938,7 +1938,8 @@ class L10nEn extends L10n {
   String get ltEditorHumErrBusy => 'Server busy, try again shortly';
 
   @override
-  String get ltEditorHumErrWaking => 'Server is waking up, try again';
+  String get ltEditorHumErrWaking =>
+      'Could not reach the server. Check your internet connection and try again.';
 
   @override
   String get ltEditorHumErrGeneric => 'Couldn\'t convert your hum';
@@ -2306,4 +2307,18 @@ class L10nEn extends L10n {
   @override
   String get policyNoticeBody =>
       'We are updating our Terms of Service, Privacy Policy and Refund Policy.\n\nWe are correcting Pro\'s description to reflect its actual benefits: unlimited saved songs and WAV, MIDI and stem export. The previously advertised cloud sync, permanent vocal backup and priority analysis were never provided. We are sorry for the confusion.\n\nOur Privacy Policy now discloses the tools already in use: Microsoft Clarity (session replay and heatmaps) and Sentry (error and crash diagnostics).\n\nYour work is saved on your device. Saved songs remain available to view, edit and play after your subscription expires. Read the documents below for details and contact information.';
+
+  @override
+  String get ltExportShared => 'File handed to the sharing app.';
+
+  @override
+  String get ltExportShareCancelled => 'File created. Sharing was cancelled.';
+
+  @override
+  String get ltExportShareUnconfirmed =>
+      'File created. Sharing completion could not be confirmed.';
+
+  @override
+  String get ltExportShareFailed =>
+      'File created, but sharing could not open. Please try again.';
 }

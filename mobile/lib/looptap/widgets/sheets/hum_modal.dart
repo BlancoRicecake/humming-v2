@@ -92,6 +92,7 @@ class _HumModalState extends State<_HumModal> {
   bool _recStarted = false;
   bool _finishing = false; // _finish re-entrancy guard (auto-stop + Convert tap)
   bool _closed = false; // cancelled/disposed — in-flight awaits must bail
+  bool _checkingPermission = false;
   bool _permissionDenied = false; // error phase offers "Open Settings"
   // waveform driven by REAL mic amplitude — bars only move when you actually
   // make sound (silence stays flat), so it reflects the input.
@@ -127,11 +128,15 @@ class _HumModalState extends State<_HumModal> {
   /// Mic permission BEFORE the count-in — the OS prompt would otherwise pop
   /// mid-count and the take would start while the user is still answering it.
   Future<void> _requestPermissionThenCountIn() async {
+    if (_checkingPermission || _closed || !mounted) return;
+    _checkingPermission = true;
     bool granted;
     try {
       granted = await _rec.hasPermission();
     } catch (_) {
       granted = false;
+    } finally {
+      _checkingPermission = false;
     }
     if (_closed || !mounted) return;
     if (!granted) {
@@ -139,6 +144,7 @@ class _HumModalState extends State<_HumModal> {
       _fail('permission');
       return;
     }
+    _permissionDenied = false;
     _startCountIn();
   }
 
@@ -439,7 +445,9 @@ class _HumModalState extends State<_HumModal> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (_permissionDenied) ...[
-                _solidBtn(l.editOpenSettings, () => openAppSettings()),
+                _solidBtn(l.retry, _requestPermissionThenCountIn),
+                const SizedBox(width: 8),
+                _ghostBtn(l.editOpenSettings, () => openAppSettings()),
                 const SizedBox(width: 8),
               ],
               _ghostBtn(l.close, _cancel),

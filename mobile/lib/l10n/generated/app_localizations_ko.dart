@@ -1690,7 +1690,7 @@ class L10nKo extends L10n {
   }
 
   @override
-  String get ltExportFailed => 'MIDI 내보내기 실패';
+  String get ltExportFailed => '파일 내보내기에 실패했어요.';
 
   @override
   String get ltExportFooter =>
@@ -1890,7 +1890,7 @@ class L10nKo extends L10n {
   String get ltEditorHumErrBusy => '서버가 혼잡해요. 잠시 후 다시 시도해주세요';
 
   @override
-  String get ltEditorHumErrWaking => '서버를 깨우는 중이에요. 다시 시도해주세요';
+  String get ltEditorHumErrWaking => '서버에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해주세요.';
 
   @override
   String get ltEditorHumErrGeneric => '허밍을 변환하지 못했어요';
@@ -2233,4 +2233,16 @@ class L10nKo extends L10n {
   @override
   String get policyNoticeBody =>
       '이용약관·개인정보처리방침·환불정책을 개정합니다.\n\nPro 혜택을 실제 제공 기능인 곡 무제한 저장과 WAV·MIDI·스템 내보내기로 정정합니다. 기존에 안내했던 클라우드 동기화·보컬 영구 보관·우선 분석은 제공되지 않았습니다. 혼란을 드려 죄송합니다.\n\n사용 중인 Microsoft Clarity(세션 리플레이·히트맵)와 Sentry(오류·크래시 진단)를 개인정보처리방침에 명시합니다.\n\n작업물은 기기에 저장됩니다. 구독이 만료되어도 저장된 곡은 열람·편집·재생할 수 있습니다. 자세한 내용과 문의 방법은 아래 문서에서 확인해 주세요.';
+
+  @override
+  String get ltExportShared => '공유 앱으로 파일을 전달했어요.';
+
+  @override
+  String get ltExportShareCancelled => '파일은 생성했지만 공유를 취소했어요.';
+
+  @override
+  String get ltExportShareUnconfirmed => '파일을 생성했어요. 공유 완료 여부는 확인할 수 없어요.';
+
+  @override
+  String get ltExportShareFailed => '파일은 생성했지만 공유창을 열지 못했어요. 다시 시도해주세요.';
 }

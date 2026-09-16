@@ -35,6 +35,7 @@ import '../theme/pad_scale.dart';
 import '../theme/tokens.dart';
 import '../widgets/arrangement.dart';
 import '../widgets/save_error.dart';
+import '../widgets/track_clear_notice.dart';
 import '../widgets/section_bar.dart';
 import '../widgets/sheets/hum_modal.dart';
 import '../widgets/sheets/paywall_sheet.dart';
@@ -1463,16 +1464,12 @@ class _EditScreenState extends State<EditScreen>
     });
     // Offer an immediate undo — clearing has no confirm dialog (keeps the flow
     // fast), so a one-tap recovery path catches accidental clears.
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(L10n.of(context).ltEditorTrackCleared),
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(
-              label: L10n.of(context).ltEditorUndo, onPressed: _undoAction),
-        ),
-      );
+    showTrackClearNotice(
+      context,
+      message: L10n.of(context).ltEditorTrackCleared,
+      undoLabel: L10n.of(context).ltEditorUndo,
+      onUndo: _undoAction,
+    );
   }
 
   // ── vocal playback (item 7) ───────────────────────────────────────
@@ -2331,7 +2328,9 @@ class _EditScreenState extends State<EditScreen>
       if (code == 413) return l.ltEditorHumErrTooLong;
       if (code == 429) return l.ltEditorHumErrBusy;
       if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.connectionError) {
+          e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
         return l.ltEditorHumErrWaking;
       }
       return l.ltEditorHumErrGeneric;

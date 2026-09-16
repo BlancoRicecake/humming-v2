@@ -643,7 +643,7 @@
   "@ltExportSaved": {"placeholders": {"filename": {"type": "String"}}},
   "ltExportVocalSkipped": "이전 형식 보컬 {count}개는 믹스에 포함되지 않았어요",
   "@ltExportVocalSkipped": {"placeholders": {"count": {"type": "int"}}},
-  "ltExportFailed": "MIDI 내보내기 실패",
+  "ltExportFailed": "파일 내보내기에 실패했어요.",
   "ltExportFooter": "섹션은 순서대로(반복 포함) 렌더링됩니다. MIDI는 모든 DAW 에서 열립니다. WAV·스템은 사운드폰트로 렌더된 오디오입니다.",
   "ltSettingsTitle": "설정",
   "ltSettingsMetronome": "메트로놈 클릭",
@@ -771,7 +771,7 @@
   "@ltEditorHumErrTooLong": {"description": "허밍 변환 실패 — 파일이 너무 큼 (413)"},
   "ltEditorHumErrBusy": "서버가 혼잡해요. 잠시 후 다시 시도해주세요",
   "@ltEditorHumErrBusy": {"description": "허밍 변환 실패 — 요청 과다 (429)"},
-  "ltEditorHumErrWaking": "서버를 깨우는 중이에요. 다시 시도해주세요",
+  "ltEditorHumErrWaking": "서버에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해주세요.",
   "@ltEditorHumErrWaking": {"description": "허밍 변환 실패 — 연결 타임아웃(콜드 스타트)"},
   "ltEditorHumErrGeneric": "허밍을 변환하지 못했어요",
   "@ltEditorHumErrGeneric": {"description": "허밍 변환 실패 — 일반 오류"},
@@ -982,5 +982,9 @@
   "@policyNoticeEffective": {"placeholders": {"date": {"type": "String"}}},
   "policyNoticeRead": "내용 보기",
   "policyNoticeAcknowledge": "확인했어요",
-  "policyNoticeBody": "이용약관·개인정보처리방침·환불정책을 개정합니다.\n\nPro 혜택을 실제 제공 기능인 곡 무제한 저장과 WAV·MIDI·스템 내보내기로 정정합니다. 기존에 안내했던 클라우드 동기화·보컬 영구 보관·우선 분석은 제공되지 않았습니다. 혼란을 드려 죄송합니다.\n\n사용 중인 Microsoft Clarity(세션 리플레이·히트맵)와 Sentry(오류·크래시 진단)를 개인정보처리방침에 명시합니다.\n\n작업물은 기기에 저장됩니다. 구독이 만료되어도 저장된 곡은 열람·편집·재생할 수 있습니다. 자세한 내용과 문의 방법은 아래 문서에서 확인해 주세요."
+  "policyNoticeBody": "이용약관·개인정보처리방침·환불정책을 개정합니다.\n\nPro 혜택을 실제 제공 기능인 곡 무제한 저장과 WAV·MIDI·스템 내보내기로 정정합니다. 기존에 안내했던 클라우드 동기화·보컬 영구 보관·우선 분석은 제공되지 않았습니다. 혼란을 드려 죄송합니다.\n\n사용 중인 Microsoft Clarity(세션 리플레이·히트맵)와 Sentry(오류·크래시 진단)를 개인정보처리방침에 명시합니다.\n\n작업물은 기기에 저장됩니다. 구독이 만료되어도 저장된 곡은 열람·편집·재생할 수 있습니다. 자세한 내용과 문의 방법은 아래 문서에서 확인해 주세요.",
+  "ltExportShared": "공유 앱으로 파일을 전달했어요.",
+  "ltExportShareCancelled": "파일은 생성했지만 공유를 취소했어요.",
+  "ltExportShareUnconfirmed": "파일을 생성했어요. 공유 완료 여부는 확인할 수 없어요.",
+  "ltExportShareFailed": "파일은 생성했지만 공유창을 열지 못했어요. 다시 시도해주세요."
 }
