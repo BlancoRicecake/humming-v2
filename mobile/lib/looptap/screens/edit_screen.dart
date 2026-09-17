@@ -1,3 +1,5 @@
+import '../music/beginner_backing.dart';
+import '../widgets/sheets/sample_workbench.dart';
 // LoopTap — Editor (the core screen). README §4.
 // Vertical stack: top bar · SONG section bar · arrangement strip · surface
 // header · track surface · transport bar. A Ticker-driven transport clock
@@ -91,6 +93,7 @@ class _EditScreenState extends State<EditScreen>
   late final List<Section> _sections =
       widget.song.sections.map((s) => s.deepCopy()).toList();
   int _activeIdx = 0;
+  BackingStyle? _guidedBacking;
 
   // ── editor runtime ──
   late String _activeId = widget.guidedStart ? 'melody' : 'drums';
@@ -1481,6 +1484,7 @@ class _EditScreenState extends State<EditScreen>
     List<double> wf,
     String? path, {
     bool aligned = false,
+    int? durationSteps,
   }) async {
     if (path == null) return false;
     // persisted is a BASENAME under Documents/looptap/vocals (durable across
@@ -1521,14 +1525,15 @@ class _EditScreenState extends State<EditScreen>
       }
       // Lane already full → start over at step 0 (overlapping the first take)
       // rather than a 1-step sliver at the loop end (C9). Told below.
-      if (startStep >= secSteps) {
+      if (startStep >= secSteps ||
+          (durationSteps != null && startStep + durationSteps > secSteps)) {
         startStep = 0;
         laneWasFull = true;
       }
       final clip = VocalClip(
         path: persisted,
         startStep: startStep,
-        durSteps: aligned ? secSteps : -1,
+        durSteps: durationSteps ?? (aligned ? secSteps : -1),
         peaks: wf,
       );
       lane.add(clip);
@@ -2564,11 +2569,26 @@ class _EditScreenState extends State<EditScreen>
           children: [
             if (_guided)
               Positioned.fill(child: GuidedHumPanel(
-                hasNotes: _activeTrack.pitchNotes.isNotEmpty,
+                hasNotes: _activeTrack.pitchNotes.isNotEmpty || (_tracks['vocal']?.effectiveClips.isNotEmpty ?? false),
                 playing: _playing,
                 saved: !_dirty && _savedAt != null,
                 onBack: _backWithSave,
                 onRecord: _openHum,
+                onSample: () async {
+                  _stopAll();
+                  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
+                    SampleWorkbench(bpm: _bpm, bars: _bars,
+                      onAdd: (peaks, path, steps) => _commitVocal(peaks, path, durationSteps: steps))));
+                  if (mounted) setState(() {});
+                },
+                backingStyle: _guidedBacking,
+                onBacking: (style) {
+                  _stopAll();
+                  _pushUndo();
+                  setState(() { _sections[_activeIdx] = withBeginnerBacking(_sec, _keyRoot, _scale, style); _guidedBacking = style; });
+                  _togglePlay();
+                },
+                onUndo: _undo.isNotEmpty ? () { _undoAction(); setState(() => _guidedBacking = null); } : null,
                 onListen: _togglePlay,
                 onInstrument: _openInstrument,
                 onSave: _saveNow,
@@ -2744,6 +2764,9 @@ class _EditScreenState extends State<EditScreen>
     final rightGroup = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        IconBtn(icon: Icons.auto_awesome, size: btnSize, tooltip: l.ltGuidedStart,
+          onTap: () { _stopAll(); setState(() { _activeId = 'melody'; _guided = true; }); }),
+        const SizedBox(width: 8),
         // Saved indicator — 고정폭 슬롯으로 예약. 라벨이 등장/사라져도 rightGroup
         // 자연 너비 불변 → 다른 버튼들 흔들림/축소 없음.
         SizedBox(

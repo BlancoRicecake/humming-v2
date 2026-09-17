@@ -40,6 +40,7 @@ dependencies:
   dio: ^5.9.2
   record: ^6.2.1
   path_provider: ^2.1.5
+  file_selector: ^1.0.3
   google_fonts: ^6.3.2
   material_symbols_icons: ^4.2928.1
   share_plus: ^12.0.2

@@ -2262,10 +2262,10 @@ class L10nKo extends L10n {
   String get ltGuidedRecord => '멜로디 녹음하기';
 
   @override
-  String get ltGuidedMore => '멜로디 더하기';
+  String get ltGuidedMore => '멜로디 추가 녹음';
 
   @override
-  String get ltGuidedListen => '내 멜로디 듣기';
+  String get ltGuidedListen => '내 곡 듣기';
 
   @override
   String get ltGuidedStop => '재생 멈추기';
@@ -2280,12 +2280,69 @@ class L10nKo extends L10n {
   String get ltGuidedSaved => '저장했어요. 자세히 편집에서 이어서 만들어보세요.';
 
   @override
-  String get ltGuidedReady => '멜로디가 준비됐어요. 들어보고 악기를 바꿔보세요.';
+  String get ltGuidedReady => '소리가 준비됐어요. 악기를 바꾸거나 반주와 내 소리를 더해보세요.';
 
   @override
   String get ltGuidedPrepare =>
-      '조용한 곳에서, 네 번의 준비 박자 뒤에 약 5초간 흥얼거려보세요. 변환에는 인터넷 연결이 필요해요.';
+      '조용한 곳에서 네 박자 준비 신호 뒤에 짧은 멜로디를 흥얼거려 보세요. 변환에는 인터넷 연결이 필요해요.';
 
   @override
-  String get ltGuidedSteps => '1 녹음   →   2 악기로 듣기   →   3 저장';
+  String get ltGuidedSteps => '1 멜로디·샘플  →  2 반주  →  3 저장';
+
+  @override
+  String get ltSampleTitle => '내 소리 샘플';
+
+  @override
+  String get ltSampleHint =>
+      '소리를 녹음하거나 WAV 파일을 불러와 원하는 구간만 곡에 넣으세요. PCM16 WAV, 최대 60초·24MB를 지원합니다.';
+
+  @override
+  String get ltSampleError => '소리를 처리하지 못했어요. 파일 형식과 저장 공간을 확인하고 다시 시도해 주세요.';
+
+  @override
+  String get ltSampleRecord => '소리 녹음';
+
+  @override
+  String get ltSampleImport => 'WAV 가져오기';
+
+  @override
+  String get ltSampleEmpty => '아직 저장한 샘플이 없어요. 손뼉이나 목소리로 시작해 보세요.';
+
+  @override
+  String get ltSampleItem => '샘플';
+
+  @override
+  String get ltSampleLoop => '선택 구간 반복 듣기';
+
+  @override
+  String get ltSampleSaveCut => '자른 소리 보관';
+
+  @override
+  String get ltSampleAdd => '곡에 넣기';
+
+  @override
+  String get ltSamplePreview => '선택 구간 듣기';
+
+  @override
+  String get ltBackingTitle => '2. 반주를 골라보세요';
+
+  @override
+  String get ltBackingHint => '현재 구간의 베이스와 드럼이 바뀝니다. 되돌리기로 이전 반주를 복원할 수 있어요.';
+
+  @override
+  String get ltBackingCalm => '차분하게';
+
+  @override
+  String get ltBackingBounce => '통통 튀게';
+
+  @override
+  String get ltBackingDrive => '신나게';
+
+  @override
+  String get ltGuidedSample => '내 소리 추가하기';
+
+  @override
+  String ltSampleLimit(String seconds) {
+    return '곡에 넣을 구간은 $seconds초 이하로 골라주세요. 위치는 직접 편집에서 조정할 수 있어요.';
+  }
 }

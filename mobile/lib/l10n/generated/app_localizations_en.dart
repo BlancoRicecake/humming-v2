@@ -2339,10 +2339,10 @@ class L10nEn extends L10n {
   String get ltGuidedRecord => 'Record a melody';
 
   @override
-  String get ltGuidedMore => 'Add another phrase';
+  String get ltGuidedMore => 'Record more melody';
 
   @override
-  String get ltGuidedListen => 'Listen to my melody';
+  String get ltGuidedListen => 'Listen to my song';
 
   @override
   String get ltGuidedStop => 'Stop playback';
@@ -2359,12 +2359,71 @@ class L10nEn extends L10n {
 
   @override
   String get ltGuidedReady =>
-      'Your melody is ready. Listen and try another instrument.';
+      'Your sound is ready. Try an instrument, a backing, or add your own sounds.';
 
   @override
   String get ltGuidedPrepare =>
-      'In a quiet place, hum for about 5 seconds after the four count-in beats. Conversion needs an internet connection.';
+      'In a quiet place, hum a short melody after the four count-in beats. Conversion needs an internet connection.';
 
   @override
-  String get ltGuidedSteps => '1 Record   →   2 Listen   →   3 Save';
+  String get ltGuidedSteps => '1 Melody or sample  →  2 Backing  →  3 Save';
+
+  @override
+  String get ltSampleTitle => 'My sound samples';
+
+  @override
+  String get ltSampleHint =>
+      'Record a sound or import a WAV, then choose a part to add to your song. PCM16 WAV, up to 60 seconds and 24 MB.';
+
+  @override
+  String get ltSampleError =>
+      'Could not process the sound. Check its format and available storage, then retry.';
+
+  @override
+  String get ltSampleRecord => 'Record a sound';
+
+  @override
+  String get ltSampleImport => 'Import WAV';
+
+  @override
+  String get ltSampleEmpty => 'No samples yet. Try a clap or your voice.';
+
+  @override
+  String get ltSampleItem => 'Sample';
+
+  @override
+  String get ltSampleLoop => 'Loop selection';
+
+  @override
+  String get ltSampleSaveCut => 'Keep trimmed sound';
+
+  @override
+  String get ltSampleAdd => 'Add to song';
+
+  @override
+  String get ltSamplePreview => 'Listen to selection';
+
+  @override
+  String get ltBackingTitle => '2. Pick a backing';
+
+  @override
+  String get ltBackingHint =>
+      'Replaces bass and drums in this section. Undo restores the previous backing.';
+
+  @override
+  String get ltBackingCalm => 'Calm';
+
+  @override
+  String get ltBackingBounce => 'Bounce';
+
+  @override
+  String get ltBackingDrive => 'Drive';
+
+  @override
+  String get ltGuidedSample => 'Add sounds';
+
+  @override
+  String ltSampleLimit(String seconds) {
+    return 'Choose up to $seconds seconds to add to this section. Adjust its position in the editor.';
+  }
 }

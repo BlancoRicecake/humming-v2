@@ -4125,13 +4125,13 @@ abstract class L10n {
   /// No description provided for @ltGuidedMore.
   ///
   /// In ko, this message translates to:
-  /// **'멜로디 더하기'**
+  /// **'멜로디 추가 녹음'**
   String get ltGuidedMore;
 
   /// No description provided for @ltGuidedListen.
   ///
   /// In ko, this message translates to:
-  /// **'내 멜로디 듣기'**
+  /// **'내 곡 듣기'**
   String get ltGuidedListen;
 
   /// No description provided for @ltGuidedStop.
@@ -4161,20 +4161,128 @@ abstract class L10n {
   /// No description provided for @ltGuidedReady.
   ///
   /// In ko, this message translates to:
-  /// **'멜로디가 준비됐어요. 들어보고 악기를 바꿔보세요.'**
+  /// **'소리가 준비됐어요. 악기를 바꾸거나 반주와 내 소리를 더해보세요.'**
   String get ltGuidedReady;
 
   /// No description provided for @ltGuidedPrepare.
   ///
   /// In ko, this message translates to:
-  /// **'조용한 곳에서, 네 번의 준비 박자 뒤에 약 5초간 흥얼거려보세요. 변환에는 인터넷 연결이 필요해요.'**
+  /// **'조용한 곳에서 네 박자 준비 신호 뒤에 짧은 멜로디를 흥얼거려 보세요. 변환에는 인터넷 연결이 필요해요.'**
   String get ltGuidedPrepare;
 
   /// No description provided for @ltGuidedSteps.
   ///
   /// In ko, this message translates to:
-  /// **'1 녹음   →   2 악기로 듣기   →   3 저장'**
+  /// **'1 멜로디·샘플  →  2 반주  →  3 저장'**
   String get ltGuidedSteps;
+
+  /// No description provided for @ltSampleTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 소리 샘플'**
+  String get ltSampleTitle;
+
+  /// No description provided for @ltSampleHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'소리를 녹음하거나 WAV 파일을 불러와 원하는 구간만 곡에 넣으세요. PCM16 WAV, 최대 60초·24MB를 지원합니다.'**
+  String get ltSampleHint;
+
+  /// No description provided for @ltSampleError.
+  ///
+  /// In ko, this message translates to:
+  /// **'소리를 처리하지 못했어요. 파일 형식과 저장 공간을 확인하고 다시 시도해 주세요.'**
+  String get ltSampleError;
+
+  /// No description provided for @ltSampleRecord.
+  ///
+  /// In ko, this message translates to:
+  /// **'소리 녹음'**
+  String get ltSampleRecord;
+
+  /// No description provided for @ltSampleImport.
+  ///
+  /// In ko, this message translates to:
+  /// **'WAV 가져오기'**
+  String get ltSampleImport;
+
+  /// No description provided for @ltSampleEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'아직 저장한 샘플이 없어요. 손뼉이나 목소리로 시작해 보세요.'**
+  String get ltSampleEmpty;
+
+  /// No description provided for @ltSampleItem.
+  ///
+  /// In ko, this message translates to:
+  /// **'샘플'**
+  String get ltSampleItem;
+
+  /// No description provided for @ltSampleLoop.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택 구간 반복 듣기'**
+  String get ltSampleLoop;
+
+  /// No description provided for @ltSampleSaveCut.
+  ///
+  /// In ko, this message translates to:
+  /// **'자른 소리 보관'**
+  String get ltSampleSaveCut;
+
+  /// No description provided for @ltSampleAdd.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡에 넣기'**
+  String get ltSampleAdd;
+
+  /// No description provided for @ltSamplePreview.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택 구간 듣기'**
+  String get ltSamplePreview;
+
+  /// No description provided for @ltBackingTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'2. 반주를 골라보세요'**
+  String get ltBackingTitle;
+
+  /// No description provided for @ltBackingHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'현재 구간의 베이스와 드럼이 바뀝니다. 되돌리기로 이전 반주를 복원할 수 있어요.'**
+  String get ltBackingHint;
+
+  /// No description provided for @ltBackingCalm.
+  ///
+  /// In ko, this message translates to:
+  /// **'차분하게'**
+  String get ltBackingCalm;
+
+  /// No description provided for @ltBackingBounce.
+  ///
+  /// In ko, this message translates to:
+  /// **'통통 튀게'**
+  String get ltBackingBounce;
+
+  /// No description provided for @ltBackingDrive.
+  ///
+  /// In ko, this message translates to:
+  /// **'신나게'**
+  String get ltBackingDrive;
+
+  /// No description provided for @ltGuidedSample.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 소리 추가하기'**
+  String get ltGuidedSample;
+
+  /// No description provided for @ltSampleLimit.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡에 넣을 구간은 {seconds}초 이하로 골라주세요. 위치는 직접 편집에서 조정할 수 있어요.'**
+  String ltSampleLimit(String seconds);
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {
