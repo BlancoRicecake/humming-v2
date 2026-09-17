@@ -776,5 +776,19 @@
   "ltExportShared": "File handed to the sharing app.",
   "ltExportShareCancelled": "File created. Sharing was cancelled.",
   "ltExportShareUnconfirmed": "File created. Sharing completion could not be confirmed.",
-  "ltExportShareFailed": "File created, but sharing could not open. Please try again."
+  "ltExportShareFailed": "File created, but sharing could not open. Please try again.",
+  "ltGuidedStart": "Start with a hum",
+  "ltGuidedDirect": "Open editor",
+  "ltGuidedTitle": "Your voice, your first melody",
+  "ltGuidedHint": "Hum a short phrase and turn it into an instrument.",
+  "ltGuidedRecord": "Record a melody",
+  "ltGuidedMore": "Add another phrase",
+  "ltGuidedListen": "Listen to my melody",
+  "ltGuidedStop": "Stop playback",
+  "ltGuidedSound": "Change instrument",
+  "ltGuidedSave": "Save my song",
+  "ltGuidedSaved": "Saved. Open the editor to keep building your song.",
+  "ltGuidedReady": "Your melody is ready. Listen and try another instrument.",
+  "ltGuidedPrepare": "In a quiet place, hum for about 5 seconds after the four count-in beats. Conversion needs an internet connection.",
+  "ltGuidedSteps": "1 Record   →   2 Listen   →   3 Save"
 }

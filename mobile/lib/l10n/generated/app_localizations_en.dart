@@ -2321,4 +2321,50 @@ class L10nEn extends L10n {
   @override
   String get ltExportShareFailed =>
       'File created, but sharing could not open. Please try again.';
+
+  @override
+  String get ltGuidedStart => 'Start with a hum';
+
+  @override
+  String get ltGuidedDirect => 'Open editor';
+
+  @override
+  String get ltGuidedTitle => 'Your voice, your first melody';
+
+  @override
+  String get ltGuidedHint =>
+      'Hum a short phrase and turn it into an instrument.';
+
+  @override
+  String get ltGuidedRecord => 'Record a melody';
+
+  @override
+  String get ltGuidedMore => 'Add another phrase';
+
+  @override
+  String get ltGuidedListen => 'Listen to my melody';
+
+  @override
+  String get ltGuidedStop => 'Stop playback';
+
+  @override
+  String get ltGuidedSound => 'Change instrument';
+
+  @override
+  String get ltGuidedSave => 'Save my song';
+
+  @override
+  String get ltGuidedSaved =>
+      'Saved. Open the editor to keep building your song.';
+
+  @override
+  String get ltGuidedReady =>
+      'Your melody is ready. Listen and try another instrument.';
+
+  @override
+  String get ltGuidedPrepare =>
+      'In a quiet place, hum for about 5 seconds after the four count-in beats. Conversion needs an internet connection.';
+
+  @override
+  String get ltGuidedSteps => '1 Record   →   2 Listen   →   3 Save';
 }

@@ -2245,4 +2245,47 @@ class L10nKo extends L10n {
 
   @override
   String get ltExportShareFailed => '파일은 생성했지만 공유창을 열지 못했어요. 다시 시도해주세요.';
+
+  @override
+  String get ltGuidedStart => '허밍으로 시작';
+
+  @override
+  String get ltGuidedDirect => '직접 편집하기';
+
+  @override
+  String get ltGuidedTitle => '내 목소리로 첫 멜로디';
+
+  @override
+  String get ltGuidedHint => '짧게 흥얼거리면 악기 소리로 바꿔드려요.';
+
+  @override
+  String get ltGuidedRecord => '멜로디 녹음하기';
+
+  @override
+  String get ltGuidedMore => '멜로디 더하기';
+
+  @override
+  String get ltGuidedListen => '내 멜로디 듣기';
+
+  @override
+  String get ltGuidedStop => '재생 멈추기';
+
+  @override
+  String get ltGuidedSound => '악기 바꾸기';
+
+  @override
+  String get ltGuidedSave => '내 곡 저장';
+
+  @override
+  String get ltGuidedSaved => '저장했어요. 자세히 편집에서 이어서 만들어보세요.';
+
+  @override
+  String get ltGuidedReady => '멜로디가 준비됐어요. 들어보고 악기를 바꿔보세요.';
+
+  @override
+  String get ltGuidedPrepare =>
+      '조용한 곳에서, 네 번의 준비 박자 뒤에 약 5초간 흥얼거려보세요. 변환에는 인터넷 연결이 필요해요.';
+
+  @override
+  String get ltGuidedSteps => '1 녹음   →   2 악기로 듣기   →   3 저장';
 }

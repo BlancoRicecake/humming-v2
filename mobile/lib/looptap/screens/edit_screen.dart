@@ -35,6 +35,7 @@ import '../theme/pad_scale.dart';
 import '../theme/tokens.dart';
 import '../widgets/arrangement.dart';
 import '../widgets/save_error.dart';
+import '../widgets/guided_hum_panel.dart';
 import '../widgets/track_clear_notice.dart';
 import '../widgets/section_bar.dart';
 import '../widgets/sheets/hum_modal.dart';
@@ -56,7 +57,8 @@ import '../widgets/transport_bar.dart';
 import '../../services/clarity_service.dart';
 
 class EditScreen extends StatefulWidget {
-  const EditScreen({super.key, required this.song});
+  const EditScreen({super.key, required this.song, this.guidedStart = false});
+  final bool guidedStart;
   final Song song;
 
   @override
@@ -91,7 +93,8 @@ class _EditScreenState extends State<EditScreen>
   int _activeIdx = 0;
 
   // ── editor runtime ──
-  String _activeId = 'drums';
+  late String _activeId = widget.guidedStart ? 'melody' : 'drums';
+  late bool _guided = widget.guidedStart;
   bool _playing = false;
   bool _recording = false;
   bool _metro = LoopPrefs.instance.metro.value; // shared with Settings sheet
@@ -2559,7 +2562,19 @@ class _EditScreenState extends State<EditScreen>
       body: SafeArea(
         child: Stack(
           children: [
-            Column(
+            if (_guided)
+              Positioned.fill(child: GuidedHumPanel(
+                hasNotes: _activeTrack.pitchNotes.isNotEmpty,
+                playing: _playing,
+                saved: !_dirty && _savedAt != null,
+                onBack: _backWithSave,
+                onRecord: _openHum,
+                onListen: _togglePlay,
+                onInstrument: _openInstrument,
+                onSave: _saveNow,
+                onEdit: () { _stopAll(); setState(() => _guided = false); },
+              ))
+            else Column(
               children: [
                 _topBar(),
                 SectionBar(

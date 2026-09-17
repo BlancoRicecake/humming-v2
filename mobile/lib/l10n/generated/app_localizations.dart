@@ -4091,6 +4091,90 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'파일은 생성했지만 공유창을 열지 못했어요. 다시 시도해주세요.'**
   String get ltExportShareFailed;
+
+  /// No description provided for @ltGuidedStart.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 시작'**
+  String get ltGuidedStart;
+
+  /// No description provided for @ltGuidedDirect.
+  ///
+  /// In ko, this message translates to:
+  /// **'직접 편집하기'**
+  String get ltGuidedDirect;
+
+  /// No description provided for @ltGuidedTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 목소리로 첫 멜로디'**
+  String get ltGuidedTitle;
+
+  /// No description provided for @ltGuidedHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'짧게 흥얼거리면 악기 소리로 바꿔드려요.'**
+  String get ltGuidedHint;
+
+  /// No description provided for @ltGuidedRecord.
+  ///
+  /// In ko, this message translates to:
+  /// **'멜로디 녹음하기'**
+  String get ltGuidedRecord;
+
+  /// No description provided for @ltGuidedMore.
+  ///
+  /// In ko, this message translates to:
+  /// **'멜로디 더하기'**
+  String get ltGuidedMore;
+
+  /// No description provided for @ltGuidedListen.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 멜로디 듣기'**
+  String get ltGuidedListen;
+
+  /// No description provided for @ltGuidedStop.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 멈추기'**
+  String get ltGuidedStop;
+
+  /// No description provided for @ltGuidedSound.
+  ///
+  /// In ko, this message translates to:
+  /// **'악기 바꾸기'**
+  String get ltGuidedSound;
+
+  /// No description provided for @ltGuidedSave.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 곡 저장'**
+  String get ltGuidedSave;
+
+  /// No description provided for @ltGuidedSaved.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장했어요. 자세히 편집에서 이어서 만들어보세요.'**
+  String get ltGuidedSaved;
+
+  /// No description provided for @ltGuidedReady.
+  ///
+  /// In ko, this message translates to:
+  /// **'멜로디가 준비됐어요. 들어보고 악기를 바꿔보세요.'**
+  String get ltGuidedReady;
+
+  /// No description provided for @ltGuidedPrepare.
+  ///
+  /// In ko, this message translates to:
+  /// **'조용한 곳에서, 네 번의 준비 박자 뒤에 약 5초간 흥얼거려보세요. 변환에는 인터넷 연결이 필요해요.'**
+  String get ltGuidedPrepare;
+
+  /// No description provided for @ltGuidedSteps.
+  ///
+  /// In ko, this message translates to:
+  /// **'1 녹음   →   2 악기로 듣기   →   3 저장'**
+  String get ltGuidedSteps;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {
