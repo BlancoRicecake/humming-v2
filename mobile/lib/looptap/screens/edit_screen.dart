@@ -1,3 +1,4 @@
+import '../widgets/desktop_workspace.dart';
 import '../widgets/desktop_instrument.dart';
 import '../music/beginner_backing.dart';
 import '../widgets/sheets/sample_workbench.dart';
@@ -74,6 +75,9 @@ class _EditScreenState extends State<EditScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final LoopAudio _audio = LoopAudio.instance;
   bool _desktopClosing = false;
+  bool get _desktop => Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  double _timelineShare = .4;
+  Widget _timelineViewport(Widget child) => _desktop ? DesktopTimeline(child: child) : child;
 
   // ── persisted-ish song state ──
   late String _title = widget.song.title;
@@ -2559,7 +2563,11 @@ class _EditScreenState extends State<EditScreen>
     final pitched = _isPitched;
     // System back / edge-swipe goes through the same save + sweep as the back
     // arrow (C4) — the route never pops on its own.
-    return PopScope(
+    return DesktopCommands(enabled: _desktop,
+      play: _togglePlay,
+      record: () { if (!_guided && _meta.kind != TrackKind.vocal) _armRecord(); },
+      save: _saveNow, undo: _undoAction, redo: _redoAction,
+      child: PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
@@ -2615,13 +2623,13 @@ class _EditScreenState extends State<EditScreen>
                 // arrangement : surface = 2 : 3 vertical split. lane 영역이
                 // 화면 커질 때 조금 더 자라도록 1:2 → 2:3 으로 조정 (40% / 60%).
                 Expanded(
-                  flex: 2,
+                  flex: _desktop ? (_timelineShare * 1000).round() : 2,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
                     child: ValueListenableBuilder<double>(
                       valueListenable: _playStep,
                       builder:
-                          (_, ps, __) => Arrangement(
+                          (_, ps, __) => _timelineViewport(Arrangement(
                             section: _songSection ?? _sec,
                             tracks: _orderedMetas(_songSection ?? _sec),
                             activeId: _activeId,
@@ -2640,13 +2648,18 @@ class _EditScreenState extends State<EditScreen>
                             ranges: _ranges,
                             // song-preview is read-only → no scrubbing there
                             onSeek: _songSection == null ? _seekTo : null,
-                          ),
+                          )),
                     ),
                   ),
                 ),
+                if (_desktop) DesktopSplitHandle(
+                  onDelta: (delta) => setState(() => _timelineShare =
+                    (_timelineShare + delta / math.max(200, MediaQuery.sizeOf(context).height - 200)).clamp(.25, .70)),
+                  onReset: () => setState(() => _timelineShare = .4),
+                ),
                 _surfaceHeader(pitched),
                 Expanded(
-                  flex: 3,
+                  flex: _desktop ? ((1 - _timelineShare) * 1000).round() : 3,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
                     child: DecoratedBox(
@@ -2707,6 +2720,7 @@ class _EditScreenState extends State<EditScreen>
             if (_countDown > 1) _countInOverlay(),
           ],
         ),
+      ),
       ),
       ),
     );

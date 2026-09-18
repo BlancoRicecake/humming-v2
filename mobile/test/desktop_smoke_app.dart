@@ -191,6 +191,19 @@ Future<void> main() async {
     if (!keyHandled) throw StateError('Instrument key was not handled');
     if (instrumentKeyLabel(PhysicalKeyboardKey.keyA) != 'A') throw StateError('Release key label missing');
     report['desktopKeyboardRoute'] = true;
+    final transportHandled = dispatchInstrumentKey(KeyDownEvent(
+      physicalKey: PhysicalKeyboardKey.space, logicalKey: LogicalKeyboardKey.space,
+      timeStamp: const Duration(seconds: 2)));
+    dispatchInstrumentKey(KeyUpEvent(physicalKey: PhysicalKeyboardKey.space,
+      logicalKey: LogicalKeyboardKey.space, timeStamp: const Duration(milliseconds: 2100)));
+    if (!transportHandled) throw StateError('Desktop transport shortcut not handled');
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    dispatchInstrumentKey(KeyDownEvent(physicalKey: PhysicalKeyboardKey.space,
+      logicalKey: LogicalKeyboardKey.space, timeStamp: const Duration(seconds: 3)));
+    dispatchInstrumentKey(KeyUpEvent(physicalKey: PhysicalKeyboardKey.space,
+      logicalKey: LogicalKeyboardKey.space, timeStamp: const Duration(milliseconds: 3100)));
+    report['desktopTransportShortcut'] = true;
+
     await Future<void>.delayed(const Duration(milliseconds: 200));
 
     RenderRepaintBoundary? boundary =

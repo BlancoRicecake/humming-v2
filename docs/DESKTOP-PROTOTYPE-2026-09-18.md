@@ -55,3 +55,11 @@ Report directory: `C:/dev/Handy_code/reports/humtrack-desktop-20260918`.
 - Package: C:/dev/Handy_code/reports/humtrack-desktop-20260918/HumTrack-Windows-Keyboard-Preview.zip (regular main.dart entrypoint, no smoke/test privilege overrides).
 - Final native release smoke passed: focus-routed key down/up, release-mode key labels, WASAPI non-silent PCM, WAV export and editor save. Report: reports/humtrack-desktop-20260918/keyboard-smoke/smoke.json. The harness dispatches the desktop focus key message in addition to HardwareKeyboard state; direct HardwareKeyboard dispatch alone does not reach Focus in this Flutter version.
 - Final visual pass replaced the compressed legend with evenly spaced key badges. All 159 tests passed before that layout-only adjustment; the three keyboard tests were rerun afterward. Static analysis on changed Dart files passed without issues before the badge layout adjustment.
+
+## Desktop workspace update (2026-09-18)
+
+- Desktop editor timeline/pad split is draggable, clamped to 25–70% timeline share. Double-click the separator to reset to 40%. Layout changes remain session-local.
+- Timeline has 100–400% zoom in 50% increments, Fit reset, and a dedicated horizontal scrollbar. Existing lane drag-to-seek is preserved. The full arrangement, including track labels, scrolls horizontally; sticky track labels are not implemented in this pass.
+- Focus-scoped desktop commands: Space play/pause, Ctrl/Cmd+Shift+R arm recording on non-vocal editor tracks, Ctrl/Cmd+S save, Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo. Key repeats are suppressed. Text editing and other modal routes retain their own key handling.
+- Mobile retains the existing layout and touch controls. No new packages or store submission.
+- Validation: 162 Flutter tests passed, including zoom bounds/scroll reset, splitter drag/reset, shortcut repeat suppression and text/modal isolation. Initial analysis of application changes found no issues. Windows native smoke and packaged startup results are stored under the workspace-* reports.
