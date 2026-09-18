@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.humming" "\0"
-            VALUE "FileDescription", "humming" "\0"
+            VALUE "FileDescription", "HumTrack" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "humming" "\0"
+            VALUE "InternalName", "HumTrack" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.humming. All rights reserved." "\0"
-            VALUE "OriginalFilename", "humming.exe" "\0"
-            VALUE "ProductName", "humming" "\0"
+            VALUE "OriginalFilename", "HumTrack.exe" "\0"
+            VALUE "ProductName", "HumTrack" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

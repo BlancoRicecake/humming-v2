@@ -19,7 +19,8 @@ class ClarityService {
   static const _projectId = String.fromEnvironment('CLARITY_PROJECT_ID');
 
   /// 키가 주입됐을 때만 true. 런타임 분기는 모두 이 값으로.
-  bool get enabled => _projectId.isNotEmpty;
+  bool get enabled => _projectId.isNotEmpty &&
+      (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
 
   /// 루트 위젯을 ClarityWidget 으로 감싼다. 비활성 시 앱을 그대로 반환 →
   /// 의존성/오버헤드 0. main() 의 runApp 에 이 결과를 넘긴다.

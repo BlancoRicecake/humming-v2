@@ -43,7 +43,7 @@ class IapService {
   IapService._();
   static final IapService instance = IapService._();
 
-  final InAppPurchase _iap = InAppPurchase.instance;
+  InAppPurchase get _iap => InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _sub;
   final _resultCtl = StreamController<IapResult>.broadcast();
   Stream<IapResult> get onPurchaseResult => _resultCtl.stream;
@@ -70,6 +70,8 @@ class IapService {
   Duration verifyBackoffBase = const Duration(seconds: 1);
 
   Future<void> init() async {
+    // Desktop purchases are not configured; server account entitlements remain authoritative.
+    if (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS) return;
     try {
       final available = await _iap.isAvailable();
       if (!available) {

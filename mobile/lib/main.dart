@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 // HumTrack — app entrypoint. Landscape tap-to-make-beats DAW.
 //
 // The product lives in lib/looptap/ (the former "LoopTap" module, now HumTrack).
@@ -31,11 +32,13 @@ Future<void> main() async {
   // 시 아래 본문을 그대로 실행 — graceful-degrade). lib/services/observability_service.dart.
   await ObservabilityService.instance.bootstrap(() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isAndroid || Platform.isIOS) {
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
 
   // EngineApi + Bearer 인터셉터 + IAP verify dio 주입 — IapService.init 이전에.
   engineApi = EngineApi();

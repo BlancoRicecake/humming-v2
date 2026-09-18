@@ -25,10 +25,11 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  pcm_ = std::make_unique<DesktopPcm>(flutter_controller_->engine()->messenger());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
+    if (GetCommandLineW() == nullptr || wcsstr(GetCommandLineW(), L"--humtrack-smoke") == nullptr) this->Show();
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -40,6 +41,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  pcm_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -62,6 +64,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case WM_GETMINMAXINFO: {
+      auto* limits = reinterpret_cast<MINMAXINFO*>(lparam);
+      const UINT dpi = GetDpiForWindow(hwnd);
+      limits->ptMinTrackSize.x = MulDiv(960, dpi, 96);
+      limits->ptMinTrackSize.y = MulDiv(600, dpi, 96);
+      return 0;
+    }
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
