@@ -1,3 +1,4 @@
+import 'package:humming/looptap/widgets/desktop_instrument.dart';
 // Explicit developer entry point; never used by the production entry point.
 import 'dart:convert';
 import 'dart:io';
@@ -21,6 +22,14 @@ import 'package:humming/looptap/music/song_util.dart';
 import 'package:humming/looptap/music/wav_export.dart';
 import 'package:humming/looptap/music/wav_codec.dart';
 import 'package:humming/looptap/state/loop_storage.dart';
+
+// The desktop engine dispatches both hardware state and the focus key message.
+// ignore: deprecated_member_use
+bool dispatchInstrumentKey(KeyEvent event) {
+  HardwareKeyboard.instance.handleKeyEvent(event);
+  // ignore: deprecated_member_use
+  return ServicesBinding.instance.keyEventManager.keyMessageHandler!(KeyMessage([event], null));
+}
 
 Future<void> main() async {
   const output = String.fromEnvironment('DESKTOP_SMOKE_OUTPUT');
@@ -148,6 +157,42 @@ Future<void> main() async {
       throw StateError('Editor save failed');
     }
     report['guidedEditorSave'] = true;
+    panel!.onEdit();
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    DesktopInstrument? instrument;
+    void findInstrument(Element element) {
+      if (element.widget is DesktopInstrument) {
+        instrument = element.widget as DesktopInstrument;
+        panelElement = element;
+      }
+      element.visitChildren(findInstrument);
+    }
+    WidgetsBinding.instance.rootElement!.visitChildren(findInstrument);
+    if (instrument == null) throw StateError('Desktop instrument missing');
+    // Hidden smoke windows do not receive the OS activation focus event.
+    // Request the same focus node that a pointer-down in the pad area requests.
+    void focusInstrument(Element element) {
+      final widget = element.widget;
+      if (widget is Focus && widget.focusNode != null) {
+        widget.focusNode!.requestFocus();
+      }
+      element.visitChildren(focusInstrument);
+    }
+    panelElement!.visitChildren(focusInstrument);
+    FocusManager.instance.applyFocusChangesIfNeeded();
+    report['keyboardFocus'] = FocusManager.instance.primaryFocus != null;
+    final keyHandled = dispatchInstrumentKey(KeyDownEvent(
+      physicalKey: PhysicalKeyboardKey.keyA, logicalKey: LogicalKeyboardKey.keyA,
+      timeStamp: const Duration(seconds: 1)));
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    dispatchInstrumentKey(KeyUpEvent(
+      physicalKey: PhysicalKeyboardKey.keyA, logicalKey: LogicalKeyboardKey.keyA,
+      timeStamp: const Duration(milliseconds: 1300)));
+    if (!keyHandled) throw StateError('Instrument key was not handled');
+    if (instrumentKeyLabel(PhysicalKeyboardKey.keyA) != 'A') throw StateError('Release key label missing');
+    report['desktopKeyboardRoute'] = true;
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+
     RenderRepaintBoundary? boundary =
         panelElement?.findAncestorRenderObjectOfType<RenderRepaintBoundary>();
     void visit(RenderObject node) {

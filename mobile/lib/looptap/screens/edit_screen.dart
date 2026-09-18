@@ -1,3 +1,4 @@
+import '../widgets/desktop_instrument.dart';
 import '../music/beginner_backing.dart';
 import '../widgets/sheets/sample_workbench.dart';
 // LoopTap — Editor (the core screen). README §4.
@@ -72,6 +73,7 @@ class EditScreen extends StatefulWidget {
 class _EditScreenState extends State<EditScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final LoopAudio _audio = LoopAudio.instance;
+  bool _desktopClosing = false;
 
   // ── persisted-ish song state ──
   late String _title = widget.song.title;
@@ -464,6 +466,7 @@ class _EditScreenState extends State<EditScreen>
 
   @override
   void dispose() {
+    _desktopClosing = true;
     WidgetsBinding.instance.removeObserver(this);
     _titleCtl.dispose();
     _autosaveTimer?.cancel();
@@ -2659,7 +2662,7 @@ class _EditScreenState extends State<EditScreen>
                           stops: const [0, 0.6],
                         ),
                       ),
-                      child: _surface(),
+                      child: _desktopSurface(),
                     ),
                   ),
                 ),
@@ -3168,6 +3171,38 @@ class _EditScreenState extends State<EditScreen>
           style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.t2),
         ),
       ),
+    );
+  }
+
+  Widget _desktopSurface() {
+    final surface = _surface();
+    if (!(Platform.isWindows || Platform.isMacOS || Platform.isLinux) ||
+        _meta.kind == TrackKind.vocal) { return surface; }
+    final pitched = _isPitched;
+    final rungs = pitched ? _padWindow : <Rung>[];
+    final specs = pitched ? <DrumSpec>[] : drumSpecsFor(_activeType == 'beatDec' ? _fillKinds : _meta.drumKinds);
+    final identity = '$_activeId:$_activeIdx:$_keyRoot:$_scale:$_octave:$_windowOffset:$_activeProgram:$_chordOn:$_powerOn';
+    return DesktopInstrument(
+      group: pitched ? 'piano' : 'drums', identity: identity,
+      labels: pitched ? rungs.map((r) => r.name).toList() : specs.map((s) => drumLabel(L10n.of(context), s.kind)).toList(),
+      onDown: (index) {
+        if (!pitched) { _hitDrum(specs[index].kind); return () {}; }
+        final rung = rungs[index];
+        final track = _activeId;
+        final section = _activeIdx;
+        final ch = _meta.channel;
+        final midis = _chordMidis(rung.midi);
+        _pitchDown(rung);
+        return () {
+          for (final timer in _strumTimers) { timer.cancel(); }
+          _strumTimers.clear();
+          for (final midi in midis) { _audio.noteOffLive(ch, midi); }
+          if (mounted && !_desktopClosing && track == _activeId && section == _activeIdx &&
+              identity == '$_activeId:$_activeIdx:$_keyRoot:$_scale:$_octave:$_windowOffset:$_activeProgram:$_chordOn:$_powerOn') {
+            _pitchUp(rung);
+          } else { _pending.remove(rung.midi); }
+        };
+      }, child: surface,
     );
   }
 

@@ -35,6 +35,13 @@ class LoopPrefs {
   final ValueNotifier<Map<String, List<int>>> instrumentFavorites =
       ValueNotifier<Map<String, List<int>>>({});
 
+  final ValueNotifier<Map<String, List<int>>> keyboardBindings = ValueNotifier({});
+
+  Future<void> setKeyboardBindings(String group, List<int> keys) async {
+    keyboardBindings.value = {...keyboardBindings.value, group: List.of(keys)};
+    await _persist();
+  }
+
   bool _loaded = false;
 
   static Future<File> _file() async {
@@ -54,6 +61,13 @@ class LoopPrefs {
       final raw = await f.readAsString();
       if (raw.trim().isEmpty) return;
       final m = (jsonDecode(raw) as Map);
+      if (m['keyboardBindings'] is Map) {
+        keyboardBindings.value = {
+          for (final e in (m['keyboardBindings'] as Map).entries)
+            if (e.key is String && e.value is List && (e.value as List).every((v) => v is int))
+              e.key as String: List<int>.from(e.value as List),
+        };
+      }
       if (m['haptics'] is bool) haptics.value = m['haptics'] as bool;
       if (m['metro'] is bool) metro.value = m['metro'] as bool;
       if (m['acknowledgedPolicyNotice'] is String) {
@@ -84,6 +98,7 @@ class LoopPrefs {
       final f = await _file();
       await f.writeAsString(
         jsonEncode({
+          'keyboardBindings': keyboardBindings.value,
           'haptics': haptics.value,
           'metro': metro.value,
           'acknowledgedPolicyNotice': acknowledgedPolicyNotice.value,

@@ -43,3 +43,15 @@ Report directory: `C:/dev/Handy_code/reports/humtrack-desktop-20260918`.
 ## Sources for native implementation
 - https://learn.microsoft.com/en-us/windows/win32/coreaudio/rendering-a-stream
 - https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclient-initialize
+
+## Desktop keyboard update (2026-09-18)
+
+- Windows/macOS/Linux editor adds a focus-scoped physical keyboard instrument layer. Piano/bass use A S D F G H J K L ; ' \\ in visible-pad order. Main drums use A=kick, S=snare, D=hi-hat. Fill uses D S A F G H in displayed order.
+- A compact legend above the instrument shows current note/drum assignments. The keyboard button opens key capture, duplicate validation, reset, cancel and save. Piano and percussion bindings are independent, persisted in existing preferences, and validated on read.
+- Key repeats do not retrigger held notes; simultaneous notes work. Release callbacks stop notes on key-up, focus loss, lifecycle change and instrument context change. Text fields and modal dialogs have independent focus. Click the instrument area after text editing to resume playing.
+- Windows native chrome opts into dark mode regardless of system light theme; Windows 11 caption/text color attributes are requested, with dark-mode fallback if unsupported. Standard system window controls remain intact. macOS uses dark Aqua, transparent title bar and a 960x600 minimum window.
+- Verification: 159 Flutter tests passed, including custom bindings, duplicate rejection, persistence decode, chords/repeats, focus/context release and dialog isolation. Windows release build passed; packaged app starts successfully (~133 MiB idle), DWM dark-mode attribute reads back enabled. Caption color attribute is unsupported on this test host, so native dark-mode fallback applies.
+- macOS build and runtime verification remain pending on a Mac. This is an incremental desktop UX pass; comprehensive timeline/mouse workflows and accessibility review are still separate work.
+- Package: C:/dev/Handy_code/reports/humtrack-desktop-20260918/HumTrack-Windows-Keyboard-Preview.zip (regular main.dart entrypoint, no smoke/test privilege overrides).
+- Final native release smoke passed: focus-routed key down/up, release-mode key labels, WASAPI non-silent PCM, WAV export and editor save. Report: reports/humtrack-desktop-20260918/keyboard-smoke/smoke.json. The harness dispatches the desktop focus key message in addition to HardwareKeyboard state; direct HardwareKeyboard dispatch alone does not reach Focus in this Flutter version.
+- Final visual pass replaced the compressed legend with evenly spaced key badges. All 159 tests passed before that layout-only adjustment; the three keyboard tests were rerun afterward. Static analysis on changed Dart files passed without issues before the badge layout adjustment.
