@@ -1,0 +1,5 @@
+# Research-only dependencies. Never install this file in the production image.
+# Basic Pitch's model license permits commercial use, but benchmark it before
+# changing the production pYIN route.
+-r requirements-test.txt
+basic-pitch>=0.4,<0.5

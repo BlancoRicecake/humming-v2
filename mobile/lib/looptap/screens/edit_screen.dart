@@ -2,6 +2,7 @@ import '../widgets/desktop_workspace.dart';
 import '../widgets/desktop_instrument.dart';
 import '../music/beginner_backing.dart';
 import '../widgets/sheets/sample_workbench.dart';
+
 // LoopTap — Editor (the core screen). README §4.
 // Vertical stack: top bar · SONG section bar · arrangement strip · surface
 // header · track surface · transport bar. A Ticker-driven transport clock
@@ -25,6 +26,7 @@ import '../../models/models.dart' as eng;
 import '../audio/loop_audio.dart';
 import '../models/loop_models.dart';
 import '../music/hum_map.dart';
+import '../music/melody_review.dart';
 import '../music/instruments.dart';
 import '../music/song_util.dart';
 import '../music/soundfont_catalog.dart';
@@ -50,6 +52,7 @@ import '../widgets/sheets/key_sheet.dart';
 import '../widgets/sheets/lt_modal.dart';
 import '../../audio/headset.dart';
 import '../widgets/sheets/mixer_sheet.dart';
+import '../widgets/sheets/melody_review_sheet.dart';
 import '../widgets/sheets/vocal_record_modal.dart';
 import '../widgets/sheets/vocal_editor.dart';
 import '../widgets/surfaces/drum_surface.dart';
@@ -75,29 +78,37 @@ class _EditScreenState extends State<EditScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final LoopAudio _audio = LoopAudio.instance;
   bool _desktopClosing = false;
-  bool get _desktop => Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  bool get _desktop =>
+      Platform.isWindows || Platform.isMacOS || Platform.isLinux;
   double _timelineShare = .4;
-  Widget _timelineViewport(Widget child) => _desktop ? DesktopTimeline(child: child) : child;
+  Widget _timelineViewport(Widget child) =>
+      _desktop ? DesktopTimeline(child: child) : child;
 
   // ── persisted-ish song state ──
   late String _title = widget.song.title;
   // One controller for the title field, owned by the State (C21) — rebuilding
   // it per build reset the cursor on every keystroke.
-  late final TextEditingController _titleCtl =
-      TextEditingController(text: widget.song.title);
+  late final TextEditingController _titleCtl = TextEditingController(
+    text: widget.song.title,
+  );
   late String _keyRoot = widget.song.key;
   // unknown scale names (old builds / hand-edited saves) fall back to minor —
   // every kScales lookup below would otherwise `!`-crash (C5).
-  late String _scale =
-      kScales.containsKey(widget.song.scale) ? widget.song.scale : 'minor';
+  late String _scale = kScales.containsKey(widget.song.scale)
+      ? widget.song.scale
+      : 'minor';
   late int _bpm = widget.song.bpm;
   late double _swing = widget.song.swing;
   late final Map<String, double> _vol = Map.of(widget.song.vol);
   late final Map<String, bool> _mutes = Map.of(widget.song.mutes);
+  late final Map<String, bool> _generationLocks = Map.of(
+    widget.song.generationLocks,
+  );
 
   // ── sections (each an independent loop × repeats) ──
-  late final List<Section> _sections =
-      widget.song.sections.map((s) => s.deepCopy()).toList();
+  late final List<Section> _sections = widget.song.sections
+      .map((s) => s.deepCopy())
+      .toList();
   int _activeIdx = 0;
   BackingStyle? _guidedBacking;
 
@@ -105,6 +116,7 @@ class _EditScreenState extends State<EditScreen>
   late String _activeId = widget.guidedStart ? 'melody' : 'drums';
   late bool _guided = widget.guidedStart;
   bool _playing = false;
+  bool _previewRawMelody = false;
   bool _recording = false;
   bool _metro = LoopPrefs.instance.metro.value; // shared with Settings sheet
   bool _countIn = true; // count-in on by default
@@ -197,7 +209,8 @@ class _EditScreenState extends State<EditScreen>
   late List<double>? _songVocalPeaks = widget.song.songVocalPeaks;
   late int? _songVocalBpm = widget.song.songVocalBpm;
   late int? _songVocalBars = widget.song.songVocalBars;
-  bool _songVocalActive = false; // the live vocal currently IS the song-level take
+  bool _songVocalActive =
+      false; // the live vocal currently IS the song-level take
 
   // undo / redo — snapshots of the editable song state
   final List<_EditSnapshot> _undo = [];
@@ -224,6 +237,7 @@ class _EditScreenState extends State<EditScreen>
   void _ensureActiveIdValid() {
     if (!_tracks.containsKey(_activeId)) _activeId = 'drums';
   }
+
   /// The Beat-Fill launchpad's 6 pad sounds for the rendered section (preview
   /// section when previewing the song, else the editing section).
   List<String> get _fillKinds => (_songSection ?? _sec).fillKinds;
@@ -320,8 +334,12 @@ class _EditScreenState extends State<EditScreen>
 
   // Guitars sit an octave lower than the generic melody register so the pads
   // land in a real guitar's playing range (≈E2–E6).
-  List<Rung> get _melodyFullLadder =>
-      buildLadder(_keyRoot, _scale, (_activeIsGuitar ? 2 : 3) + _melodyOctave, 22);
+  List<Rung> get _melodyFullLadder => buildLadder(
+    _keyRoot,
+    _scale,
+    (_activeIsGuitar ? 2 : 3) + _melodyOctave,
+    22,
+  );
   List<Rung> get _bassFullLadder =>
       buildLadder(_keyRoot, _scale, 1 + _bassOctave, 22);
   List<Rung> get _activeFullLadder =>
@@ -410,20 +428,24 @@ class _EditScreenState extends State<EditScreen>
           ? (cat.bySlot(big.first)?.label ?? '')
           : '${big.length}';
       final size = big.length == 1 ? cat.sizeLabel(big.first) : null;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        duration: const Duration(seconds: 8),
-        content: Text(size == null
-            ? l.ltEditorSoundDownloadAsk(label)
-            : l.ltEditorSoundDownloadAskSized(label, size)),
-        action: SnackBarAction(
-          label: l.ltEditorSoundDownloadNow,
-          onPressed: () {
-            for (final p in big) {
-              SoundfontCatalog.instance.ensureDownloaded(p);
-            }
-          },
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            size == null
+                ? l.ltEditorSoundDownloadAsk(label)
+                : l.ltEditorSoundDownloadAskSized(label, size),
+          ),
+          action: SnackBarAction(
+            label: l.ltEditorSoundDownloadNow,
+            onPressed: () {
+              for (final p in big) {
+                SoundfontCatalog.instance.ensureDownloaded(p);
+              }
+            },
+          ),
         ),
-      ));
+      );
     });
   }
 
@@ -496,7 +518,10 @@ class _EditScreenState extends State<EditScreen>
   // and a pending count-in must not start recording into the void (C25).
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.paused && state != AppLifecycleState.hidden) return;
+    if (state != AppLifecycleState.paused &&
+        state != AppLifecycleState.hidden) {
+      return;
+    }
     if (_playing || _songSection != null || _countDown > 0) _stopAll();
   }
 
@@ -609,13 +634,21 @@ class _EditScreenState extends State<EditScreen>
           for (final n in data.pitchNotes.where((n) => n.step == step))
             if (!_freshThisLoop.contains('${tk.id}:${n.midi}:$step')) n,
         ];
+        int previewMidi(PitchNote n) => _previewRawMelody && tk.id == 'melody'
+            ? (n.sourceMidi ?? n.midi)
+            : n.midi;
         if (isGuitarProgram(prog) && due.length > 1) {
           // strum the chord on playback the same way the live pad does
-          final byMidi = {for (final n in due) n.midi: n};
-          for (final s in strumPlan([for (final n in due) n.midi])) {
+          final byMidi = {for (final n in due) previewMidi(n): n};
+          for (final s in strumPlan([for (final n in due) previewMidi(n)])) {
             final note = byMidi[s.midi]!;
-            void hit() => _audio.playPitch(tk.channel, s.midi,
-                program: prog, vol: vol * s.velScale, durSec: dsec(note.dur));
+            void hit() => _audio.playPitch(
+              tk.channel,
+              s.midi,
+              program: prog,
+              vol: vol * s.velScale,
+              durSec: dsec(note.dur),
+            );
             // fire-and-forget: the strum sweep is a few ms, no cancellation
             if (s.delayMs <= 0) {
               hit();
@@ -625,15 +658,20 @@ class _EditScreenState extends State<EditScreen>
           }
         } else {
           for (final n in due) {
-            _audio.playPitch(tk.channel, n.midi,
-                program: prog, vol: vol, durSec: dsec(n.dur));
+            _audio.playPitch(
+              tk.channel,
+              previewMidi(n),
+              program: prog,
+              vol: vol,
+              durSec: dsec(n.dur),
+            );
           }
         }
         // glow only the ACTIVE track's pads — otherwise a melody note would
         // light a same-pitch pad on melody-fill/bass while they're showing.
         if (tk.id == _activeId) {
           for (final n in due) {
-            litM.add(n.midi);
+            litM.add(previewMidi(n));
           }
         }
       } else if (tk.kind == TrackKind.drums) {
@@ -702,63 +740,60 @@ class _EditScreenState extends State<EditScreen>
     final l = L10n.of(context);
     final type = await showDialog<String>(
       context: context,
-      builder:
-          (ctx) => Dialog(
-            backgroundColor: LT.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        l.addTrackTitle,
-                        style: LTType.inter(
-                          size: 16,
-                          weight: FontWeight.w800,
-                          color: LT.t1,
-                        ),
-                      ),
+      builder: (ctx) => Dialog(
+        backgroundColor: LT.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    l.addTrackTitle,
+                    style: LTType.inter(
+                      size: 16,
+                      weight: FontWeight.w800,
+                      color: LT.t1,
                     ),
                   ),
-                  // base instanceable tracks + the addable "Audio" lane (a
-                  // second vocal-kind lane for overlapping/layered takes).
-                  for (final t in kAddableTracks)
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => Navigator.of(ctx).pop(t.id),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 12,
-                        ),
-                        child: Row(
-                          children: [
-                            Ms(t.icon, size: 18, color: t.color),
-                            const SizedBox(width: 12),
-                            Text(
-                              t.label,
-                              style: LTType.inter(
-                                size: 14,
-                                weight: FontWeight.w700,
-                                color: LT.t1,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                ],
+                ),
               ),
-            ),
+              // base instanceable tracks + the addable "Audio" lane (a
+              // second vocal-kind lane for overlapping/layered takes).
+              for (final t in kAddableTracks)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(ctx).pop(t.id),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        Ms(t.icon, size: 18, color: t.color),
+                        const SizedBox(width: 12),
+                        Text(
+                          t.label,
+                          style: LTType.inter(
+                            size: 14,
+                            weight: FontWeight.w700,
+                            color: LT.t1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+            ],
           ),
+        ),
+      ),
     );
     if (type != null) _addTrack(type);
   }
@@ -909,11 +944,11 @@ class _EditScreenState extends State<EditScreen>
   void _duplicateSection(int idx) {
     _pushUndo();
     if (_playing) _stopAll();
-    final copy =
-        _sections[idx].deepCopy()
-          ..id = 'sec${DateTime.now().millisecondsSinceEpoch}'
-          ..autoName = true // a duplicate gets a fresh position letter
-          ..name = _nextSectionName();
+    final copy = _sections[idx].deepCopy()
+      ..id = 'sec${DateTime.now().millisecondsSinceEpoch}'
+      ..autoName =
+          true // a duplicate gets a fresh position letter
+      ..name = _nextSectionName();
     setState(() {
       _sections.insert(idx + 1, copy);
       _relabelSections();
@@ -973,46 +1008,45 @@ class _EditScreenState extends State<EditScreen>
       context,
       width: 300,
       child: StatefulBuilder(
-        builder:
-            (context, _) => Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  l.ltEditorSectionMenuTitle(_sections[idx].name),
-                  style: LTType.inter(
-                    size: 15,
-                    weight: FontWeight.w800,
-                    color: LT.t1,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                _menuRow(LtIcons.layers, l.projectOptionDuplicate, () {
-                  Navigator.of(context).pop();
-                  _duplicateSection(idx);
-                }),
-                _menuRow(
-                  LtIcons.arrowBack,
-                  l.ltEditorMoveLeft,
-                  idx > 0
-                      ? () {
-                        Navigator.of(context).pop();
-                        _moveSection(idx, -1);
-                      }
-                      : null,
-                ),
-                _menuRow(
-                  LtIcons.playArrow,
-                  l.ltEditorMoveRight,
-                  idx < _sections.length - 1
-                      ? () {
-                        Navigator.of(context).pop();
-                        _moveSection(idx, 1);
-                      }
-                      : null,
-                ),
-              ],
+        builder: (context, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              l.ltEditorSectionMenuTitle(_sections[idx].name),
+              style: LTType.inter(
+                size: 15,
+                weight: FontWeight.w800,
+                color: LT.t1,
+              ),
             ),
+            const SizedBox(height: 14),
+            _menuRow(LtIcons.layers, l.projectOptionDuplicate, () {
+              Navigator.of(context).pop();
+              _duplicateSection(idx);
+            }),
+            _menuRow(
+              LtIcons.arrowBack,
+              l.ltEditorMoveLeft,
+              idx > 0
+                  ? () {
+                      Navigator.of(context).pop();
+                      _moveSection(idx, -1);
+                    }
+                  : null,
+            ),
+            _menuRow(
+              LtIcons.playArrow,
+              l.ltEditorMoveRight,
+              idx < _sections.length - 1
+                  ? () {
+                      Navigator.of(context).pop();
+                      _moveSection(idx, 1);
+                    }
+                  : null,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1196,7 +1230,10 @@ class _EditScreenState extends State<EditScreen>
   // an independent kit. The drum kit is a sticky synth-side selection, so this
   // runs on open / undo-restore / after adding a track.
   void _applyDrumKits() {
-    _audio.setDrumKitOn(LoopAudio.drumChannel, _instruments['drums'] ?? kDefaultDrumKit);
+    _audio.setDrumKitOn(
+      LoopAudio.drumChannel,
+      _instruments['drums'] ?? kDefaultDrumKit,
+    );
     for (final m in _editMetas) {
       if (m.kind == TrackKind.drums && m.channel != LoopAudio.drumChannel) {
         _audio.setDrumKitOn(m.channel, _instruments[m.id] ?? kDefaultDrumKit);
@@ -1235,7 +1272,11 @@ class _EditScreenState extends State<EditScreen>
         dn.removeAt(i);
       } else {
         dn.add(DrumNote(kind: kind, step: step));
-        _audio.playDrum(kind, channel: _meta.channel, vol: _vol[_activeId] ?? 1);
+        _audio.playDrum(
+          kind,
+          channel: _meta.channel,
+          vol: _vol[_activeId] ?? 1,
+        );
       }
     });
   }
@@ -1251,8 +1292,11 @@ class _EditScreenState extends State<EditScreen>
       context,
       child: FillPaletteSheet(
         current: current,
-        onPreview: (k) =>
-            _audio.playDrum(k, channel: _meta.channel, vol: _vol[_activeId] ?? 1),
+        onPreview: (k) => _audio.playDrum(
+          k,
+          channel: _meta.channel,
+          vol: _vol[_activeId] ?? 1,
+        ),
       ),
     );
     if (picked == null || picked == current) return;
@@ -1304,16 +1348,15 @@ class _EditScreenState extends State<EditScreen>
   }
 
   /// A Rung for an arbitrary chord-member midi (the root reuses the real Rung).
-  Rung _rungFor(int midi, Rung root) =>
-      midi == root.midi
-          ? root
-          : Rung(
-            midi: midi,
-            name: kNoteNames[((midi % 12) + 12) % 12],
-            degree: root.degree,
-            freq: midiToFreq(midi),
-            index: root.index,
-          );
+  Rung _rungFor(int midi, Rung root) => midi == root.midi
+      ? root
+      : Rung(
+          midi: midi,
+          name: kNoteNames[((midi % 12) + 12) % 12],
+          degree: root.degree,
+          freq: midiToFreq(midi),
+          index: root.index,
+        );
 
   // Pending strum note-ons (a guitar chord sweeps over a few ms); cancelled on
   // release so a quick tap never leaves a late string ringing.
@@ -1328,7 +1371,8 @@ class _EditScreenState extends State<EditScreen>
     if (_activeIsGuitar && midis.length > 1) {
       // strum the chord: each string a little after the previous, slightly softer
       for (final s in strumPlan(midis)) {
-        void hit() => _audio.noteOnLive(ch, s.midi, program: prog, vol: vol * s.velScale);
+        void hit() =>
+            _audio.noteOnLive(ch, s.midi, program: prog, vol: vol * s.velScale);
         if (s.delayMs <= 0) {
           hit();
         } else {
@@ -1366,11 +1410,19 @@ class _EditScreenState extends State<EditScreen>
     final p = _pending.remove(n.midi);
     if (p == null) return;
     final dur = _durFromHold(DateTime.now().millisecondsSinceEpoch - p.t);
-    final tgt = _recTarget(p.step); // p.step is the played step (global in song mode)
+    final tgt = _recTarget(
+      p.step,
+    ); // p.step is the played step (global in song mode)
     if (tgt == null) return; // song-mode playhead/active track didn't resolve
     _pushUndo(coalesce: true);
     for (final m in midis) {
-      _placePitched(tgt.tracks, _activeId, _rungFor(m, n), tgt.step, tgt.step + dur - 1);
+      _placePitched(
+        tgt.tracks,
+        _activeId,
+        _rungFor(m, n),
+        tgt.step,
+        tgt.step + dur - 1,
+      );
       // heard live now → don't let the clock replay it this loop pass (the clock
       // checks the played/global step).
       _freshThisLoop.add('$_activeId:$m:${p.step}');
@@ -1381,7 +1433,13 @@ class _EditScreenState extends State<EditScreen>
   /// Place a pitched note spanning [a,b] in [tracks], merging overlapping
   /// same-pitch notes. [tracks] is the active section normally, or the section
   /// under the playhead for a song-mode overdub.
-  void _placePitched(Map<String, TrackData> tracks, String id, Rung n, int a, int b) {
+  void _placePitched(
+    Map<String, TrackData> tracks,
+    String id,
+    Rung n,
+    int a,
+    int b,
+  ) {
     setState(() {
       var lo = a < b ? a : b;
       var hi = a < b ? b : a;
@@ -1523,7 +1581,9 @@ class _EditScreenState extends State<EditScreen>
       final t = _trackIn(_tracks, _vocalId);
       // Multi-take: APPEND a new clip to the lane instead of replacing. The
       // first recording seeds the lane (migrating any legacy single take).
-      final lane = t.clips ?? (t.vocalPath != null ? List.of(t.effectiveClips) : <VocalClip>[]);
+      final lane =
+          t.clips ??
+          (t.vocalPath != null ? List.of(t.effectiveClips) : <VocalClip>[]);
       // Place each new take to the RIGHT of the rightmost existing chunk so they
       // never stack on top of each other (drag it on the strip to reposition).
       final secSteps = stepsForBars(_bars);
@@ -1592,7 +1652,8 @@ class _EditScreenState extends State<EditScreen>
   /// Player volume for a vocal file: a bounced section mix already has every
   /// lane's mixer level baked in (unity here); a raw single take is the base
   /// Vocal lane, so its level is applied by the player.
-  double _vocalFileVol(String name) => _isMixFile(name) ? 1.0 : (_vol['vocal'] ?? 0.85);
+  double _vocalFileVol(String name) =>
+      _isMixFile(name) ? 1.0 : (_vol['vocal'] ?? 0.85);
 
   /// The cached playable vocal basename for [sec] (the lane mix, or a raw single
   /// take). '' is cached for "nothing to play". Cleared on record/edit/mute.
@@ -1628,29 +1689,44 @@ class _EditScreenState extends State<EditScreen>
     if (clips.isEmpty) return null;
     if (clips.length == 1 && baseLaneOnly) {
       final c = sec.tracks['vocal']!.effectiveClips.first;
-      final untouched = c.startStep == 0 &&
+      final untouched =
+          c.startStep == 0 &&
           c.trimStart == 0 &&
           c.trimEnd == -1 &&
           c.fadeInMs == 0 &&
           c.fadeOutMs == 0 &&
           c.gain == 1.0;
-      if (untouched) return c.path; // play the raw take directly (level via the player)
+      if (untouched) {
+        return c.path; // play the raw take directly (level via the player)
+      }
     }
     final sources = <String, ({Float32List pcm, int sampleRate})>{};
     for (final c in clips) {
       if (sources.containsKey(c.path)) continue;
       try {
-        final wav = parseWav(await File(LoopStorage.resolveVocal(c.path)).readAsBytes());
-        if (wav != null) sources[c.path] = (pcm: wav.samples, sampleRate: wav.sampleRate);
+        final wav = parseWav(
+          await File(LoopStorage.resolveVocal(c.path)).readAsBytes(),
+        );
+        if (wav != null) {
+          sources[c.path] = (pcm: wav.samples, sampleRate: wav.sampleRate);
+        }
       } catch (_) {}
     }
     if (sources.isEmpty) return null;
-    final minLen = (stepsForBars(sec.bars) * 60 / _bpm / kStepsPerBeat * 44100).round();
-    final lane = bounceVocalClips(clips, sec.bars, _bpm, sources, minLen: minLen);
+    final minLen = (stepsForBars(sec.bars) * 60 / _bpm / kStepsPerBeat * 44100)
+        .round();
+    final lane = bounceVocalClips(
+      clips,
+      sec.bars,
+      _bpm,
+      sources,
+      minLen: minLen,
+    );
     if (lane.isEmpty) return null;
     // fixed name per section → overwrites in place (no file accumulation).
     final name = '_mix_${widget.song.id}_${sec.id}.wav';
-    await File(LoopStorage.resolveVocal(name)).writeAsBytes(encodeWavMono16(lane, 44100));
+    await File(LoopStorage.resolveVocal(name))
+        .writeAsBytes(encodeWavMono16(lane, 44100));
     return name;
   }
 
@@ -1749,15 +1825,21 @@ class _EditScreenState extends State<EditScreen>
           SoundfontCatalog.instance.ensureDownloaded(program).then((path) {
             if (!mounted) return;
             if (path == null) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
                   content: Text(L10n.of(context).ltEditorSoundDownloadFailed),
-                  duration: const Duration(milliseconds: 1800)));
+                  duration: const Duration(milliseconds: 1800),
+                ),
+              );
               return;
             }
             _applyInstrument(id, ch, program);
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
                 content: Text(L10n.of(context).ltEditorSoundReady),
-                duration: const Duration(milliseconds: 1300)));
+                duration: const Duration(milliseconds: 1300),
+              ),
+            );
           });
           return;
         }
@@ -1787,8 +1869,13 @@ class _EditScreenState extends State<EditScreen>
       final isBass = _isBass;
       final ladder = isBass ? _bassLadder : _ladder;
       final preview = ladder.isNotEmpty ? ladder[isBass ? 0 : 2].midi : 60;
-      _audio.playPitch(ch, preview,
-          program: program, vol: _vol[id] ?? 0.85, durSec: 0.5);
+      _audio.playPitch(
+        ch,
+        preview,
+        program: program,
+        vol: _vol[id] ?? 0.85,
+        durSec: 0.5,
+      );
     }
   }
 
@@ -2234,6 +2321,41 @@ class _EditScreenState extends State<EditScreen>
   // differs; minor/major/dorian match.
   static const _engineScale = {'pentatonic': 'minor_pentatonic'};
 
+  void _startMelodyPreview({required bool raw}) {
+    _stopAll();
+    setState(() => _previewRawMelody = raw);
+    _togglePlay();
+  }
+
+  Future<void> _reviewMelody() async {
+    _stopAll();
+    await showMelodyReviewSheet(
+      context,
+      notes: () => _tracks['melody']?.pitchNotes ?? const [],
+      onOctaveDown: (index) =>
+          _editMelody((notes) => shiftNoteOctave(notes, index, -1)),
+      onOctaveUp: (index) =>
+          _editMelody((notes) => shiftNoteOctave(notes, index, 1)),
+      onSplit: (index) =>
+          _editMelody((notes) => splitNoteAtMidpoint(notes, index)),
+      onMerge: (index) => _editMelody((notes) => mergeWithNext(notes, index)),
+    );
+  }
+
+  void _editMelody(List<PitchNote> Function(List<PitchNote>) transform) {
+    final track = _tracks['melody'];
+    if (track == null) return;
+    _pushUndo();
+    final edited = transform(track.pitchNotes);
+    setState(() {
+      track.pitchNotes
+        ..clear()
+        ..addAll(edited);
+      _dirty = true;
+      _previewRawMelody = false;
+    });
+  }
+
   Future<void> _humConvert(String audioPath) async {
     final drums = _meta.kind == TrackKind.drums;
     final opts = eng.AnalyzeOptions(
@@ -2298,7 +2420,26 @@ class _EditScreenState extends State<EditScreen>
           final dur = (n.durSteps ?? math.max(1, (n.duration / sps).round()))
               .clamp(1, steps - step);
           final r = _snapToLadder(n.pitch + shift, ladder);
-          out.add(PitchNote(midi: r.midi, freq: r.freq, step: step, dur: dur));
+          var sourceMidi = n.pitchOriginal + shift;
+          while (sourceMidi < ladder.first.midi - 6) {
+            sourceMidi += 12;
+          }
+          while (sourceMidi > ladder.last.midi + 6) {
+            sourceMidi -= 12;
+          }
+          out.add(
+            PitchNote(
+              midi: r.midi,
+              freq: r.freq,
+              step: step,
+              dur: dur,
+              sourceMidi: sourceMidi,
+              confidence: n.confidence.clamp(0, 1),
+              assisted: n.assisted || sourceMidi != r.midi,
+              locked:
+                  _activeId == 'melody' && (_generationLocks['melody'] ?? true),
+            ),
+          );
         }
         if (out.isEmpty) throw StateError('no notes');
         _pushUndo();
@@ -2321,8 +2462,7 @@ class _EditScreenState extends State<EditScreen>
         return;
       }
       // keep the recording for a retry; drop it once the offer goes unanswered
-      final ctl = ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar();
+      final ctl = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
       final shown = ctl.showSnackBar(
         SnackBar(
           content: Text(_humErrorMessage(L10n.of(context), e)),
@@ -2333,9 +2473,11 @@ class _EditScreenState extends State<EditScreen>
           ),
         ),
       );
-      unawaited(shown.closed.then((reason) {
-        if (reason != SnackBarClosedReason.action) _deleteTempFile(audioPath);
-      }));
+      unawaited(
+        shown.closed.then((reason) {
+          if (reason != SnackBarClosedReason.action) _deleteTempFile(audioPath);
+        }),
+      );
     } finally {
       if (ok) _deleteTempFile(audioPath); // temp hum recording (C27)
     }
@@ -2447,6 +2589,7 @@ class _EditScreenState extends State<EditScreen>
       vol: Map.of(_vol),
       mutes: Map.of(_mutes),
       instruments: Map.of(_instruments),
+      generationLocks: Map.of(_generationLocks),
       sections: _sections.map((s) => s.deepCopy()).toList(),
       updatedAt: DateTime.now(),
       wave: buildWave(flat),
@@ -2600,167 +2743,238 @@ class _EditScreenState extends State<EditScreen>
     final pitched = _isPitched;
     // System back / edge-swipe goes through the same save + sweep as the back
     // arrow (C4) — the route never pops on its own.
-    return DesktopCommands(enabled: _desktop,
+    return DesktopCommands(
+      enabled: _desktop,
       play: _togglePlay,
-      record: () { if (!_guided && _meta.kind != TrackKind.vocal) _armRecord(); },
-      save: _saveNow, undo: _undoAction, redo: _redoAction,
-      child: PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        _backWithSave();
+      record: () {
+        if (!_guided && _meta.kind != TrackKind.vocal) _armRecord();
       },
-      child: Scaffold(
-      backgroundColor: LT.bg,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            if (_guided)
-              Positioned.fill(child: GuidedHumPanel(
-                hasNotes: _activeTrack.pitchNotes.isNotEmpty || (_tracks['vocal']?.effectiveClips.isNotEmpty ?? false),
-                playing: _playing,
-                saved: !_dirty && _savedAt != null,
-                onBack: _backWithSave,
-                onRecord: _openHum,
-                onSample: () async {
-                  _stopAll();
-                  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
-                    SampleWorkbench(bpm: _bpm, bars: _bars,
-                      onAdd: (peaks, path, steps) => _commitVocal(peaks, path, durationSteps: steps))));
-                  if (mounted) setState(() {});
-                },
-                backingStyle: _guidedBacking,
-                onBacking: (style) {
-                  _stopAll();
-                  _pushUndo();
-                  setState(() { _sections[_activeIdx] = withBeginnerBacking(_sec, _keyRoot, _scale, style); _guidedBacking = style; });
-                  ClarityService.instance.event('guided_backing_applied');
-                  ClarityService.instance.tag('guided_backing_style', style.name);
-                  _togglePlay();
-                },
-                onUndo: _undo.isNotEmpty ? () { _undoAction(); setState(() => _guidedBacking = null); } : null,
-                onListen: _togglePlay,
-                onInstrument: _openInstrument,
-                onSave: _saveNow,
-                onEdit: () { _stopAll(); setState(() => _guided = false); },
-              ))
-            else Column(
+      save: _saveNow,
+      undo: _undoAction,
+      redo: _redoAction,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _backWithSave();
+        },
+        child: Scaffold(
+          backgroundColor: LT.bg,
+          body: SafeArea(
+            child: Stack(
               children: [
-                _topBar(),
-                SectionBar(
-                  sections: _sections,
-                  activeIdx: _activeIdx,
-                  songMode: _songSection != null,
-                  onSwitch: _switchSection,
-                  onAdd: _addSection,
-                  onRename: _renameSection,
-                  onRepeats: _setRepeats,
-                  onDelete: _deleteSection,
-                  onLongPress: _openSectionMenu,
-                  onPlaySong: _playSong,
-                ),
-                // arrangement : surface = 2 : 3 vertical split. lane 영역이
-                // 화면 커질 때 조금 더 자라도록 1:2 → 2:3 으로 조정 (40% / 60%).
-                Expanded(
-                  flex: _desktop ? (_timelineShare * 1000).round() : 2,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
-                    child: ValueListenableBuilder<double>(
-                      valueListenable: _playStep,
-                      builder:
-                          (_, ps, __) => _timelineViewport(Arrangement(
-                            section: _songSection ?? _sec,
-                            tracks: _orderedMetas(_songSection ?? _sec),
-                            activeId: _activeId,
-                            mutes: _mutes,
-                            onSelect: (id) => setState(() => _activeId = id),
-                            onToggleMute: _toggleMute,
-                            // editing only (song-preview is read-only)
-                            onAddTrack:
-                                _songSection == null ? _openAddTrack : null,
-                            onReorder:
-                                _songSection == null ? _reorderTracks : null,
-                            onMoveClip: _songSection == null ? _moveVocalClip : null,
-                            playing: _playing,
-                            playStep: _playStep,
-                            steps: _steps,
-                            ranges: _ranges,
-                            // song-preview is read-only → no scrubbing there
-                            onSeek: _songSection == null ? _seekTo : null,
-                          )),
+                if (_guided)
+                  Positioned.fill(
+                    child: GuidedHumPanel(
+                      hasNotes:
+                          _activeTrack.pitchNotes.isNotEmpty ||
+                          (_tracks['vocal']?.effectiveClips.isNotEmpty ??
+                              false),
+                      playing: _playing,
+                      saved: !_dirty && _savedAt != null,
+                      onBack: _backWithSave,
+                      onRecord: _openHum,
+                      onSample: () async {
+                        _stopAll();
+                        await Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => SampleWorkbench(
+                              bpm: _bpm,
+                              bars: _bars,
+                              onAdd: (peaks, path, steps) => _commitVocal(
+                                peaks,
+                                path,
+                                durationSteps: steps,
+                              ),
+                            ),
+                          ),
+                        );
+                        if (mounted) setState(() {});
+                      },
+                      backingStyle: _guidedBacking,
+                      lowConfidenceCount: uncertainNoteIndices(
+                        _tracks['melody']?.pitchNotes ?? const [],
+                      ).length,
+                      previewingOriginal: _previewRawMelody,
+                      melodyLocked: _generationLocks['melody'] ?? true,
+                      onPreviewOriginal: () => _startMelodyPreview(raw: true),
+                      onPreviewCorrected: () => _startMelodyPreview(raw: false),
+                      onReviewMelody: _reviewMelody,
+                      onBacking: (style) {
+                        _stopAll();
+                        _pushUndo();
+                        setState(() {
+                          _sections[_activeIdx] = withBeginnerBacking(
+                            _sec,
+                            _keyRoot,
+                            _scale,
+                            style,
+                            melodyLocked: _generationLocks['melody'] ?? true,
+                          );
+                          _guidedBacking = style;
+                        });
+                        ClarityService.instance.event('guided_backing_applied');
+                        ClarityService.instance.tag(
+                          'guided_backing_style',
+                          style.name,
+                        );
+                        _togglePlay();
+                      },
+                      onUndo: _undo.isNotEmpty
+                          ? () {
+                              _undoAction();
+                              setState(() => _guidedBacking = null);
+                            }
+                          : null,
+                      onListen: _togglePlay,
+                      onInstrument: _openInstrument,
+                      onSave: _saveNow,
+                      onEdit: () {
+                        _stopAll();
+                        setState(() => _guided = false);
+                      },
                     ),
-                  ),
-                ),
-                if (_desktop) DesktopSplitHandle(
-                  onDelta: (delta) => setState(() => _timelineShare =
-                    (_timelineShare + delta / math.max(200, MediaQuery.sizeOf(context).height - 200)).clamp(.25, .70)),
-                  onReset: () => setState(() => _timelineShare = .4),
-                ),
-                _surfaceHeader(pitched),
-                Expanded(
-                  flex: _desktop ? ((1 - _timelineShare) * 1000).round() : 3,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(LTRadius.card),
-                        gradient: RadialGradient(
-                          center: const Alignment(0, 1.3),
-                          radius: 1.0,
-                          colors: [
-                            _meta.color.withValues(alpha: 0.08),
-                            Colors.transparent,
-                          ],
-                          stops: const [0, 0.6],
+                  )
+                else
+                  Column(
+                    children: [
+                      _topBar(),
+                      SectionBar(
+                        sections: _sections,
+                        activeIdx: _activeIdx,
+                        songMode: _songSection != null,
+                        onSwitch: _switchSection,
+                        onAdd: _addSection,
+                        onRename: _renameSection,
+                        onRepeats: _setRepeats,
+                        onDelete: _deleteSection,
+                        onLongPress: _openSectionMenu,
+                        onPlaySong: _playSong,
+                      ),
+                      // arrangement : surface = 2 : 3 vertical split. lane 영역이
+                      // 화면 커질 때 조금 더 자라도록 1:2 → 2:3 으로 조정 (40% / 60%).
+                      Expanded(
+                        flex: _desktop ? (_timelineShare * 1000).round() : 2,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
+                          child: ValueListenableBuilder<double>(
+                            valueListenable: _playStep,
+                            builder: (_, ps, __) => _timelineViewport(
+                              Arrangement(
+                                section: _songSection ?? _sec,
+                                tracks: _orderedMetas(_songSection ?? _sec),
+                                activeId: _activeId,
+                                mutes: _mutes,
+                                onSelect: (id) =>
+                                    setState(() => _activeId = id),
+                                onToggleMute: _toggleMute,
+                                // editing only (song-preview is read-only)
+                                onAddTrack: _songSection == null
+                                    ? _openAddTrack
+                                    : null,
+                                onReorder: _songSection == null
+                                    ? _reorderTracks
+                                    : null,
+                                onMoveClip: _songSection == null
+                                    ? _moveVocalClip
+                                    : null,
+                                playing: _playing,
+                                playStep: _playStep,
+                                steps: _steps,
+                                ranges: _ranges,
+                                // song-preview is read-only → no scrubbing there
+                                onSeek: _songSection == null ? _seekTo : null,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      child: _desktopSurface(),
-                    ),
+                      if (_desktop)
+                        DesktopSplitHandle(
+                          onDelta: (delta) => setState(
+                            () => _timelineShare =
+                                (_timelineShare +
+                                        delta /
+                                            math.max(
+                                              200,
+                                              MediaQuery.sizeOf(context)
+                                                      .height -
+                                                  200,
+                                            ))
+                                    .clamp(.25, .70),
+                          ),
+                          onReset: () => setState(() => _timelineShare = .4),
+                        ),
+                      _surfaceHeader(pitched),
+                      Expanded(
+                        flex: _desktop
+                            ? ((1 - _timelineShare) * 1000).round()
+                            : 3,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(
+                                LTRadius.card,
+                              ),
+                              gradient: RadialGradient(
+                                center: const Alignment(0, 1.3),
+                                radius: 1.0,
+                                colors: [
+                                  _meta.color.withValues(alpha: 0.08),
+                                  Colors.transparent,
+                                ],
+                                stops: const [0, 0.6],
+                              ),
+                            ),
+                            child: _desktopSurface(),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                        decoration: const BoxDecoration(
+                          border: Border(top: BorderSide(color: LT.border)),
+                        ),
+                        child: TransportBar(
+                          playing: _playing,
+                          recording: _recording,
+                          onPlay: _togglePlay,
+                          onStop: _stopAll,
+                          onRec: _armRecord,
+                          bpm: _bpm,
+                          onBpm: _setBpm,
+                          metro: _metro,
+                          onMetro: (v) {
+                            setState(() => _metro = v);
+                            LoopPrefs.instance.setMetro(
+                              v,
+                            ); // keep Settings in sync + persist
+                          },
+                          countIn: _countIn,
+                          onCountIn: (v) => setState(() => _countIn = v),
+                          onClear: _clearTrack,
+                          swing: _swing,
+                          onSwing: (v) => setState(() {
+                            _swing = v;
+                            _dirty = true;
+                          }),
+                          bars: _bars,
+                          onBars: _setBars,
+                          showRecord:
+                              trackById(_activeType).kind != TrackKind.vocal,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  decoration: const BoxDecoration(
-                    border: Border(top: BorderSide(color: LT.border)),
-                  ),
-                  child: TransportBar(
-                    playing: _playing,
-                    recording: _recording,
-                    onPlay: _togglePlay,
-                    onStop: _stopAll,
-                    onRec: _armRecord,
-                    bpm: _bpm,
-                    onBpm: _setBpm,
-                    metro: _metro,
-                    onMetro: (v) {
-                      setState(() => _metro = v);
-                      LoopPrefs.instance.setMetro(
-                        v,
-                      ); // keep Settings in sync + persist
-                    },
-                    countIn: _countIn,
-                    onCountIn: (v) => setState(() => _countIn = v),
-                    onClear: _clearTrack,
-                    swing: _swing,
-                    onSwing: (v) => setState(() {
-                      _swing = v;
-                      _dirty = true;
-                    }),
-                    bars: _bars,
-                    onBars: _setBars,
-                    showRecord: trackById(_activeType).kind != TrackKind.vocal,
-                  ),
-                ),
+                // Hide the overlay on the final "1" beat (not at 0) so the input
+                // surface is already exposed one beat before recording starts —
+                // the user can see the pads and play right on the downbeat.
+                if (_countDown > 1) _countInOverlay(),
               ],
             ),
-            // Hide the overlay on the final "1" beat (not at 0) so the input
-            // surface is already exposed one beat before recording starts —
-            // the user can see the pads and play right on the downbeat.
-            if (_countDown > 1) _countInOverlay(),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -2820,8 +3034,18 @@ class _EditScreenState extends State<EditScreen>
     final rightGroup = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconBtn(icon: Icons.auto_awesome, size: btnSize, tooltip: l.ltGuidedStart,
-          onTap: () { _stopAll(); setState(() { _activeId = 'melody'; _guided = true; }); }),
+        IconBtn(
+          icon: Icons.auto_awesome,
+          size: btnSize,
+          tooltip: l.ltGuidedStart,
+          onTap: () {
+            _stopAll();
+            setState(() {
+              _activeId = 'melody';
+              _guided = true;
+            });
+          },
+        ),
         const SizedBox(width: 8),
         // Saved indicator — 고정폭 슬롯으로 예약. 라벨이 등장/사라져도 rightGroup
         // 자연 너비 불변 → 다른 버튼들 흔들림/축소 없음.
@@ -2844,9 +3068,19 @@ class _EditScreenState extends State<EditScreen>
           ),
         ),
         const SizedBox(width: 8),
-        _undoRedoBtn(LtIcons.undo, l.ltEditorUndo, _undo.isNotEmpty, _undoAction),
+        _undoRedoBtn(
+          LtIcons.undo,
+          l.ltEditorUndo,
+          _undo.isNotEmpty,
+          _undoAction,
+        ),
         const SizedBox(width: 6),
-        _undoRedoBtn(LtIcons.redo, l.ltEditorRedo, _redo.isNotEmpty, _redoAction),
+        _undoRedoBtn(
+          LtIcons.redo,
+          l.ltEditorRedo,
+          _redo.isNotEmpty,
+          _redoAction,
+        ),
         const SizedBox(width: 8),
         IconBtn(
           icon: LtIcons.save,
@@ -3029,9 +3263,10 @@ class _EditScreenState extends State<EditScreen>
         if (trackById(_activeType).kind != TrackKind.vocal) ...[
           const SizedBox(width: 8),
           Pill(
-              label: L10n.of(context).ltEditorHumToMidi,
-              icon: LtIcons.graphicEq,
-              onTap: _openHum),
+            label: L10n.of(context).ltEditorHumToMidi,
+            icon: LtIcons.graphicEq,
+            onTap: _openHum,
+          ),
         ],
         const SizedBox(width: 8),
         if (_inputMode == 'grid' && _meta.kind == TrackKind.drums)
@@ -3230,16 +3465,27 @@ class _EditScreenState extends State<EditScreen>
   Widget _desktopSurface() {
     final surface = _surface();
     if (!(Platform.isWindows || Platform.isMacOS || Platform.isLinux) ||
-        _meta.kind == TrackKind.vocal) { return surface; }
+        _meta.kind == TrackKind.vocal) {
+      return surface;
+    }
     final pitched = _isPitched;
     final rungs = pitched ? _padWindow : <Rung>[];
-    final specs = pitched ? <DrumSpec>[] : drumSpecsFor(_activeType == 'beatDec' ? _fillKinds : _meta.drumKinds);
-    final identity = '$_activeId:$_activeIdx:$_keyRoot:$_scale:$_octave:$_windowOffset:$_activeProgram:$_chordOn:$_powerOn';
+    final specs = pitched
+        ? <DrumSpec>[]
+        : drumSpecsFor(_activeType == 'beatDec' ? _fillKinds : _meta.drumKinds);
+    final identity =
+        '$_activeId:$_activeIdx:$_keyRoot:$_scale:$_octave:$_windowOffset:$_activeProgram:$_chordOn:$_powerOn';
     return DesktopInstrument(
-      group: pitched ? 'piano' : 'drums', identity: identity,
-      labels: pitched ? rungs.map((r) => r.name).toList() : specs.map((s) => drumLabel(L10n.of(context), s.kind)).toList(),
+      group: pitched ? 'piano' : 'drums',
+      identity: identity,
+      labels: pitched
+          ? rungs.map((r) => r.name).toList()
+          : specs.map((s) => drumLabel(L10n.of(context), s.kind)).toList(),
       onDown: (index) {
-        if (!pitched) { _hitDrum(specs[index].kind); return () {}; }
+        if (!pitched) {
+          _hitDrum(specs[index].kind);
+          return () {};
+        }
         final rung = rungs[index];
         final track = _activeId;
         final section = _activeIdx;
@@ -3247,15 +3493,26 @@ class _EditScreenState extends State<EditScreen>
         final midis = _chordMidis(rung.midi);
         _pitchDown(rung);
         return () {
-          for (final timer in _strumTimers) { timer.cancel(); }
+          for (final timer in _strumTimers) {
+            timer.cancel();
+          }
           _strumTimers.clear();
-          for (final midi in midis) { _audio.noteOffLive(ch, midi); }
-          if (mounted && !_desktopClosing && track == _activeId && section == _activeIdx &&
-              identity == '$_activeId:$_activeIdx:$_keyRoot:$_scale:$_octave:$_windowOffset:$_activeProgram:$_chordOn:$_powerOn') {
+          for (final midi in midis) {
+            _audio.noteOffLive(ch, midi);
+          }
+          if (mounted &&
+              !_desktopClosing &&
+              track == _activeId &&
+              section == _activeIdx &&
+              identity ==
+                  '$_activeId:$_activeIdx:$_keyRoot:$_scale:$_octave:$_windowOffset:$_activeProgram:$_chordOn:$_powerOn') {
             _pitchUp(rung);
-          } else { _pending.remove(rung.midi); }
+          } else {
+            _pending.remove(rung.midi);
+          }
         };
-      }, child: surface,
+      },
+      child: surface,
     );
   }
 
@@ -3277,15 +3534,14 @@ class _EditScreenState extends State<EditScreen>
       if (_inputMode == 'grid') {
         return ValueListenableBuilder<double>(
           valueListenable: _playStep,
-          builder:
-              (_, ps, __) => DrumGrid(
-                notes: map,
-                onToggle: _toggleDrumCell,
-                playStep: ps,
-                steps: _steps,
-                bars: _bars,
-                specs: specs,
-              ),
+          builder: (_, ps, __) => DrumGrid(
+            notes: map,
+            onToggle: _toggleDrumCell,
+            playStep: ps,
+            steps: _steps,
+            bars: _bars,
+            specs: specs,
+          ),
         );
       }
       // Pads mode: Beat-Fill gets the launchpad (6 square pads, no beat grid);
@@ -3305,15 +3561,14 @@ class _EditScreenState extends State<EditScreen>
       }
       return ValueListenableBuilder<double>(
         valueListenable: _playStep,
-        builder:
-            (_, ps, __) => DrumSurface(
-              notes: map,
-              onHit: _hitDrum,
-              playStep: ps,
-              steps: _steps,
-              bars: _bars,
-              specs: specs,
-            ),
+        builder: (_, ps, __) => DrumSurface(
+          notes: map,
+          onHit: _hitDrum,
+          playStep: ps,
+          steps: _steps,
+          bars: _bars,
+          specs: specs,
+        ),
       );
     }
     if (kind == TrackKind.pitched || kind == TrackKind.bass) {
@@ -3321,22 +3576,21 @@ class _EditScreenState extends State<EditScreen>
       if (_inputMode == 'grid') {
         return ValueListenableBuilder<double>(
           valueListenable: _playStep,
-          builder:
-              (_, ps, __) => StepGrid(
-                ladder: _gridLadder,
-                notes: notes,
-                onPlace: _gridPlace,
-                onErase: _gridErase,
-                playStep: ps,
-                accent: _meta.color,
-                steps: _steps,
-                bars: _bars,
-                // vertical drag on the row labels moves the pitch window (same
-                // window the pads slide), so the grid reaches the full range.
-                windowOffset: _windowOffset.clamp(0, _maxWindow),
-                maxOffset: _maxWindow,
-                onWindowChanged: _setWindowOffset,
-              ),
+          builder: (_, ps, __) => StepGrid(
+            ladder: _gridLadder,
+            notes: notes,
+            onPlace: _gridPlace,
+            onErase: _gridErase,
+            playStep: ps,
+            accent: _meta.color,
+            steps: _steps,
+            bars: _bars,
+            // vertical drag on the row labels moves the pitch window (same
+            // window the pads slide), so the grid reaches the full range.
+            windowOffset: _windowOffset.clamp(0, _maxWindow),
+            maxOffset: _maxWindow,
+            onWindowChanged: _setWindowOffset,
+          ),
         );
       }
       // melody / melody-fill / bass: a horizontal strip of the whole in-key

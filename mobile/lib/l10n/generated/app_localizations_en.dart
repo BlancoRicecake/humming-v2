@@ -2426,4 +2426,49 @@ class L10nEn extends L10n {
   String ltSampleLimit(String seconds) {
     return 'Choose up to $seconds seconds to add to this section. Adjust its position in the editor.';
   }
+
+  @override
+  String get ltMelodyReview => 'Review melody';
+
+  @override
+  String get ltMelodyReviewHint =>
+      'Check uncertain notes first. Compare raw and corrected pitches, then fix only what needs attention.';
+
+  @override
+  String ltMelodyUncertain(int count) {
+    return '$count notes need a check';
+  }
+
+  @override
+  String get ltMelodyRaw => 'Hear raw pitches';
+
+  @override
+  String get ltMelodyCorrected => 'Hear corrected pitches';
+
+  @override
+  String get ltMelodyOctaveDown => 'Octave down';
+
+  @override
+  String get ltMelodyOctaveUp => 'Octave up';
+
+  @override
+  String get ltMelodySplit => 'Split in two';
+
+  @override
+  String get ltMelodyMerge => 'Merge with next';
+
+  @override
+  String ltMelodyConfidence(int percent) {
+    return '$percent% confidence';
+  }
+
+  @override
+  String get ltMelodyNoIssues => 'No notes need attention.';
+
+  @override
+  String get ltMelodyLocked => 'Lock my melody';
+
+  @override
+  String get ltMelodyLockedHint =>
+      'Changing the backing will keep this melody.';
 }

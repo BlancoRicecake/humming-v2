@@ -809,5 +809,20 @@
   "ltBackingDrive": "Drive",
   "ltGuidedSample": "Add sounds",
   "ltSampleLimit": "Choose up to {seconds} seconds to add to this section. Adjust its position in the editor.",
-  "@ltSampleLimit": {"placeholders": {"seconds": {"type": "String"}}}
+  "@ltSampleLimit": {"placeholders": {"seconds": {"type": "String"}}},
+  "ltMelodyReview": "Review melody",
+  "ltMelodyReviewHint": "Check uncertain notes first. Compare raw and corrected pitches, then fix only what needs attention.",
+  "ltMelodyUncertain": "{count} notes need a check",
+  "@ltMelodyUncertain": {"placeholders": {"count": {"type": "int"}}},
+  "ltMelodyRaw": "Hear raw pitches",
+  "ltMelodyCorrected": "Hear corrected pitches",
+  "ltMelodyOctaveDown": "Octave down",
+  "ltMelodyOctaveUp": "Octave up",
+  "ltMelodySplit": "Split in two",
+  "ltMelodyMerge": "Merge with next",
+  "ltMelodyConfidence": "{percent}% confidence",
+  "@ltMelodyConfidence": {"placeholders": {"percent": {"type": "int"}}},
+  "ltMelodyNoIssues": "No notes need attention.",
+  "ltMelodyLocked": "Lock my melody",
+  "ltMelodyLockedHint": "Changing the backing will keep this melody."
 }

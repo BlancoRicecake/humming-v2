@@ -25,6 +25,11 @@ void main() {
           original.tracks['vocal']!.toJson(),
         );
         expect(backed.tracks['drums']!.drumNotes, isNotEmpty);
+        expect(backed.tracks['melodyDec']!.pitchNotes, isNotEmpty);
+        expect(
+          backed.tracks['melodyDec']!.pitchNotes.length,
+          original.bars * 3,
+        );
         for (final n in backed.tracks['bass']!.pitchNotes) {
           expect(kScales['major']!.steps, contains(n.midi % 12));
           expect(n.step, greaterThanOrEqualTo(0));
@@ -39,4 +44,42 @@ void main() {
       },
     );
   }
+
+  test('three chord candidates differ and never modify a locked melody', () {
+    final original = Section(id: 'A', name: 'A', bars: 4);
+    original.tracks['melody']!.pitchNotes.add(
+      PitchNote(midi: 60, freq: midiToFreq(60), step: 0, dur: 4, locked: true),
+    );
+    final variants = [
+      for (var i = 0; i < 3; i++)
+        withBeginnerBacking(
+          original,
+          'C',
+          'major',
+          BackingStyle.calm,
+          chordVariant: i,
+        ),
+    ];
+    expect(
+      variants.map(
+        (s) => s.tracks['melodyDec']!.pitchNotes.map((n) => n.midi).join(','),
+      ),
+      hasLength(3),
+    );
+    expect(
+      variants
+          .map(
+            (s) =>
+                s.tracks['melodyDec']!.pitchNotes.map((n) => n.midi).join(','),
+          )
+          .toSet(),
+      hasLength(3),
+    );
+    for (final section in variants) {
+      expect(
+        section.tracks['melody']!.toJson(),
+        original.tracks['melody']!.toJson(),
+      );
+    }
+  });
 }

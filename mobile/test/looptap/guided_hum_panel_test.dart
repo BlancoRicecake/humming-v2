@@ -42,6 +42,49 @@ void main() {
     expect([listened, saved, edited], [1, 1, 1]);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('converted melody exposes lock, A/B preview and review', (
+    tester,
+  ) async {
+    var raw = 0, corrected = 0, reviewed = 0;
+    await tester.binding.setSurfaceSize(const Size(850, 400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ko'),
+        localizationsDelegates: L10n.localizationsDelegates,
+        supportedLocales: L10n.supportedLocales,
+        home: Scaffold(
+          body: GuidedHumPanel(
+            hasNotes: true,
+            playing: false,
+            saved: false,
+            onBack: () {},
+            onRecord: () {},
+            onListen: () {},
+            onSave: () {},
+            onInstrument: () {},
+            onEdit: () {},
+            lowConfidenceCount: 2,
+            melodyLocked: true,
+            onPreviewOriginal: () => raw++,
+            onPreviewCorrected: () => corrected++,
+            onReviewMelody: () => reviewed++,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('내 멜로디 잠금'), findsOneWidget);
+    for (final label in ['원음정 듣기', '보정음정 듣기', '확인이 필요한 음 2개']) {
+      await tester.ensureVisible(find.text(label));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label));
+    }
+    expect([raw, corrected, reviewed], [1, 1, 1]);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final lang in ['ko', 'en']) {
     testWidgets(
       '$lang landscape keeps transport visible and backing actionable',

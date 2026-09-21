@@ -4283,6 +4283,84 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'곡에 넣을 구간은 {seconds}초 이하로 골라주세요. 위치는 직접 편집에서 조정할 수 있어요.'**
   String ltSampleLimit(String seconds);
+
+  /// No description provided for @ltMelodyReview.
+  ///
+  /// In ko, this message translates to:
+  /// **'멜로디 확인'**
+  String get ltMelodyReview;
+
+  /// No description provided for @ltMelodyReviewHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'변환이 불확실한 음을 먼저 표시했어요. 원음정과 보정음정을 비교하고 필요한 음만 고쳐보세요.'**
+  String get ltMelodyReviewHint;
+
+  /// No description provided for @ltMelodyUncertain.
+  ///
+  /// In ko, this message translates to:
+  /// **'확인이 필요한 음 {count}개'**
+  String ltMelodyUncertain(int count);
+
+  /// No description provided for @ltMelodyRaw.
+  ///
+  /// In ko, this message translates to:
+  /// **'원음정 듣기'**
+  String get ltMelodyRaw;
+
+  /// No description provided for @ltMelodyCorrected.
+  ///
+  /// In ko, this message translates to:
+  /// **'보정음정 듣기'**
+  String get ltMelodyCorrected;
+
+  /// No description provided for @ltMelodyOctaveDown.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브 내림'**
+  String get ltMelodyOctaveDown;
+
+  /// No description provided for @ltMelodyOctaveUp.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브 올림'**
+  String get ltMelodyOctaveUp;
+
+  /// No description provided for @ltMelodySplit.
+  ///
+  /// In ko, this message translates to:
+  /// **'둘로 나누기'**
+  String get ltMelodySplit;
+
+  /// No description provided for @ltMelodyMerge.
+  ///
+  /// In ko, this message translates to:
+  /// **'다음 음과 합치기'**
+  String get ltMelodyMerge;
+
+  /// No description provided for @ltMelodyConfidence.
+  ///
+  /// In ko, this message translates to:
+  /// **'신뢰도 {percent}%'**
+  String ltMelodyConfidence(int percent);
+
+  /// No description provided for @ltMelodyNoIssues.
+  ///
+  /// In ko, this message translates to:
+  /// **'확인이 필요한 음이 없어요.'**
+  String get ltMelodyNoIssues;
+
+  /// No description provided for @ltMelodyLocked.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 멜로디 잠금'**
+  String get ltMelodyLocked;
+
+  /// No description provided for @ltMelodyLockedHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'반주를 바꿔도 이 멜로디는 유지됩니다.'**
+  String get ltMelodyLockedHint;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

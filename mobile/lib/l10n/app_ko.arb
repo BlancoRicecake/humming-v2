@@ -1019,5 +1019,20 @@
   "ltBackingDrive": "신나게",
   "ltGuidedSample": "내 소리 추가하기",
   "ltSampleLimit": "곡에 넣을 구간은 {seconds}초 이하로 골라주세요. 위치는 직접 편집에서 조정할 수 있어요.",
-  "@ltSampleLimit": {"placeholders": {"seconds": {"type": "String"}}}
+  "@ltSampleLimit": {"placeholders": {"seconds": {"type": "String"}}},
+  "ltMelodyReview": "멜로디 확인",
+  "ltMelodyReviewHint": "변환이 불확실한 음을 먼저 표시했어요. 원음정과 보정음정을 비교하고 필요한 음만 고쳐보세요.",
+  "ltMelodyUncertain": "확인이 필요한 음 {count}개",
+  "@ltMelodyUncertain": {"placeholders": {"count": {"type": "int"}}},
+  "ltMelodyRaw": "원음정 듣기",
+  "ltMelodyCorrected": "보정음정 듣기",
+  "ltMelodyOctaveDown": "옥타브 내림",
+  "ltMelodyOctaveUp": "옥타브 올림",
+  "ltMelodySplit": "둘로 나누기",
+  "ltMelodyMerge": "다음 음과 합치기",
+  "ltMelodyConfidence": "신뢰도 {percent}%",
+  "@ltMelodyConfidence": {"placeholders": {"percent": {"type": "int"}}},
+  "ltMelodyNoIssues": "확인이 필요한 음이 없어요.",
+  "ltMelodyLocked": "내 멜로디 잠금",
+  "ltMelodyLockedHint": "반주를 바꿔도 이 멜로디는 유지됩니다."
 }

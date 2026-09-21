@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../l10n/generated/app_localizations.dart';
 import '../theme/tokens.dart';
 import '../music/beginner_backing.dart';
@@ -19,12 +20,22 @@ class GuidedHumPanel extends StatelessWidget {
     this.onBacking,
     this.onUndo,
     this.backingStyle,
+    this.lowConfidenceCount = 0,
+    this.previewingOriginal = false,
+    this.melodyLocked = true,
+    this.onPreviewOriginal,
+    this.onPreviewCorrected,
+    this.onReviewMelody,
   });
   final bool hasNotes, playing, saved;
   final VoidCallback onBack, onRecord, onListen, onInstrument, onSave, onEdit;
   final VoidCallback? onSample, onUndo;
   final ValueChanged<BackingStyle>? onBacking;
   final BackingStyle? backingStyle;
+  final int lowConfidenceCount;
+  final bool previewingOriginal;
+  final bool melodyLocked;
+  final VoidCallback? onPreviewOriginal, onPreviewCorrected, onReviewMelody;
 
   Widget _card(List<Widget> children) => Container(
     padding: const EdgeInsets.all(16),
@@ -88,6 +99,70 @@ class GuidedHumPanel extends StatelessWidget {
             ),
         ],
       ),
+      if (hasNotes) ...[
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              melodyLocked ? Icons.lock_outline : Icons.lock_open,
+              color: melodyLocked ? LT.lime : LT.t3,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l.ltMelodyLocked,
+                    style: const TextStyle(
+                      color: LT.t1,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    l.ltMelodyLockedHint,
+                    style: const TextStyle(color: LT.t3, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+      if (hasNotes &&
+          onPreviewOriginal != null &&
+          onPreviewCorrected != null) ...[
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            ChoiceChip(
+              label: Text(l.ltMelodyRaw),
+              selected: previewingOriginal,
+              onSelected: (_) => onPreviewOriginal!(),
+            ),
+            ChoiceChip(
+              label: Text(l.ltMelodyCorrected),
+              selected: !previewingOriginal,
+              onSelected: (_) => onPreviewCorrected!(),
+            ),
+            if (onReviewMelody != null)
+              TextButton.icon(
+                onPressed: onReviewMelody,
+                icon: const Icon(Icons.tune),
+                label: Text(
+                  lowConfidenceCount > 0
+                      ? l.ltMelodyUncertain(lowConfidenceCount)
+                      : l.ltMelodyReview,
+                ),
+              ),
+          ],
+        ),
+      ],
     ]);
     final backing = _card([
       Text(
@@ -113,10 +188,9 @@ class GuidedHumPanel extends StatelessWidget {
                 BackingStyle.drive => l.ltBackingDrive,
               }),
               selected: backingStyle == style,
-              onSelected:
-                  hasNotes && onBacking != null
-                      ? (_) => onBacking!(style)
-                      : null,
+              onSelected: hasNotes && onBacking != null
+                  ? (_) => onBacking!(style)
+                  : null,
             ),
         ],
       ),
@@ -146,33 +220,31 @@ class GuidedHumPanel extends StatelessWidget {
           ),
           Expanded(
             child: LayoutBuilder(
-              builder:
-                  (context, constraints) => SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 8,
-                    ),
-                    child:
-                        constraints.maxWidth >= 680 && onBacking != null
-                            ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(child: melody),
-                                const SizedBox(width: 16),
-                                Expanded(child: backing),
-                              ],
-                            )
-                            : Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                melody,
-                                if (onBacking != null) ...[
-                                  const SizedBox(height: 16),
-                                  backing,
-                                ],
-                              ],
-                            ),
-                  ),
+              builder: (context, constraints) => SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 8,
+                ),
+                child: constraints.maxWidth >= 680 && onBacking != null
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: melody),
+                          const SizedBox(width: 16),
+                          Expanded(child: backing),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          melody,
+                          if (onBacking != null) ...[
+                            const SizedBox(height: 16),
+                            backing,
+                          ],
+                        ],
+                      ),
+              ),
             ),
           ),
           if (hasNotes)

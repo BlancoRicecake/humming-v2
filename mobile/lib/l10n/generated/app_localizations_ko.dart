@@ -2345,4 +2345,48 @@ class L10nKo extends L10n {
   String ltSampleLimit(String seconds) {
     return '곡에 넣을 구간은 $seconds초 이하로 골라주세요. 위치는 직접 편집에서 조정할 수 있어요.';
   }
+
+  @override
+  String get ltMelodyReview => '멜로디 확인';
+
+  @override
+  String get ltMelodyReviewHint =>
+      '변환이 불확실한 음을 먼저 표시했어요. 원음정과 보정음정을 비교하고 필요한 음만 고쳐보세요.';
+
+  @override
+  String ltMelodyUncertain(int count) {
+    return '확인이 필요한 음 $count개';
+  }
+
+  @override
+  String get ltMelodyRaw => '원음정 듣기';
+
+  @override
+  String get ltMelodyCorrected => '보정음정 듣기';
+
+  @override
+  String get ltMelodyOctaveDown => '옥타브 내림';
+
+  @override
+  String get ltMelodyOctaveUp => '옥타브 올림';
+
+  @override
+  String get ltMelodySplit => '둘로 나누기';
+
+  @override
+  String get ltMelodyMerge => '다음 음과 합치기';
+
+  @override
+  String ltMelodyConfidence(int percent) {
+    return '신뢰도 $percent%';
+  }
+
+  @override
+  String get ltMelodyNoIssues => '확인이 필요한 음이 없어요.';
+
+  @override
+  String get ltMelodyLocked => '내 멜로디 잠금';
+
+  @override
+  String get ltMelodyLockedHint => '반주를 바꿔도 이 멜로디는 유지됩니다.';
 }
