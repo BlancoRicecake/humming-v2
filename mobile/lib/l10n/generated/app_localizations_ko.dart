@@ -1712,6 +1712,12 @@ class L10nKo extends L10n {
   String get ltSettingsHapticsSub => '패드 탭 시 진동';
 
   @override
+  String get ltSettingsAnalytics => '익명 사용 통계';
+
+  @override
+  String get ltSettingsAnalyticsSub => '제품 개선용 Clarity·Firebase 분석 허용';
+
+  @override
   String get ltSettingsAbout => '정보';
 
   @override

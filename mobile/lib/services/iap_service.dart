@@ -33,9 +33,9 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 
 import 'auth_service.dart';
-import 'clarity_service.dart';
 import 'iap_types.dart';
 import 'observability_service.dart';
+import 'product_analytics.dart';
 
 export 'iap_types.dart';
 
@@ -188,7 +188,14 @@ class IapService {
       debugPrint('[iap] buy failed: $e');
       ObservabilityService.instance.captureException(e, st,
           tags: {'store': _storeName, 'product_id': productId}, hint: 'iap buy failed');
-      ClarityService.instance.event('purchase_failed');
+      ProductAnalytics.instance.track(
+        ProductEvent.purchaseFailed,
+        properties: {
+          'feature': 'subscription',
+          'error_code': 'launch_exception',
+          'store': _storeName,
+        },
+      );
       return IapError.storeError;
     }
   }
@@ -251,7 +258,14 @@ class IapService {
             tags: {'store': _storeName, 'product_id': p.productID},
             hint: 'iap purchase error',
           );
-          ClarityService.instance.event('purchase_failed');
+          ProductAnalytics.instance.track(
+            ProductEvent.purchaseFailed,
+            properties: {
+              'feature': 'subscription',
+              'error_code': 'store_error',
+              'store': _storeName,
+            },
+          );
           _resultCtl.add(IapResult(
             ok: false, productId: p.productID,
             error: IapError.storeError, message: msg,
@@ -292,10 +306,25 @@ class IapService {
             restored: restored,
           ));
           if (v.pro) {
-            ClarityService.instance.event(restored ? 'subscription_restored' : 'subscription_started');
-            ClarityService.instance.tag('plan', p.productID);
+            ProductAnalytics.instance.track(
+              restored
+                  ? ProductEvent.purchaseRestored
+                  : ProductEvent.purchaseCompleted,
+              properties: {
+                'feature': 'subscription',
+                'store': _storeName,
+              },
+            );
+            ProductAnalytics.instance.setPlan(true);
           } else if (!notEntitled) {
-            ClarityService.instance.event('verify_failed');
+            ProductAnalytics.instance.track(
+              ProductEvent.purchaseFailed,
+              properties: {
+                'feature': 'subscription',
+                'error_code': 'verify_failed',
+                'store': _storeName,
+              },
+            );
           }
           // 409(결제 승인 대기) 는 아직 소유 확정 전 — 스토어 큐에 남겨 승인 후
           // 다시 배달받는다. 그 외에는 항상 complete (검증 실패여도 영수증은

@@ -650,6 +650,8 @@
   "ltSettingsMetronomeSub": "녹음 중 클릭음 재생",
   "ltSettingsHaptics": "햅틱",
   "ltSettingsHapticsSub": "패드 탭 시 진동",
+  "ltSettingsAnalytics": "익명 사용 통계",
+  "ltSettingsAnalyticsSub": "제품 개선용 Clarity·Firebase 분석 허용",
   "ltSettingsAbout": "정보",
   "ltSettingsAboutSub": "HumTrack · v0.4",
   "ltSettingsLegalSection": "약관 및 정책",

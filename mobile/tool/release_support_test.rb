@@ -84,6 +84,13 @@ class ReleaseSupportTest < Minitest::Test
     refute_includes error.message, "https://private.example"
   end
 
+  def test_optional_analytics_settings_do_not_block_existing_releases
+    required = HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
+    result = HumTrackRelease.defines(env: required, secrets_path: "/absent")
+    assert_equal required, result
+    refute result.key?("FIREBASE_ANALYTICS_ENABLED")
+  end
+
   def test_json_configuration_filters_keys_and_shell_metacharacters_are_data
     values = configuration.merge("SENTRY_DSN_MOBILE" => "value with spaces & $(touch nope)", "SERVER_SECRET" => "private")
     result = HumTrackRelease.defines(env: {"HUMTRACK_DART_DEFINES_JSON" => JSON.generate(values)}, secrets_path: "/absent")

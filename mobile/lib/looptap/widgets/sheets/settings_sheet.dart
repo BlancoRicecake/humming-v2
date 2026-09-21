@@ -16,6 +16,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../screens/legal_doc_screen.dart';
 import '../../../services/iap_service.dart' show manageSubscriptionUri;
 import '../../../services/locale_service.dart';
+import '../../../services/product_analytics.dart';
 import '../../app.dart' show rootMessengerKey;
 import '../../state/loop_prefs.dart';
 import '../../state/loop_store.dart';
@@ -41,6 +42,7 @@ class _SettingsSheet extends StatefulWidget {
 class _SettingsSheetState extends State<_SettingsSheet> {
   late bool _metro = LoopPrefs.instance.metro.value;
   late bool _haptics = LoopPrefs.instance.haptics.value;
+  late bool _analytics = LoopPrefs.instance.analyticsEnabled.value;
   late int _vocalLatencyMs = LoopPrefs.instance.vocalLatencyMs.value;
 
   void _setMetro(bool v) {
@@ -51,6 +53,12 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   void _setHaptics(bool v) {
     setState(() => _haptics = v);
     LoopPrefs.instance.setHaptics(v);
+  }
+
+  void _setAnalytics(bool v) {
+    setState(() => _analytics = v);
+    LoopPrefs.instance.setAnalyticsEnabled(v);
+    ProductAnalytics.instance.setConsent(v);
   }
 
   void _setVocalLatencyMs(int v) {
@@ -133,6 +141,12 @@ class _SettingsSheetState extends State<_SettingsSheet> {
           title: l.ltSettingsHaptics,
           sub: l.ltSettingsHapticsSub,
           right: _MiniSwitch(on: _haptics, onChanged: _setHaptics),
+        ),
+        _Row(
+          icon: LtIcons.privacyTip,
+          title: l.ltSettingsAnalytics,
+          sub: l.ltSettingsAnalyticsSub,
+          right: _MiniSwitch(on: _analytics, onChanged: _setAnalytics),
         ),
         _Row(
           icon: LtIcons.timer,
@@ -238,10 +252,10 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   }
 
   String _deleteErrorText(L10n l, DeleteAccountError e) => switch (e.kind) {
-        DeleteAccountFailure.notSignedIn => l.acctDeleteNotSignedIn,
-        DeleteAccountFailure.rejected => l.acctDeleteRejected(e.code ?? 0),
-        DeleteAccountFailure.network => l.acctDeleteNetwork,
-      };
+    DeleteAccountFailure.notSignedIn => l.acctDeleteNotSignedIn,
+    DeleteAccountFailure.rejected => l.acctDeleteRejected(e.code ?? 0),
+    DeleteAccountFailure.network => l.acctDeleteNetwork,
+  };
 
   Future<void> _confirmDelete(BuildContext context) async {
     final l = L10n.of(context);
@@ -283,7 +297,11 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                       minimumSize: const Size(0, 32),
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                     ),
-                    icon: const Ms(LtIcons.receiptLong, size: 16, color: LT.lime),
+                    icon: const Ms(
+                      LtIcons.receiptLong,
+                      size: 16,
+                      color: LT.lime,
+                    ),
                     label: Text(
                       l.accountMenuManage,
                       style: LTType.inter(

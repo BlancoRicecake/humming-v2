@@ -3120,6 +3120,18 @@ abstract class L10n {
   /// **'패드 탭 시 진동'**
   String get ltSettingsHapticsSub;
 
+  /// No description provided for @ltSettingsAnalytics.
+  ///
+  /// In ko, this message translates to:
+  /// **'익명 사용 통계'**
+  String get ltSettingsAnalytics;
+
+  /// No description provided for @ltSettingsAnalyticsSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'제품 개선용 Clarity·Firebase 분석 허용'**
+  String get ltSettingsAnalyticsSub;
+
   /// No description provided for @ltSettingsAbout.
   ///
   /// In ko, this message translates to:

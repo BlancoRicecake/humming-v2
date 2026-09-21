@@ -8,13 +8,14 @@
 //   - restore           → LoopStore.restorePurchases() 의 결과(enum)로 문구 결정.
 // 모든 사용자 문구는 L10n (pay*) — audit M12.
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
-import '../../../services/clarity_service.dart';
+import '../../../services/product_analytics.dart';
 import '../../../services/iap_pricing.dart';
 import '../../../services/iap_service.dart';
 import '../../app.dart' show rootMessengerKey;
@@ -35,24 +36,30 @@ const int _kFreeSongQuota = 4;
 enum PaywallTrigger {
   /// 트랙 export 시도 (MIDI/오디오 내보내기).
   export,
+
   /// 무료 플랜 곡 개수 한도 도달.
   songQuota,
+
   /// 일반 업그레이드 진입 (계정/설정에서 직접 진입). 별도 banner 표시 없음.
   upgrade;
 
   /// banner 에 표시할 한 줄 — null 이면 banner 미노출.
   String? hint(L10n l) => switch (this) {
-        PaywallTrigger.export => l.looptapPaywallTriggerExport,
-        PaywallTrigger.songQuota => l.looptapPaywallTriggerSongQuota,
-        PaywallTrigger.upgrade => null,
-      };
+    PaywallTrigger.export => l.looptapPaywallTriggerExport,
+    PaywallTrigger.songQuota => l.looptapPaywallTriggerSongQuota,
+    PaywallTrigger.upgrade => null,
+  };
 }
 
 Future<void> showPaywallSheet(
   BuildContext context, {
   PaywallTrigger trigger = PaywallTrigger.upgrade,
 }) {
-  return showLtModal(context, width: 440, child: _PaywallSheet(trigger: trigger));
+  return showLtModal(
+    context,
+    width: 440,
+    child: _PaywallSheet(trigger: trigger),
+  );
 }
 
 /// 사용자에게 보여줄 결제 실패 문구 — null 이면 조용히 (취소). 순수 매핑이라
@@ -78,11 +85,11 @@ String? paywallMessageFor(L10n l, IapError? e, {required bool storeEnabled}) {
 
 /// 복원 결과 문구.
 String restoreMessageFor(L10n l, RestoreOutcome o) => switch (o) {
-      RestoreOutcome.restored => l.payRestoreDone,
-      RestoreOutcome.alreadyActive => l.payRestoreAlready,
-      RestoreOutcome.nothingFound => l.payRestoreEmpty,
-      RestoreOutcome.error => l.payRestoreError,
-    };
+  RestoreOutcome.restored => l.payRestoreDone,
+  RestoreOutcome.alreadyActive => l.payRestoreAlready,
+  RestoreOutcome.nothingFound => l.payRestoreEmpty,
+  RestoreOutcome.error => l.payRestoreError,
+};
 
 class _PaywallSheet extends StatefulWidget {
   const _PaywallSheet({required this.trigger});
@@ -93,11 +100,13 @@ class _PaywallSheet extends StatefulWidget {
   State<_PaywallSheet> createState() => _PaywallSheetState();
 }
 
-String _fmtDate(BuildContext context, DateTime d) =>
-    DateFormat.yMMMd(Localizations.localeOf(context).toString()).format(d.toLocal());
+String _fmtDate(BuildContext context, DateTime d) => DateFormat.yMMMd(
+  Localizations.localeOf(context).toString(),
+).format(d.toLocal());
 
 class _PaywallSheetState extends State<_PaywallSheet> {
   bool _busy = false;
+
   /// 스토어가 "승인 대기"(Ask to Buy 등) 를 알려온 상태 — 타임아웃 없이 대기.
   bool _pending = false;
   String _selected = kProductYearly;
@@ -111,9 +120,14 @@ class _PaywallSheetState extends State<_PaywallSheet> {
   @override
   void initState() {
     super.initState();
-    // Clarity: paywall 노출 + 진입 트리거(export/songQuota/upgrade) 태깅.
-    ClarityService.instance.event('paywall_viewed');
-    ClarityService.instance.tag('paywall_trigger', widget.trigger.name);
+    ProductAnalytics.instance.track(
+      ProductEvent.paywallViewed,
+      properties: {
+        'feature': 'subscription',
+        'entry_source': widget.trigger.name,
+        'trigger': widget.trigger.name,
+      },
+    );
     // 시트 진입 시점에 ProductDetails 로드 — 라벨이 KRW 폴백 → 스토어 가격으로 갱신.
     final store = context.read<LoopStore>();
     store.loadProducts().then((_) {
@@ -128,7 +142,9 @@ class _PaywallSheetState extends State<_PaywallSheet> {
     // onPurchaseResult 로 계속 받아 Pro 를 켠다.
     final c = _purchase;
     if (c != null && !c.isCompleted) {
-      c.complete(const IapResult(ok: false, productId: '', error: IapError.canceled));
+      c.complete(
+        const IapResult(ok: false, productId: '', error: IapError.canceled),
+      );
     }
     super.dispose();
   }
@@ -137,13 +153,15 @@ class _PaywallSheetState extends State<_PaywallSheet> {
     // rootMessenger 사용 — paywall (showGeneralDialog) 위에서도 보이도록.
     rootMessengerKey.currentState
       ?..clearSnackBars()
-      ..showSnackBar(SnackBar(
-        backgroundColor: LT.surface2,
-        content: Text(msg, style: LTType.inter(size: 13, color: LT.t1)),
-        duration: const Duration(seconds: 5),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-      ));
+      ..showSnackBar(
+        SnackBar(
+          backgroundColor: LT.surface2,
+          content: Text(msg, style: LTType.inter(size: 13, color: LT.t1)),
+          duration: const Duration(seconds: 5),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+        ),
+      );
   }
 
   Future<void> _buy(LoopStore store, String productId) async {
@@ -160,6 +178,14 @@ class _PaywallSheetState extends State<_PaywallSheet> {
       _busy = true;
       _pending = false;
     });
+    ProductAnalytics.instance.track(
+      ProductEvent.purchaseStarted,
+      properties: {
+        'feature': 'subscription',
+        'entry_source': widget.trigger.name,
+        'store': Platform.isIOS ? 'app_store' : 'play_store',
+      },
+    );
     // buy() 호출 직전에 listener 부착 — 해당 productId 의 결과만 받는다.
     final completer = Completer<IapResult>();
     _purchase = completer;
@@ -173,7 +199,10 @@ class _PaywallSheetState extends State<_PaywallSheet> {
       }
       if (!completer.isCompleted) completer.complete(r);
     });
-    final launchErr = productId == kProductYearly ? await store.buyYearly() : await store.buyMonthly();
+    final launchErr =
+        productId == kProductYearly
+            ? await store.buyYearly()
+            : await store.buyMonthly();
     final IapResult result;
     if (launchErr != null) {
       result = IapResult(ok: false, productId: productId, error: launchErr);
@@ -192,22 +221,49 @@ class _PaywallSheetState extends State<_PaywallSheet> {
       Navigator.of(context).maybePop();
       return;
     }
-    final msg = paywallMessageFor(l, result.error, storeEnabled: store.iapEnabled);
+    if (result.error != IapError.canceled) {
+      ProductAnalytics.instance.track(
+        ProductEvent.purchaseFailed,
+        properties: {
+          'feature': 'subscription',
+          'entry_source': widget.trigger.name,
+          'error_code': result.error?.name ?? 'unknown',
+          'store': Platform.isIOS ? 'app_store' : 'play_store',
+        },
+      );
+    }
+    final msg = paywallMessageFor(
+      l,
+      result.error,
+      storeEnabled: store.iapEnabled,
+    );
     if (msg != null) _toast(msg);
   }
 
   /// 결과 대기. 60초 타임아웃은 스토어가 pending 을 알리지 않은 경우에만 —
   /// 승인 대기 중이면 최종 결과가 올 때까지 기다린다 (M5).
-  Future<IapResult> _awaitResult(Completer<IapResult> c, String productId) async {
+  Future<IapResult> _awaitResult(
+    Completer<IapResult> c,
+    String productId,
+  ) async {
     while (true) {
       try {
         return await c.future.timeout(_resultTimeout);
       } on TimeoutException {
         if (!mounted) {
-          return IapResult(ok: false, productId: productId, error: IapError.canceled);
+          return IapResult(
+            ok: false,
+            productId: productId,
+            error: IapError.canceled,
+          );
         }
         if (_pending) continue;
-        return IapResult(ok: false, productId: productId, error: IapError.storeError, message: 'timeout');
+        return IapResult(
+          ok: false,
+          productId: productId,
+          error: IapError.storeError,
+          message: 'timeout',
+        );
       }
     }
   }
@@ -226,7 +282,8 @@ class _PaywallSheetState extends State<_PaywallSheet> {
     if (!mounted) return;
     setState(() => _busy = false);
     _toast(restoreMessageFor(l, outcome));
-    if (outcome == RestoreOutcome.restored || outcome == RestoreOutcome.alreadyActive) {
+    if (outcome == RestoreOutcome.restored ||
+        outcome == RestoreOutcome.alreadyActive) {
       Navigator.of(context).maybePop();
     }
   }
@@ -249,14 +306,30 @@ class _PaywallSheetState extends State<_PaywallSheet> {
                 Container(
                   width: 30,
                   height: 30,
-                  decoration: BoxDecoration(color: LT.lime, borderRadius: BorderRadius.circular(8)),
-                  child: const Center(child: Ms(LtIcons.workspacePremium, size: 18, color: LT.bg)),
+                  decoration: BoxDecoration(
+                    color: LT.lime,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Center(
+                    child: Ms(LtIcons.workspacePremium, size: 18, color: LT.bg),
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text(l.payTitle, style: LTType.inter(size: 17, weight: FontWeight.w800, color: LT.t1)),
+                Text(
+                  l.payTitle,
+                  style: LTType.inter(
+                    size: 17,
+                    weight: FontWeight.w800,
+                    color: LT.t1,
+                  ),
+                ),
               ],
             ),
-            IconBtn(icon: LtIcons.close, tooltip: l.close, onTap: () => Navigator.of(context).maybePop()),
+            IconBtn(
+              icon: LtIcons.close,
+              tooltip: l.close,
+              onTap: () => Navigator.of(context).maybePop(),
+            ),
           ],
         ),
         // 진입점 contextual banner — Export 같은 특정 기능에서 들어왔을 때
@@ -278,7 +351,12 @@ class _PaywallSheetState extends State<_PaywallSheet> {
                 Expanded(
                   child: Text(
                     hint,
-                    style: LTType.inter(size: 12, weight: FontWeight.w600, color: LT.t1, height: 1.4),
+                    style: LTType.inter(
+                      size: 12,
+                      weight: FontWeight.w600,
+                      color: LT.t1,
+                      height: 1.4,
+                    ),
                   ),
                 ),
               ],
@@ -293,7 +371,12 @@ class _PaywallSheetState extends State<_PaywallSheet> {
             store.proLapsedWasTrial
                 ? l.payLapsedTrial(_fmtDate(context, store.proLapsedAt!))
                 : l.payLapsedSub(_fmtDate(context, store.proLapsedAt!)),
-            style: LTType.inter(size: 12, weight: FontWeight.w600, color: LT.t1, height: 1.4),
+            style: LTType.inter(
+              size: 12,
+              weight: FontWeight.w600,
+              color: LT.t1,
+              height: 1.4,
+            ),
           ),
         ],
         const SizedBox(height: 14),
@@ -309,7 +392,8 @@ class _PaywallSheetState extends State<_PaywallSheet> {
           price: IapPricing.yearlyLabel(),
           per: l.payPerMonthEquiv(IapPricing.yearlyAsMonthlyLabel()),
           selected: _selected == kProductYearly,
-          onTap: _busy ? null : () => setState(() => _selected = kProductYearly),
+          onTap:
+              _busy ? null : () => setState(() => _selected = kProductYearly),
         ),
         const SizedBox(height: 10),
         _PlanCard(
@@ -318,7 +402,8 @@ class _PaywallSheetState extends State<_PaywallSheet> {
           price: IapPricing.monthlyLabel(),
           per: l.payBilledMonthly,
           selected: _selected == kProductMonthly,
-          onTap: _busy ? null : () => setState(() => _selected = kProductMonthly),
+          onTap:
+              _busy ? null : () => setState(() => _selected = kProductMonthly),
         ),
         const SizedBox(height: 16),
         // Billed amount is the most prominent pricing element (App Store
@@ -328,7 +413,8 @@ class _PaywallSheetState extends State<_PaywallSheet> {
         // amount or auto-renewal disclosure.
         () {
           final isYearly = _selected == kProductYearly;
-          final billed = isYearly ? IapPricing.yearlyLabel() : IapPricing.monthlyLabel();
+          final billed =
+              isYearly ? IapPricing.yearlyLabel() : IapPricing.monthlyLabel();
           final period = isYearly ? l.payPeriodYear : l.payPeriodMonth;
           // Trial wording (M11): iOS cannot tell intro-offer eligibility
           // client-side, so the line is explicitly "for new subscribers" and
@@ -337,23 +423,34 @@ class _PaywallSheetState extends State<_PaywallSheet> {
           // terms instead — the purchase flow bills them immediately to match
           // (see IapService._androidOfferToken).
           final hasTrial = IapPricing.hasFreeTrial(_selected);
-          final disclosure = hasTrial
-              ? l.payDisclosureTrial(IapPricing.trialDays, billed, period)
-              : l.payDisclosureNoTrial(billed, period);
+          final disclosure =
+              hasTrial
+                  ? l.payDisclosureTrial(IapPricing.trialDays, billed, period)
+                  : l.payDisclosureNoTrial(billed, period);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text.rich(
-                TextSpan(children: [
-                  TextSpan(
-                    text: billed,
-                    style: LTType.inter(size: 22, weight: FontWeight.w800, color: LT.t1),
-                  ),
-                  TextSpan(
-                    text: l.payPerPeriod(period),
-                    style: LTType.inter(size: 13, weight: FontWeight.w600, color: LT.t2),
-                  ),
-                ]),
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: billed,
+                      style: LTType.inter(
+                        size: 22,
+                        weight: FontWeight.w800,
+                        color: LT.t1,
+                      ),
+                    ),
+                    TextSpan(
+                      text: l.payPerPeriod(period),
+                      style: LTType.inter(
+                        size: 13,
+                        weight: FontWeight.w600,
+                        color: LT.t2,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 4),
               Text(
@@ -375,27 +472,40 @@ class _PaywallSheetState extends State<_PaywallSheet> {
                 color: LT.lime,
                 borderRadius: BorderRadius.circular(LTRadius.control),
               ),
-              child: _busy
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2.5, color: LT.bg),
-                        ),
-                        if (_pending) ...[
-                          const SizedBox(width: 10),
-                          Text(
-                            l.payPendingButton,
-                            style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg),
+              child:
+                  _busy
+                      ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: LT.bg,
+                            ),
                           ),
+                          if (_pending) ...[
+                            const SizedBox(width: 10),
+                            Text(
+                              l.payPendingButton,
+                              style: LTType.inter(
+                                size: 14,
+                                weight: FontWeight.w800,
+                                color: LT.bg,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    )
-                  : Text(
-                      l.paySubscribe,
-                      style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg),
-                    ),
+                      )
+                      : Text(
+                        l.paySubscribe,
+                        style: LTType.inter(
+                          size: 14,
+                          weight: FontWeight.w800,
+                          color: LT.bg,
+                        ),
+                      ),
             ),
           ),
         ),
@@ -407,7 +517,11 @@ class _PaywallSheetState extends State<_PaywallSheet> {
             alignment: Alignment.center,
             child: Text(
               disabled ? l.payStoreUnavailable : l.payRestore,
-              style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t3),
+              style: LTType.inter(
+                size: 13,
+                weight: FontWeight.w700,
+                color: LT.t3,
+              ),
             ),
           ),
         ),
@@ -441,37 +555,63 @@ class _PlanCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? LT.surface3 : LT.surface2,
           borderRadius: BorderRadius.circular(LTRadius.control),
-          border: Border.all(color: selected ? LT.lime : LT.border, width: selected ? 1.5 : 1),
+          border: Border.all(
+            color: selected ? LT.lime : LT.border,
+            width: selected ? 1.5 : 1,
+          ),
         ),
         child: Row(
           children: [
             Container(
-              width: 18, height: 18,
+              width: 18,
+              height: 18,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: selected ? LT.lime : LT.borderStrong, width: 2),
+                border: Border.all(
+                  color: selected ? LT.lime : LT.borderStrong,
+                  width: 2,
+                ),
               ),
-              child: selected
-                  ? Center(
-                      child: Container(
-                        width: 8, height: 8,
-                        decoration: const BoxDecoration(color: LT.lime, shape: BoxShape.circle),
-                      ),
-                    )
-                  : null,
+              child:
+                  selected
+                      ? Center(
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: LT.lime,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      )
+                      : null,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.t1)),
+                  Text(
+                    title,
+                    style: LTType.inter(
+                      size: 14,
+                      weight: FontWeight.w800,
+                      color: LT.t1,
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   Text(per, style: LTType.inter(size: 11, color: LT.t3)),
                 ],
               ),
             ),
-            Text(price, style: LTType.mono(size: 14, weight: FontWeight.w700, color: LT.t1)),
+            Text(
+              price,
+              style: LTType.mono(
+                size: 14,
+                weight: FontWeight.w700,
+                color: LT.t1,
+              ),
+            ),
           ],
         ),
       ),

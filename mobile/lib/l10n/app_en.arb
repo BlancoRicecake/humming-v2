@@ -568,6 +568,8 @@
   "ltSettingsMetronomeSub": "Play a click while recording",
   "ltSettingsHaptics": "Haptics",
   "ltSettingsHapticsSub": "Buzz on pad hits",
+  "ltSettingsAnalytics": "Anonymous usage analytics",
+  "ltSettingsAnalyticsSub": "Allow Clarity and Firebase analytics for product improvement",
   "ltSettingsAbout": "About",
   "ltSettingsAboutSub": "HumTrack · v0.4",
   "ltSettingsLegalSection": "Legal & Policies",

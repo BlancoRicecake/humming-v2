@@ -62,6 +62,12 @@ dependencies:
   # Microsoft Clarity (세션 리플레이 + 히트맵, 무료·무제한). dart-define
   # CLARITY_PROJECT_ID 미설정 시 비활성 — lib/services/clarity_service.dart.
   clarity_flutter: ^1.9.0
+  # Privacy-safe quantitative funnels. Runtime configuration is supplied with
+  # dart-defines; missing configuration degrades to a no-op sink.
+  firebase_core: ^4.15.0
+  firebase_analytics: ^12.6.0
+  # 9.x supports the project's AGP 8.11 toolchain (10.x requires AGP 8.12.1).
+  package_info_plus: ^9.0.1
   supabase_flutter: ^2.5.0
   in_app_purchase: ^3.3.0
   # Play 구독 base plan 가격 추출에 필요 (trial offer phase[0]=₩0 으로 표시되는 버그 회피).

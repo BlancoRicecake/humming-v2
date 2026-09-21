@@ -20,7 +20,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../audio/autotune_monitor.dart';
 import '../../../audio/headset.dart';
 import '../../../audio/synth.dart';
-import '../../../services/clarity_service.dart';
+import '../../../services/product_analytics.dart';
 import '../../music/wav_codec.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
@@ -167,7 +167,10 @@ class _VocalRecordModalState extends State<_VocalRecordModal>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.paused && state != AppLifecycleState.hidden) return;
+    if (state != AppLifecycleState.paused &&
+        state != AppLifecycleState.hidden) {
+      return;
+    }
     if (_checkingPermission) return; // the system permission sheet may pause us
     unawaited(_abortForLifecycle());
   }
@@ -191,7 +194,13 @@ class _VocalRecordModalState extends State<_VocalRecordModal>
     await releaseAutotuneMonitorSession();
     await _restoreOutput();
     if (_closed) return;
-    ClarityService.instance.event('vocal_recording_interrupted');
+    ProductAnalytics.instance.track(
+      ProductEvent.vocalRecordingInterrupted,
+      properties: const {
+        'feature': 'vocal_recording',
+        'error_code': 'lifecycle',
+      },
+    );
     _fail('interrupted');
   }
 
@@ -526,11 +535,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal>
       final minRms = a['minVoiceRms'] as double;
       final minPeak = a['minVoicePeak'] as double;
       if (pcm.length - drop < minUseful) {
-        return (
-          path: '',
-          peaks: const <double>[],
-          error: 'tooShort',
-        );
+        return (path: '', peaks: const <double>[], error: 'tooShort');
       }
       // drop the mic lead-in, then trim/zero-pad to exactly one loop
       final out = Float32List(loop);
@@ -550,11 +555,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal>
       }
       final rms = measured > 0 ? math.sqrt(sumSq / measured) : 0.0;
       if (peak < minPeak || rms < minRms) {
-        return (
-          path: '',
-          peaks: const <double>[],
-          error: 'tooQuiet',
-        );
+        return (path: '', peaks: const <double>[], error: 'tooQuiet');
       }
       final dst = a['dst'] as String;
       await File(dst).writeAsBytes(encodeWavMono16(out, _sr));

@@ -23,6 +23,11 @@ class LoopPrefs {
   /// Play a click while recording (metronome).
   final ValueNotifier<bool> metro = ValueNotifier<bool>(true);
 
+  /// Anonymous product analytics (Clarity + quantitative funnel sink).
+  /// Existing releases already collect Clarity under legitimate interest, so
+  /// upgrades preserve that behavior while adding an explicit opt-out.
+  final ValueNotifier<bool> analyticsEnabled = ValueNotifier<bool>(true);
+
   /// The policy notice the user has read; changing the notice ID shows it again.
   final ValueNotifier<String?> acknowledgedPolicyNotice = ValueNotifier(null);
 
@@ -35,7 +40,9 @@ class LoopPrefs {
   final ValueNotifier<Map<String, List<int>>> instrumentFavorites =
       ValueNotifier<Map<String, List<int>>>({});
 
-  final ValueNotifier<Map<String, List<int>>> keyboardBindings = ValueNotifier({});
+  final ValueNotifier<Map<String, List<int>>> keyboardBindings = ValueNotifier(
+    {},
+  );
 
   Future<void> setKeyboardBindings(String group, List<int> keys) async {
     keyboardBindings.value = {...keyboardBindings.value, group: List.of(keys)};
@@ -64,14 +71,20 @@ class LoopPrefs {
       if (m['keyboardBindings'] is Map) {
         keyboardBindings.value = {
           for (final e in (m['keyboardBindings'] as Map).entries)
-            if (e.key is String && e.value is List && (e.value as List).every((v) => v is int))
+            if (e.key is String &&
+                e.value is List &&
+                (e.value as List).every((v) => v is int))
               e.key as String: List<int>.from(e.value as List),
         };
       }
       if (m['haptics'] is bool) haptics.value = m['haptics'] as bool;
       if (m['metro'] is bool) metro.value = m['metro'] as bool;
+      if (m['analyticsEnabled'] is bool) {
+        analyticsEnabled.value = m['analyticsEnabled'] as bool;
+      }
       if (m['acknowledgedPolicyNotice'] is String) {
-        acknowledgedPolicyNotice.value = m['acknowledgedPolicyNotice'] as String;
+        acknowledgedPolicyNotice.value =
+            m['acknowledgedPolicyNotice'] as String;
       }
       if (m['vocalLatencyMs'] is num) {
         vocalLatencyMs.value =
@@ -101,6 +114,7 @@ class LoopPrefs {
           'keyboardBindings': keyboardBindings.value,
           'haptics': haptics.value,
           'metro': metro.value,
+          'analyticsEnabled': analyticsEnabled.value,
           'acknowledgedPolicyNotice': acknowledgedPolicyNotice.value,
           'vocalLatencyMs': vocalLatencyMs.value,
           'instrumentFavorites': instrumentFavorites.value,
@@ -123,6 +137,11 @@ class LoopPrefs {
 
   Future<void> setMetro(bool v) async {
     metro.value = v;
+    await _persist();
+  }
+
+  Future<void> setAnalyticsEnabled(bool v) async {
+    analyticsEnabled.value = v;
     await _persist();
   }
 

@@ -62,7 +62,7 @@ import '../widgets/surfaces/live_pads.dart';
 import '../widgets/surfaces/step_grid.dart';
 import '../widgets/surfaces/vocal_surface.dart';
 import '../widgets/transport_bar.dart';
-import '../../services/clarity_service.dart';
+import '../../services/product_analytics.dart';
 
 class EditScreen extends StatefulWidget {
   const EditScreen({super.key, required this.song, this.guidedStart = false});
@@ -471,7 +471,13 @@ class _EditScreenState extends State<EditScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (widget.guidedStart) {
-      ClarityService.instance.event('guided_started');
+      ProductAnalytics.instance.track(
+        ProductEvent.guidedStarted,
+        properties: const {
+          'feature': 'guided_creation',
+          'entry_source': 'new_song',
+        },
+      );
     }
     // apply this song's chosen instruments (per pitched channel), then warm the synth
     _audio.setPrograms({
@@ -2468,11 +2474,19 @@ class _EditScreenState extends State<EditScreen>
       ok = true;
       _toast(L10n.of(context).ltEditorHumAdded(count));
       // Clarity: 분석 성공 + 분기(드럼/멜로딕) 태깅. noteCount 는 이벤트로 분포 확인.
-      ClarityService.instance.event('analyze_completed');
+      ProductAnalytics.instance.track(
+        ProductEvent.analyzeCompleted,
+        properties: {
+          'feature': _guided ? 'guided_creation' : 'editor',
+          'role': drums ? 'drum' : 'melodic',
+        },
+      );
       if (_guided) {
-        ClarityService.instance.event('guided_conversion_completed');
+        ProductAnalytics.instance.track(
+          ProductEvent.guidedConversionCompleted,
+          properties: const {'feature': 'guided_creation'},
+        );
       }
-      ClarityService.instance.tag('analyze_role', drums ? 'drum' : 'melodic');
     } catch (e) {
       _trackAnalyzeFailure(e);
       debugPrint('[hum] convert failed: $e');
@@ -2521,8 +2535,13 @@ class _EditScreenState extends State<EditScreen>
         reason = 'server';
       }
     }
-    ClarityService.instance.event('analyze_failed');
-    ClarityService.instance.tag('analyze_failure', reason);
+    ProductAnalytics.instance.track(
+      ProductEvent.analyzeFailed,
+      properties: {
+        'feature': _guided ? 'guided_creation' : 'editor',
+        'error_code': reason,
+      },
+    );
   }
 
   /// User-facing reason a hum conversion failed. DioException → status-aware
@@ -2613,7 +2632,6 @@ class _EditScreenState extends State<EditScreen>
       _guidedPreviewCandidate = null;
       _guidedAppliedCandidate = null;
     });
-    ClarityService.instance.tag('guided_backing_style', style.name);
   }
 
   void _previewBacking(int variant) {
@@ -2629,7 +2647,14 @@ class _EditScreenState extends State<EditScreen>
       _guidedPreviewSection = _backingCandidate(style, variant);
       _guidedPreviewCandidate = variant;
     });
-    ClarityService.instance.event('guided_backing_previewed');
+    ProductAnalytics.instance.track(
+      ProductEvent.guidedBackingPreviewed,
+      properties: {
+        'feature': 'guided_backing',
+        'backing_style': style.name,
+        'candidate': variant + 1,
+      },
+    );
     _togglePlay();
   }
 
@@ -2645,7 +2670,14 @@ class _EditScreenState extends State<EditScreen>
       _guidedPreviewCandidate = variant;
       _guidedAppliedCandidate = variant;
     });
-    ClarityService.instance.event('guided_backing_applied');
+    ProductAnalytics.instance.track(
+      ProductEvent.guidedBackingApplied,
+      properties: {
+        'feature': 'guided_backing',
+        'backing_style': style.name,
+        'candidate': variant + 1,
+      },
+    );
     _togglePlay();
   }
 
@@ -2725,8 +2757,12 @@ class _EditScreenState extends State<EditScreen>
     try {
       await context.read<LoopStore>().upsert(_snapshot());
     } catch (_) {
-      ClarityService.instance.event(
-        _guided ? 'guided_song_save_failed' : 'song_save_failed',
+      ProductAnalytics.instance.track(
+        _guided ? ProductEvent.guidedSongFailed : ProductEvent.songSaveFailed,
+        properties: {
+          'feature': _guided ? 'guided_creation' : 'editor',
+          'error_code': 'local_save',
+        },
       );
       _handleSaveFailure();
       return;
@@ -2744,7 +2780,10 @@ class _EditScreenState extends State<EditScreen>
     });
     if (_guided && !_guidedSaveTracked) {
       _guidedSaveTracked = true;
-      ClarityService.instance.event('guided_song_saved');
+      ProductAnalytics.instance.track(
+        ProductEvent.guidedSongSaved,
+        properties: const {'feature': 'guided_creation'},
+      );
     }
   }
 

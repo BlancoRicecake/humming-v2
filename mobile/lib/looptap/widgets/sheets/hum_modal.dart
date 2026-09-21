@@ -15,7 +15,7 @@ import '../../../audio/container.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../audio/headset.dart';
 import '../../../audio/synth.dart';
-import '../../../services/clarity_service.dart';
+import '../../../services/product_analytics.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import 'lt_modal.dart';
@@ -90,7 +90,8 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   // the synth output under it). Gates the restore-to-.playback rebuild on stop so
   // we don't reconfigure output when recording never actually started.
   bool _recStarted = false;
-  bool _finishing = false; // _finish re-entrancy guard (auto-stop + Convert tap)
+  bool _finishing =
+      false; // _finish re-entrancy guard (auto-stop + Convert tap)
   bool _closed = false; // cancelled/disposed — in-flight awaits must bail
   bool _checkingPermission = false;
   bool _permissionDenied = false; // error phase offers "Open Settings"
@@ -129,13 +130,18 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.paused && state != AppLifecycleState.hidden) return;
+    if (state != AppLifecycleState.paused &&
+        state != AppLifecycleState.hidden) {
+      return;
+    }
     if (_checkingPermission) return; // the system permission sheet may pause us
     unawaited(_abortForLifecycle());
   }
 
   Future<void> _abortForLifecycle() async {
-    if (_closed || _finishing || (_phase != 'countin' && _phase != 'listen')) return;
+    if (_closed || _finishing || (_phase != 'countin' && _phase != 'listen')) {
+      return;
+    }
     _finishing = true;
     _autoStop?.cancel();
     _msTimer?.cancel();
@@ -152,7 +158,10 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
     await _restoreOutput();
     _finishing = false;
     if (_closed) return;
-    ClarityService.instance.event('recording_interrupted');
+    ProductAnalytics.instance.track(
+      ProductEvent.recordingInterrupted,
+      properties: const {'feature': 'hum_recording', 'error_code': 'lifecycle'},
+    );
     _fail('interrupted');
   }
 
@@ -250,7 +259,10 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
         return;
       }
       _stateSub = _rec.onStateChanged().listen(_onRecordState);
-      ClarityService.instance.event('recording_started');
+      ProductAnalytics.instance.track(
+        ProductEvent.recordingStarted,
+        properties: const {'feature': 'hum_recording'},
+      );
       // _rec.start just flipped the shared AVAudioSession to .playAndRecord,
       // which corrupts the synth's already-running output pipe (RemoteIO) →
       // crackle. Rebuild that pipe under .playAndRecord so the backing plays
@@ -275,11 +287,15 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
       _msTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
         if (_phase == 'listen' && mounted) setState(() => _ms += 100);
       });
-      _ampSub = _rec.onAmplitudeChanged(const Duration(milliseconds: 70)).listen((a) {
-        if (_phase == 'listen' && mounted) {
-          setState(() => _levels = [..._levels.sublist(1), _norm(a.current)]);
-        }
-      });
+      _ampSub = _rec
+          .onAmplitudeChanged(const Duration(milliseconds: 70))
+          .listen((a) {
+            if (_phase == 'listen' && mounted) {
+              setState(
+                () => _levels = [..._levels.sublist(1), _norm(a.current)],
+              );
+            }
+          });
       // Capture exactly one loop pass, then convert automatically.
       _autoStop = Timer(Duration(milliseconds: _loopMs), _finish);
     } catch (e) {
@@ -304,11 +320,11 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   }
 
   String _errorText(L10n l) => switch (_errorCode) {
-        'permission' => l.editMicPermNeededTitle,
-        'unavailable' => l.ltRecErrUnavailable,
-        'interrupted' => l.ltRecErrInterrupted,
-        _ => l.ltRecErrNoAudio,
-      };
+    'permission' => l.editMicPermNeededTitle,
+    'unavailable' => l.ltRecErrUnavailable,
+    'interrupted' => l.ltRecErrInterrupted,
+    _ => l.ltRecErrNoAudio,
+  };
 
   /// record left the session in .playAndRecord; restore .playback and rebuild
   /// the output pipe so pad taps / playback are clean after the hum. Runs once
@@ -348,7 +364,9 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   }
 
   Future<void> _finish() async {
-    if (_finishing || _phase != 'listen') return; // auto-stop + Convert tap race
+    if (_finishing || _phase != 'listen') {
+      return; // auto-stop + Convert tap race
+    }
     _finishing = true;
     _autoStop?.cancel();
     _msTimer?.cancel();
@@ -368,7 +386,9 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
     if (mounted) setState(() => _phase = 'converting');
     try {
       await widget.onConvert(path);
-    } catch (_) {/* host shows its own error toast + fallback */}
+    } catch (_) {
+      /* host shows its own error toast + fallback */
+    }
     if (!mounted) return;
     setState(() => _phase = 'done');
     Timer(const Duration(milliseconds: 650), () {
@@ -412,40 +432,66 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
           children: [
             Ms(LtIcons.graphicEq, size: 18, color: widget.accent),
             const SizedBox(width: 8),
-            Text(l.ltHumModalTitle(widget.trackLabel),
-                style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
+            Text(
+              l.ltHumModalTitle(widget.trackLabel),
+              style: LTType.inter(
+                size: 16,
+                weight: FontWeight.w800,
+                color: LT.t1,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 6),
-        Text(subtitle,
-            textAlign: TextAlign.center,
-            style: LTType.inter(size: 12, color: _phase == 'error' ? LT.danger : LT.t2)),
+        Text(
+          subtitle,
+          textAlign: TextAlign.center,
+          style: LTType.inter(
+            size: 12,
+            color: _phase == 'error' ? LT.danger : LT.t2,
+          ),
+        ),
         const SizedBox(height: 20),
         SizedBox(
           height: 70,
           child: Center(
-            child: _phase == 'done'
-                ? Ms(LtIcons.checkCircle, size: 48, color: widget.accent, fill: 1)
-                : _phase == 'error'
+            child:
+                _phase == 'done'
+                    ? Ms(
+                      LtIcons.checkCircle,
+                      size: 48,
+                      color: widget.accent,
+                      fill: 1,
+                    )
+                    : _phase == 'error'
                     ? Ms(LtIcons.info, size: 44, color: LT.danger)
                     : _phase == 'countin'
-                        ? Text('$_count',
-                            style: LTType.mono(size: 48, weight: FontWeight.w800, color: widget.accent))
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              for (final l in _levels)
-                                Container(
-                                  width: 5,
-                                  height: (l * (_phase == 'listen' ? 64 : 24)).clamp(6, 64),
-                                  margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                  decoration: BoxDecoration(
-                                    color: _phase == 'listen' ? widget.accent : LT.t3,
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                ),
-                            ],
+                    ? Text(
+                      '$_count',
+                      style: LTType.mono(
+                        size: 48,
+                        weight: FontWeight.w800,
+                        color: widget.accent,
+                      ),
+                    )
+                    : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (final l in _levels)
+                          Container(
+                            width: 5,
+                            height: (l * (_phase == 'listen' ? 64 : 24)).clamp(
+                              6,
+                              64,
+                            ),
+                            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                            decoration: BoxDecoration(
+                              color: _phase == 'listen' ? widget.accent : LT.t3,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
                           ),
+                      ],
+                    ),
           ),
         ),
         const SizedBox(height: 22),
@@ -453,9 +499,23 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(width: 8, height: 8, decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle)),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: LT.danger,
+                  shape: BoxShape.circle,
+                ),
+              ),
               const SizedBox(width: 6),
-              Text(time, style: LTType.mono(size: 14, weight: FontWeight.w700, color: LT.danger)),
+              Text(
+                time,
+                style: LTType.mono(
+                  size: 14,
+                  weight: FontWeight.w700,
+                  color: LT.danger,
+                ),
+              ),
               const SizedBox(width: 14),
               GestureDetector(
                 onTap: _finish,
@@ -463,8 +523,18 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
                   height: 44,
                   padding: const EdgeInsets.symmetric(horizontal: 26),
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: widget.accent, borderRadius: BorderRadius.circular(999)),
-                  child: Text(l.ltHumConvert, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg)),
+                  decoration: BoxDecoration(
+                    color: widget.accent,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    l.ltHumConvert,
+                    style: LTType.inter(
+                      size: 14,
+                      weight: FontWeight.w800,
+                      color: LT.bg,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -491,27 +561,36 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   }
 
   Widget _ghostBtn(String label, VoidCallback onTap) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: LT.border),
-          ),
-          child: Text(label, style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t2)),
-        ),
-      );
+    onTap: onTap,
+    child: Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: LT.border),
+      ),
+      child: Text(
+        label,
+        style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t2),
+      ),
+    ),
+  );
 
   Widget _solidBtn(String label, VoidCallback onTap) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(color: widget.accent, borderRadius: BorderRadius.circular(999)),
-          child: Text(label, style: LTType.inter(size: 13, weight: FontWeight.w800, color: LT.bg)),
-        ),
-      );
+    onTap: onTap,
+    child: Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: widget.accent,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: LTType.inter(size: 13, weight: FontWeight.w800, color: LT.bg),
+      ),
+    ),
+  );
 }

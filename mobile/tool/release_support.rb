@@ -5,7 +5,17 @@ require "tempfile"
 module HumTrackRelease
   MOBILE = File.expand_path("..", __dir__)
   ROOT = File.dirname(MOBILE)
-  DEFINE_KEYS = %w[SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL CLARITY_PROJECT_ID SENTRY_DSN_MOBILE].freeze
+  REQUIRED_DEFINE_KEYS = %w[
+    SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL
+    CLARITY_PROJECT_ID SENTRY_DSN_MOBILE
+  ].freeze
+  OPTIONAL_DEFINE_KEYS = %w[
+    APP_ENVIRONMENT FIREBASE_ANALYTICS_ENABLED FIREBASE_PROJECT_ID
+    FIREBASE_MESSAGING_SENDER_ID FIREBASE_MEASUREMENT_ID
+    FIREBASE_ANDROID_APP_ID FIREBASE_ANDROID_API_KEY
+    FIREBASE_IOS_APP_ID FIREBASE_IOS_API_KEY
+  ].freeze
+  DEFINE_KEYS = (REQUIRED_DEFINE_KEYS + OPTIONAL_DEFINE_KEYS).freeze
 
   def self.defines(env: ENV, secrets_path: File.join(ROOT, "backend/.env.secrets"))
     values = {}
@@ -26,7 +36,7 @@ module HumTrackRelease
       value = env[key]
       values[key] = value unless value.nil? || value.empty?
     end
-    missing = DEFINE_KEYS.reject { |key| values[key].is_a?(String) && !values[key].strip.empty? }
+    missing = REQUIRED_DEFINE_KEYS.reject { |key| values[key].is_a?(String) && !values[key].strip.empty? }
     raise ArgumentError, "Missing release configuration: #{missing.join(', ')}" unless missing.empty?
     values
   end

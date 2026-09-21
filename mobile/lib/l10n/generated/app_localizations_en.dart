@@ -1750,6 +1750,13 @@ class L10nEn extends L10n {
   String get ltSettingsHapticsSub => 'Buzz on pad hits';
 
   @override
+  String get ltSettingsAnalytics => 'Anonymous usage analytics';
+
+  @override
+  String get ltSettingsAnalyticsSub =>
+      'Allow Clarity and Firebase analytics for product improvement';
+
+  @override
   String get ltSettingsAbout => 'About';
 
   @override

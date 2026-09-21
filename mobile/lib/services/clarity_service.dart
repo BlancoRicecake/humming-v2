@@ -17,55 +17,78 @@ class ClarityService {
   static final ClarityService instance = ClarityService._();
 
   static const _projectId = String.fromEnvironment('CLARITY_PROJECT_ID');
+  bool _collectionEnabled = true;
 
   /// 키가 주입됐을 때만 true. 런타임 분기는 모두 이 값으로.
-  bool get enabled => _projectId.isNotEmpty &&
-      (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+  bool get enabled =>
+      _projectId.isNotEmpty &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   /// 루트 위젯을 ClarityWidget 으로 감싼다. 비활성 시 앱을 그대로 반환 →
   /// 의존성/오버헤드 0. main() 의 runApp 에 이 결과를 넘긴다.
-  Widget wrap(Widget app) {
+  Widget wrap(Widget app, {required ValueListenable<bool> collectionEnabled}) {
     if (!enabled) {
-      debugPrint('[clarity] CLARITY_PROJECT_ID not set — session replay disabled');
+      debugPrint(
+        '[clarity] CLARITY_PROJECT_ID not set — session replay disabled',
+      );
       return app;
     }
-    debugPrint('[clarity] enabled (project $_projectId)');
+    debugPrint('[clarity] enabled');
     final config = ClarityConfig(
       projectId: _projectId,
       // production 빌드는 SDK 가 자동으로 None 강제 (오버헤드 제거). debug 만 Info.
       logLevel: kDebugMode ? LogLevel.Info : LogLevel.None,
     );
-    return ClarityWidget(app: app, clarityConfig: config);
+    return ValueListenableBuilder<bool>(
+      valueListenable: collectionEnabled,
+      child: app,
+      builder: (_, allowed, child) {
+        _collectionEnabled = allowed;
+        if (!allowed) return child!;
+        return ClarityWidget(app: child!, clarityConfig: config);
+      },
+    );
+  }
+
+  void setCollectionEnabled(bool value) {
+    _collectionEnabled = value;
+    if (!enabled) return;
+    if (value) {
+      Clarity.resume();
+    } else {
+      Clarity.pause();
+    }
   }
 
   /// 로그인 사용자 식별 (세션 필터용). 이메일 등 PII 가 아니라 Supabase user id
   /// 같은 불투명 식별자만 넘길 것. 로그아웃 시 setUserId(null) 대신 새 세션을 시작.
   void setUserId(String userId) {
-    if (!enabled || userId.isEmpty) return;
+    if (!enabled || !_collectionEnabled || userId.isEmpty) return;
     Clarity.setCustomUserId(userId);
   }
 
   /// 사용자 전환(로그아웃→다른 로그인) 시 리플레이를 분리.
   void startNewSession() {
-    if (!enabled) return;
+    if (!enabled || !_collectionEnabled) return;
     Clarity.startNewSession((_) {});
   }
 
   /// 세션 필터용 커스텀 태그 (예: role=guitar, plan=pro).
   void tag(String key, String value) {
-    if (!enabled || key.isEmpty || value.isEmpty) return;
+    if (!enabled || !_collectionEnabled || key.isEmpty || value.isEmpty) return;
     Clarity.setCustomTag(key, value);
   }
 
   /// 커스텀 이벤트 (Clarity 가 자동 캡처하지 못하는 행동: analyze 완료, export 등).
   void event(String name) {
-    if (!enabled || name.isEmpty) return;
+    if (!enabled || !_collectionEnabled || name.isEmpty) return;
     Clarity.sendCustomEvent(name);
   }
 
   /// 라우트 전환 시 화면 이름 지정 → 히트맵/리플레이가 화면 단위로 분리된다.
   void screen(String name) {
-    if (!enabled || name.isEmpty) return;
+    if (!enabled || !_collectionEnabled || name.isEmpty) return;
     Clarity.setCurrentScreenName(name);
   }
 }
