@@ -46,6 +46,10 @@ an opaque Supabase ID; values containing an email marker or spaces are rejected.
 
 1. Create or select a dedicated HumTrack Firebase project and enable Google Analytics.
 2. Register Android and iOS apps with bundle/application ID `com.humtrack.app`.
+   Put the downloaded files at `mobile/android/app/google-services.json` and
+   `mobile/ios/Runner/GoogleService-Info.plist`. Both paths are ignored by Git.
+   Android applies Google Services only when the JSON exists, so an unconfigured
+   checkout remains buildable while configured builds receive `google_app_id`.
 3. Verify events in Android and iOS DebugView with a non-production build.
 4. Add these optional fields to `HUMTRACK_DART_DEFINES_JSON` for each release environment:
    - `FIREBASE_ANALYTICS_ENABLED=true`
