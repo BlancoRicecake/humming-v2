@@ -1,7 +1,8 @@
 # HumTrack product analytics rollout
 
-Status: code complete; Firebase collection remains disabled until the console,
-release secrets, privacy notice, and store disclosures below are complete.
+Status: code and Firebase project/app registration are complete. Production
+collection remains disabled until the privacy notice and store disclosures below
+are complete.
 
 ## Architecture
 
@@ -44,14 +45,21 @@ an opaque Supabase ID; values containing an email marker or spaces are rejected.
 
 ## Firebase console and release steps
 
-1. Create or select a dedicated HumTrack Firebase project and enable Google Analytics.
-2. Register Android and iOS apps with bundle/application ID `com.humtrack.app`.
-   Put the downloaded files at `mobile/android/app/google-services.json` and
-   `mobile/ios/Runner/GoogleService-Info.plist`. Both paths are ignored by Git.
-   Android applies Google Services only when the JSON exists, so an unconfigured
-   checkout remains buildable while configured builds receive `google_app_id`.
-3. Verify events in Android and iOS DebugView with a non-production build.
-4. Add these optional fields to `HUMTRACK_DART_DEFINES_JSON` for each release environment:
+Completed:
+
+- Created the dedicated Spark-plan project `humtrack-hq` and enabled Google
+  Analytics property `p555155566`.
+- Registered Android and iOS apps with bundle/application ID
+  `com.humtrack.app`, plus a Web app for future browser integration.
+- Stored the official files at `mobile/android/app/google-services.json` and
+  `mobile/ios/Runner/GoogleService-Info.plist`. Both paths are ignored by Git.
+- Rebuilt the Android debug APK with the official config and verified that the
+  generated `google_app_id` matches the registered Android app.
+
+Remaining:
+
+1. Verify events in Android and iOS DebugView with a non-production build.
+2. Add these optional fields to `HUMTRACK_DART_DEFINES_JSON` for each release environment:
    - `FIREBASE_ANALYTICS_ENABLED=true`
    - `FIREBASE_PROJECT_ID`
    - `FIREBASE_MESSAGING_SENDER_ID`
@@ -59,7 +67,7 @@ an opaque Supabase ID; values containing an email marker or spaces are rejected.
    - `FIREBASE_ANDROID_APP_ID`, `FIREBASE_ANDROID_API_KEY`
    - `FIREBASE_IOS_APP_ID`, `FIREBASE_IOS_API_KEY`
    - `APP_ENVIRONMENT=production` (or `staging` for internal validation)
-5. Do not enable `FIREBASE_ANALYTICS_ENABLED` until the privacy and store items below are published.
+3. Do not enable `FIREBASE_ANALYTICS_ENABLED` in production until the privacy and store items below are published.
 
 Existing production release validation still requires non-empty
 `CLARITY_PROJECT_ID` and `SENTRY_DSN_MOBILE`; secret values must remain outside Git.
