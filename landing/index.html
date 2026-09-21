@@ -804,7 +804,7 @@ document.querySelectorAll('.billing-opt').forEach(function (btn) {
 
 (function () {
   if (!document.documentElement.classList.contains('anim')) return;
-  var targets = document.querySelectorAll('.how, .features, .pricing, .faq, .cta-strip');
+  var targets = document.querySelectorAll('.how, .features, .product-update, .pricing, .faq, .cta-strip');
   if (!('IntersectionObserver' in window)) { targets.forEach(function (t) { t.classList.add('in'); }); return; }
   var io = new IntersectionObserver(function (entries) {
     entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
