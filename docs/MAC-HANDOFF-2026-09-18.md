@@ -27,6 +27,7 @@ cat docs/MAC-HANDOFF-2026-09-18.md
 | `e3f0c45` | Windows PCM 출력, 데스크톱 실행 기반, Mac 마이크 권한 준비 |
 | `8b83422` | 사용자 지정 연주 키, 어두운 창 제목 표시줄 |
 | `5f3c255` | 영역 크기 조절, 타임라인 확대·스크롤, 재생·녹음·저장 단축키 |
+| `0c93bd4` | 허밍·보컬 녹음의 백그라운드 중단 처리, 초보자 퍼널 계측, Flutter 최신 API 정리 |
 
 웹사이트 업데이트는 별도 PR #6으로 `main`에 배포됐다. 앱 배포를 위해 웹 변경을 다시 배포할 필요는 없다.
 
@@ -34,10 +35,12 @@ cat docs/MAC-HANDOFF-2026-09-18.md
 
 - `mobile/pubspec.yaml`: **1.0.7+35**. 그대로 업로드하지 말고 App Store Connect의 실제 최신 버전/빌드 번호와 비교할 것.
 - Windows: 일반 Release 실행 파일, PCM 출력, WAV 내보내기, 편집 저장, 연주/재생 키 입력 검증 완료. Flutter 테스트 **162개 통과**.
+- Android: Pixel 에뮬레이터에서 초보자 허밍 → MIDI → 반주 → 저장·복구, 마이크 권한 거부, 무료 곡 4개 한도와 Pro 안내를 확인했다. 녹음 중 앱을 백그라운드로 보내면 잘린 녹음을 자동 변환하던 결함을 수정했고, 허밍·보컬 모두 복귀 시 중단 안내와 임시 파일 폐기를 확인했다. `flutter analyze` 문제 0건, 162개 테스트와 디버그 APK 빌드가 통과했다.
 - iOS: 예전 커밋의 클라우드 컴파일 성공 이력은 있으나, **현재 데스크톱 브랜치 전체의 iOS 빌드·실기기 검증은 아직 하지 않았다.**
 - macOS: 코드/권한 준비만 완료. **컴파일, 소리, 마이크, 로그인, 내보내기, 서명, 공증 모두 Mac에서 확인해야 한다.**
 - 이 저장소의 `test/desktop_smoke_app.dart`는 Windows 전용 검증 진입점이다. 배포는 항상 `lib/main.dart`를 사용한다.
 - Windows 로컬 산출물은 Git에 들어 있지 않다. Mac에서는 소스를 빌드한다.
+- Windows 작업 환경에는 `mobile/android/key.properties`와 `backend/.env.secrets`가 없어서 서명된 운영 AAB를 만들지 않았다. 배포용 빌드는 운영 설정과 실제 업로드 키가 있는 Mac 또는 CI에서 Fastlane의 fail-closed 검사를 통과시켜 만든다.
 
 ## 3. 도구와 운영 설정
 
