@@ -92,6 +92,8 @@ void main() {
         await tester.binding.setSurfaceSize(const Size(850, 400));
         addTearDown(() => tester.binding.setSurfaceSize(null));
         BackingStyle? chosen;
+        var previewed = -1;
+        var applied = -1;
         var samples = 0;
         await tester.pumpWidget(
           MaterialApp(
@@ -111,6 +113,8 @@ void main() {
                 onEdit: () {},
                 onSample: () => samples++,
                 onBacking: (s) => chosen = s,
+                onPreviewBacking: (i) => previewed = i,
+                onApplyBacking: (i) => applied = i,
               ),
             ),
           ),
@@ -118,6 +122,38 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text(lang == 'ko' ? '신나게' : 'Drive'));
         expect(chosen, BackingStyle.drive);
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: Locale(lang),
+            localizationsDelegates: L10n.localizationsDelegates,
+            supportedLocales: L10n.supportedLocales,
+            home: Scaffold(
+              body: GuidedHumPanel(
+                hasNotes: true,
+                playing: false,
+                saved: true,
+                onBack: () {},
+                onRecord: () {},
+                onListen: () {},
+                onInstrument: () {},
+                onSave: () {},
+                onEdit: () {},
+                onSample: () => samples++,
+                backingStyle: BackingStyle.drive,
+                onBacking: (s) => chosen = s,
+                onPreviewBacking: (i) => previewed = i,
+                onApplyBacking: (i) => applied = i,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('A'));
+        await tester.tap(
+          find.byTooltip(lang == 'ko' ? '미리듣기' : 'Preview').first,
+        );
+        await tester.tap(find.text(lang == 'ko' ? '적용' : 'Apply').first);
+        expect([previewed, applied], [0, 0]);
         await tester.ensureVisible(
           find.text(lang == 'ko' ? '내 소리 추가하기' : 'Add sounds'),
         );

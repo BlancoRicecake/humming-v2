@@ -18,8 +18,13 @@ class GuidedHumPanel extends StatelessWidget {
     required this.onEdit,
     this.onSample,
     this.onBacking,
+    this.onPreviewBacking,
+    this.onApplyBacking,
+    this.onSongPlan,
     this.onUndo,
     this.backingStyle,
+    this.previewCandidate,
+    this.appliedCandidate,
     this.lowConfidenceCount = 0,
     this.previewingOriginal = false,
     this.melodyLocked = true,
@@ -29,9 +34,11 @@ class GuidedHumPanel extends StatelessWidget {
   });
   final bool hasNotes, playing, saved;
   final VoidCallback onBack, onRecord, onListen, onInstrument, onSave, onEdit;
-  final VoidCallback? onSample, onUndo;
+  final VoidCallback? onSample, onUndo, onSongPlan;
   final ValueChanged<BackingStyle>? onBacking;
+  final ValueChanged<int>? onPreviewBacking, onApplyBacking;
   final BackingStyle? backingStyle;
+  final int? previewCandidate, appliedCandidate;
   final int lowConfidenceCount;
   final bool previewingOriginal;
   final bool melodyLocked;
@@ -188,12 +195,93 @@ class GuidedHumPanel extends StatelessWidget {
                 BackingStyle.drive => l.ltBackingDrive,
               }),
               selected: backingStyle == style,
-              onSelected: hasNotes && onBacking != null
-                  ? (_) => onBacking!(style)
-                  : null,
+              onSelected:
+                  hasNotes && onBacking != null
+                      ? (_) => onBacking!(style)
+                      : null,
             ),
         ],
       ),
+      if (backingStyle != null) ...[
+        const SizedBox(height: 16),
+        Text(
+          l.ltBackingCompare,
+          style: const TextStyle(color: LT.t1, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        for (var i = 0; i < 3; i++) ...[
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+            decoration: BoxDecoration(
+              color:
+                  previewCandidate == i
+                      ? LT.lime.withValues(alpha: .08)
+                      : LT.bg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: previewCandidate == i ? LT.lime : LT.border,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: LT.surface2,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    String.fromCharCode(65 + i),
+                    style: const TextStyle(
+                      color: LT.t1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    backingCandidateLabel(backingStyle!, i),
+                    style: const TextStyle(color: LT.t2, fontSize: 12),
+                  ),
+                ),
+                IconButton(
+                  tooltip: l.ltBackingPreview,
+                  onPressed:
+                      onPreviewBacking == null
+                          ? null
+                          : () => onPreviewBacking!(i),
+                  icon: Icon(
+                    previewCandidate == i && playing
+                        ? Icons.stop_circle_outlined
+                        : Icons.play_circle_outline,
+                  ),
+                ),
+                FilledButton.tonal(
+                  onPressed:
+                      onApplyBacking == null ? null : () => onApplyBacking!(i),
+                  child: Text(
+                    appliedCandidate == i
+                        ? l.ltBackingApplied
+                        : l.ltBackingApply,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (i != 2) const SizedBox(height: 8),
+        ],
+      ],
+      if (hasNotes && onSongPlan != null) ...[
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: onSongPlan,
+          icon: const Icon(Icons.account_tree_outlined),
+          label: Text(l.ltSongPlan),
+        ),
+      ],
     ]);
     return ColoredBox(
       color: LT.bg,
@@ -220,31 +308,33 @@ class GuidedHumPanel extends StatelessWidget {
           ),
           Expanded(
             child: LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 8,
-                ),
-                child: constraints.maxWidth >= 680 && onBacking != null
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: melody),
-                          const SizedBox(width: 16),
-                          Expanded(child: backing),
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          melody,
-                          if (onBacking != null) ...[
-                            const SizedBox(height: 16),
-                            backing,
-                          ],
-                        ],
-                      ),
-              ),
+              builder:
+                  (context, constraints) => SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 8,
+                    ),
+                    child:
+                        constraints.maxWidth >= 680 && onBacking != null
+                            ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: melody),
+                                const SizedBox(width: 16),
+                                Expanded(child: backing),
+                              ],
+                            )
+                            : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                melody,
+                                if (onBacking != null) ...[
+                                  const SizedBox(height: 16),
+                                  backing,
+                                ],
+                              ],
+                            ),
+                  ),
             ),
           ),
           if (hasNotes)

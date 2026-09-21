@@ -2408,7 +2408,7 @@ class L10nEn extends L10n {
 
   @override
   String get ltBackingHint =>
-      'Replaces bass and drums in this section. Undo restores the previous backing.';
+      'Pick a mood, then compare three options. Your song changes only when you apply one.';
 
   @override
   String get ltBackingCalm => 'Calm';
@@ -2418,6 +2418,50 @@ class L10nEn extends L10n {
 
   @override
   String get ltBackingDrive => 'Drive';
+
+  @override
+  String get ltBackingCompare => 'Compare A, B and C';
+
+  @override
+  String get ltBackingPreview => 'Preview';
+
+  @override
+  String get ltBackingApply => 'Apply';
+
+  @override
+  String get ltBackingApplied => 'Applied';
+
+  @override
+  String get ltSongPlan => 'View song structure';
+
+  @override
+  String get ltSongPlanTitle => 'Song structure';
+
+  @override
+  String get ltSongPlanHint =>
+      'Arrange sections and repeats, then lock the tracks that automatic arrangement must preserve.';
+
+  @override
+  String get ltSongPlanBars => 'bars';
+
+  @override
+  String get ltSongPlanLocks => 'Arrangement locks';
+
+  @override
+  String get ltSongPlanLocksHint =>
+      'Locked tracks stay unchanged when you apply another option.';
+
+  @override
+  String get ltSongPlanMelody => 'My melody';
+
+  @override
+  String get ltSongPlanHarmony => 'Chords';
+
+  @override
+  String get ltSongPlanBass => 'Bass';
+
+  @override
+  String get ltSongPlanDrums => 'Drums';
 
   @override
   String get ltGuidedSample => 'Add sounds';

@@ -3,6 +3,8 @@ import 'theory.dart';
 
 enum BackingStyle { calm, bounce, drive }
 
+const _romanDegrees = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+
 /// Three intentionally small harmonic choices. They are deterministic so a
 /// beginner can compare them and undo them; the user's melody is never changed.
 List<List<int>> backingChordCandidates(BackingStyle style) => switch (style) {
@@ -23,6 +25,13 @@ List<List<int>> backingChordCandidates(BackingStyle style) => switch (style) {
   ],
 };
 
+/// Short, theory-friendly label shown while comparing arrangement candidates.
+String backingCandidateLabel(BackingStyle style, int variant) =>
+    backingChordCandidates(style)[variant.clamp(
+      0,
+      2,
+    )].map((degree) => _romanDegrees[degree.clamp(0, 6)]).join(' – ');
+
 /// Deterministic, in-key bass + drums. All original sections/tracks stay intact;
 /// only the returned copy's bass and drums are replaced.
 Section withBeginnerBacking(
@@ -32,6 +41,7 @@ Section withBeginnerBacking(
   BackingStyle style, {
   int chordVariant = 0,
   bool melodyLocked = true,
+  Map<String, bool> lockedTracks = const {},
 }) {
   final out = source.deepCopy();
   final bass = <PitchNote>[];
@@ -94,9 +104,15 @@ Section withBeginnerBacking(
       drums.add(DrumNote(kind: 'hihat', step: start + offset));
     }
   }
-  out.tracks['bass'] = TrackData(notes: bass);
-  out.tracks['melodyDec'] = TrackData(notes: chords);
-  out.tracks['drums'] = TrackData(drums: drums);
+  if (!(lockedTracks['bass'] ?? false)) {
+    out.tracks['bass'] = TrackData(notes: bass);
+  }
+  if (!(lockedTracks['harmony'] ?? false)) {
+    out.tracks['melodyDec'] = TrackData(notes: chords);
+  }
+  if (!(lockedTracks['drums'] ?? false)) {
+    out.tracks['drums'] = TrackData(drums: drums);
+  }
   // Defensive invariant: even a future backing implementation must not mutate
   // or replace the user's melody when it is locked.
   if (melodyLocked) {

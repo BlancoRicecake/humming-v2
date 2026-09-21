@@ -4251,7 +4251,7 @@ abstract class L10n {
   /// No description provided for @ltBackingHint.
   ///
   /// In ko, this message translates to:
-  /// **'현재 구간의 베이스와 드럼이 바뀝니다. 되돌리기로 이전 반주를 복원할 수 있어요.'**
+  /// **'분위기를 고른 뒤 세 후보를 들어보세요. 적용하기 전에는 곡이 바뀌지 않아요.'**
   String get ltBackingHint;
 
   /// No description provided for @ltBackingCalm.
@@ -4271,6 +4271,90 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'신나게'**
   String get ltBackingDrive;
+
+  /// No description provided for @ltBackingCompare.
+  ///
+  /// In ko, this message translates to:
+  /// **'후보 A·B·C 비교'**
+  String get ltBackingCompare;
+
+  /// No description provided for @ltBackingPreview.
+  ///
+  /// In ko, this message translates to:
+  /// **'미리듣기'**
+  String get ltBackingPreview;
+
+  /// No description provided for @ltBackingApply.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용'**
+  String get ltBackingApply;
+
+  /// No description provided for @ltBackingApplied.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용됨'**
+  String get ltBackingApplied;
+
+  /// No description provided for @ltSongPlan.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 구성 보기'**
+  String get ltSongPlan;
+
+  /// No description provided for @ltSongPlanTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 구성'**
+  String get ltSongPlanTitle;
+
+  /// No description provided for @ltSongPlanHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'구간의 순서와 반복을 정하고, 자동 편곡에서 지킬 트랙을 잠가두세요.'**
+  String get ltSongPlanHint;
+
+  /// No description provided for @ltSongPlanBars.
+  ///
+  /// In ko, this message translates to:
+  /// **'마디'**
+  String get ltSongPlanBars;
+
+  /// No description provided for @ltSongPlanLocks.
+  ///
+  /// In ko, this message translates to:
+  /// **'자동 편곡 잠금'**
+  String get ltSongPlanLocks;
+
+  /// No description provided for @ltSongPlanLocksHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'잠근 트랙은 다른 후보를 적용해도 그대로 유지됩니다.'**
+  String get ltSongPlanLocksHint;
+
+  /// No description provided for @ltSongPlanMelody.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 멜로디'**
+  String get ltSongPlanMelody;
+
+  /// No description provided for @ltSongPlanHarmony.
+  ///
+  /// In ko, this message translates to:
+  /// **'코드'**
+  String get ltSongPlanHarmony;
+
+  /// No description provided for @ltSongPlanBass.
+  ///
+  /// In ko, this message translates to:
+  /// **'베이스'**
+  String get ltSongPlanBass;
+
+  /// No description provided for @ltSongPlanDrums.
+  ///
+  /// In ko, this message translates to:
+  /// **'드럼'**
+  String get ltSongPlanDrums;
 
   /// No description provided for @ltGuidedSample.
   ///

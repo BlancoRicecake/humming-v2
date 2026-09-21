@@ -82,4 +82,26 @@ void main() {
       );
     }
   });
+
+  test('locked backing tracks survive candidate generation', () {
+    final original = Section(id: 'A', name: 'A', bars: 2);
+    original.tracks['bass']!.pitchNotes.add(
+      PitchNote(midi: 36, freq: midiToFreq(36), step: 3, dur: 2),
+    );
+    original.tracks['drums']!.drumNotes.add(DrumNote(kind: 'snare', step: 7));
+    final backed = withBeginnerBacking(
+      original,
+      'C',
+      'major',
+      BackingStyle.drive,
+      lockedTracks: const {'bass': true, 'drums': true},
+    );
+    expect(backed.tracks['bass']!.toJson(), original.tracks['bass']!.toJson());
+    expect(
+      backed.tracks['drums']!.toJson(),
+      original.tracks['drums']!.toJson(),
+    );
+    expect(backed.tracks['melodyDec']!.pitchNotes, isNotEmpty);
+    expect(backingCandidateLabel(BackingStyle.drive, 0), contains('I'));
+  });
 }

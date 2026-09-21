@@ -2327,7 +2327,7 @@ class L10nKo extends L10n {
   String get ltBackingTitle => '2. 반주를 골라보세요';
 
   @override
-  String get ltBackingHint => '현재 구간의 베이스와 드럼이 바뀝니다. 되돌리기로 이전 반주를 복원할 수 있어요.';
+  String get ltBackingHint => '분위기를 고른 뒤 세 후보를 들어보세요. 적용하기 전에는 곡이 바뀌지 않아요.';
 
   @override
   String get ltBackingCalm => '차분하게';
@@ -2337,6 +2337,48 @@ class L10nKo extends L10n {
 
   @override
   String get ltBackingDrive => '신나게';
+
+  @override
+  String get ltBackingCompare => '후보 A·B·C 비교';
+
+  @override
+  String get ltBackingPreview => '미리듣기';
+
+  @override
+  String get ltBackingApply => '적용';
+
+  @override
+  String get ltBackingApplied => '적용됨';
+
+  @override
+  String get ltSongPlan => '곡 구성 보기';
+
+  @override
+  String get ltSongPlanTitle => '곡 구성';
+
+  @override
+  String get ltSongPlanHint => '구간의 순서와 반복을 정하고, 자동 편곡에서 지킬 트랙을 잠가두세요.';
+
+  @override
+  String get ltSongPlanBars => '마디';
+
+  @override
+  String get ltSongPlanLocks => '자동 편곡 잠금';
+
+  @override
+  String get ltSongPlanLocksHint => '잠근 트랙은 다른 후보를 적용해도 그대로 유지됩니다.';
+
+  @override
+  String get ltSongPlanMelody => '내 멜로디';
+
+  @override
+  String get ltSongPlanHarmony => '코드';
+
+  @override
+  String get ltSongPlanBass => '베이스';
+
+  @override
+  String get ltSongPlanDrums => '드럼';
 
   @override
   String get ltGuidedSample => '내 소리 추가하기';
