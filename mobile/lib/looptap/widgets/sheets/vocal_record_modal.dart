@@ -20,6 +20,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../audio/autotune_monitor.dart';
 import '../../../audio/headset.dart';
 import '../../../audio/synth.dart';
+import '../../../services/clarity_service.dart';
 import '../../music/wav_codec.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
@@ -95,7 +96,8 @@ class _VocalRecordModal extends StatefulWidget {
   State<_VocalRecordModal> createState() => _VocalRecordModalState();
 }
 
-class _VocalRecordModalState extends State<_VocalRecordModal> {
+class _VocalRecordModalState extends State<_VocalRecordModal>
+    with WidgetsBindingObserver {
   static const int _sr = 44100;
   static const double _minUsefulRecordSec = 0.5;
   static const double _minUsefulRecordRatio = 0.1;
@@ -137,6 +139,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _count = widget.countInBeats; // shown while the permission prompt is up
     // native monitor can stop itself (headphones unplugged mid-recording) —
     // clear the LIVE AUTOTUNE badge when it does
@@ -149,6 +152,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _closed = true;
     onAutotuneMonitorStopped = null;
     _msTimer?.cancel();
@@ -159,6 +163,36 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
     if (_backingOn) widget.stopBacking?.call();
     _stopMonitor();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.paused && state != AppLifecycleState.hidden) return;
+    if (_checkingPermission) return; // the system permission sheet may pause us
+    unawaited(_abortForLifecycle());
+  }
+
+  Future<void> _abortForLifecycle() async {
+    if (_closed || (_phase != 'countin' && _phase != 'listen')) return;
+    if (mounted) setState(() => _phase = 'saving');
+    _autoStop?.cancel();
+    _msTimer?.cancel();
+    _ampSub?.cancel();
+    _stateSub?.cancel();
+    _stopBacking();
+    _stopMonitor();
+    String? path;
+    if (_recStarted) {
+      try {
+        path = await _rec.stop();
+      } catch (_) {}
+    }
+    _deleteQuiet(path);
+    await releaseAutotuneMonitorSession();
+    await _restoreOutput();
+    if (_closed) return;
+    ClarityService.instance.event('vocal_recording_interrupted');
+    _fail('interrupted');
   }
 
   /// Mic permission BEFORE the count-in — the OS prompt would otherwise pop
@@ -237,7 +271,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
   Future<void> _beginCapture() async {
     try {
       final dir = await getTemporaryDirectory();
-      if (_closed || !mounted) return;
+      if (_closed || _phase != 'countin' || !mounted) return;
       final path =
           '${dir.path}/humtrack_vocal_${DateTime.now().millisecondsSinceEpoch}.wav';
       // Record at the device's CURRENT output rate (iOS) like the hum modal:
@@ -245,7 +279,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
       // restores it, so a fixed 44.1k would drag 48k hardware down and leave
       // the synth output crackling after. _alignJob resamples to _sr anyway.
       final deviceRate = await outputSampleRate() ?? _sr;
-      if (_closed || !mounted) return;
+      if (_closed || _phase != 'countin' || !mounted) return;
       await _rec.start(
         RecordConfig(
           encoder: AudioEncoder.wav,
@@ -264,7 +298,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
         path: path,
       );
       _recStarted = true;
-      if (_closed || !mounted) {
+      if (_closed || _phase != 'countin' || !mounted) {
         // cancelled while start() was in flight — _cancel's stop ran before
         // the recorder existed, so stop it here and skip backing/monitor
         String? p;
@@ -284,7 +318,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
       // no-op elsewhere. Done BEFORE the monitor so its session tweaks win.
       await SynthEngine().rebuildOutput(forRecording: true);
       if (widget.headset == HeadsetRoute.none) await overrideOutputToSpeaker();
-      if (_closed || !mounted) {
+      if (_closed || _phase != 'countin' || !mounted) {
         String? p;
         try {
           p = await _rec.stop();
@@ -302,7 +336,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
         _backingOn = true;
       }
       await _startMonitor(); // after the recorder owns the mic; fails soft
-      if (_closed || !mounted) {
+      if (_closed || _phase != 'countin' || !mounted) {
         _stopBacking();
         String? p;
         try {
@@ -334,7 +368,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
         _finish,
       );
     } catch (_) {
-      _fail('unavailable');
+      if (!_closed && _phase == 'countin') _fail('unavailable');
     }
   }
 
@@ -624,7 +658,7 @@ class _VocalRecordModalState extends State<_VocalRecordModal> {
                   height: 24,
                   child: Switch(
                     value: _monitorOn,
-                    activeColor: widget.accent,
+                    activeThumbColor: widget.accent,
                     onChanged: (v) => setState(() => _monitorOn = v),
                   ),
                 ),

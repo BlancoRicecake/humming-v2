@@ -77,7 +77,7 @@ class _HumModal extends StatefulWidget {
   State<_HumModal> createState() => _HumModalState();
 }
 
-class _HumModalState extends State<_HumModal> {
+class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   final AudioRecorder _rec = AudioRecorder();
   String _phase = 'countin'; // countin | listen | converting | done | error
   // Error CODE (not text) — the message is localized in build(), so _fail can
@@ -109,12 +109,14 @@ class _HumModalState extends State<_HumModal> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _count = widget.countInBeats; // shown while the permission prompt is up
     _requestPermissionThenCountIn();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _closed = true;
     _msTimer?.cancel();
     _autoStop?.cancel();
@@ -123,6 +125,35 @@ class _HumModalState extends State<_HumModal> {
     _rec.dispose();
     widget.stopBacking?.call();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.paused && state != AppLifecycleState.hidden) return;
+    if (_checkingPermission) return; // the system permission sheet may pause us
+    unawaited(_abortForLifecycle());
+  }
+
+  Future<void> _abortForLifecycle() async {
+    if (_closed || _finishing || (_phase != 'countin' && _phase != 'listen')) return;
+    _finishing = true;
+    _autoStop?.cancel();
+    _msTimer?.cancel();
+    _ampSub?.cancel();
+    _stateSub?.cancel();
+    _stopBacking();
+    String? path;
+    if (_recStarted) {
+      try {
+        path = await _rec.stop();
+      } catch (_) {}
+    }
+    _deleteQuiet(path);
+    await _restoreOutput();
+    _finishing = false;
+    if (_closed) return;
+    ClarityService.instance.event('recording_interrupted');
+    _fail('interrupted');
   }
 
   /// Mic permission BEFORE the count-in — the OS prompt would otherwise pop
@@ -182,7 +213,7 @@ class _HumModalState extends State<_HumModal> {
       // finalize 가 안 끝나 partial file 로 업로드되던 회귀 fix. Android API 29
       // 미만은 Opus 인코더가 없어 AAC-LC(.m4a) 로 폴백 (audit A3).
       final opus = opusSupported(await androidSdkInt());
-      if (_closed || !mounted) return;
+      if (_closed || _finishing || _phase != 'countin' || !mounted) return;
       final path =
           '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${takeContainerExt(opus: opus)}';
       // Record at the device's CURRENT output rate (iOS), not a fixed 16k. On
@@ -208,11 +239,13 @@ class _HumModalState extends State<_HumModal> {
         path: path,
       );
       _recStarted = true;
-      if (_closed || !mounted) {
+      if (_closed || _finishing || _phase != 'countin' || !mounted) {
         // cancelled while start() was in flight — stop what we just started
+        String? stoppedPath;
         try {
-          await _rec.stop();
+          stoppedPath = await _rec.stop();
         } catch (_) {}
+        _deleteQuiet(stoppedPath);
         await _restoreOutput();
         return;
       }
@@ -250,7 +283,7 @@ class _HumModalState extends State<_HumModal> {
       // Capture exactly one loop pass, then convert automatically.
       _autoStop = Timer(Duration(milliseconds: _loopMs), _finish);
     } catch (e) {
-      _fail('unavailable');
+      if (!_closed && _phase == 'countin') _fail('unavailable');
     }
   }
 

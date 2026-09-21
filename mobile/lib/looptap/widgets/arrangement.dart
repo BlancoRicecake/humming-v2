@@ -108,7 +108,7 @@ class Arrangement extends StatelessWidget {
           padding: EdgeInsets.zero,
           buildDefaultDragHandles: false,
           itemCount: tracks.length,
-          onReorder: onReorder ?? (_, __) {},
+          onReorderItem: onReorder ?? (_, __) {},
           // Flutter hardcodes the reorder animation at 250ms with no knob, so we
           // slow it ~25% (×1.33) for the duration of the drag, restoring normal
           // speed on drop. timeDilation is global, so we only apply it while

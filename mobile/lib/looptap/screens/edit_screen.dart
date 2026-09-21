@@ -287,7 +287,6 @@ class _EditScreenState extends State<EditScreen>
   void _reorderTracks(int oldIndex, int newIndex) {
     final ids = _orderedMetas(_sec).map((m) => m.id).toList();
     if (oldIndex < 0 || oldIndex >= ids.length) return;
-    if (newIndex > oldIndex) newIndex -= 1;
     final id = ids.removeAt(oldIndex);
     ids.insert(newIndex.clamp(0, ids.length), id);
     setState(() {
@@ -439,12 +438,16 @@ class _EditScreenState extends State<EditScreen>
   bool _dirty = false;
   DateTime? _savedAt;
   bool _savedFlash = false;
+  bool _guidedSaveTracked = false;
   Timer? _flashTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (widget.guidedStart) {
+      ClarityService.instance.event('guided_started');
+    }
     // apply this song's chosen instruments (per pitched channel), then warm the synth
     _audio.setPrograms({
       for (final t in kPitchedTracks)
@@ -2306,8 +2309,12 @@ class _EditScreenState extends State<EditScreen>
       _toast(L10n.of(context).ltEditorHumAdded(count));
       // Clarity: 분석 성공 + 분기(드럼/멜로딕) 태깅. noteCount 는 이벤트로 분포 확인.
       ClarityService.instance.event('analyze_completed');
+      if (_guided) {
+        ClarityService.instance.event('guided_conversion_completed');
+      }
       ClarityService.instance.tag('analyze_role', drums ? 'drum' : 'melodic');
     } catch (e) {
+      _trackAnalyzeFailure(e);
       debugPrint('[hum] convert failed: $e');
       if (!mounted) {
         _deleteTempFile(audioPath);
@@ -2332,6 +2339,29 @@ class _EditScreenState extends State<EditScreen>
     } finally {
       if (ok) _deleteTempFile(audioPath); // temp hum recording (C27)
     }
+  }
+
+  void _trackAnalyzeFailure(Object e) {
+    var reason = 'unknown';
+    if (e is StateError) {
+      reason = 'no_notes';
+    } else if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 413) {
+        reason = 'too_long';
+      } else if (code == 429) {
+        reason = 'busy';
+      } else if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        reason = 'connection';
+      } else {
+        reason = 'server';
+      }
+    }
+    ClarityService.instance.event('analyze_failed');
+    ClarityService.instance.tag('analyze_failure', reason);
   }
 
   /// User-facing reason a hum conversion failed. DioException → status-aware
@@ -2431,6 +2461,9 @@ class _EditScreenState extends State<EditScreen>
     try {
       await context.read<LoopStore>().upsert(_snapshot());
     } catch (_) {
+      ClarityService.instance.event(
+        _guided ? 'guided_song_save_failed' : 'song_save_failed',
+      );
       _handleSaveFailure();
       return;
     }
@@ -2445,6 +2478,10 @@ class _EditScreenState extends State<EditScreen>
     _flashTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _savedFlash = false);
     });
+    if (_guided && !_guidedSaveTracked) {
+      _guidedSaveTracked = true;
+      ClarityService.instance.event('guided_song_saved');
+    }
   }
 
   /// A brand-new song the user never touched — not in the library yet, no
@@ -2597,6 +2634,8 @@ class _EditScreenState extends State<EditScreen>
                   _stopAll();
                   _pushUndo();
                   setState(() { _sections[_activeIdx] = withBeginnerBacking(_sec, _keyRoot, _scale, style); _guidedBacking = style; });
+                  ClarityService.instance.event('guided_backing_applied');
+                  ClarityService.instance.tag('guided_backing_style', style.name);
                   _togglePlay();
                 },
                 onUndo: _undo.isNotEmpty ? () { _undoAction(); setState(() => _guidedBacking = null); } : null,
