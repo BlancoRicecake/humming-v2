@@ -195,6 +195,9 @@ jobs:
           bundler: '2.6.2'
           bundler-cache: true
           working-directory: mobile/ios
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
       - name: Check release helpers and app tests
         working-directory: mobile
         run: |

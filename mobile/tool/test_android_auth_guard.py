@@ -1,7 +1,7 @@
 """Exercise the real Gradle release guard without Android, credentials or network.
 
 Run: python3 tool/test_android_auth_guard.py
-Optional GRADLE points to a local Gradle executable; otherwise use the wrapper.
+Requires Gradle on PATH, or GRADLE pointing to a local Gradle executable.
 """
 import base64
 import os
@@ -12,7 +12,7 @@ import unittest
 
 MOBILE = Path(__file__).resolve().parents[1]
 GUARD = MOBILE / "android/auth-config.gradle"
-GRADLE = os.environ.get("GRADLE", str(MOBILE / "android" / ("gradlew.bat" if os.name == "nt" else "gradlew")))
+GRADLE = os.environ.get("GRADLE", "gradle")
 VALID = {
     "SUPABASE_URL": "https://login.example.test",
     "SUPABASE_ANON_KEY": "test-only-public-key-do-not-log",
