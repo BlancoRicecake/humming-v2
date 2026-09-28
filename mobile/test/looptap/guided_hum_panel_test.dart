@@ -85,6 +85,91 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'beginner can complete record, backing, preview, apply and save',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(850, 400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final actions = <String>[];
+      var hasNotes = false;
+      var saved = false;
+      BackingStyle? backing;
+      var preview = -1;
+      var applied = -1;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ko'),
+          localizationsDelegates: L10n.localizationsDelegates,
+          supportedLocales: L10n.supportedLocales,
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder:
+                  (context, setState) => GuidedHumPanel(
+                    hasNotes: hasNotes,
+                    playing: false,
+                    saved: saved,
+                    backingStyle: backing,
+                    previewCandidate: preview < 0 ? null : preview,
+                    appliedCandidate: applied < 0 ? null : applied,
+                    onBack: () {},
+                    onRecord: () {
+                      actions.add('record');
+                      setState(() => hasNotes = true);
+                    },
+                    onListen: () => actions.add('listen'),
+                    onInstrument: () {},
+                    onSave: () {
+                      actions.add('save');
+                      setState(() => saved = true);
+                    },
+                    onEdit: () {},
+                    onBacking: (style) {
+                      actions.add('backing:${style.name}');
+                      setState(() => backing = style);
+                    },
+                    onPreviewBacking: (candidate) {
+                      actions.add('preview:$candidate');
+                      setState(() => preview = candidate);
+                    },
+                    onApplyBacking: (candidate) {
+                      actions.add('apply:$candidate');
+                      setState(() => applied = candidate);
+                    },
+                  ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('멜로디 녹음하기'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('신나게'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('A'));
+      await tester.tap(find.byTooltip('미리듣기').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('적용').first);
+    await tester.ensureVisible(find.text('내 곡 저장'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('내 곡 저장'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('내 곡 듣기'));
+
+      expect(actions, [
+        'record',
+        'backing:drive',
+        'preview:0',
+        'apply:0',
+        'save',
+        'listen',
+      ]);
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final lang in ['ko', 'en']) {
     testWidgets(
       '$lang landscape keeps transport visible and backing actionable',

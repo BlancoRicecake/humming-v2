@@ -140,4 +140,164 @@ void main() {
     expect(sink.userId, isNull);
     expect(sink.events, isEmpty);
   });
+
+  test('beginner success funnel preserves the product step order', () async {
+    final sink = _FakeSink();
+    final analytics = ProductAnalytics(sinks: [sink]);
+    await analytics.bootstrap(
+      enabled: true,
+      locale: 'ko-KR',
+      packageInfo: _packageInfo(),
+    );
+
+    await analytics.track(ProductEvent.appStarted);
+    await analytics.track(
+      ProductEvent.guidedStarted,
+      properties: const {
+        'feature': 'guided_creation',
+        'entry_source': 'new_song',
+      },
+    );
+    await analytics.track(
+      ProductEvent.recordingStarted,
+      properties: const {'feature': 'hum_recording'},
+    );
+    await analytics.track(
+      ProductEvent.analyzeCompleted,
+      properties: const {'feature': 'guided_creation', 'role': 'melodic'},
+    );
+    await analytics.track(
+      ProductEvent.guidedBackingPreviewed,
+      properties: const {
+        'feature': 'guided_backing',
+        'backing_style': 'drive',
+        'candidate': 1,
+      },
+    );
+    await analytics.track(
+      ProductEvent.guidedBackingApplied,
+      properties: const {
+        'feature': 'guided_backing',
+        'backing_style': 'drive',
+        'candidate': 1,
+      },
+    );
+    await analytics.track(
+      ProductEvent.guidedSongSaved,
+      properties: const {'feature': 'guided_creation'},
+    );
+    // A free user reaches the subscription screen from Export. Successful
+    // export events follow entitlement activation.
+    await analytics.track(
+      ProductEvent.paywallViewed,
+      properties: const {
+        'feature': 'subscription',
+        'entry_source': 'export',
+        'trigger': 'export',
+      },
+    );
+    await analytics.track(
+      ProductEvent.purchaseStarted,
+      properties: const {
+        'feature': 'subscription',
+        'entry_source': 'export',
+        'store': 'play_store',
+      },
+    );
+    await analytics.track(
+      ProductEvent.purchaseCompleted,
+      properties: const {'feature': 'subscription', 'store': 'play_store'},
+    );
+    await analytics.track(
+      ProductEvent.exportMidi,
+      properties: const {
+        'feature': 'export',
+        'export_type': 'midi',
+        'scope': 'song',
+      },
+    );
+    await analytics.track(
+      ProductEvent.exportWav,
+      properties: const {
+        'feature': 'export',
+        'export_type': 'wav',
+        'scope': 'song',
+      },
+    );
+
+    expect(sink.events.map((event) => event.$1), [
+      ProductEvent.appStarted,
+      ProductEvent.guidedStarted,
+      ProductEvent.recordingStarted,
+      ProductEvent.analyzeCompleted,
+      ProductEvent.guidedBackingPreviewed,
+      ProductEvent.guidedBackingApplied,
+      ProductEvent.guidedSongSaved,
+      ProductEvent.paywallViewed,
+      ProductEvent.purchaseStarted,
+      ProductEvent.purchaseCompleted,
+      ProductEvent.exportMidi,
+      ProductEvent.exportWav,
+    ]);
+    for (final event in sink.events) {
+      expect(event.$2['app_id'], 'humtrack');
+      expect(event.$2['app_version'], '1.0.7');
+      expect(event.$2['build_number'], '37');
+      expect(event.$2['locale'], 'ko-KR');
+      expect(event.$2.keys, isNot(contains('email')));
+      expect(event.$2.keys, isNot(contains('song_title')));
+      expect(event.$2.keys, isNot(contains('audio_path')));
+    }
+  });
+
+  test('beginner recovery funnel records fixed failure reasons', () async {
+    final sink = _FakeSink();
+    final analytics = ProductAnalytics(sinks: [sink]);
+    await analytics.bootstrap(enabled: true, packageInfo: _packageInfo());
+
+    await analytics.track(
+      ProductEvent.analyzeFailed,
+      properties: const {
+        'feature': 'guided_creation',
+        'error_code': 'connection',
+      },
+    );
+    await analytics.track(
+      ProductEvent.guidedSongFailed,
+      properties: const {
+        'feature': 'guided_creation',
+        'error_code': 'local_save',
+      },
+    );
+    await analytics.track(
+      ProductEvent.exportFailed,
+      properties: const {
+        'feature': 'export',
+        'export_type': 'wav',
+        'error_code': 'render',
+      },
+    );
+    await analytics.track(
+      ProductEvent.purchaseFailed,
+      properties: const {
+        'feature': 'subscription',
+        'entry_source': 'export',
+        'error_code': 'storeError',
+        'store': 'play_store',
+      },
+    );
+
+    expect(sink.events.map((event) => event.$1), [
+      ProductEvent.analyzeFailed,
+      ProductEvent.guidedSongFailed,
+      ProductEvent.exportFailed,
+      ProductEvent.purchaseFailed,
+    ]);
+    expect(sink.events.map((event) => event.$2['error_code']), [
+      'connection',
+      'local_save',
+      'render',
+      'storeError',
+    ]);
+  });
 }

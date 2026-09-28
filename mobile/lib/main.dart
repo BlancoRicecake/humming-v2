@@ -76,6 +76,7 @@ Future<void> main() async {
       enabled: LoopPrefs.instance.analyticsEnabled.value,
       locale: LocaleService.instance.selected.value?.toLanguageTag(),
     );
+    await ProductAnalytics.instance.track(ProductEvent.appStarted);
     LoopPrefs.instance.analyticsEnabled.addListener(() {
       ProductAnalytics.instance.setConsent(
         LoopPrefs.instance.analyticsEnabled.value,

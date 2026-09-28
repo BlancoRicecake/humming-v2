@@ -15,6 +15,7 @@ abstract interface class ProductAnalyticsSink {
 }
 
 abstract final class ProductEvent {
+  static const appStarted = 'app_started';
   static const signedIn = 'signed_in';
   static const guidedStarted = 'guided_started';
   static const recordingStarted = 'recording_started';
@@ -39,6 +40,7 @@ abstract final class ProductEvent {
   static const purchaseRestored = 'purchase_restored';
 
   static const allowed = <String>{
+    appStarted,
     signedIn,
     guidedStarted,
     recordingStarted,
@@ -65,7 +67,7 @@ abstract final class ProductEvent {
 }
 
 /// One privacy boundary for product funnels. Feature code never talks to an
-/// analytics SDK directly. Only enum-like values from [_allowedPropertyKeys]
+/// analytics SDK directly. Only enum-like values from [_allowedStringValues]
 /// cross this boundary; user text, titles, paths, audio and musical content do
 /// not have a representable field.
 class ProductAnalytics {

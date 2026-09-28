@@ -22,6 +22,7 @@ separate crash/error diagnostic service described in the privacy policy.
 
 | Funnel step | Event | Safe parameters |
 |---|---|---|
+| App bootstrap completed | `app_started` | common context only |
 | Guided editor opened | `guided_started` | `feature`, `entry_source` |
 | Hum capture opened | `recording_started` | `feature` |
 | Analysis succeeded/failed | `analyze_completed`, `analyze_failed` | `feature`, `role`, fixed `error_code` |
