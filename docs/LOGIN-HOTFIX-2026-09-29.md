@@ -50,3 +50,13 @@ No server scaling, service plan changes or paid APIs are required. GitHub Action
 - Installation link: https://play.google.com/apps/internaltest/4701278899500552203
 - The requested installation/checklist email was sent to `jlionk200@gmail.com`; Gmail returned the `SENT` label (message ID `1a0e8bbaeadc40b0`).
 - Actual device login confirmation remains with the user. Production was not deployed; later explicit user approval is required.
+
+## Approved production submission
+
+On 2026-09-29 KST the user confirmed successful device login and explicitly approved production publishing in the app portfolio thread (`01a0a33e-53d4-7d22-8420-9603d176cb9d`). The actual user approval was read before proceeding.
+
+The existing empty production draft was reused because it disabled direct track promotion. The exact already-uploaded bundle `39 (1.0.10)` was selected from the Play library, with no rebuild. Bundle 38 was excluded; the previous `1.0.9 (38)` rollout was observed as stopped and was not resumed. Korean and English release notes describe the Google sign-in fix.
+
+Production rollout was saved at **100%**, all existing target countries (178). The sole pending change, `1.0.10 (39) / Start full rollout`, was submitted for Google review. Play publishing overview now shows **Changes in review**, with pre-review quick checks running. Managed publishing is disabled, so successful review proceeds to automatic publication. This is a confirmed submission, not a claim that the new version is already publicly available.
+
+Screenshot evidence: `C:/src/humming-v2/mobile/build/release-evidence/production39-submitted.png`.
