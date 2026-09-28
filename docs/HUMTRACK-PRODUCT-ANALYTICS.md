@@ -1,8 +1,9 @@
 # HumTrack product analytics rollout
 
-Status: code and Firebase project/app registration are complete. Production
-collection remains disabled until the privacy notice and store disclosures below
-are complete.
+Status: code, Firebase project/app registration, privacy wording, store-form
+drafts, native collection defaults, and release validation are complete.
+Production collection remains disabled until the remaining manual release gate
+below is complete.
 
 ## Architecture
 
@@ -56,11 +57,28 @@ Completed:
   `mobile/ios/Runner/GoogleService-Info.plist`. Both paths are ignored by Git.
 - Rebuilt the Android debug APK with the official config and verified that the
   generated `google_app_id` matches the registered Android app.
+- Added Korean/English Firebase disclosures to the canonical, in-app, and web
+  privacy-policy drafts (`1.4-draft`, proposed effective date 2026-11-01).
+- Drafted the full-app App Store Privacy and Play Data safety answers plus the
+  Android/iOS physical-device DebugView procedure in
+  `docs/release/HUMTRACK-FIREBASE-PRIVACY-SUBMISSION-DRAFTS.md`.
+- Disabled Firebase collection, advertising-ID collection, and advertising
+  personalization by default in native Android/iOS configuration. iOS uses the
+  Firebase Analytics no-ad-ID pod variant.
+- Made the release helper reject invalid flags, incomplete Firebase defines, and
+  production analytics builds without `HUMTRACK_FIREBASE_DISCLOSURES_READY=true`.
 
 Remaining:
 
-1. Verify events in Android and iOS DebugView with a non-production build.
-2. Add these optional fields to `HUMTRACK_DART_DEFINES_JSON` for each release environment:
+1. Publish the 1.4 policy and send both required notices at least 30 days before
+   its effective date. If either notice misses 2026-10-02, move the effective date.
+2. Submit the reviewed App Store Privacy and Play Data safety forms for the exact
+   release binary.
+3. Set Firebase user/event retention to 2 months and verify Google Signals,
+   advertising personalization, and ad-network links are off.
+4. Verify the allowlisted events on physical Android and iOS devices in DebugView
+   using a staging build and save the evidence.
+5. Supply these fields in `HUMTRACK_DART_DEFINES_JSON` for the release environment:
    - `FIREBASE_ANALYTICS_ENABLED=true`
    - `FIREBASE_PROJECT_ID`
    - `FIREBASE_MESSAGING_SENDER_ID`
@@ -68,20 +86,20 @@ Remaining:
    - `FIREBASE_ANDROID_APP_ID`, `FIREBASE_ANDROID_API_KEY`
    - `FIREBASE_IOS_APP_ID`, `FIREBASE_IOS_API_KEY`
    - `APP_ENVIRONMENT=production` (or `staging` for internal validation)
-3. Do not enable `FIREBASE_ANALYTICS_ENABLED` in production until the privacy and store items below are published.
+6. Only after steps 1–5 pass, set the release-process environment variable
+   `HUMTRACK_FIREBASE_DISCLOSURES_READY=true` and enable Firebase Analytics in the
+   production define JSON.
 
 Existing production release validation still requires non-empty
 `CLARITY_PROJECT_ID` and `SENTRY_DSN_MOBILE`; secret values must remain outside Git.
 
-## Required disclosure work before enabling Firebase
+## Production activation gate
 
-- Amend the Korean and English privacy policy to name Google/Firebase Analytics,
-  describe product interaction data, the opaque user ID, retention, purpose, and
-  international processing, and describe the in-app opt-out.
-- Complete the policy's existing advance-notice process before the effective date.
-- Update App Store Privacy answers for product interaction/analytics data.
-- Update Google Play Data safety for app interactions/analytics data and the opt-out.
-- Confirm DebugView contains none of the prohibited content listed above.
+The reviewable drafts and exact checklist are in
+`docs/release/HUMTRACK-FIREBASE-PRIVACY-SUBMISSION-DRAFTS.md`. The environment
+gate does not replace those checks; it records that the human release owner has
+completed them. It is intentionally not a Dart define and is never compiled into
+the app.
 
 No App Store review submission, production rollout, or TestFlight upload is part
 of this implementation change.

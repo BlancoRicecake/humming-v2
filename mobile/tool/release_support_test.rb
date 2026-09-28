@@ -64,7 +64,10 @@ class ReleaseSupportTest < Minitest::Test
   end
 
   def configuration
-    HumTrackRelease::DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
+    HumTrackRelease::DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }.merge(
+      "APP_ENVIRONMENT" => "staging",
+      "FIREBASE_ANALYTICS_ENABLED" => "false",
+    )
   end
 
   def test_partial_environment_keeps_other_file_values_and_excludes_server_keys
@@ -89,6 +92,50 @@ class ReleaseSupportTest < Minitest::Test
     result = HumTrackRelease.defines(env: required, secrets_path: "/absent")
     assert_equal required, result
     refute result.key?("FIREBASE_ANALYTICS_ENABLED")
+  end
+
+  def test_enabled_firebase_requires_complete_mobile_configuration
+    values = configuration.merge("FIREBASE_ANALYTICS_ENABLED" => "true", "APP_ENVIRONMENT" => "staging")
+    values.delete("FIREBASE_IOS_API_KEY")
+    error = assert_raises(ArgumentError) do
+      HumTrackRelease.defines(env: {"HUMTRACK_DART_DEFINES_JSON" => JSON.generate(values)}, secrets_path: "/absent")
+    end
+    assert_includes error.message, "FIREBASE_IOS_API_KEY"
+    refute_includes error.message, values["FIREBASE_PROJECT_ID"]
+  end
+
+  def test_staging_firebase_accepts_complete_configuration_without_disclosure_gate
+    values = configuration.merge("FIREBASE_ANALYTICS_ENABLED" => "true", "APP_ENVIRONMENT" => "staging")
+    result = HumTrackRelease.defines(
+      env: {"HUMTRACK_DART_DEFINES_JSON" => JSON.generate(values)},
+      secrets_path: "/absent",
+    )
+    assert_equal "true", result["FIREBASE_ANALYTICS_ENABLED"]
+  end
+
+  def test_production_firebase_requires_explicit_disclosure_readiness
+    values = configuration.merge("FIREBASE_ANALYTICS_ENABLED" => "true", "APP_ENVIRONMENT" => "production")
+    json = JSON.generate(values)
+    error = assert_raises(ArgumentError) do
+      HumTrackRelease.defines(env: {"HUMTRACK_DART_DEFINES_JSON" => json}, secrets_path: "/absent")
+    end
+    assert_includes error.message, "HUMTRACK_FIREBASE_DISCLOSURES_READY=true"
+
+    result = HumTrackRelease.defines(
+      env: {
+        "HUMTRACK_DART_DEFINES_JSON" => json,
+        "HUMTRACK_FIREBASE_DISCLOSURES_READY" => "true",
+      },
+      secrets_path: "/absent",
+    )
+    assert_equal "production", result["APP_ENVIRONMENT"]
+  end
+
+  def test_invalid_firebase_enable_flag_is_rejected
+    values = configuration.merge("FIREBASE_ANALYTICS_ENABLED" => "yes")
+    assert_raises(ArgumentError) do
+      HumTrackRelease.defines(env: {"HUMTRACK_DART_DEFINES_JSON" => JSON.generate(values)}, secrets_path: "/absent")
+    end
   end
 
   def test_json_configuration_filters_keys_and_shell_metacharacters_are_data

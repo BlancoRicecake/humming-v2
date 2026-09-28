@@ -42,6 +42,14 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>HumTrack</string>
+	<!-- Firebase Analytics remains off until Dart applies the in-app analytics preference.
+	     applied. Advertising personalization and IDFV collection stay disabled. -->
+	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_IDFV_COLLECTION_ENABLED</key>
+	<false/>
 	<!--
 	  ITSAppUsesNonExemptEncryption = false → App Store Connect 의 수출 규정
 	  준수 (Export Compliance) 질문을 매 업로드마다 건너뛴다. 본 앱은 HTTPS
