@@ -1,6 +1,13 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Firebase/Play Services may contribute AD_ID transitively. HumTrack does
+         not read the advertising ID, so keep it out of the merged manifest to
+         match the Play Console declaration. -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove" />
     <!-- No Bluetooth / MODIFY_AUDIO_SETTINGS permissions: both recording
          modals pass manageBluetooth:false (no SCO routing), MainActivity only
          READS the output route (AudioManager.getDevices needs nothing), and
