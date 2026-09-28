@@ -88,5 +88,8 @@ jobs:
 
       # Dart checks do not compile Kotlin/C++ or validate the Android toolchain.
       # Debug signing only; no release keys, store access or artifact upload.
+      - name: Android release auth guard regression tests
+        run: python3 tool/test_android_auth_guard.py
+
       - name: Android debug build
         run: flutter build apk --debug --no-pub --target-platform android-arm64

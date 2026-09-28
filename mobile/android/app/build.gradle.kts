@@ -8,6 +8,8 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+apply(from = rootProject.file("auth-config.gradle"))
+
 // Analytics는 google_app_id Android 리소스가 있어야 동작한다. 공식 설정
 // 파일이 주입된 빌드에만 플러그인을 적용해 설정 없는 개발/CI 빌드는 유지한다.
 if (file("google-services.json").exists()) {
