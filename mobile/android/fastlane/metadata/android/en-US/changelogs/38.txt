@@ -1,0 +1,4 @@
+- Improved backing option comparison and song structure editing.
+- Stabilized hum review, melody locking, and MIDI/WAV export.
+- Improved save recovery, vocal preservation, and subscription checks.
+- Added privacy-safe, opt-in product analytics.
