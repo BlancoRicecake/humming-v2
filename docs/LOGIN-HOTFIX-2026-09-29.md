@@ -41,3 +41,12 @@ For build-only validation use `destination=build`. Do not use `destination=produ
 Existing Play internal testers/groups should be reused. Send the verified opt-in/install link to the requested address after build 39 is available. Ask the tester to confirm version 1.0.10 (39), Google login, logout/login again and reopening the app. Avoid uninstalling or clearing storage because songs may be local. Production stays on the user's chosen rollback release until explicit approval.
 
 No server scaling, service plan changes or paid APIs are required. GitHub Actions consumes the account's runner allowance; do not claim its cost is always zero.
+
+## Completed internal release
+
+- GitHub Actions run [36445483549](https://github.com/BlancoRicecake/humming-v2/actions/runs/36445483549) completed successfully from `e8ac3da` on `codex/humtrack-login-hotfix`. Android only, `destination=internal`, build number 39. Ruby helper/syntax checks, Gradle guard tests, analyzer, Flutter tests, signed release build and internal upload passed.
+- Play Console shows `1.0.10`, bundle `39 (1.0.10)`, **available to internal testers**. Existing tester group already includes the requested recipient; no membership changes were needed.
+- The workflow AAB artifact SHA-256 is `aa9af0a609aa3852f031b4ab61fe5b16d3e74a5fb9c1f5c7c85bea234b906c1e`. All three compiled architectures contain the expected Supabase hostname, Google web client ID and an anon JWT matching the production project. Verification output contains booleans only, no credential values.
+- Installation link: https://play.google.com/apps/internaltest/4701278899500552203
+- The requested installation/checklist email was sent to `jlionk200@gmail.com`; Gmail returned the `SENT` label (message ID `1a0e8bbaeadc40b0`).
+- Actual device login confirmation remains with the user. Production was not deployed; later explicit user approval is required.
