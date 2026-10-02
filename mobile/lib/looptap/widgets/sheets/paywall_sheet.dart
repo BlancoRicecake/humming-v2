@@ -106,6 +106,7 @@ String _fmtDate(BuildContext context, DateTime d) => DateFormat.yMMMd(
 
 class _PaywallSheetState extends State<_PaywallSheet> {
   bool _busy = false;
+  String _closeOutcome = 'dismissed';
 
   /// 스토어가 "승인 대기"(Ask to Buy 등) 를 알려온 상태 — 타임아웃 없이 대기.
   bool _pending = false;
@@ -137,6 +138,19 @@ class _PaywallSheetState extends State<_PaywallSheet> {
 
   @override
   void dispose() {
+    ProductAnalytics.instance.track(
+      ProductEvent.paywallClosed,
+      properties: {
+        'feature': 'subscription',
+        'entry_source': widget.trigger.name,
+        'outcome':
+            _pending
+                ? 'pending'
+                : _busy
+                ? 'in_progress'
+                : _closeOutcome,
+      },
+    );
     _sub?.cancel();
     // 시트가 닫혀도 대기 루프가 영원히 남지 않도록 — 결과는 LoopStore 가
     // onPurchaseResult 로 계속 받아 Pro 를 켠다.
@@ -218,6 +232,7 @@ class _PaywallSheetState extends State<_PaywallSheet> {
       _pending = false;
     });
     if (result.ok) {
+      _closeOutcome = 'purchased';
       Navigator.of(context).maybePop();
       return;
     }
@@ -271,20 +286,42 @@ class _PaywallSheetState extends State<_PaywallSheet> {
   Future<void> _restore(LoopStore store) async {
     if (_busy) return;
     final l = L10n.of(context);
-    // restore 도 verify 가 필요 — 로그인 게이트.
-    if (!store.isSignedIn) {
-      await showAccountSheet(context);
-      if (!mounted) return;
-      if (!store.isSignedIn) return;
-    }
     setState(() => _busy = true);
-    final outcome = await store.restorePurchases();
-    if (!mounted) return;
-    setState(() => _busy = false);
-    _toast(restoreMessageFor(l, outcome));
-    if (outcome == RestoreOutcome.restored ||
-        outcome == RestoreOutcome.alreadyActive) {
-      Navigator.of(context).maybePop();
+    ProductAnalytics.instance.track(
+      ProductEvent.restoreStarted,
+      properties: {'feature': 'restore', 'entry_source': widget.trigger.name},
+    );
+    var outcome = 'error';
+    try {
+      // Restoration still requires the account used for server verification.
+      if (!store.isSignedIn) {
+        await showAccountSheet(context);
+        if (!mounted || !store.isSignedIn) {
+          outcome = 'auth_cancelled';
+          return;
+        }
+      }
+      final result = await store.restorePurchases();
+      outcome = result.name;
+      if (!mounted) return;
+      _toast(restoreMessageFor(l, result));
+      if (result == RestoreOutcome.restored ||
+          result == RestoreOutcome.alreadyActive) {
+        _closeOutcome = 'restored';
+        Navigator.of(context).maybePop();
+      }
+    } catch (_) {
+      if (mounted) _toast(l.payRestoreError);
+    } finally {
+      ProductAnalytics.instance.track(
+        ProductEvent.restoreCompleted,
+        properties: {
+          'feature': 'restore',
+          'entry_source': widget.trigger.name,
+          'outcome': outcome,
+        },
+      );
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -385,7 +422,17 @@ class _PaywallSheetState extends State<_PaywallSheet> {
           l.payBenefits(_kFreeSongQuota),
           style: LTType.inter(size: 12, color: LT.t2, height: 1.5),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const ValueKey('restore-purchases'),
+            onPressed: disabled || _busy ? null : () => _restore(store),
+            icon: const Icon(Icons.restore, size: 18),
+            label: Text(l.payRestore),
+          ),
+        ),
+        const SizedBox(height: 10),
         _PlanCard(
           productId: kProductYearly,
           title: l.payPlanYearly,
@@ -509,22 +556,13 @@ class _PaywallSheetState extends State<_PaywallSheet> {
             ),
           ),
         ),
-        const SizedBox(height: 10),
-        GestureDetector(
-          onTap: disabled || _busy ? null : () => _restore(store),
-          child: Container(
-            height: 42,
-            alignment: Alignment.center,
-            child: Text(
-              disabled ? l.payStoreUnavailable : l.payRestore,
-              style: LTType.inter(
-                size: 13,
-                weight: FontWeight.w700,
-                color: LT.t3,
-              ),
-            ),
+        if (disabled) ...[
+          const SizedBox(height: 10),
+          Text(
+            l.payStoreUnavailable,
+            style: LTType.inter(size: 13, color: LT.t3),
           ),
-        ),
+        ],
       ],
     );
   }

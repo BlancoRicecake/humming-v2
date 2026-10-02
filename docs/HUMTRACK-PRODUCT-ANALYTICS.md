@@ -24,14 +24,18 @@ separate crash/error diagnostic service described in the privacy policy.
 | Funnel step | Event | Safe parameters |
 |---|---|---|
 | App bootstrap completed | `app_started` | common context only |
+| First-song card shown | `first_song_prompt_viewed` | common context only |
 | Guided editor opened | `guided_started` | `feature`, `entry_source` |
 | Hum capture opened | `recording_started` | `feature` |
 | Analysis succeeded/failed | `analyze_completed`, `analyze_failed` | `feature`, `role`, fixed `error_code` |
 | Backing compared/applied | `guided_backing_previewed`, `guided_backing_applied` | `backing_style`, candidate number |
-| Guided song saved/failed | `guided_song_saved`, `guided_song_failed` | `feature`, fixed `error_code` |
+| Guided song saved/failed | `guided_song_saved`, `guided_song_failed` | `feature`, `entry_source`, `save_method`, fixed `error_code` |
+| Guided editor exited | `guided_exited` | `feature`, `entry_source`, `stage`, `exit_reason` |
 | Export completed | `export_midi`, `export_wav`, `export_stems` | `export_type`, `scope` |
 | Export failed | `export_failed` | `export_type`, fixed `error_code` |
 | Paywall and purchase | `paywall_viewed`, `purchase_started`, `purchase_completed`, `purchase_failed`, `purchase_restored` | `entry_source`, `store`, fixed `error_code` |
+| Paywall closed | `paywall_closed` | `feature`, `entry_source`, `outcome` |
+| Restore attempted/finished | `restore_started`, `restore_completed` | `feature`, `entry_source`, `outcome` |
 
 Common context is `app_id`, platform, app version/build, environment, locale,
 and plan. Firebase already collects app/platform/version/locale dimensions, so
@@ -103,3 +107,25 @@ the app.
 
 No App Store review submission, production rollout, or TestFlight upload is part
 of this implementation change.
+
+## First-song funnel semantics (2026-10-02)
+
+- `entry_source`: `first_song` bypasses the mode chooser for a library with no
+  user-created songs (seed demos do not count); `new_song` retains the returning
+  creator chooser; `editor` means opening guidance from the detailed editor.
+- `guided_song_saved` records the first successful save of music per guided
+  visit, including `manual`, `autosave`, and `back`. Empty songs do not complete
+  the funnel. This is not a lifetime first-song count; segment by entry source
+  and deduplicate users/sessions when calculating conversion.
+- `guided_exited` records explicit back or switching to `editor`, once per visit.
+  Stage is `empty`, `music`, `backing`, or `saved`. `saved` means a successful
+  content save was observed earlier in that visit, not proof that no unsaved
+  edits remain. Backgrounding, crashes, and process death do not emit exit.
+- Restore outcomes: `restored`, `alreadyActive`, `nothingFound`, `error`,
+  `auth_cancelled`. Paywall closure uses `dismissed`, `purchased`, `restored`,
+  `pending`, or `in_progress`; restoration can finish after the sheet closes.
+- All values are fixed allowlists. No new identifiers or SDKs were introduced.
+  Existing consent and the Firebase production release gate remain unchanged.
+- Installation and first-open aggregates are not a shared acquisition cohort.
+  Do not calculate a funnel conversion rate by dividing those totals. A release
+  comparison needs version/platform cohorts with matching event definitions.

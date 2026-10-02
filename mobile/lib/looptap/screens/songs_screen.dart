@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/generated/app_localizations.dart';
+import '../widgets/first_song_card.dart';
 import '../models/loop_models.dart';
 import '../state/loop_store.dart';
 import '../theme/atoms.dart';
@@ -46,7 +47,10 @@ class SongsScreen extends StatelessWidget {
     }
     if (!context.mounted) return;
     final l = L10n.of(context);
-    final guided = await showDialog<bool>(
+    // Demo songs are not the user's work. The first creation goes directly
+    // to the guest-accessible guided editor, which also offers direct editing.
+    final firstSong = userSongCount(store.songs) == 0;
+    final guided = firstSong ? true : await showDialog<bool>(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: Text(l.ltSongsNewSong),
@@ -60,7 +64,8 @@ class SongsScreen extends StatelessWidget {
     );
     if (!context.mounted || guided == null) return;
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => EditScreen(song: store.createNew(), guidedStart: guided),
+      builder: (_) => EditScreen(song: store.createNew(), guidedStart: guided,
+          guidedEntrySource: firstSong ? 'first_song' : 'new_song'),
     ));
   }
 
@@ -216,22 +221,25 @@ class _Grid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final firstSong = userSongCount(songs) == 0;
     return GridView.builder(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: MediaQuery.sizeOf(context).width < 760 ? 2 : 3,
         mainAxisSpacing: 14,
         crossAxisSpacing: 14,
-        mainAxisExtent: 150,
+        mainAxisExtent: firstSong ? 210 : 150,
       ),
       itemCount: songs.length + 1,
       itemBuilder: (context, i) {
-        if (i == songs.length) return _NewCard(onTap: onNew);
+        if (firstSong && i == 0) return FirstSongCard(onStart: onNew);
+        if (!firstSong && i == songs.length) return _NewCard(onTap: onNew);
+        final song = songs[firstSong ? i - 1 : i];
         return _SongCard(
-          song: songs[i],
-          onTap: () => onOpen(songs[i]),
-          onRename: () => _renameSong(context, songs[i]),
-          onDuplicate: () => _duplicateSong(context, songs[i]),
-          onDelete: () => _deleteSong(context, songs[i]),
+          song: song,
+          onTap: () => onOpen(song),
+          onRename: () => _renameSong(context, song),
+          onDuplicate: () => _duplicateSong(context, song),
+          onDelete: () => _deleteSong(context, song),
         );
       },
     );

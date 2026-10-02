@@ -4457,6 +4457,18 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'반주를 바꿔도 이 멜로디는 유지됩니다.'**
   String get ltMelodyLockedHint;
+
+  /// No description provided for @ltFirstSongTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'첫 곡을 만들어 보세요'**
+  String get ltFirstSongTitle;
+
+  /// No description provided for @ltFirstSongHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍 → 반주 → 저장\n로그인 없이 무료로 시작해요.'**
+  String get ltFirstSongHint;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

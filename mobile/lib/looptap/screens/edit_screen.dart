@@ -65,7 +65,13 @@ import '../widgets/transport_bar.dart';
 import '../../services/product_analytics.dart';
 
 class EditScreen extends StatefulWidget {
-  const EditScreen({super.key, required this.song, this.guidedStart = false});
+  const EditScreen({
+    super.key,
+    required this.song,
+    this.guidedStart = false,
+    this.guidedEntrySource = 'new_song',
+  });
+  final String guidedEntrySource;
   final bool guidedStart;
   final Song song;
 
@@ -464,6 +470,66 @@ class _EditScreenState extends State<EditScreen>
   DateTime? _savedAt;
   bool _savedFlash = false;
   bool _guidedSaveTracked = false;
+  bool _guidedExitTracked = false;
+  late String _guidedEntrySource = widget.guidedEntrySource;
+
+  bool get _hasSongContent =>
+      _songVocalPath != null ||
+      _sections.any(
+        (section) => section.tracks.values.any(
+          (track) =>
+              track.pitchNotes.isNotEmpty ||
+              track.drumNotes.isNotEmpty ||
+              track.effectiveClips.isNotEmpty,
+        ),
+      );
+
+  void _trackGuidedStart(String source) {
+    _guidedEntrySource = source;
+    _guidedExitTracked = false;
+    _guidedSaveTracked = false;
+    ProductAnalytics.instance.track(
+      ProductEvent.guidedStarted,
+      properties: {'feature': 'guided_creation', 'entry_source': source},
+    );
+  }
+
+  // Only a successful durable save of actual music completes the funnel.
+  // Include automatic/back saves so a user who never taps Save is not lost.
+  void _trackGuidedSave(String method) {
+    if (!_guided || _guidedSaveTracked || !_hasSongContent) return;
+    _guidedSaveTracked = true;
+    ProductAnalytics.instance.track(
+      ProductEvent.guidedSongSaved,
+      properties: {
+        'feature': 'guided_creation',
+        'entry_source': _guidedEntrySource,
+        'save_method': method,
+      },
+    );
+  }
+
+  void _trackGuidedExit(String reason) {
+    if (!_guided || _guidedExitTracked) return;
+    _guidedExitTracked = true;
+    ProductAnalytics.instance.track(
+      ProductEvent.guidedExited,
+      properties: {
+        'feature': 'guided_creation',
+        'entry_source': _guidedEntrySource,
+        'stage':
+            _guidedSaveTracked
+                ? 'saved'
+                : _guidedAppliedCandidate != null
+                ? 'backing'
+                : _hasSongContent
+                ? 'music'
+                : 'empty',
+        'exit_reason': reason,
+      },
+    );
+  }
+
   Timer? _flashTimer;
 
   @override
@@ -471,13 +537,7 @@ class _EditScreenState extends State<EditScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (widget.guidedStart) {
-      ProductAnalytics.instance.track(
-        ProductEvent.guidedStarted,
-        properties: const {
-          'feature': 'guided_creation',
-          'entry_source': 'new_song',
-        },
-      );
+      _trackGuidedStart(widget.guidedEntrySource);
     }
     // apply this song's chosen instruments (per pitched channel), then warm the synth
     _audio.setPrograms({
@@ -541,6 +601,7 @@ class _EditScreenState extends State<EditScreen>
       // an untouched brand-new song doesn't earn a library slot yet (C15)
       if (_isPristineNew(store)) return;
       await store.upsert(_snapshot());
+      _trackGuidedSave('autosave');
       if (!mounted) return;
       _saveErrorShown = false;
       setState(() {
@@ -2756,6 +2817,7 @@ class _EditScreenState extends State<EditScreen>
   Future<void> _saveNow() async {
     try {
       await context.read<LoopStore>().upsert(_snapshot());
+      _trackGuidedSave('manual');
     } catch (_) {
       ProductAnalytics.instance.track(
         _guided ? ProductEvent.guidedSongFailed : ProductEvent.songSaveFailed,
@@ -2778,13 +2840,6 @@ class _EditScreenState extends State<EditScreen>
     _flashTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _savedFlash = false);
     });
-    if (_guided && !_guidedSaveTracked) {
-      _guidedSaveTracked = true;
-      ProductAnalytics.instance.track(
-        ProductEvent.guidedSongSaved,
-        properties: const {'feature': 'guided_creation'},
-      );
-    }
   }
 
   /// A brand-new song the user never touched — not in the library yet, no
@@ -2827,7 +2882,10 @@ class _EditScreenState extends State<EditScreen>
     _leaving = true;
     final store = context.read<LoopStore>();
     try {
-      if (!_isPristineNew(store)) await store.upsert(_snapshot());
+      if (!_isPristineNew(store)) {
+        await store.upsert(_snapshot());
+        _trackGuidedSave('back');
+      }
       // editor session over → undo stack (the last holder of replaced takes) is
       // gone, so unreferenced vocal files are safe to drop.
       await store.sweepVocals();
@@ -2837,7 +2895,10 @@ class _EditScreenState extends State<EditScreen>
       _handleSaveFailure();
       return; // Keep the editor and its undo history available for retry.
     }
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) {
+      _trackGuidedExit('back');
+      Navigator.of(context).pop();
+    }
   }
 
   /// Pro 활성이면 export drawer, 아니면 paywall 먼저. paywall 닫힌 시점에
@@ -2986,6 +3047,7 @@ class _EditScreenState extends State<EditScreen>
                       onSave: _saveNow,
                       onEdit: () {
                         _stopAll();
+                        _trackGuidedExit('editor');
                         setState(() => _guided = false);
                       },
                     ),
@@ -3207,6 +3269,7 @@ class _EditScreenState extends State<EditScreen>
             setState(() {
               _activeId = 'melody';
               _guided = true;
+              _trackGuidedStart('editor');
             });
           },
         ),

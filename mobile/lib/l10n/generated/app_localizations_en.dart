@@ -2522,4 +2522,11 @@ class L10nEn extends L10n {
   @override
   String get ltMelodyLockedHint =>
       'Changing the backing will keep this melody.';
+
+  @override
+  String get ltFirstSongTitle => 'Make your first song';
+
+  @override
+  String get ltFirstSongHint =>
+      'Hum → add backing → save\nStart free, no sign-in needed.';
 }

@@ -840,5 +840,7 @@
   "@ltMelodyConfidence": {"placeholders": {"percent": {"type": "int"}}},
   "ltMelodyNoIssues": "No notes need attention.",
   "ltMelodyLocked": "Lock my melody",
-  "ltMelodyLockedHint": "Changing the backing will keep this melody."
+  "ltMelodyLockedHint": "Changing the backing will keep this melody.",
+  "ltFirstSongTitle": "Make your first song",
+  "ltFirstSongHint": "Hum → add backing → save\nStart free, no sign-in needed."
 }

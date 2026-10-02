@@ -1050,5 +1050,7 @@
   "@ltMelodyConfidence": {"placeholders": {"percent": {"type": "int"}}},
   "ltMelodyNoIssues": "확인이 필요한 음이 없어요.",
   "ltMelodyLocked": "내 멜로디 잠금",
-  "ltMelodyLockedHint": "반주를 바꿔도 이 멜로디는 유지됩니다."
+  "ltMelodyLockedHint": "반주를 바꿔도 이 멜로디는 유지됩니다.",
+  "ltFirstSongTitle": "첫 곡을 만들어 보세요",
+  "ltFirstSongHint": "허밍 → 반주 → 저장\n로그인 없이 무료로 시작해요."
 }

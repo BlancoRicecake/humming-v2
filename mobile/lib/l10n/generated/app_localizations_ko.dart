@@ -2437,4 +2437,10 @@ class L10nKo extends L10n {
 
   @override
   String get ltMelodyLockedHint => '반주를 바꿔도 이 멜로디는 유지됩니다.';
+
+  @override
+  String get ltFirstSongTitle => '첫 곡을 만들어 보세요';
+
+  @override
+  String get ltFirstSongHint => '허밍 → 반주 → 저장\n로그인 없이 무료로 시작해요.';
 }
