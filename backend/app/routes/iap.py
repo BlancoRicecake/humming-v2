@@ -75,7 +75,9 @@ APPLE_PROD = "https://api.storekit.itunes.apple.com"
 APPLE_SANDBOX = "https://api.storekit-sandbox.itunes.apple.com"
 
 # Apple notification types that end the entitlement regardless of expiresDate.
-_APPLE_TERMINAL = {"EXPIRED", "REVOKE", "REFUND", "GRACE_PERIOD_EXPIRED", "REFUND_DECLINED"}
+# REFUND_DECLINED is deliberately absent: Apple *declined* the refund, so the
+# customer keeps the subscription (treating it as terminal revoked paying users).
+_APPLE_TERMINAL = {"EXPIRED", "REVOKE", "REFUND", "GRACE_PERIOD_EXPIRED"}
 
 
 # --- helpers ----------------------------------------------------------------
@@ -350,6 +352,39 @@ async def _apple_lookup_transaction(transaction_id: str) -> dict:
                 break
     logger.warning("Apple lookup %s failed: %s %s", transaction_id, last_status, last_body)
     raise HTTPException(502 if last_status >= 500 else 400, "apple verify failed")
+
+
+async def _apple_lookup_subscription(original_transaction_id: str) -> Tuple[dict, dict]:
+    """Return the verified ``(latest transaction, renewal info)`` for a
+    subscription via Get All Subscription Statuses.
+
+    Use this — not a transaction lookup — to learn a subscription's current
+    state: a stored transaction id is a point in time, so the original trial
+    transaction keeps saying "expired" after the customer converted to paid.
+    """
+    headers = {"Authorization": f"Bearer {_apple_jwt()}"}
+    s = get_settings()
+    order = (APPLE_PROD, APPLE_SANDBOX) if s.apple_environment != "sandbox" else (APPLE_SANDBOX, APPLE_PROD)
+    last_status: int = 0
+    last_body: str = ""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        for base in order:
+            r = await client.get(f"{base}/inApps/v1/subscriptions/{original_transaction_id}", headers=headers)
+            if r.status_code == 200:
+                for group in r.json().get("data") or []:
+                    for last in group.get("lastTransactions") or []:
+                        if str(last.get("originalTransactionId")) != str(original_transaction_id):
+                            continue
+                        tx = _decode_apple_jws_verified(last["signedTransactionInfo"])
+                        signed_renew = last.get("signedRenewalInfo")
+                        return tx, (_decode_apple_jws_verified(signed_renew) if signed_renew else {})
+                last_status, last_body = 404, "subscription not in response"
+                break
+            last_status, last_body = r.status_code, r.text[:200]
+            if r.status_code not in (401, 404):
+                break
+    logger.warning("Apple subscription lookup %s failed: %s %s", original_transaction_id, last_status, last_body)
+    raise HTTPException(502 if last_status >= 500 else 400, "apple subscription lookup failed")
 
 
 def _trusted_roots():
@@ -860,7 +895,9 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
             original_transaction_id=orig_tx,
             transaction_id=str(tx.get("transactionId") or "") or None,
             environment=environment,
-            event_at=_ms_to_dt(tx.get("signedDate")),
+            # Legacy receipts carry no signedDate but reflect the state as of
+            # now; without a stamp a retried older webhook would overwrite it.
+            event_at=_ms_to_dt(tx.get("signedDate")) or (_now_utc() if legacy_path else None),
         )
         return IapVerifyResponse(
             status=status_v, product_id=product_id, expires_at=expires_at,
@@ -956,7 +993,7 @@ async def apple_webhook(request: Request):
         if not user_id:
             logger.warning("apple webhook %s: originalTransactionId %s not bound to a user "
                            "(user has not re-verified since 002) — skipped", notif_type, orig_tx)
-            _mark_notification(sb, notif_id, error="no_user")
+            _mark_notification(sb, notif_id, error=f"no_user:{orig_tx}" if orig_tx else "no_user")
             return {"ok": True, "skipped": "no_user"}
 
         status_v, expires_at = _apple_status(tx, renew, notif_type)
