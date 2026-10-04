@@ -81,17 +81,18 @@ async def _check_apple(row: dict) -> Tuple[Optional[str], Optional[datetime], Op
     """Ask Apple for the current state of this subscription.
 
     Returns ``(status, expires_at, transaction)``; ``(None, None, None)`` when
-    the row cannot be addressed (no transaction id on file).
+    the row cannot be addressed (no original transaction id on file).
+
+    Addressed by the *original* transaction id through the subscription-status
+    endpoint. Looking up the stored ``transaction_id`` instead returns that one
+    point-in-time transaction — for a converted trial, the expired trial — and
+    would have revoked paying customers.
     """
-    tx_id = row.get("transaction_id") or row.get("original_transaction_id")
-    if not tx_id:
+    otid = row.get("original_transaction_id")
+    if not otid:
         return None, None, None
-    info = await iap_mod._apple_lookup_transaction(str(tx_id))
-    signed = info.get("signedTransactionInfo")
-    if not signed:
-        raise RuntimeError("apple returned no signedTransactionInfo")
-    tx = iap_mod._decode_apple_jws_verified(signed)
-    status, expires_at = iap_mod._apple_status(tx)
+    tx, renewal = await iap_mod._apple_lookup_subscription(str(otid))
+    status, expires_at = iap_mod._apple_status(tx, renewal)
     return status, expires_at, tx
 
 
@@ -144,8 +145,7 @@ async def reconcile(*, apply: bool, window_days: Optional[int]) -> int:
         was_pro = subscription_is_pro(row)
         now_pro = subscription_is_pro({"status": status, "expires_at": expires_at})
         old_exp = row.get("expires_at")
-        if status == row.get("status") and str(old_exp or "") == str(
-                expires_at.isoformat() if expires_at else ""):
+        if status == row.get("status") and iap_mod._parse_ts(old_exp) == expires_at:
             continue
 
         changes.append((row, status, expires_at))
@@ -163,10 +163,12 @@ async def reconcile(*, apply: bool, window_days: Optional[int]) -> int:
             product_id=(payload or {}).get("productId") or row.get("product_id") or "",
             status=status, expires_at=expires_at,
             trial_ends_at=expires_at if status == "trial" else None,
-            cancel_reason="reconcile" if status == "expired" else None,
+            cancel_reason="reconcile" if status in ("cancelled", "expired") else None,
             # keep the existing binding — never move a receipt between users here
             original_transaction_id=row.get("original_transaction_id"),
             purchase_token=row.get("purchase_token"),
+            transaction_id=str((payload or {}).get("transactionId") or "") or None,
+            last_renewed_at=iap_mod._ms_to_dt((payload or {}).get("purchaseDate")),
             allow_transfer=False,
         )
         try:

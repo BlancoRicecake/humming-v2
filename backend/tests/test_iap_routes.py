@@ -248,7 +248,52 @@ def test_apple_webhook_unknown_user_is_skipped_and_retryable(client, db, chain):
     r = client.post("/iap/webhook/apple", json=notif(chain, apple_tx(orig="999")))
     assert r.status_code == 200 and r.json()["skipped"] == "no_user"
     n = db.tables["iap_notifications"][0]
-    assert n.get("processed_at") is None and n["error"] == "no_user"
+    assert n.get("processed_at") is None and n["error"] == "no_user:999"
+
+
+def test_apple_webhook_refund_declined_keeps_subscription(client, db, chain):
+    # Apple declined the customer's refund request — the subscription stands.
+    verify_apple(client, chain.sign(apple_tx()))
+    r = client.post("/iap/webhook/apple", json=notif(chain, apple_tx(), ntype="REFUND_DECLINED"))
+    assert r.status_code == 200
+    row = db.sub(USER_A)
+    assert row["status"] == "active" and deps.subscription_is_pro(row)
+
+
+def test_apple_webhook_trial_converts_to_paid(client, db, chain):
+    verify_apple(client, chain.sign(apple_tx(expires_in_days=1, offerType=1)))
+    assert db.sub(USER_A)["status"] == "trial"
+    r = client.post("/iap/webhook/apple", json=notif(
+        chain, apple_tx(expires_in_days=31, txid="1000000000000009"), ntype="DID_RENEW",
+        renewal={"autoRenewStatus": 1, "originalTransactionId": "1000000000000001"}))
+    assert r.status_code == 200
+    row = db.sub(USER_A)
+    assert row["status"] == "active" and row["transaction_id"] == "1000000000000009"
+    assert deps.subscription_is_pro(row)
+
+
+def test_legacy_verify_is_not_overwritten_by_a_retried_older_webhook(client, db, chain, monkeypatch):
+    now = datetime.now(timezone.utc)
+
+    async def legacy(_receipt):
+        return {"receipt": {"bundle_id": "com.example.humtrack"}, "environment": "Production",
+                "latest_receipt_info": [{
+                    "product_id": "humtrack_pro_monthly_v2", "original_transaction_id": "1000000000000001",
+                    "transaction_id": "1000000000000005", "expires_date_ms": str(ms(now + timedelta(days=30))),
+                    "purchase_date_ms": str(ms(now)), "original_purchase_date_ms": str(ms(now - timedelta(days=40)))}]}
+    monkeypatch.setattr(iap_mod, "_apple_verify_receipt_legacy", legacy)
+    assert verify_apple(client, "MIIlegacyReceiptBase64" * 20).status_code == 200
+    # Apple retries an EXPIRED notification that was signed before the renewal.
+    body = {
+        "notificationType": "EXPIRED", "notificationUUID": str(uuid.uuid4()),
+        "signedDate": ms(now - timedelta(days=9)),
+        "data": {"bundleId": "com.example.humtrack", "environment": "Production",
+                 "signedTransactionInfo": chain.sign(apple_tx(expires_in_days=-10, signedDate=ms(now - timedelta(days=9))))},
+    }
+    r = client.post("/iap/webhook/apple", json={"signedPayload": chain.sign(body)})
+    assert r.status_code == 200
+    row = db.sub(USER_A)
+    assert row["status"] == "active" and deps.subscription_is_pro(row)
 
 
 def test_apple_webhook_duplicate_after_processing_short_circuits(client, db, chain):
@@ -476,6 +521,32 @@ def test_google_v2_state_mapping(state, expected, pro):
     status_v, expires_at = iap_mod._google_status_v2(gv2(state))
     assert status_v == expected
     assert deps.subscription_is_pro({"status": status_v, "expires_at": expires_at}) is pro
+
+
+def test_google_v2_free_trial_phase_is_trial():
+    status_v, expires_at = iap_mod._google_status_v2(gv2(items=[gline(offerPhase={"freeTrial": {}})]))
+    assert status_v == "trial" and deps.subscription_is_pro({"status": status_v, "expires_at": expires_at})
+    assert iap_mod._google_from_v2(gv2(items=[gline(offerPhase={"freeTrial": {}})])).trial is True
+
+
+def test_google_v2_base_price_phase_is_paid_active():
+    assert iap_mod._google_status_v2(gv2(items=[gline(offerPhase={"basePrice": {}})]))[0] == "active"
+    assert iap_mod._google_from_v2(gv2(items=[gline(offerPhase={"basePrice": {}})])).trial is False
+
+
+def test_google_v2_trial_cancelled_stays_cancelled_until_expiry():
+    sub = gv2(items=[gline(auto_renew=False, offerPhase={"freeTrial": {}})])
+    status_v, expires_at = iap_mod._google_status_v2(sub)
+    assert status_v == "cancelled" and deps.subscription_is_pro({"status": status_v, "expires_at": expires_at})
+
+
+def test_google_v2_verify_records_trial_end(client, db, google):
+    google["v2"] = gv2(items=[gline(days=7, offerPhase={"freeTrial": {}})])
+    r = client.post("/iap/verify", headers=auth(), json={
+        "store": "play_store", "receipt_data": '{"productId": "humtrack_pro_monthly_v2", "purchaseToken": "tok-trial"}'})
+    assert r.status_code == 200, r.text
+    row = db.sub(USER_A)
+    assert row["status"] == "trial" and row["trial_ends_at"] == row["expires_at"]
 
 
 def test_google_v2_state_accepts_bare_enum_name():
