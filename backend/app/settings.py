@@ -34,9 +34,9 @@ class Settings(BaseSettings):
     r2_public_base_url: Optional[str] = None  # https://cdn.example.com
 
     # Apple App Store Server API
-    # NOTE: App Store Server API uses Team ID as JWT `iss` (NOT the
-    # App Store Connect API issuer UUID). We keep apple_issuer_id around as
-    # an optional override for environments that still use a legacy key.
+    # NOTE: App Store Server API JWTs use the App Store Connect issuer UUID
+    # (Users and Access → Integrations) as `iss`. The Team ID is rejected with
+    # 401, which silently broke every server-side lookup until 2026-10-04.
     apple_shared_secret: Optional[str] = None  # Legacy verifyReceipt fallback
     apple_bundle_id: Optional[str] = None
     apple_team_id: Optional[str] = None
@@ -108,9 +108,8 @@ class Settings(BaseSettings):
         return self.apple_iap_key_id or self.apple_key_id
 
     def resolve_apple_issuer(self) -> Optional[str]:
-        # App Store Server API: use Team ID as `iss`. Fallback to legacy
-        # apple_issuer_id if present (older ASC API style keys).
-        return self.apple_team_id or self.apple_issuer_id
+        # App Store Server API `iss` is the issuer UUID, never the Team ID.
+        return self.apple_issuer_id
 
     def resolve_apple_private_key(self) -> Optional[str]:
         """Return PEM contents. Prefer inline env, then path on disk."""

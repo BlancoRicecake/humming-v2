@@ -305,8 +305,9 @@ def _upsert_subscription(sb, *, user_id: str, store: str, product_id: str,
 # --- Apple ------------------------------------------------------------------
 def _apple_jwt() -> str:
     """Build the ES256 JWT used to authenticate with Apple's App Store Server
-    API. ``iss`` is the Team ID (NOT the ASC API issuer UUID), ``kid`` is the
-    subscription key id, ``aud`` is the literal ``appstoreconnect-v1``.
+    API. ``iss`` is the App Store Connect issuer UUID (the Team ID returns
+    401), ``kid`` is the in-app purchase key id, ``aud`` is the literal
+    ``appstoreconnect-v1``.
 
     See https://developer.apple.com/documentation/appstoreserverapi/generating_tokens_for_api_requests.
     """
@@ -316,7 +317,7 @@ def _apple_jwt() -> str:
     iss = s.resolve_apple_issuer()
     pk = s.resolve_apple_private_key()
     if not (kid and iss and pk and s.apple_bundle_id):
-        raise HTTPException(503, "Apple StoreKit not configured (team_id/key_id/private_key/bundle_id required)")
+        raise HTTPException(503, "Apple StoreKit not configured (issuer_id/key_id/private_key/bundle_id required)")
     now = int(time.time())
     headers = {"alg": "ES256", "kid": kid, "typ": "JWT"}
     payload = {
