@@ -523,6 +523,32 @@ def test_google_v2_state_mapping(state, expected, pro):
     assert deps.subscription_is_pro({"status": status_v, "expires_at": expires_at}) is pro
 
 
+def test_google_v2_free_trial_phase_is_trial():
+    status_v, expires_at = iap_mod._google_status_v2(gv2(items=[gline(offerPhase={"freeTrial": {}})]))
+    assert status_v == "trial" and deps.subscription_is_pro({"status": status_v, "expires_at": expires_at})
+    assert iap_mod._google_from_v2(gv2(items=[gline(offerPhase={"freeTrial": {}})])).trial is True
+
+
+def test_google_v2_base_price_phase_is_paid_active():
+    assert iap_mod._google_status_v2(gv2(items=[gline(offerPhase={"basePrice": {}})]))[0] == "active"
+    assert iap_mod._google_from_v2(gv2(items=[gline(offerPhase={"basePrice": {}})])).trial is False
+
+
+def test_google_v2_trial_cancelled_stays_cancelled_until_expiry():
+    sub = gv2(items=[gline(auto_renew=False, offerPhase={"freeTrial": {}})])
+    status_v, expires_at = iap_mod._google_status_v2(sub)
+    assert status_v == "cancelled" and deps.subscription_is_pro({"status": status_v, "expires_at": expires_at})
+
+
+def test_google_v2_verify_records_trial_end(client, db, google):
+    google["v2"] = gv2(items=[gline(days=7, offerPhase={"freeTrial": {}})])
+    r = client.post("/iap/verify", headers=auth(), json={
+        "store": "play_store", "receipt_data": '{"productId": "humtrack_pro_monthly_v2", "purchaseToken": "tok-trial"}'})
+    assert r.status_code == 200, r.text
+    row = db.sub(USER_A)
+    assert row["status"] == "trial" and row["trial_ends_at"] == row["expires_at"]
+
+
 def test_google_v2_state_accepts_bare_enum_name():
     assert iap_mod._google_status_v2({"subscriptionState": "ACTIVE",
                                       "lineItems": [gline()]})[0] == "active"

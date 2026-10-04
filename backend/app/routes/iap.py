@@ -627,10 +627,18 @@ def _google_v2_governing_item(sub: dict) -> Optional[dict]:
     return items[0] if items else None
 
 
+def _google_v2_in_free_trial(item: dict) -> bool:
+    """``lineItems[].offerPhase`` names the phase the line item is in now
+    (``freeTrial`` / ``introductoryPrice`` / ``basePrice`` / ``prorationPeriod``)."""
+    phase = item.get("offerPhase")
+    return isinstance(phase, dict) and "freeTrial" in phase
+
+
 def _google_status_v2(sub: dict, now: Optional[datetime] = None) -> Tuple[SubStatus, Optional[datetime]]:
     """Map a ``subscriptionsv2`` resource → our SubStatus + effective expiry.
 
-    ACTIVE           → active; ``cancelled`` when the governing plan has
+    ACTIVE           → active (``trial`` while the line item's offerPhase is
+                       freeTrial); ``cancelled`` when the governing plan has
                        auto-renew off (still entitled until expiry — same
                        semantics as the Apple path's autoRenewStatus == 0)
     IN_GRACE_PERIOD  → active (Google extends expiryTime through the grace)
@@ -649,6 +657,8 @@ def _google_status_v2(sub: dict, now: Optional[datetime] = None) -> Tuple[SubSta
             # means auto-renew is OFF. Prepaid plans carry no autoRenewingPlan
             # at all and stay "active" — nothing was cancelled.
             return "cancelled", expiry
+        if _google_v2_in_free_trial(item):
+            return "trial", expiry
         return "active", expiry
     if state == "IN_GRACE_PERIOD":
         if expiry and expiry <= now:
@@ -689,7 +699,7 @@ def _google_from_v2(sub: dict) -> _GoogleSub:
         linked_purchase_token=str(sub.get("linkedPurchaseToken") or "") or None,
         start_at=_parse_rfc3339(sub.get("startTime")),
         pending=_google_v2_state(sub) == "PENDING",
-        trial=False,  # v2 does not flag free trials on the subscription resource
+        trial=_google_v2_in_free_trial(item),
         cancel_reason=_google_v2_cancel_reason(sub, status_v),
         external_account_id=(ext.get("obfuscatedExternalAccountId")
                              or ext.get("externalAccountId")
