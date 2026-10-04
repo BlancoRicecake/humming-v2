@@ -127,6 +127,7 @@ class _Query:
         self.db, self.table = db, table
         self._filters: List[tuple] = []
         self._limit: Optional[int] = None
+        self._order: Optional[tuple] = None
         self._op = ("select", None)
 
     # builders
@@ -151,6 +152,9 @@ class _Query:
     def limit(self, n):
         self._limit = n; return self
 
+    def order(self, col, desc=False):
+        self._order = (col, desc); return self
+
     def maybe_single(self):
         self._limit = 1; return self
 
@@ -163,6 +167,9 @@ class _Query:
         op, arg = self._op
         if op == "select":
             out = [dict(r) for r in rows if self._match(r)]
+            if self._order:
+                col, desc = self._order
+                out.sort(key=lambda r: r.get(col) or "", reverse=desc)
             return _Res(out[: self._limit] if self._limit else out)
         if op == "insert":
             pk = self.db.pks[self.table]

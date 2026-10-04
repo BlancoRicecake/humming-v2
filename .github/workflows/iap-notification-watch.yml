@@ -1,0 +1,33 @@
+name: IAP notification watch
+
+# 스토어 구독 알림(App Store Server Notifications / Play RTDN)이 끊기면 실패한다.
+# 실패한 예약 워크플로는 GitHub 이 이메일로 알린다. 판정 기준은
+# backend/app/routes/iap_health.py (알림이 와야 했는데 5일 넘게 없음).
+on:
+  schedule:
+    - cron: '0 0 * * *'   # 매일 09:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check /health/iap-notifications
+        run: |
+          set -u
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o body.json -w '%{http_code}' --max-time 60 \
+              https://api.hum-track.com/health/iap-notifications) || code=000
+            # 000/5xx other than 503 = server unreachable (e.g. Fly cold start) — retry.
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then break; fi
+            sleep 20
+          done
+          cat body.json 2>/dev/null; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Store notifications look broken (HTTP $code). See body above and docs/IOS-LAUNCH-CRASH-2026-10-04.md."
+            exit 1
+          fi
