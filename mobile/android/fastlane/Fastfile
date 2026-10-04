@@ -53,16 +53,17 @@ platform :android do
     end
   end
 
-  desc "Upload the current release AAB to internal testing"
-  lane :upload_internal do
+  desc "Build with validated production configuration, then upload to internal testing"
+  lane :upload_internal do |options|
+    # Never upload a stale AAB produced by an unvalidated manual build.
+    build(entry: options[:entry] || "lib/main.dart")
     publish_android("internal")
   end
 
   desc "Build and publish to internal testing"
   lane :internal do |options|
     doctor
-    build(entry: options[:entry] || "lib/main.dart")
-    upload_internal
+    upload_internal(entry: options[:entry] || "lib/main.dart")
   end
 
   desc "Build and send a production update with revised store text for review"

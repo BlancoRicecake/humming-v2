@@ -1,4 +1,5 @@
 backend/.venv/
+backend/.venv*/
 backend/__pycache__/
 backend/app/__pycache__/
 backend/*.pyc
@@ -62,6 +63,7 @@ backend/secrets/*.plist
 # iOS Google Sign In — bundle id 만 들어있어 강한 secret 은 아니지만
 # 사용자 지시로 git out-of-tree 유지. 빌드 시 backend/secrets 에서 복사.
 mobile/ios/Runner/GoogleService-Info.plist
+mobile/android/app/google-services.json
 
 # Claude Code 에이전트 worktree 자동 생성 디렉터리 — 세션마다 일회성
 .claude/worktrees/

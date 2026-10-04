@@ -1728,7 +1728,7 @@ class L10nEn extends L10n {
   }
 
   @override
-  String get ltExportFailed => 'MIDI export failed';
+  String get ltExportFailed => 'File export failed.';
 
   @override
   String get ltExportFooter =>
@@ -1748,6 +1748,13 @@ class L10nEn extends L10n {
 
   @override
   String get ltSettingsHapticsSub => 'Buzz on pad hits';
+
+  @override
+  String get ltSettingsAnalytics => 'Anonymous usage analytics';
+
+  @override
+  String get ltSettingsAnalyticsSub =>
+      'Allow Clarity and Firebase analytics for product improvement';
 
   @override
   String get ltSettingsAbout => 'About';
@@ -1938,7 +1945,8 @@ class L10nEn extends L10n {
   String get ltEditorHumErrBusy => 'Server busy, try again shortly';
 
   @override
-  String get ltEditorHumErrWaking => 'Server is waking up, try again';
+  String get ltEditorHumErrWaking =>
+      'Could not reach the server. Check your internet connection and try again.';
 
   @override
   String get ltEditorHumErrGeneric => 'Couldn\'t convert your hum';
@@ -2306,4 +2314,212 @@ class L10nEn extends L10n {
   @override
   String get policyNoticeBody =>
       'We are updating our Terms of Service, Privacy Policy and Refund Policy.\n\nWe are correcting Pro\'s description to reflect its actual benefits: unlimited saved songs and WAV, MIDI and stem export. The previously advertised cloud sync, permanent vocal backup and priority analysis were never provided. We are sorry for the confusion.\n\nOur Privacy Policy now discloses the tools already in use: Microsoft Clarity (session replay and heatmaps) and Sentry (error and crash diagnostics).\n\nYour work is saved on your device. Saved songs remain available to view, edit and play after your subscription expires. Read the documents below for details and contact information.';
+
+  @override
+  String get ltExportShared => 'File handed to the sharing app.';
+
+  @override
+  String get ltExportShareCancelled => 'File created. Sharing was cancelled.';
+
+  @override
+  String get ltExportShareUnconfirmed =>
+      'File created. Sharing completion could not be confirmed.';
+
+  @override
+  String get ltExportShareFailed =>
+      'File created, but sharing could not open. Please try again.';
+
+  @override
+  String get ltGuidedStart => 'Start with a hum';
+
+  @override
+  String get ltGuidedDirect => 'Open editor';
+
+  @override
+  String get ltGuidedTitle => 'Your voice, your first melody';
+
+  @override
+  String get ltGuidedHint =>
+      'Hum a short phrase and turn it into an instrument.';
+
+  @override
+  String get ltGuidedRecord => 'Record a melody';
+
+  @override
+  String get ltGuidedMore => 'Record more melody';
+
+  @override
+  String get ltGuidedListen => 'Listen to my song';
+
+  @override
+  String get ltGuidedStop => 'Stop playback';
+
+  @override
+  String get ltGuidedSound => 'Change instrument';
+
+  @override
+  String get ltGuidedSave => 'Save my song';
+
+  @override
+  String get ltGuidedSaved =>
+      'Saved. Open the editor to keep building your song.';
+
+  @override
+  String get ltGuidedReady =>
+      'Your sound is ready. Try an instrument, a backing, or add your own sounds.';
+
+  @override
+  String get ltGuidedPrepare =>
+      'In a quiet place, hum a short melody after the four count-in beats. Conversion needs an internet connection.';
+
+  @override
+  String get ltGuidedSteps => '1 Melody or sample  →  2 Backing  →  3 Save';
+
+  @override
+  String get ltSampleTitle => 'My sound samples';
+
+  @override
+  String get ltSampleHint =>
+      'Record a sound or import a WAV, then choose a part to add to your song. PCM16 WAV, up to 60 seconds and 24 MB.';
+
+  @override
+  String get ltSampleError =>
+      'Could not process the sound. Check its format and available storage, then retry.';
+
+  @override
+  String get ltSampleRecord => 'Record a sound';
+
+  @override
+  String get ltSampleImport => 'Import WAV';
+
+  @override
+  String get ltSampleEmpty => 'No samples yet. Try a clap or your voice.';
+
+  @override
+  String get ltSampleItem => 'Sample';
+
+  @override
+  String get ltSampleLoop => 'Loop selection';
+
+  @override
+  String get ltSampleSaveCut => 'Keep trimmed sound';
+
+  @override
+  String get ltSampleAdd => 'Add to song';
+
+  @override
+  String get ltSamplePreview => 'Listen to selection';
+
+  @override
+  String get ltBackingTitle => '2. Pick a backing';
+
+  @override
+  String get ltBackingHint =>
+      'Pick a mood, then compare three options. Your song changes only when you apply one.';
+
+  @override
+  String get ltBackingCalm => 'Calm';
+
+  @override
+  String get ltBackingBounce => 'Bounce';
+
+  @override
+  String get ltBackingDrive => 'Drive';
+
+  @override
+  String get ltBackingCompare => 'Compare A, B and C';
+
+  @override
+  String get ltBackingPreview => 'Preview';
+
+  @override
+  String get ltBackingApply => 'Apply';
+
+  @override
+  String get ltBackingApplied => 'Applied';
+
+  @override
+  String get ltSongPlan => 'View song structure';
+
+  @override
+  String get ltSongPlanTitle => 'Song structure';
+
+  @override
+  String get ltSongPlanHint =>
+      'Arrange sections and repeats, then lock the tracks that automatic arrangement must preserve.';
+
+  @override
+  String get ltSongPlanBars => 'bars';
+
+  @override
+  String get ltSongPlanLocks => 'Arrangement locks';
+
+  @override
+  String get ltSongPlanLocksHint =>
+      'Locked tracks stay unchanged when you apply another option.';
+
+  @override
+  String get ltSongPlanMelody => 'My melody';
+
+  @override
+  String get ltSongPlanHarmony => 'Chords';
+
+  @override
+  String get ltSongPlanBass => 'Bass';
+
+  @override
+  String get ltSongPlanDrums => 'Drums';
+
+  @override
+  String get ltGuidedSample => 'Add sounds';
+
+  @override
+  String ltSampleLimit(String seconds) {
+    return 'Choose up to $seconds seconds to add to this section. Adjust its position in the editor.';
+  }
+
+  @override
+  String get ltMelodyReview => 'Review melody';
+
+  @override
+  String get ltMelodyReviewHint =>
+      'Check uncertain notes first. Compare raw and corrected pitches, then fix only what needs attention.';
+
+  @override
+  String ltMelodyUncertain(int count) {
+    return '$count notes need a check';
+  }
+
+  @override
+  String get ltMelodyRaw => 'Hear raw pitches';
+
+  @override
+  String get ltMelodyCorrected => 'Hear corrected pitches';
+
+  @override
+  String get ltMelodyOctaveDown => 'Octave down';
+
+  @override
+  String get ltMelodyOctaveUp => 'Octave up';
+
+  @override
+  String get ltMelodySplit => 'Split in two';
+
+  @override
+  String get ltMelodyMerge => 'Merge with next';
+
+  @override
+  String ltMelodyConfidence(int percent) {
+    return '$percent% confidence';
+  }
+
+  @override
+  String get ltMelodyNoIssues => 'No notes need attention.';
+
+  @override
+  String get ltMelodyLocked => 'Lock my melody';
+
+  @override
+  String get ltMelodyLockedHint =>
+      'Changing the backing will keep this melody.';
 }

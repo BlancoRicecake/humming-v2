@@ -8,24 +8,76 @@ import '../music/theory.dart';
 
 /// A pitched note: { midi, freq, step, dur }.
 class PitchNote {
-  PitchNote({required this.midi, required this.freq, required this.step, this.dur = 1});
+  PitchNote({
+    required this.midi,
+    required this.freq,
+    required this.step,
+    this.dur = 1,
+    this.sourceMidi,
+    this.confidence = 1.0,
+    this.assisted = false,
+    this.locked = false,
+  });
 
   final int midi;
   final double freq;
   int step;
   int dur;
 
-  PitchNote copyWith({int? step}) =>
-      PitchNote(midi: midi, freq: freq, step: step ?? this.step, dur: dur);
+  /// Pitch before key/scale correction. Null for notes entered by hand or from
+  /// old projects. Keeping it makes raw-vs-corrected listening reversible.
+  final int? sourceMidi;
 
-  Map<String, dynamic> toJson() => {'midi': midi, 'freq': freq, 'step': step, 'dur': dur};
+  /// Analyzer confidence in the source note, normalized to 0..1.
+  final double confidence;
+
+  /// True when the analyzer or grid mapping changed [sourceMidi].
+  final bool assisted;
+
+  /// Generation/editing tools must preserve locked notes.
+  final bool locked;
+
+  PitchNote copyWith({
+    int? midi,
+    double? freq,
+    int? step,
+    int? dur,
+    int? sourceMidi,
+    double? confidence,
+    bool? assisted,
+    bool? locked,
+  }) => PitchNote(
+    midi: midi ?? this.midi,
+    freq: freq ?? this.freq,
+    step: step ?? this.step,
+    dur: dur ?? this.dur,
+    sourceMidi: sourceMidi ?? this.sourceMidi,
+    confidence: confidence ?? this.confidence,
+    assisted: assisted ?? this.assisted,
+    locked: locked ?? this.locked,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'midi': midi,
+    'freq': freq,
+    'step': step,
+    'dur': dur,
+    if (sourceMidi != null) 'sourceMidi': sourceMidi,
+    if (confidence != 1.0) 'confidence': confidence,
+    if (assisted) 'assisted': true,
+    if (locked) 'locked': true,
+  };
 
   static PitchNote fromJson(Map<String, dynamic> j) => PitchNote(
-        midi: (j['midi'] as num).toInt(),
-        freq: (j['freq'] as num).toDouble(),
-        step: (j['step'] as num).toInt(),
-        dur: (j['dur'] as num?)?.toInt() ?? 1,
-      );
+    midi: (j['midi'] as num).toInt(),
+    freq: (j['freq'] as num).toDouble(),
+    step: (j['step'] as num).toInt(),
+    dur: (j['dur'] as num?)?.toInt() ?? 1,
+    sourceMidi: (j['sourceMidi'] as num?)?.toInt(),
+    confidence: (j['confidence'] as num?)?.toDouble() ?? 1.0,
+    assisted: (j['assisted'] as bool?) ?? false,
+    locked: (j['locked'] as bool?) ?? false,
+  );
 }
 
 /// A drum hit: { kind:'kick'|'snare'|'hihat', step }.
@@ -35,7 +87,8 @@ class DrumNote {
   final String kind;
   int step;
 
-  DrumNote copyWith({int? step}) => DrumNote(kind: kind, step: step ?? this.step);
+  DrumNote copyWith({int? step}) =>
+      DrumNote(kind: kind, step: step ?? this.step);
 
   Map<String, dynamic> toJson() => {'kind': kind, 'step': step};
 
@@ -47,27 +100,33 @@ class DrumNote {
 /// the chain can be re-ordered, disabled, or reverted. [type] is the fx name
 /// ('eq'|'reverb'|'comp'|'delay'|'stretch'|'pitch'); [params] are its knobs.
 class FxNode {
-  FxNode({required this.type, Map<String, dynamic>? params, this.enabled = true})
-      : params = params ?? {};
+  FxNode({
+    required this.type,
+    Map<String, dynamic>? params,
+    this.enabled = true,
+  }) : params = params ?? {};
 
   String type;
   Map<String, dynamic> params;
   bool enabled;
 
   FxNode copy() => FxNode(
-        type: type,
-        params: Map<String, dynamic>.from(params),
-        enabled: enabled,
-      );
+    type: type,
+    params: Map<String, dynamic>.from(params),
+    enabled: enabled,
+  );
 
-  Map<String, dynamic> toJson() =>
-      {'type': type, 'params': params, if (!enabled) 'enabled': false};
+  Map<String, dynamic> toJson() => {
+    'type': type,
+    'params': params,
+    if (!enabled) 'enabled': false,
+  };
 
   static FxNode fromJson(Map<String, dynamic> j) => FxNode(
-        type: j['type'] as String,
-        params: (j['params'] as Map?)?.cast<String, dynamic>() ?? {},
-        enabled: (j['enabled'] as bool?) ?? true,
-      );
+    type: j['type'] as String,
+    params: (j['params'] as Map?)?.cast<String, dynamic>() ?? {},
+    enabled: (j['enabled'] as bool?) ?? true,
+  );
 }
 
 /// One placed take on the vocal lane. The recording lives at [path] (basename
@@ -88,12 +147,13 @@ class VocalClip {
     this.fadeOutMs = 0,
     List<FxNode>? fx,
     List<double>? peaks,
-  })  : fx = fx ?? [],
-        peaks = peaks ?? [];
+  }) : fx = fx ?? [],
+       peaks = peaks ?? [];
 
   String path;
   String? origPath;
   int startStep;
+
   /// The chunk's length on the grid in 16th steps, for arrangement display.
   /// -1 = unknown (drawn to the section end) until the editor measures the take.
   int durSteps;
@@ -106,50 +166,50 @@ class VocalClip {
   List<double> peaks;
 
   VocalClip copy() => VocalClip(
-        path: path,
-        origPath: origPath,
-        startStep: startStep,
-        durSteps: durSteps,
-        trimStart: trimStart,
-        trimEnd: trimEnd,
-        gain: gain,
-        fadeInMs: fadeInMs,
-        fadeOutMs: fadeOutMs,
-        fx: fx.map((f) => f.copy()).toList(),
-        peaks: List<double>.from(peaks),
-      );
+    path: path,
+    origPath: origPath,
+    startStep: startStep,
+    durSteps: durSteps,
+    trimStart: trimStart,
+    trimEnd: trimEnd,
+    gain: gain,
+    fadeInMs: fadeInMs,
+    fadeOutMs: fadeOutMs,
+    fx: fx.map((f) => f.copy()).toList(),
+    peaks: List<double>.from(peaks),
+  );
 
   Map<String, dynamic> toJson() => {
-        'path': path,
-        if (origPath != null) 'origPath': origPath,
-        if (startStep != 0) 'startStep': startStep,
-        if (durSteps != -1) 'durSteps': durSteps,
-        if (trimStart != 0) 'trimStart': trimStart,
-        if (trimEnd != -1) 'trimEnd': trimEnd,
-        if (gain != 1.0) 'gain': gain,
-        if (fadeInMs != 0) 'fadeInMs': fadeInMs,
-        if (fadeOutMs != 0) 'fadeOutMs': fadeOutMs,
-        if (fx.isNotEmpty) 'fx': fx.map((f) => f.toJson()).toList(),
-        if (peaks.isNotEmpty) 'peaks': peaks,
-      };
+    'path': path,
+    if (origPath != null) 'origPath': origPath,
+    if (startStep != 0) 'startStep': startStep,
+    if (durSteps != -1) 'durSteps': durSteps,
+    if (trimStart != 0) 'trimStart': trimStart,
+    if (trimEnd != -1) 'trimEnd': trimEnd,
+    if (gain != 1.0) 'gain': gain,
+    if (fadeInMs != 0) 'fadeInMs': fadeInMs,
+    if (fadeOutMs != 0) 'fadeOutMs': fadeOutMs,
+    if (fx.isNotEmpty) 'fx': fx.map((f) => f.toJson()).toList(),
+    if (peaks.isNotEmpty) 'peaks': peaks,
+  };
 
   static String? _basename(String? p) => p?.split('/').last.split('\\').last;
 
   static VocalClip fromJson(Map<String, dynamic> j) => VocalClip(
-        path: _basename(j['path'] as String?) ?? '',
-        origPath: _basename(j['origPath'] as String?),
-        startStep: (j['startStep'] as num?)?.toInt() ?? 0,
-        durSteps: (j['durSteps'] as num?)?.toInt() ?? -1,
-        trimStart: (j['trimStart'] as num?)?.toInt() ?? 0,
-        trimEnd: (j['trimEnd'] as num?)?.toInt() ?? -1,
-        gain: (j['gain'] as num?)?.toDouble() ?? 1.0,
-        fadeInMs: (j['fadeInMs'] as num?)?.toInt() ?? 0,
-        fadeOutMs: (j['fadeOutMs'] as num?)?.toInt() ?? 0,
-        fx: (j['fx'] as List?)
-            ?.map((e) => FxNode.fromJson((e as Map).cast<String, dynamic>()))
-            .toList(),
-        peaks: (j['peaks'] as List?)?.map((e) => (e as num).toDouble()).toList(),
-      );
+    path: _basename(j['path'] as String?) ?? '',
+    origPath: _basename(j['origPath'] as String?),
+    startStep: (j['startStep'] as num?)?.toInt() ?? 0,
+    durSteps: (j['durSteps'] as num?)?.toInt() ?? -1,
+    trimStart: (j['trimStart'] as num?)?.toInt() ?? 0,
+    trimEnd: (j['trimEnd'] as num?)?.toInt() ?? -1,
+    gain: (j['gain'] as num?)?.toDouble() ?? 1.0,
+    fadeInMs: (j['fadeInMs'] as num?)?.toInt() ?? 0,
+    fadeOutMs: (j['fadeOutMs'] as num?)?.toInt() ?? 0,
+    fx: (j['fx'] as List?)
+        ?.map((e) => FxNode.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(),
+    peaks: (j['peaks'] as List?)?.map((e) => (e as num).toDouble()).toList(),
+  );
 }
 
 /// One track's content. Pitched/bass/drums use [notes]; vocal uses [clip].
@@ -164,27 +224,33 @@ class TrackData {
     this.vocalBpm,
     this.vocalBars,
     this.clips,
-  })  : pitchNotes = notes ?? [],
-        drumNotes = drums ?? [];
+  }) : pitchNotes = notes ?? [],
+       drumNotes = drums ?? [];
 
   final List<PitchNote> pitchNotes;
   final List<DrumNote> drumNotes;
+
   /// Vocal waveform peaks (audio only — no MIDI), or null when empty.
   List<double>? clip;
+
   /// Recorded vocal file under Documents/looptap/vocals/ — stored as a
   /// BASENAME (resolve via LoopStorage.resolveVocal). Absolute paths from old
   /// saves are migrated in [fromJson].
   String? vocalPath;
+
   /// Pre-autotune original take (basename), kept for "revert to original".
   String? vocalOrigPath;
+
   /// True when the take was recorded via the loop-aligned modal: starts on the
   /// downbeat and is trimmed to exactly the section's loop length AT THE
   /// BPM/BARS IT WAS RECORDED ([vocalBpm]/[vocalBars]).
   bool vocalAligned;
+
   /// Loop context the take was recorded at. A take is only loop-length-exact
   /// for that bpm/bars combination — null on old saves (treated as unaligned).
   int? vocalBpm;
   int? vocalBars;
+
   /// Multi-take vocal lane (non-destructive editor). Null on legacy single-take
   /// saves — read [effectiveClips], which synthesizes one clip from the legacy
   /// [vocalPath]/[clip] so consumers don't have to special-case either shape.
@@ -215,16 +281,16 @@ class TrackData {
       vocalAligned && vocalBpm == bpm && vocalBars == bars;
 
   TrackData deepCopy() => TrackData(
-        notes: pitchNotes.map((n) => n.copyWith()).toList(),
-        drums: drumNotes.map((n) => n.copyWith()).toList(),
-        clip: clip == null ? null : List<double>.from(clip!),
-        vocalPath: vocalPath,
-        vocalOrigPath: vocalOrigPath,
-        vocalAligned: vocalAligned,
-        vocalBpm: vocalBpm,
-        vocalBars: vocalBars,
-        clips: clips?.map((c) => c.copy()).toList(),
-      );
+    notes: pitchNotes.map((n) => n.copyWith()).toList(),
+    drums: drumNotes.map((n) => n.copyWith()).toList(),
+    clip: clip == null ? null : List<double>.from(clip!),
+    vocalPath: vocalPath,
+    vocalOrigPath: vocalOrigPath,
+    vocalAligned: vocalAligned,
+    vocalBpm: vocalBpm,
+    vocalBars: vocalBars,
+    clips: clips?.map((c) => c.copy()).toList(),
+  );
 
   Map<String, dynamic> toJson() {
     // Mirror the first clip into the legacy vocalPath/clip fields so older app
@@ -234,8 +300,10 @@ class TrackData {
     final vp = first?.path ?? vocalPath;
     final pk = (first != null && first.peaks.isNotEmpty) ? first.peaks : clip;
     return {
-      if (pitchNotes.isNotEmpty) 'notes': pitchNotes.map((n) => n.toJson()).toList(),
-      if (drumNotes.isNotEmpty) 'drums': drumNotes.map((n) => n.toJson()).toList(),
+      if (pitchNotes.isNotEmpty)
+        'notes': pitchNotes.map((n) => n.toJson()).toList(),
+      if (drumNotes.isNotEmpty)
+        'drums': drumNotes.map((n) => n.toJson()).toList(),
       if (pk != null) 'clip': pk,
       if (vp != null) 'vocalPath': vp,
       if (vocalOrigPath != null) 'vocalOrigPath': vocalOrigPath,
@@ -254,8 +322,12 @@ class TrackData {
   static TrackData fromJson(Map<String, dynamic>? j) {
     if (j == null) return TrackData();
     return TrackData(
-      notes: (j['notes'] as List?)?.map((e) => PitchNote.fromJson(e as Map<String, dynamic>)).toList(),
-      drums: (j['drums'] as List?)?.map((e) => DrumNote.fromJson(e as Map<String, dynamic>)).toList(),
+      notes: (j['notes'] as List?)
+          ?.map((e) => PitchNote.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      drums: (j['drums'] as List?)
+          ?.map((e) => DrumNote.fromJson(e as Map<String, dynamic>))
+          .toList(),
       clip: (j['clip'] as List?)?.map((e) => (e as num).toDouble()).toList(),
       vocalPath: _basename(j['vocalPath'] as String?),
       vocalOrigPath: _basename(j['vocalOrigPath'] as String?),
@@ -281,20 +353,23 @@ class Section {
     this.autoName = true,
     this.bars = 2,
     this.repeats = 1,
-  })  : tracks = tracks ?? _emptyTracks(),
-        extras = extras ?? [],
-        order = order ?? [],
-        fillKinds = (fillKinds != null && fillKinds.length == kFillKindsDefault.length)
-            ? List.of(fillKinds)
-            : List.of(kFillKindsDefault);
+  }) : tracks = tracks ?? _emptyTracks(),
+       extras = extras ?? [],
+       order = order ?? [],
+       fillKinds =
+           (fillKinds != null && fillKinds.length == kFillKindsDefault.length)
+           ? List.of(fillKinds)
+           : List.of(kFillKindsDefault);
 
   String id;
   String name;
+
   /// True while [name] is an auto-assigned position letter (A, B, C…). The
   /// editor re-letters auto-named sections by their position on add/move/delete;
   /// a user rename flips this false so the custom name is left alone.
   bool autoName;
-  final Map<String, TrackData> tracks; // keyed by track id (base ids + extra ids)
+  final Map<String, TrackData>
+  tracks; // keyed by track id (base ids + extra ids)
   /// The 6 percussion sounds assigned to the Beat-Fill launchpad pads (kinds in
   /// kFillPalette). Per-section so each section's Fill notes match its layout.
   final List<String> fillKinds;
@@ -310,32 +385,32 @@ class Section {
   int repeats;
 
   static Map<String, TrackData> _emptyTracks() => {
-        for (final t in kTracks) t.id: TrackData(),
-      };
+    for (final t in kTracks) t.id: TrackData(),
+  };
 
   Section deepCopy() => Section(
-        id: id,
-        name: name,
-        tracks: tracks.map((k, v) => MapEntry(k, v.deepCopy())),
-        extras: [for (final e in extras) TrackRef(e.id, e.type)],
-        order: [...order],
-        fillKinds: [...fillKinds],
-        autoName: autoName,
-        bars: bars,
-        repeats: repeats,
-      );
+    id: id,
+    name: name,
+    tracks: tracks.map((k, v) => MapEntry(k, v.deepCopy())),
+    extras: [for (final e in extras) TrackRef(e.id, e.type)],
+    order: [...order],
+    fillKinds: [...fillKinds],
+    autoName: autoName,
+    bars: bars,
+    repeats: repeats,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'tracks': tracks.map((k, v) => MapEntry(k, v.toJson())),
-        'extras': [for (final e in extras) e.toJson()],
-        'order': order,
-        'fillKinds': fillKinds,
-        if (!autoName) 'autoName': false,
-        'bars': bars,
-        'repeats': repeats,
-      };
+    'id': id,
+    'name': name,
+    'tracks': tracks.map((k, v) => MapEntry(k, v.toJson())),
+    'extras': [for (final e in extras) e.toJson()],
+    'order': order,
+    'fillKinds': fillKinds,
+    if (!autoName) 'autoName': false,
+    'bars': bars,
+    'repeats': repeats,
+  };
 
   static Section fromJson(Map<String, dynamic> j) {
     final rawTracks = (j['tracks'] as Map?)?.cast<String, dynamic>() ?? {};
@@ -385,14 +460,20 @@ class Song {
     this.songVocalPeaks,
     this.songVocalBpm,
     this.songVocalBars,
-  })  : vol = vol ?? {for (final t in kTracks) t.id: t.kind == TrackKind.drums ? 1.0 : 0.85},
-        mutes = mutes ?? {},
-        instruments = instruments ??
-            {
-              for (final t in kPitchedTracks) t.id: t.defaultProgram,
-            },
-        sections = sections ?? [Section(id: 'A', name: 'A')],
-        wave = wave ?? List<double>.filled(30, 0.12);
+    Map<String, bool>? generationLocks,
+  }) : vol =
+           vol ??
+           {
+             for (final t in kTracks)
+               t.id: t.kind == TrackKind.drums ? 1.0 : 0.85,
+           },
+       mutes = mutes ?? {},
+       instruments =
+           instruments ??
+           {for (final t in kPitchedTracks) t.id: t.defaultProgram},
+       sections = sections ?? [Section(id: 'A', name: 'A')],
+       wave = wave ?? List<double>.filled(30, 0.12),
+       generationLocks = generationLocks ?? {'melody': true};
 
   String id;
   String title;
@@ -403,12 +484,15 @@ class Song {
   int bars; // 1 | 2 | 4
   final Map<String, double> vol;
   final Map<String, bool> mutes;
+
   /// Per-track GM program (melody/bass). Drives live playback + MIDI export.
   final Map<String, int> instruments;
   final List<Section> sections;
   DateTime? updatedAt;
+
   /// 30-bar waveform thumbnail for the songs grid.
   List<double> wave;
+
   /// Optional song-level continuous vocal take — recorded over the WHOLE song
   /// and played from step 0 during Play Song (avoids the per-section repeat
   /// conflict). Basename under Documents/looptap/vocals; null when none.
@@ -416,64 +500,80 @@ class Song {
   List<double>? songVocalPeaks; // display peaks
   int? songVocalBpm; // bpm at record time
   int? songVocalBars; // total song bars at record time (loop length)
+  /// Track-level invariants for an arrangement model. Melody is locked by
+  /// default so an AI/backing pass cannot silently replace the user's idea.
+  final Map<String, bool> generationLocks;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'key': key,
-        'scale': scale,
-        'bpm': bpm,
-        'swing': swing,
-        'bars': bars,
-        'vol': vol,
-        'mutes': mutes,
-        'instruments': instruments,
-        'sections': sections.map((s) => s.toJson()).toList(),
-        'updatedAt': updatedAt?.millisecondsSinceEpoch,
-        'wave': wave,
-        if (songVocalPath != null) 'songVocalPath': songVocalPath,
-        if (songVocalPeaks != null) 'songVocalPeaks': songVocalPeaks,
-        if (songVocalBpm != null) 'songVocalBpm': songVocalBpm,
-        if (songVocalBars != null) 'songVocalBars': songVocalBars,
-      };
+    'id': id,
+    'title': title,
+    'key': key,
+    'scale': scale,
+    'bpm': bpm,
+    'swing': swing,
+    'bars': bars,
+    'vol': vol,
+    'mutes': mutes,
+    'instruments': instruments,
+    'sections': sections.map((s) => s.toJson()).toList(),
+    'updatedAt': updatedAt?.millisecondsSinceEpoch,
+    'wave': wave,
+    if (songVocalPath != null) 'songVocalPath': songVocalPath,
+    if (songVocalPeaks != null) 'songVocalPeaks': songVocalPeaks,
+    if (songVocalBpm != null) 'songVocalBpm': songVocalBpm,
+    if (songVocalBars != null) 'songVocalBars': songVocalBars,
+    'generationLocks': generationLocks,
+  };
 
   static Song fromJson(Map<String, dynamic> j) => Song(
-        id: (j['id'] ?? 'lt') as String,
-        title: (j['title'] ?? 'Untitled loop') as String,
-        key: (j['key'] ?? 'A') as String,
-        // an unknown scale (older build / hand-edited file) would crash every
-        // kScales[scale]! lookup downstream — normalise it here once.
-        scale: kScales.containsKey(j['scale']) ? j['scale'] as String : 'minor',
-        bpm: (j['bpm'] as num?)?.toInt() ?? 92,
-        swing: (j['swing'] as num?)?.toDouble() ?? 0,
-        bars: (j['bars'] as num?)?.toInt() ?? 2,
-        vol: (j['vol'] as Map?)?.map((k, v) => MapEntry(k as String, (v as num).toDouble())),
-        mutes: (j['mutes'] as Map?)?.map((k, v) => MapEntry(k as String, v as bool)),
-        instruments: (j['instruments'] as Map?)?.map((k, v) => MapEntry(k as String, (v as num).toInt())),
-        sections: (j['sections'] as List?)
-            ?.map((e) => Section.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        updatedAt: j['updatedAt'] == null
-            ? null
-            : DateTime.fromMillisecondsSinceEpoch((j['updatedAt'] as num).toInt()),
-        wave: (j['wave'] as List?)?.map((e) => (e as num).toDouble()).toList(),
-        songVocalPath:
-            (j['songVocalPath'] as String?)?.split('/').last.split('\\').last,
-        songVocalPeaks: (j['songVocalPeaks'] as List?)
-            ?.map((e) => (e as num).toDouble())
-            .toList(),
-        songVocalBpm: (j['songVocalBpm'] as num?)?.toInt(),
-        songVocalBars: (j['songVocalBars'] as num?)?.toInt(),
-      );
+    id: (j['id'] ?? 'lt') as String,
+    title: (j['title'] ?? 'Untitled loop') as String,
+    key: (j['key'] ?? 'A') as String,
+    // an unknown scale (older build / hand-edited file) would crash every
+    // kScales[scale]! lookup downstream — normalise it here once.
+    scale: kScales.containsKey(j['scale']) ? j['scale'] as String : 'minor',
+    bpm: (j['bpm'] as num?)?.toInt() ?? 92,
+    swing: (j['swing'] as num?)?.toDouble() ?? 0,
+    bars: (j['bars'] as num?)?.toInt() ?? 2,
+    vol: (j['vol'] as Map?)?.map(
+      (k, v) => MapEntry(k as String, (v as num).toDouble()),
+    ),
+    mutes: (j['mutes'] as Map?)?.map(
+      (k, v) => MapEntry(k as String, v as bool),
+    ),
+    instruments: (j['instruments'] as Map?)?.map(
+      (k, v) => MapEntry(k as String, (v as num).toInt()),
+    ),
+    sections: (j['sections'] as List?)
+        ?.map((e) => Section.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    updatedAt: j['updatedAt'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch((j['updatedAt'] as num).toInt()),
+    wave: (j['wave'] as List?)?.map((e) => (e as num).toDouble()).toList(),
+    songVocalPath: (j['songVocalPath'] as String?)
+        ?.split('/')
+        .last
+        .split('\\')
+        .last,
+    songVocalPeaks: (j['songVocalPeaks'] as List?)
+        ?.map((e) => (e as num).toDouble())
+        .toList(),
+    songVocalBpm: (j['songVocalBpm'] as num?)?.toInt(),
+    songVocalBars: (j['songVocalBars'] as num?)?.toInt(),
+    generationLocks: (j['generationLocks'] as Map?)?.map(
+      (k, v) => MapEntry(k as String, v as bool),
+    ),
+  );
 
   /// songs.json top-level schema version. v1 = a bare JSON list (never
   /// written any more, still readable); v2 = `{"v": 2, "songs": [...]}`.
   static const int kSchemaVersion = 2;
 
   static String encodeList(List<Song> songs) => jsonEncode({
-        'v': kSchemaVersion,
-        'songs': songs.map((s) => s.toJson()).toList(),
-      });
+    'v': kSchemaVersion,
+    'songs': songs.map((s) => s.toJson()).toList(),
+  });
 
   /// The raw song entries of either file shape (v1 bare list, v2 envelope).
   /// Throws on anything else — the caller decides what "unreadable" means.
@@ -489,7 +589,9 @@ class Song {
 
   /// Strict decode — any malformed song fails the whole list.
   static List<Song> decodeList(String raw) =>
-      _unwrap(raw).map((e) => Song.fromJson(e as Map<String, dynamic>)).toList();
+      _unwrap(raw)
+          .map((e) => Song.fromJson(e as Map<String, dynamic>))
+          .toList();
 
   /// Lenient decode — a malformed song entry is skipped (and counted) instead
   /// of taking the whole library down with it. Still throws when the file

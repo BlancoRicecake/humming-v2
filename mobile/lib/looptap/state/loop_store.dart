@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../main.dart' show engineApi;
 import '../../services/auth_service.dart';
-import '../../services/clarity_service.dart';
+import '../../services/product_analytics.dart';
 import '../../services/entitlement_cache.dart';
 import '../../services/iap_service.dart';
 import '../../services/observability_service.dart';
@@ -29,6 +29,7 @@ enum DeleteAccountFailure { notSignedIn, rejected, network }
 class DeleteAccountError {
   const DeleteAccountError(this.kind, {this.code});
   final DeleteAccountFailure kind;
+
   /// [DeleteAccountFailure.rejected] 일 때 HTTP 상태.
   final int? code;
 }
@@ -42,6 +43,7 @@ class IapStatusHttpException implements Exception {
     final t = body?.toString() ?? '';
     return t.length <= 200 ? t : t.substring(0, 200);
   }
+
   @override
   String toString() => 'IapStatusHttpException($status): $body';
 }
@@ -71,11 +73,16 @@ class LoopStore extends ChangeNotifier {
   bool get isSignedIn => _user != null;
   // Debug-only Pro override so paywall-gated features (export) can be exercised
   // without a real purchase. Stripped from release builds (kDebugMode == false),
-  // so store gating is unaffected in production. Flip to false to test the real
-  // paywall flow in debug.
-  static const bool _debugProOverride = false;
-  bool get proActive => _pro == ProStatus.active || (kDebugMode && _debugProOverride);
+  // so store gating is unaffected in production. Opt in only for local QA:
+  // --dart-define=HUMTRACK_QA_PRO=true (default false).
+  static const bool _debugProOverride = bool.fromEnvironment(
+    'HUMTRACK_QA_PRO',
+    defaultValue: false,
+  );
+  bool get proActive =>
+      _pro == ProStatus.active || (kDebugMode && _debugProOverride);
   DateTime? get proRenewsAt => _renewsAt;
+
   /// 서버 status 문자열 (trial/active/cancelled/expired) — 표시용. Pro 판정은
   /// [proActive] 만 쓴다.
   String? get proStatus => _proStatus;
@@ -119,7 +126,10 @@ class LoopStore extends ChangeNotifier {
     _songs
       ..clear()
       ..addAll(seedNow ? _seed() : loaded);
-    _songs.sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
+    _songs.sort(
+      (a, b) =>
+          (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)),
+    );
     _loaded = true;
     if (seedNow) {
       try {
@@ -154,7 +164,8 @@ class LoopStore extends ChangeNotifier {
   void _onSession(AuthSession s) {
     if (s.isSignedIn) {
       final email = s.email ?? '';
-      final name = email.isNotEmpty ? email.split('@').first : (s.provider ?? 'User');
+      final name =
+          email.isNotEmpty ? email.split('@').first : (s.provider ?? 'User');
       _user = {
         'name': name,
         'provider': _providerLabel(s.provider),
@@ -177,7 +188,9 @@ class LoopStore extends ChangeNotifier {
           _markRestore(uid, now);
           unawaited(IapService.instance.restore());
         } else {
-          debugPrint('[loopstore] startup restore throttled (last ${_entitlement.lastRestoreAt})');
+          debugPrint(
+            '[loopstore] startup restore throttled (last ${_entitlement.lastRestoreAt})',
+          );
         }
       }
       // 3) 서버 판정 — 리뷰 계정처럼 IAP 영수증 없이 부여된 Pro 도 이 경로.
@@ -202,7 +215,8 @@ class LoopStore extends ChangeNotifier {
   /// 서버/캐시 판정을 상태에 반영. 변화가 있을 때만 notify.
   void _applyVerdict(EntitlementVerdict v, {bool notify = true}) {
     final next = v.pro ? ProStatus.active : ProStatus.inactive;
-    final changed = _pro != next ||
+    final changed =
+        _pro != next ||
         _renewsAt != v.expiresAt ||
         _proStatus != v.status ||
         _proProductId != v.productId;
@@ -210,22 +224,28 @@ class LoopStore extends ChangeNotifier {
     _renewsAt = v.expiresAt;
     _proStatus = v.status;
     _proProductId = v.productId;
-    // Clarity: plan 태그는 구매 시점뿐 아니라 판정이 갱신될 때마다.
-    ClarityService.instance.tag('plan', v.pro ? (v.productId ?? 'pro') : 'free');
+    ProductAnalytics.instance.setPlan(v.pro);
     if (changed && notify) notifyListeners();
   }
 
   void _markRestore(String uid, DateTime now) {
-    _entitlement = _entitlement.copyWith(lastRestoreAt: now, lastRestoreUserId: uid);
+    _entitlement = _entitlement.copyWith(
+      lastRestoreAt: now,
+      lastRestoreUserId: uid,
+    );
     unawaited(EntitlementCache.save(_entitlement));
   }
 
   String _providerLabel(String? p) {
     switch (p) {
-      case 'apple': return 'Apple';
-      case 'google': return 'Google';
-      case 'email': return 'Email';
-      default: return p ?? '';
+      case 'apple':
+        return 'Apple';
+      case 'google':
+        return 'Google';
+      case 'email':
+        return 'Email';
+      default:
+        return p ?? '';
     }
   }
 
@@ -243,7 +263,7 @@ class LoopStore extends ChangeNotifier {
   Future<void> signOut() async {
     await AuthService.instance.signOut();
     // 사용자 전환 — 리플레이 세션 분리 + 로컬 권한 캐시 폐기.
-    ClarityService.instance.startNewSession();
+    ProductAnalytics.instance.reset();
     _entitlement = EntitlementCacheState.empty;
     await EntitlementCache.clear();
     // listener 가 _user=null 로 처리하지만, auth 비활성 환경(_enabled=false) 에서는
@@ -281,7 +301,11 @@ class LoopStore extends ChangeNotifier {
       await signOut();
       return null;
     } catch (e, st) {
-      ObservabilityService.instance.captureException(e, st, hint: 'deleteAccount failed');
+      ObservabilityService.instance.captureException(
+        e,
+        st,
+        hint: 'deleteAccount failed',
+      );
       return const DeleteAccountError(DeleteAccountFailure.network);
     }
   }
@@ -296,8 +320,8 @@ class LoopStore extends ChangeNotifier {
     // + 캐시, 그리고 /iap/status 로 정본 status/expires_at 동기화.
     final uid = AuthService.instance.current.userId;
     final isYearly = r.productId == kProductYearly;
-    final renews = r.renewsAt ??
-        DateTime.now().add(Duration(days: isYearly ? 365 : 30));
+    final renews =
+        r.renewsAt ?? DateTime.now().add(Duration(days: isYearly ? 365 : 30));
     final v = EntitlementVerdict(
       userId: uid ?? '',
       pro: true,
@@ -316,6 +340,7 @@ class LoopStore extends ChangeNotifier {
   }
 
   Future<void> loadProducts() => IapService.instance.loadProducts();
+
   /// null = 스토어 시트가 떴음 (결과는 IapService.onPurchaseResult).
   Future<IapError?> buyMonthly() => IapService.instance.buy(kProductMonthly);
   Future<IapError?> buyYearly() => IapService.instance.buy(kProductYearly);
@@ -343,6 +368,7 @@ class LoopStore extends ChangeNotifier {
     void onFlip() {
       if (proActive && !wasActive && !first.isCompleted) first.complete(null);
     }
+
     addListener(onFlip);
     IapResult? result;
     var launched = false;
@@ -361,19 +387,35 @@ class LoopStore extends ChangeNotifier {
       removeListener(onFlip);
     }
     if (!launched) {
-      ClarityService.instance.event('restore_failed');
+      ProductAnalytics.instance.track(
+        ProductEvent.purchaseFailed,
+        properties: const {
+          'feature': 'restore',
+          'error_code': 'store_unavailable',
+        },
+      );
       return RestoreOutcome.error; // IapService.restore 가 이미 Sentry 보고.
     }
     final refreshed = await refreshSubscription();
     final outcome = _restoreOutcome(wasActive, result, refreshed: refreshed);
     if (outcome == RestoreOutcome.nothingFound) {
-      ClarityService.instance.event('restore_empty');
-      ObservabilityService.instance.breadcrumb('restore empty', category: 'iap',
-          data: {'had_result': result != null, 'error': result?.error?.name});
+      ObservabilityService.instance.breadcrumb(
+        'restore empty',
+        category: 'iap',
+        data: {'had_result': result != null, 'error': result?.error?.name},
+      );
     } else if (outcome == RestoreOutcome.error) {
-      ClarityService.instance.event('restore_failed');
+      ProductAnalytics.instance.track(
+        ProductEvent.purchaseFailed,
+        properties: const {
+          'feature': 'restore',
+          'error_code': 'restore_failed',
+        },
+      );
       ObservabilityService.instance.captureException(
-        StateError('restore failed: ${result?.error?.name ?? 'status refresh failed'}'),
+        StateError(
+          'restore failed: ${result?.error?.name ?? 'status refresh failed'}',
+        ),
         StackTrace.current,
         tags: {'iap_error': result?.error?.name ?? 'none'},
         hint: 'iap restore failed',
@@ -382,7 +424,11 @@ class LoopStore extends ChangeNotifier {
     return outcome;
   }
 
-  RestoreOutcome _restoreOutcome(bool wasActive, IapResult? result, {bool refreshed = true}) {
+  RestoreOutcome _restoreOutcome(
+    bool wasActive,
+    IapResult? result, {
+    bool refreshed = true,
+  }) {
     if (proActive && !wasActive) return RestoreOutcome.restored;
     if (proActive) return RestoreOutcome.alreadyActive;
     final err = result?.error;
@@ -414,17 +460,25 @@ class LoopStore extends ChangeNotifier {
       }
       // 응답이 오는 사이 로그아웃됐으면 무시.
       if (AuthService.instance.current.userId != uid) return false;
-      final v = EntitlementVerdict.fromServer(data, userId: uid, now: DateTime.now().toUtc());
+      final v = EntitlementVerdict.fromServer(
+        data,
+        userId: uid,
+        now: DateTime.now().toUtc(),
+      );
       _applyVerdict(v);
-      _entitlement = v.pro
-          ? _entitlement.copyWith(verdict: v)
-          : _entitlement.copyWith(clearVerdict: true); // 확정 pro:false → 캐시 폐기
+      _entitlement =
+          v.pro
+              ? _entitlement.copyWith(verdict: v)
+              : _entitlement.copyWith(
+                clearVerdict: true,
+              ); // 확정 pro:false → 캐시 폐기
       unawaited(EntitlementCache.save(_entitlement));
       return true;
     } catch (e, st) {
       debugPrint('[loopstore] refreshSubscription failed: $e');
       ObservabilityService.instance.captureException(
-        e, st,
+        e,
+        st,
         tags: {'endpoint': '/iap/status', 'http_status': '${httpStatus ?? 0}'},
         hint: 'iap status failed',
       );
@@ -450,12 +504,18 @@ class LoopStore extends ChangeNotifier {
 
   Future<void> _changeSongs(Future<void> Function() change) {
     final result = _songChanges.then((_) => change());
-    _songChanges = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _songChanges = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
     return result;
   }
 
   Future<void> _commitSongs(List<Song> next) async {
-    next.sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
+    next.sort(
+      (a, b) =>
+          (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)),
+    );
     await LoopStorage.save(next);
     // Publish only a successfully saved library. Failed deletes/renames must
     // leave both the UI and the cleanup reference set intact.
@@ -497,7 +557,8 @@ class LoopStore extends ChangeNotifier {
 
   /// Drop vocal files no song references anymore. Call when an editor session
   /// ends (its undo stack — the last holder of stale paths — is gone).
-  Future<void> sweepVocals() => _changeSongs(() => LoopStorage.sweepVocals(_songs));
+  Future<void> sweepVocals() =>
+      _changeSongs(() => LoopStorage.sweepVocals(_songs));
 
   /// 새 ID 로 deep-copy + " (copy)" suffix. 새 노래는 grid 맨 앞으로.
   Future<Song> duplicate(Song src) async {
@@ -515,7 +576,10 @@ class LoopStore extends ChangeNotifier {
       sections: src.sections.map((s) => s.deepCopy()).toList(),
       wave: List<double>.of(src.wave),
       songVocalPath: src.songVocalPath,
-      songVocalPeaks: src.songVocalPeaks == null ? null : List<double>.of(src.songVocalPeaks!),
+      songVocalPeaks:
+          src.songVocalPeaks == null
+              ? null
+              : List<double>.of(src.songVocalPeaks!),
       songVocalBpm: src.songVocalBpm,
       songVocalBars: src.songVocalBars,
       updatedAt: DateTime.now(),
@@ -529,9 +593,10 @@ class LoopStore extends ChangeNotifier {
     final i = _songs.indexWhere((s) => s.id == id);
     if (i < 0) return;
     final next = List<Song>.of(_songs);
-    next[i] = Song.fromJson(_songs[i].toJson())
-      ..title = newTitle.trim().isEmpty ? 'Untitled loop' : newTitle.trim()
-      ..updatedAt = DateTime.now();
+    next[i] =
+        Song.fromJson(_songs[i].toJson())
+          ..title = newTitle.trim().isEmpty ? 'Untitled loop' : newTitle.trim()
+          ..updatedAt = DateTime.now();
     await _commitSongs(next);
   });
 
@@ -550,7 +615,14 @@ class LoopStore extends ChangeNotifier {
       return sec;
     }
 
-    Song demo(String id, String title, String key, String scale, int bpm, int bars) {
+    Song demo(
+      String id,
+      String title,
+      String key,
+      String scale,
+      int bpm,
+      int bars,
+    ) {
       final song = Song(
         id: id,
         title: title,

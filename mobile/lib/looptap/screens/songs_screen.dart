@@ -45,7 +45,23 @@ class SongsScreen extends StatelessWidget {
       if (!context.read<LoopStore>().proActive) return;
     }
     if (!context.mounted) return;
-    _open(context, store.createNew());
+    final l = L10n.of(context);
+    final guided = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(l.ltSongsNewSong),
+        children: [
+          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, true),
+              child: Text(l.ltGuidedStart)),
+          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l.ltGuidedDirect)),
+        ],
+      ),
+    );
+    if (!context.mounted || guided == null) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => EditScreen(song: store.createNew(), guidedStart: guided),
+    ));
   }
 
   @override

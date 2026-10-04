@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.6+34
+version: 1.0.10+39
 
 environment:
   sdk: ^3.7.0
@@ -40,6 +40,7 @@ dependencies:
   dio: ^5.9.2
   record: ^6.2.1
   path_provider: ^2.1.5
+  file_selector: ^1.0.3
   google_fonts: ^6.3.2
   material_symbols_icons: ^4.2928.1
   share_plus: ^12.0.2
@@ -61,6 +62,12 @@ dependencies:
   # Microsoft Clarity (세션 리플레이 + 히트맵, 무료·무제한). dart-define
   # CLARITY_PROJECT_ID 미설정 시 비활성 — lib/services/clarity_service.dart.
   clarity_flutter: ^1.9.0
+  # Privacy-safe quantitative funnels. Runtime configuration is supplied with
+  # dart-defines; missing configuration degrades to a no-op sink.
+  firebase_core: ^4.15.0
+  firebase_analytics: ^12.6.0
+  # 9.x supports the project's AGP 8.11 toolchain (10.x requires AGP 8.12.1).
+  package_info_plus: ^9.0.1
   supabase_flutter: ^2.5.0
   in_app_purchase: ^3.3.0
   # Play 구독 base plan 가격 추출에 필요 (trial offer phase[0]=₩0 으로 표시되는 버그 회피).

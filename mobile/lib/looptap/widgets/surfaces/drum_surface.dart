@@ -313,7 +313,9 @@ class DrumGrid extends StatelessWidget {
           Expanded(
             child: LayoutBuilder(
               builder: (context, c) {
-                const minRow = 40.0;
+                // Keep the main three drums visible on short landscape screens.
+                // Larger percussion kits retain roomy, scrollable lanes.
+                final minRow = specs.length <= 3 ? 24.0 : 40.0;
                 final fits = specs.length * minRow <= c.maxHeight;
                 final rows = [for (final d in specs) _row(d, cur)];
                 if (fits) {

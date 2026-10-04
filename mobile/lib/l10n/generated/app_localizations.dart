@@ -3081,7 +3081,7 @@ abstract class L10n {
   /// No description provided for @ltExportFailed.
   ///
   /// In ko, this message translates to:
-  /// **'MIDI 내보내기 실패'**
+  /// **'파일 내보내기에 실패했어요.'**
   String get ltExportFailed;
 
   /// No description provided for @ltExportFooter.
@@ -3119,6 +3119,18 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'패드 탭 시 진동'**
   String get ltSettingsHapticsSub;
+
+  /// No description provided for @ltSettingsAnalytics.
+  ///
+  /// In ko, this message translates to:
+  /// **'익명 사용 통계'**
+  String get ltSettingsAnalytics;
+
+  /// No description provided for @ltSettingsAnalyticsSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'제품 개선용 Clarity·Firebase 분석 허용'**
+  String get ltSettingsAnalyticsSub;
 
   /// No description provided for @ltSettingsAbout.
   ///
@@ -3447,7 +3459,7 @@ abstract class L10n {
   /// 허밍 변환 실패 — 연결 타임아웃(콜드 스타트)
   ///
   /// In ko, this message translates to:
-  /// **'서버를 깨우는 중이에요. 다시 시도해주세요'**
+  /// **'서버에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해주세요.'**
   String get ltEditorHumErrWaking;
 
   /// 허밍 변환 실패 — 일반 오류
@@ -4067,6 +4079,384 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'이용약관·개인정보처리방침·환불정책을 개정합니다.\n\nPro 혜택을 실제 제공 기능인 곡 무제한 저장과 WAV·MIDI·스템 내보내기로 정정합니다. 기존에 안내했던 클라우드 동기화·보컬 영구 보관·우선 분석은 제공되지 않았습니다. 혼란을 드려 죄송합니다.\n\n사용 중인 Microsoft Clarity(세션 리플레이·히트맵)와 Sentry(오류·크래시 진단)를 개인정보처리방침에 명시합니다.\n\n작업물은 기기에 저장됩니다. 구독이 만료되어도 저장된 곡은 열람·편집·재생할 수 있습니다. 자세한 내용과 문의 방법은 아래 문서에서 확인해 주세요.'**
   String get policyNoticeBody;
+
+  /// No description provided for @ltExportShared.
+  ///
+  /// In ko, this message translates to:
+  /// **'공유 앱으로 파일을 전달했어요.'**
+  String get ltExportShared;
+
+  /// No description provided for @ltExportShareCancelled.
+  ///
+  /// In ko, this message translates to:
+  /// **'파일은 생성했지만 공유를 취소했어요.'**
+  String get ltExportShareCancelled;
+
+  /// No description provided for @ltExportShareUnconfirmed.
+  ///
+  /// In ko, this message translates to:
+  /// **'파일을 생성했어요. 공유 완료 여부는 확인할 수 없어요.'**
+  String get ltExportShareUnconfirmed;
+
+  /// No description provided for @ltExportShareFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'파일은 생성했지만 공유창을 열지 못했어요. 다시 시도해주세요.'**
+  String get ltExportShareFailed;
+
+  /// No description provided for @ltGuidedStart.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 시작'**
+  String get ltGuidedStart;
+
+  /// No description provided for @ltGuidedDirect.
+  ///
+  /// In ko, this message translates to:
+  /// **'직접 편집하기'**
+  String get ltGuidedDirect;
+
+  /// No description provided for @ltGuidedTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 목소리로 첫 멜로디'**
+  String get ltGuidedTitle;
+
+  /// No description provided for @ltGuidedHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'짧게 흥얼거리면 악기 소리로 바꿔드려요.'**
+  String get ltGuidedHint;
+
+  /// No description provided for @ltGuidedRecord.
+  ///
+  /// In ko, this message translates to:
+  /// **'멜로디 녹음하기'**
+  String get ltGuidedRecord;
+
+  /// No description provided for @ltGuidedMore.
+  ///
+  /// In ko, this message translates to:
+  /// **'멜로디 추가 녹음'**
+  String get ltGuidedMore;
+
+  /// No description provided for @ltGuidedListen.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 곡 듣기'**
+  String get ltGuidedListen;
+
+  /// No description provided for @ltGuidedStop.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 멈추기'**
+  String get ltGuidedStop;
+
+  /// No description provided for @ltGuidedSound.
+  ///
+  /// In ko, this message translates to:
+  /// **'악기 바꾸기'**
+  String get ltGuidedSound;
+
+  /// No description provided for @ltGuidedSave.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 곡 저장'**
+  String get ltGuidedSave;
+
+  /// No description provided for @ltGuidedSaved.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장했어요. 자세히 편집에서 이어서 만들어보세요.'**
+  String get ltGuidedSaved;
+
+  /// No description provided for @ltGuidedReady.
+  ///
+  /// In ko, this message translates to:
+  /// **'소리가 준비됐어요. 악기를 바꾸거나 반주와 내 소리를 더해보세요.'**
+  String get ltGuidedReady;
+
+  /// No description provided for @ltGuidedPrepare.
+  ///
+  /// In ko, this message translates to:
+  /// **'조용한 곳에서 네 박자 준비 신호 뒤에 짧은 멜로디를 흥얼거려 보세요. 변환에는 인터넷 연결이 필요해요.'**
+  String get ltGuidedPrepare;
+
+  /// No description provided for @ltGuidedSteps.
+  ///
+  /// In ko, this message translates to:
+  /// **'1 멜로디·샘플  →  2 반주  →  3 저장'**
+  String get ltGuidedSteps;
+
+  /// No description provided for @ltSampleTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 소리 샘플'**
+  String get ltSampleTitle;
+
+  /// No description provided for @ltSampleHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'소리를 녹음하거나 WAV 파일을 불러와 원하는 구간만 곡에 넣으세요. PCM16 WAV, 최대 60초·24MB를 지원합니다.'**
+  String get ltSampleHint;
+
+  /// No description provided for @ltSampleError.
+  ///
+  /// In ko, this message translates to:
+  /// **'소리를 처리하지 못했어요. 파일 형식과 저장 공간을 확인하고 다시 시도해 주세요.'**
+  String get ltSampleError;
+
+  /// No description provided for @ltSampleRecord.
+  ///
+  /// In ko, this message translates to:
+  /// **'소리 녹음'**
+  String get ltSampleRecord;
+
+  /// No description provided for @ltSampleImport.
+  ///
+  /// In ko, this message translates to:
+  /// **'WAV 가져오기'**
+  String get ltSampleImport;
+
+  /// No description provided for @ltSampleEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'아직 저장한 샘플이 없어요. 손뼉이나 목소리로 시작해 보세요.'**
+  String get ltSampleEmpty;
+
+  /// No description provided for @ltSampleItem.
+  ///
+  /// In ko, this message translates to:
+  /// **'샘플'**
+  String get ltSampleItem;
+
+  /// No description provided for @ltSampleLoop.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택 구간 반복 듣기'**
+  String get ltSampleLoop;
+
+  /// No description provided for @ltSampleSaveCut.
+  ///
+  /// In ko, this message translates to:
+  /// **'자른 소리 보관'**
+  String get ltSampleSaveCut;
+
+  /// No description provided for @ltSampleAdd.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡에 넣기'**
+  String get ltSampleAdd;
+
+  /// No description provided for @ltSamplePreview.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택 구간 듣기'**
+  String get ltSamplePreview;
+
+  /// No description provided for @ltBackingTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'2. 반주를 골라보세요'**
+  String get ltBackingTitle;
+
+  /// No description provided for @ltBackingHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'분위기를 고른 뒤 세 후보를 들어보세요. 적용하기 전에는 곡이 바뀌지 않아요.'**
+  String get ltBackingHint;
+
+  /// No description provided for @ltBackingCalm.
+  ///
+  /// In ko, this message translates to:
+  /// **'차분하게'**
+  String get ltBackingCalm;
+
+  /// No description provided for @ltBackingBounce.
+  ///
+  /// In ko, this message translates to:
+  /// **'통통 튀게'**
+  String get ltBackingBounce;
+
+  /// No description provided for @ltBackingDrive.
+  ///
+  /// In ko, this message translates to:
+  /// **'신나게'**
+  String get ltBackingDrive;
+
+  /// No description provided for @ltBackingCompare.
+  ///
+  /// In ko, this message translates to:
+  /// **'후보 A·B·C 비교'**
+  String get ltBackingCompare;
+
+  /// No description provided for @ltBackingPreview.
+  ///
+  /// In ko, this message translates to:
+  /// **'미리듣기'**
+  String get ltBackingPreview;
+
+  /// No description provided for @ltBackingApply.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용'**
+  String get ltBackingApply;
+
+  /// No description provided for @ltBackingApplied.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용됨'**
+  String get ltBackingApplied;
+
+  /// No description provided for @ltSongPlan.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 구성 보기'**
+  String get ltSongPlan;
+
+  /// No description provided for @ltSongPlanTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 구성'**
+  String get ltSongPlanTitle;
+
+  /// No description provided for @ltSongPlanHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'구간의 순서와 반복을 정하고, 자동 편곡에서 지킬 트랙을 잠가두세요.'**
+  String get ltSongPlanHint;
+
+  /// No description provided for @ltSongPlanBars.
+  ///
+  /// In ko, this message translates to:
+  /// **'마디'**
+  String get ltSongPlanBars;
+
+  /// No description provided for @ltSongPlanLocks.
+  ///
+  /// In ko, this message translates to:
+  /// **'자동 편곡 잠금'**
+  String get ltSongPlanLocks;
+
+  /// No description provided for @ltSongPlanLocksHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'잠근 트랙은 다른 후보를 적용해도 그대로 유지됩니다.'**
+  String get ltSongPlanLocksHint;
+
+  /// No description provided for @ltSongPlanMelody.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 멜로디'**
+  String get ltSongPlanMelody;
+
+  /// No description provided for @ltSongPlanHarmony.
+  ///
+  /// In ko, this message translates to:
+  /// **'코드'**
+  String get ltSongPlanHarmony;
+
+  /// No description provided for @ltSongPlanBass.
+  ///
+  /// In ko, this message translates to:
+  /// **'베이스'**
+  String get ltSongPlanBass;
+
+  /// No description provided for @ltSongPlanDrums.
+  ///
+  /// In ko, this message translates to:
+  /// **'드럼'**
+  String get ltSongPlanDrums;
+
+  /// No description provided for @ltGuidedSample.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 소리 추가하기'**
+  String get ltGuidedSample;
+
+  /// No description provided for @ltSampleLimit.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡에 넣을 구간은 {seconds}초 이하로 골라주세요. 위치는 직접 편집에서 조정할 수 있어요.'**
+  String ltSampleLimit(String seconds);
+
+  /// No description provided for @ltMelodyReview.
+  ///
+  /// In ko, this message translates to:
+  /// **'멜로디 확인'**
+  String get ltMelodyReview;
+
+  /// No description provided for @ltMelodyReviewHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'변환이 불확실한 음을 먼저 표시했어요. 원음정과 보정음정을 비교하고 필요한 음만 고쳐보세요.'**
+  String get ltMelodyReviewHint;
+
+  /// No description provided for @ltMelodyUncertain.
+  ///
+  /// In ko, this message translates to:
+  /// **'확인이 필요한 음 {count}개'**
+  String ltMelodyUncertain(int count);
+
+  /// No description provided for @ltMelodyRaw.
+  ///
+  /// In ko, this message translates to:
+  /// **'원음정 듣기'**
+  String get ltMelodyRaw;
+
+  /// No description provided for @ltMelodyCorrected.
+  ///
+  /// In ko, this message translates to:
+  /// **'보정음정 듣기'**
+  String get ltMelodyCorrected;
+
+  /// No description provided for @ltMelodyOctaveDown.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브 내림'**
+  String get ltMelodyOctaveDown;
+
+  /// No description provided for @ltMelodyOctaveUp.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브 올림'**
+  String get ltMelodyOctaveUp;
+
+  /// No description provided for @ltMelodySplit.
+  ///
+  /// In ko, this message translates to:
+  /// **'둘로 나누기'**
+  String get ltMelodySplit;
+
+  /// No description provided for @ltMelodyMerge.
+  ///
+  /// In ko, this message translates to:
+  /// **'다음 음과 합치기'**
+  String get ltMelodyMerge;
+
+  /// No description provided for @ltMelodyConfidence.
+  ///
+  /// In ko, this message translates to:
+  /// **'신뢰도 {percent}%'**
+  String ltMelodyConfidence(int percent);
+
+  /// No description provided for @ltMelodyNoIssues.
+  ///
+  /// In ko, this message translates to:
+  /// **'확인이 필요한 음이 없어요.'**
+  String get ltMelodyNoIssues;
+
+  /// No description provided for @ltMelodyLocked.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 멜로디 잠금'**
+  String get ltMelodyLocked;
+
+  /// No description provided for @ltMelodyLockedHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'반주를 바꿔도 이 멜로디는 유지됩니다.'**
+  String get ltMelodyLockedHint;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

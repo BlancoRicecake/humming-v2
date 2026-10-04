@@ -1,0 +1,48 @@
+// Runs for every Flutter release compilation, including direct flutter/Gradle builds.
+// Never include configuration values in errors or task output.
+import java.nio.charset.StandardCharsets
+import java.util.Base64
+
+def verifyAuth = tasks.register('verifyReleaseAuthConfiguration') {
+    group = 'verification'
+    description = 'Reject release builds without Supabase and Google login configuration.'
+    doLast {
+        def defines = [:]
+        def encoded = project.findProperty('dart-defines')?.toString() ?: ''
+        try {
+            encoded.split(',').findAll { !it.isEmpty() }.each { item ->
+                def decoded = new String(Base64.decoder.decode(item), StandardCharsets.UTF_8)
+                def separator = decoded.indexOf('=')
+                if (separator <= 0) throw new IllegalArgumentException()
+                defines[decoded.substring(0, separator)] = decoded.substring(separator + 1)
+            }
+        } catch (IllegalArgumentException ignored) {
+            throw new GradleException('Invalid encoded Dart configuration; release build blocked.')
+        }
+        def required = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'GOOGLE_WEB_CLIENT_ID']
+        def missing = required.findAll { !defines[it]?.trim() }
+        if (!missing.isEmpty()) {
+            throw new GradleException('Missing release authentication configuration: ' + missing.join(', ')
+                + '. Supply the complete production --dart-define-from-file configuration.')
+        }
+        try {
+            def url = new URI(defines.SUPABASE_URL)
+            if (url.scheme != 'https' || !url.host || url.userInfo || url.query || url.fragment
+                || !(url.path in [null, '', '/'])) throw new IllegalArgumentException()
+        } catch (Exception ignored) {
+            throw new GradleException('SUPABASE_URL must be an HTTPS origin; release build blocked.')
+        }
+        if (!defines.GOOGLE_WEB_CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
+            throw new GradleException('GOOGLE_WEB_CLIENT_ID must be a Google web OAuth client ID; release build blocked.')
+        }
+        logger.lifecycle('Release authentication configuration verified (3 required fields present).')
+    }
+}
+
+// Flutter creates these tasks after the app build script is evaluated.
+// Matching the compiler task also covers APKs, AABs and flavored release variants.
+tasks.configureEach {
+    if (name.startsWith('compileFlutterBuild') && name.endsWith('Release')) {
+        dependsOn(verifyAuth)
+    }
+}

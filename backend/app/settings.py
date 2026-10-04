@@ -102,6 +102,15 @@ class Settings(BaseSettings):
     # for longer than this without one arriving.
     iap_notification_max_age_days: int = 5
 
+    # Optional symbolic arrangement provider. Disabled by default so no
+    # unlicensed model weights or provider credentials can enter production by
+    # accident. The provider speaks the versioned HumTrack SongSpec contract.
+    arrangement_enabled: bool = False
+    arrangement_provider: str = "disabled"
+    arrangement_base_url: Optional[str] = None
+    arrangement_api_key: Optional[str] = None
+    arrangement_timeout_sec: float = 45.0
+
     @property
     def is_production(self) -> bool:
         return (self.environment or "dev").strip().lower() in ("production", "prod")

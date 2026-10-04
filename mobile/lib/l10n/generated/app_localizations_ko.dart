@@ -1690,7 +1690,7 @@ class L10nKo extends L10n {
   }
 
   @override
-  String get ltExportFailed => 'MIDI 내보내기 실패';
+  String get ltExportFailed => '파일 내보내기에 실패했어요.';
 
   @override
   String get ltExportFooter =>
@@ -1710,6 +1710,12 @@ class L10nKo extends L10n {
 
   @override
   String get ltSettingsHapticsSub => '패드 탭 시 진동';
+
+  @override
+  String get ltSettingsAnalytics => '익명 사용 통계';
+
+  @override
+  String get ltSettingsAnalyticsSub => '제품 개선용 Clarity·Firebase 분석 허용';
 
   @override
   String get ltSettingsAbout => '정보';
@@ -1890,7 +1896,7 @@ class L10nKo extends L10n {
   String get ltEditorHumErrBusy => '서버가 혼잡해요. 잠시 후 다시 시도해주세요';
 
   @override
-  String get ltEditorHumErrWaking => '서버를 깨우는 중이에요. 다시 시도해주세요';
+  String get ltEditorHumErrWaking => '서버에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해주세요.';
 
   @override
   String get ltEditorHumErrGeneric => '허밍을 변환하지 못했어요';
@@ -2233,4 +2239,202 @@ class L10nKo extends L10n {
   @override
   String get policyNoticeBody =>
       '이용약관·개인정보처리방침·환불정책을 개정합니다.\n\nPro 혜택을 실제 제공 기능인 곡 무제한 저장과 WAV·MIDI·스템 내보내기로 정정합니다. 기존에 안내했던 클라우드 동기화·보컬 영구 보관·우선 분석은 제공되지 않았습니다. 혼란을 드려 죄송합니다.\n\n사용 중인 Microsoft Clarity(세션 리플레이·히트맵)와 Sentry(오류·크래시 진단)를 개인정보처리방침에 명시합니다.\n\n작업물은 기기에 저장됩니다. 구독이 만료되어도 저장된 곡은 열람·편집·재생할 수 있습니다. 자세한 내용과 문의 방법은 아래 문서에서 확인해 주세요.';
+
+  @override
+  String get ltExportShared => '공유 앱으로 파일을 전달했어요.';
+
+  @override
+  String get ltExportShareCancelled => '파일은 생성했지만 공유를 취소했어요.';
+
+  @override
+  String get ltExportShareUnconfirmed => '파일을 생성했어요. 공유 완료 여부는 확인할 수 없어요.';
+
+  @override
+  String get ltExportShareFailed => '파일은 생성했지만 공유창을 열지 못했어요. 다시 시도해주세요.';
+
+  @override
+  String get ltGuidedStart => '허밍으로 시작';
+
+  @override
+  String get ltGuidedDirect => '직접 편집하기';
+
+  @override
+  String get ltGuidedTitle => '내 목소리로 첫 멜로디';
+
+  @override
+  String get ltGuidedHint => '짧게 흥얼거리면 악기 소리로 바꿔드려요.';
+
+  @override
+  String get ltGuidedRecord => '멜로디 녹음하기';
+
+  @override
+  String get ltGuidedMore => '멜로디 추가 녹음';
+
+  @override
+  String get ltGuidedListen => '내 곡 듣기';
+
+  @override
+  String get ltGuidedStop => '재생 멈추기';
+
+  @override
+  String get ltGuidedSound => '악기 바꾸기';
+
+  @override
+  String get ltGuidedSave => '내 곡 저장';
+
+  @override
+  String get ltGuidedSaved => '저장했어요. 자세히 편집에서 이어서 만들어보세요.';
+
+  @override
+  String get ltGuidedReady => '소리가 준비됐어요. 악기를 바꾸거나 반주와 내 소리를 더해보세요.';
+
+  @override
+  String get ltGuidedPrepare =>
+      '조용한 곳에서 네 박자 준비 신호 뒤에 짧은 멜로디를 흥얼거려 보세요. 변환에는 인터넷 연결이 필요해요.';
+
+  @override
+  String get ltGuidedSteps => '1 멜로디·샘플  →  2 반주  →  3 저장';
+
+  @override
+  String get ltSampleTitle => '내 소리 샘플';
+
+  @override
+  String get ltSampleHint =>
+      '소리를 녹음하거나 WAV 파일을 불러와 원하는 구간만 곡에 넣으세요. PCM16 WAV, 최대 60초·24MB를 지원합니다.';
+
+  @override
+  String get ltSampleError => '소리를 처리하지 못했어요. 파일 형식과 저장 공간을 확인하고 다시 시도해 주세요.';
+
+  @override
+  String get ltSampleRecord => '소리 녹음';
+
+  @override
+  String get ltSampleImport => 'WAV 가져오기';
+
+  @override
+  String get ltSampleEmpty => '아직 저장한 샘플이 없어요. 손뼉이나 목소리로 시작해 보세요.';
+
+  @override
+  String get ltSampleItem => '샘플';
+
+  @override
+  String get ltSampleLoop => '선택 구간 반복 듣기';
+
+  @override
+  String get ltSampleSaveCut => '자른 소리 보관';
+
+  @override
+  String get ltSampleAdd => '곡에 넣기';
+
+  @override
+  String get ltSamplePreview => '선택 구간 듣기';
+
+  @override
+  String get ltBackingTitle => '2. 반주를 골라보세요';
+
+  @override
+  String get ltBackingHint => '분위기를 고른 뒤 세 후보를 들어보세요. 적용하기 전에는 곡이 바뀌지 않아요.';
+
+  @override
+  String get ltBackingCalm => '차분하게';
+
+  @override
+  String get ltBackingBounce => '통통 튀게';
+
+  @override
+  String get ltBackingDrive => '신나게';
+
+  @override
+  String get ltBackingCompare => '후보 A·B·C 비교';
+
+  @override
+  String get ltBackingPreview => '미리듣기';
+
+  @override
+  String get ltBackingApply => '적용';
+
+  @override
+  String get ltBackingApplied => '적용됨';
+
+  @override
+  String get ltSongPlan => '곡 구성 보기';
+
+  @override
+  String get ltSongPlanTitle => '곡 구성';
+
+  @override
+  String get ltSongPlanHint => '구간의 순서와 반복을 정하고, 자동 편곡에서 지킬 트랙을 잠가두세요.';
+
+  @override
+  String get ltSongPlanBars => '마디';
+
+  @override
+  String get ltSongPlanLocks => '자동 편곡 잠금';
+
+  @override
+  String get ltSongPlanLocksHint => '잠근 트랙은 다른 후보를 적용해도 그대로 유지됩니다.';
+
+  @override
+  String get ltSongPlanMelody => '내 멜로디';
+
+  @override
+  String get ltSongPlanHarmony => '코드';
+
+  @override
+  String get ltSongPlanBass => '베이스';
+
+  @override
+  String get ltSongPlanDrums => '드럼';
+
+  @override
+  String get ltGuidedSample => '내 소리 추가하기';
+
+  @override
+  String ltSampleLimit(String seconds) {
+    return '곡에 넣을 구간은 $seconds초 이하로 골라주세요. 위치는 직접 편집에서 조정할 수 있어요.';
+  }
+
+  @override
+  String get ltMelodyReview => '멜로디 확인';
+
+  @override
+  String get ltMelodyReviewHint =>
+      '변환이 불확실한 음을 먼저 표시했어요. 원음정과 보정음정을 비교하고 필요한 음만 고쳐보세요.';
+
+  @override
+  String ltMelodyUncertain(int count) {
+    return '확인이 필요한 음 $count개';
+  }
+
+  @override
+  String get ltMelodyRaw => '원음정 듣기';
+
+  @override
+  String get ltMelodyCorrected => '보정음정 듣기';
+
+  @override
+  String get ltMelodyOctaveDown => '옥타브 내림';
+
+  @override
+  String get ltMelodyOctaveUp => '옥타브 올림';
+
+  @override
+  String get ltMelodySplit => '둘로 나누기';
+
+  @override
+  String get ltMelodyMerge => '다음 음과 합치기';
+
+  @override
+  String ltMelodyConfidence(int percent) {
+    return '신뢰도 $percent%';
+  }
+
+  @override
+  String get ltMelodyNoIssues => '확인이 필요한 음이 없어요.';
+
+  @override
+  String get ltMelodyLocked => '내 멜로디 잠금';
+
+  @override
+  String get ltMelodyLockedHint => '반주를 바꿔도 이 멜로디는 유지됩니다.';
 }

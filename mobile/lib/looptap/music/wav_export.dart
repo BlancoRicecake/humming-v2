@@ -25,6 +25,7 @@ import 'dart:math' as math;
 
 import 'package:dart_melty_soundfont/dart_melty_soundfont.dart';
 import 'package:dart_melty_soundfont/soundfont.dart' show SoundFont;
+import 'package:dart_melty_soundfont/soundfont_math.dart' show SoundFontMath;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
@@ -134,6 +135,20 @@ class _Sf2Pool {
 // rendered. Vocal takes arrive as file paths (a['vocalPaths'] = {name: path})
 // and are read/decoded/resampled HERE so nothing heavy crosses the isolate
 // boundary; a['vocals'] schedules them by name.
+// The realtime synth drops gains below 0.001. Offline rendering must retain
+// quiet lanes before normalization/PCM encoding, including a 1% mixer level.
+// Scope the override so direct callers and tests do not change live playback.
+@visibleForTesting
+List<Uint8List> renderWavForExport(Map<String, dynamic> a) {
+  final previous = SoundFontMath.nonAudible;
+  SoundFontMath.nonAudible = 1e-9;
+  try {
+    return _renderIso(a);
+  } finally {
+    SoundFontMath.nonAudible = previous;
+  }
+}
+
 List<Uint8List> _renderIso(Map<String, dynamic> a) {
   final sf2Paths = (a['sf2s'] as List).cast<String>();
   final jobs = (a['jobs'] as List).cast<Map>();
@@ -680,7 +695,7 @@ Future<({File file, int skippedVocals})> exportWavSong(
   final vocal = songVocalPath != null
       ? await _songVocalJob(songVocalPath, sections, bpm, vol['vocal'] ?? 0.85)
       : await _vocalJobs(sections, bpm, vol);
-  final wavs = await compute(_renderIso, {
+  final wavs = await compute(renderWavForExport, {
     'sf2s': pool.paths,
     'jobs': jobs,
     'vocals': vocal.schedule,
@@ -780,7 +795,7 @@ Future<List<File>> exportStems(
             strumGuitar: r.strum),
       });
     }
-    final wavs = await compute(_renderIso, {
+    final wavs = await compute(renderWavForExport, {
       'sf2s': pool.paths,
       'jobs': jobs,
       'mix': false,

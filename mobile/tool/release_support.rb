@@ -5,7 +5,22 @@ require "tempfile"
 module HumTrackRelease
   MOBILE = File.expand_path("..", __dir__)
   ROOT = File.dirname(MOBILE)
-  DEFINE_KEYS = %w[SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL CLARITY_PROJECT_ID SENTRY_DSN_MOBILE].freeze
+  REQUIRED_DEFINE_KEYS = %w[
+    SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL
+    CLARITY_PROJECT_ID SENTRY_DSN_MOBILE
+  ].freeze
+  OPTIONAL_DEFINE_KEYS = %w[
+    APP_ENVIRONMENT FIREBASE_ANALYTICS_ENABLED FIREBASE_PROJECT_ID
+    FIREBASE_MESSAGING_SENDER_ID FIREBASE_MEASUREMENT_ID
+    FIREBASE_ANDROID_APP_ID FIREBASE_ANDROID_API_KEY
+    FIREBASE_IOS_APP_ID FIREBASE_IOS_API_KEY
+  ].freeze
+  DEFINE_KEYS = (REQUIRED_DEFINE_KEYS + OPTIONAL_DEFINE_KEYS).freeze
+  FIREBASE_REQUIRED_DEFINE_KEYS = %w[
+    APP_ENVIRONMENT FIREBASE_PROJECT_ID FIREBASE_MESSAGING_SENDER_ID
+    FIREBASE_ANDROID_APP_ID FIREBASE_ANDROID_API_KEY
+    FIREBASE_IOS_APP_ID FIREBASE_IOS_API_KEY
+  ].freeze
 
   def self.defines(env: ENV, secrets_path: File.join(ROOT, "backend/.env.secrets"))
     values = {}
@@ -26,9 +41,31 @@ module HumTrackRelease
       value = env[key]
       values[key] = value unless value.nil? || value.empty?
     end
-    missing = DEFINE_KEYS.reject { |key| values[key].is_a?(String) && !values[key].strip.empty? }
+    missing = REQUIRED_DEFINE_KEYS.reject { |key| values[key].is_a?(String) && !values[key].strip.empty? }
     raise ArgumentError, "Missing release configuration: #{missing.join(', ')}" unless missing.empty?
+    validate_firebase_analytics!(values, env: env)
     values
+  end
+
+  def self.validate_firebase_analytics!(values, env: ENV)
+    flag = values["FIREBASE_ANALYTICS_ENABLED"]
+    return if flag.nil? || flag == "false"
+    raise ArgumentError, "FIREBASE_ANALYTICS_ENABLED must be true or false" unless flag == "true"
+
+    missing = FIREBASE_REQUIRED_DEFINE_KEYS.reject do |key|
+      values[key].is_a?(String) && !values[key].strip.empty?
+    end
+    unless missing.empty?
+      raise ArgumentError, "Incomplete Firebase Analytics configuration: #{missing.join(', ')}"
+    end
+
+    environment = values.fetch("APP_ENVIRONMENT")
+    unless %w[production staging].include?(environment)
+      raise ArgumentError, "APP_ENVIRONMENT must be production or staging when Firebase Analytics is enabled"
+    end
+    if environment == "production" && env["HUMTRACK_FIREBASE_DISCLOSURES_READY"] != "true"
+      raise ArgumentError, "Production Firebase Analytics requires HUMTRACK_FIREBASE_DISCLOSURES_READY=true"
+    end
   end
 
   def self.version(env: ENV, pubspec_path: File.join(MOBILE, "pubspec.yaml"))
@@ -79,12 +116,31 @@ module HumTrackRelease
     raise ArgumentError, "Apple has not made version #{version} editable yet; retry submission without uploading another build"
   end
 
-  def self.require_google_plist!
-    path = File.join(MOBILE, "ios/Runner/GoogleService-Info.plist")
+  # firebase_core auto-runs FirebaseApp.configure() at plugin registration
+  # whenever this plist exists, so a Sign-In-only plist (no GOOGLE_APP_ID)
+  # aborts every launch before Dart starts (iOS 1.0.9 build 38 incident).
+  # The file must carry both the Firebase app keys and the Google Sign-In keys.
+  IOS_BUNDLE_ID = "com.humtrack.app"
+  GOOGLE_PLIST_REQUIRED_KEYS = %w[
+    GOOGLE_APP_ID API_KEY GCM_SENDER_ID PROJECT_ID BUNDLE_ID CLIENT_ID REVERSED_CLIENT_ID
+  ].freeze
+
+  def self.require_google_plist!(path: File.join(MOBILE, "ios/Runner/GoogleService-Info.plist"))
     raise ArgumentError, "Missing production GoogleService-Info.plist" unless File.file?(path)
     contents = File.read(path)
-    if contents.include?("CI_COMPILE_ONLY") || !contents.include?("CLIENT_ID")
+    if contents.include?("CI_COMPILE_ONLY")
       raise ArgumentError, "A production GoogleService-Info.plist is required for distribution"
+    end
+    values = contents.scan(%r{<key>([^<]+)</key>\s*<string>([^<]*)</string>}).to_h
+    missing = GOOGLE_PLIST_REQUIRED_KEYS.reject { |key| values[key].to_s.strip != "" }
+    unless missing.empty?
+      raise ArgumentError, "GoogleService-Info.plist is missing: #{missing.join(', ')}"
+    end
+    unless values["GOOGLE_APP_ID"].match?(/\A1:\d+:ios:[0-9a-f]+\z/)
+      raise ArgumentError, "GoogleService-Info.plist GOOGLE_APP_ID is not an iOS Firebase app ID"
+    end
+    unless values["BUNDLE_ID"] == IOS_BUNDLE_ID
+      raise ArgumentError, "GoogleService-Info.plist BUNDLE_ID does not match #{IOS_BUNDLE_ID}"
     end
   end
 

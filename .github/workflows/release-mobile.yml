@@ -195,11 +195,15 @@ jobs:
           bundler: '2.6.2'
           bundler-cache: true
           working-directory: mobile/ios
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
       - name: Check release helpers and app tests
         working-directory: mobile
         run: |
           bundle exec ruby tool/release_support_test.rb
           ruby -c android/fastlane/Fastfile
+          python3 tool/test_android_auth_guard.py
           flutter config --jdk-dir="$JAVA_HOME"
           flutter pub get
           flutter analyze --no-fatal-infos

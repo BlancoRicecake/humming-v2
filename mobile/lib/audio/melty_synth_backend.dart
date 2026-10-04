@@ -1,5 +1,5 @@
-// iOS-only live synth backend — MeltySynth (dart_melty_soundfont) + real-time
-// PCM output via flutter_pcm_sound.
+// Shared iOS/macOS/Windows live synth — MeltySynth + real-time PCM output.
+// PcmOutput preserves flutter_pcm_sound on Apple and uses WASAPI on Windows.
 //
 // WHY: on iOS, flutter_midi_pro routes notes through AVAudioUnitSampler, which
 // could not reliably SELECT instruments from our soundfonts — every channel
@@ -25,7 +25,7 @@
 //  - The flutter_pcm_sound calls are isolated in _startOutput/_onFeed — if the
 //    installed package version's API differs, only those need adjusting.
 import 'dart:async';
-import 'dart:io' show File;
+import 'dart:io' show File, Platform;
 import 'dart:math' as math;
 
 // Float32List/Int16List/ByteData/Uint8List come via dart_melty_soundfont's
@@ -40,6 +40,7 @@ import 'package:flutter_pcm_sound/flutter_pcm_sound.dart';
 // resetToPlaybackSession (full session reset after recording) +
 // setAudioInterruptionListener (native AVAudioSession interruption events).
 import 'headset.dart';
+import 'pcm_output.dart';
 import '../looptap/music/soundfont_catalog.dart'; // isDynamicSlot, SoundfontCatalog
 
 // WidgetsBindingObserver: the PCM feed loop must stop while the app is not in
@@ -144,7 +145,7 @@ class MeltyEngine with WidgetsBindingObserver {
   final Float32List _acc = Float32List(_frames);
   final Int16List _out = Int16List(_frames);
 
-  bool get isLoaded => _main != null;
+  bool get isLoaded => _main != null && _outputStarted;
 
   // ── loading ──────────────────────────────────────────────────────────
   Future<void> ensureLoaded() => _loading ??= _init();
@@ -203,19 +204,19 @@ class MeltyEngine with WidgetsBindingObserver {
   // installed flutter_pcm_sound version exposes a different API.
   Future<void> _startOutput() async {
     if (_outputStarted) return;
+    await PcmOutput.setLogLevel(LogLevel.none); // silence per-feed [PCM] spam
+    await PcmOutput.setup(sampleRate: _sampleRate, channelCount: 1);
     _outputStarted = true;
-    await FlutterPcmSound.setLogLevel(LogLevel.none); // silence per-feed [PCM] spam
-    await FlutterPcmSound.setup(sampleRate: _sampleRate, channelCount: 1);
     _targetFrames = _idleTarget;
     _forRecording = false;
-    FlutterPcmSound.setFeedThreshold(_idleThreshold);
-    FlutterPcmSound.setFeedCallback(_onFeed);
+    PcmOutput.setFeedThreshold(_idleThreshold);
+    PcmOutput.setFeedCallback(_onFeed);
     // Lifecycle gate + native interruption events (iOS). Registered once.
     WidgetsBinding.instance.addObserver(this);
     final st = WidgetsBinding.instance.lifecycleState;
     _feedPaused = st != null && st != AppLifecycleState.resumed;
     setAudioInterruptionListener(_onAudioInterruption);
-    FlutterPcmSound.start(); // returns bool (not a Future) in this version
+    PcmOutput.start(); // returns bool (not a Future) in this version
   }
 
   // ── lifecycle / interruption recovery ─────────────────────────────────
@@ -233,6 +234,7 @@ class MeltyEngine with WidgetsBindingObserver {
       }
       return;
     }
+    if ((Platform.isWindows || Platform.isMacOS) && state == AppLifecycleState.inactive) return;
     _feedPaused = true;
     if (state != AppLifecycleState.inactive) {
       // paused / hidden / detached: the RemoteIO unit gets stopped underneath
@@ -288,8 +290,8 @@ class MeltyEngine with WidgetsBindingObserver {
   Future<void> _recover(String reason) async {
     debugPrint('[melty] recover output ($reason) forRecording=$_forRecording');
     try {
-      await FlutterPcmSound.release();
-      await FlutterPcmSound.setup(
+      await PcmOutput.release();
+      await PcmOutput.setup(
         sampleRate: _sampleRate,
         channelCount: 1,
         iosAudioCategory: _forRecording
@@ -297,8 +299,8 @@ class MeltyEngine with WidgetsBindingObserver {
             : IosAudioCategory.playback,
       );
       _targetFrames = _forRecording ? _recTarget : _idleTarget;
-      FlutterPcmSound.setFeedThreshold(_forRecording ? _recThreshold : _idleThreshold);
-      FlutterPcmSound.setFeedCallback(_onFeed);
+      PcmOutput.setFeedThreshold(_forRecording ? _recThreshold : _idleThreshold);
+      PcmOutput.setFeedCallback(_onFeed);
       _needsRebuild = false;
       _recoverFailures = 0;
       _onFeed(0); // prime — restarts the native feed loop
@@ -323,7 +325,7 @@ class MeltyEngine with WidgetsBindingObserver {
   ///   true  → .playAndRecord — rebuild WHILE recording (keeps capture alive)
   ///   false → .playback      — rebuild AFTER recording (restores normal output)
   ///
-  /// We deliberately do NOT call FlutterPcmSound.start() to resume: its second
+  /// We deliberately do NOT call PcmOutput.start() to resume: its second
   /// call is a no-op because of a stale internal _needsStart flag (this is why
   /// earlier restart attempts went silent). Instead we prime the loop directly
   /// with one render block — that feed kicks AudioOutputUnitStart inside the
@@ -335,7 +337,7 @@ class MeltyEngine with WidgetsBindingObserver {
     }
     debugPrint('[rebuild] start forRecording=$forRecording '
         'hwRate(before)=${await outputSampleRate()}');
-    await FlutterPcmSound.release();
+    await PcmOutput.release();
     if (!forRecording) {
       // Output unit is released; now force a clean session reset. Flipping the
       // category alone leaves recording's duplex hardware IO in place (output
@@ -345,7 +347,7 @@ class MeltyEngine with WidgetsBindingObserver {
       await resetToPlaybackSession();
       debugPrint('[rebuild] after session reset hwRate=${await outputSampleRate()}');
     }
-    await FlutterPcmSound.setup(
+    await PcmOutput.setup(
       sampleRate: _sampleRate,
       channelCount: 1,
       iosAudioCategory: forRecording
@@ -356,8 +358,8 @@ class MeltyEngine with WidgetsBindingObserver {
     // shallow again after (responsive pad taps).
     _targetFrames = forRecording ? _recTarget : _idleTarget;
     _forRecording = forRecording;
-    FlutterPcmSound.setFeedThreshold(forRecording ? _recThreshold : _idleThreshold);
-    FlutterPcmSound.setFeedCallback(_onFeed);
+    PcmOutput.setFeedThreshold(forRecording ? _recThreshold : _idleThreshold);
+    PcmOutput.setFeedCallback(_onFeed);
     // A fresh unit supersedes any pending recovery.
     _recoverRetry?.cancel();
     _recoverRetry = null;
@@ -391,7 +393,7 @@ class MeltyEngine with WidgetsBindingObserver {
   // means the unit is dead → recover once (backoff-limited) instead of
   // surfacing an unhandled async error on every block.
   void _feed(PcmArrayInt16 buf) {
-    FlutterPcmSound.feed(buf).catchError((Object e) {
+    PcmOutput.feed(buf).catchError((Object e) {
       debugPrint('[melty] feed failed: $e');
       _scheduleRecover('feed error');
     });

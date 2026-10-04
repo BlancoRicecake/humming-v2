@@ -4,8 +4,6 @@
 // lane through GeneralUser-GS.sf2 so we know the GM path still works alongside.
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
-
 import 'package:dart_melty_soundfont/dart_melty_soundfont.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:humming/looptap/models/loop_models.dart';

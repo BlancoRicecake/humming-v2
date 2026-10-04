@@ -51,7 +51,7 @@ class SynthEngine {
   // (which could not reliably select instruments — everything fell back to piano).
   // Android keeps flutter_midi_pro/FluidSynth. Each public method below forwards
   // to [_melty] when [_useMelty] is set; the flutter_midi_pro code runs otherwise.
-  static final bool _useMelty = Platform.isIOS;
+  static final bool _useMelty = Platform.isIOS || Platform.isWindows || Platform.isMacOS;
   final MeltyEngine _melty = MeltyEngine();
   int? _sfId;
   Future<int>? _loading;

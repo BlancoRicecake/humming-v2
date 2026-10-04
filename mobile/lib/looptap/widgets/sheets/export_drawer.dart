@@ -9,7 +9,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../models/loop_models.dart';
 import '../../music/midi_export.dart';
 import '../../music/theory.dart';
-import '../../../services/clarity_service.dart';
+import '../../../services/product_analytics.dart';
 import '../../music/wav_export.dart';
 import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
@@ -44,29 +44,33 @@ Future<void> showExportDrawer(
     barrierLabel: 'export',
     barrierColor: Colors.black.withValues(alpha: 0.6),
     transitionDuration: const Duration(milliseconds: 180),
-    pageBuilder: (_, __, ___) => Align(
-      alignment: Alignment.centerRight,
-      child: _ExportDrawer(
-        title: title,
-        songId: songId,
-        sections: sections,
-        bpm: bpm,
-        swing: swing,
-        vol: vol,
-        melodyProgram: melodyProgram,
-        bassProgram: bassProgram,
-        melodyDecProgram: melodyDecProgram,
-        drumProgram: drumProgram,
-        extras: extras,
-        instruments: instruments,
-        songVocalPath: songVocalPath,
-      ),
-    ),
-    transitionBuilder: (_, anim, __, child) => SlideTransition(
-      position: Tween(begin: const Offset(1, 0), end: Offset.zero)
-          .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
-      child: child,
-    ),
+    pageBuilder:
+        (_, __, ___) => Align(
+          alignment: Alignment.centerRight,
+          child: _ExportDrawer(
+            title: title,
+            songId: songId,
+            sections: sections,
+            bpm: bpm,
+            swing: swing,
+            vol: vol,
+            melodyProgram: melodyProgram,
+            bassProgram: bassProgram,
+            melodyDecProgram: melodyDecProgram,
+            drumProgram: drumProgram,
+            extras: extras,
+            instruments: instruments,
+            songVocalPath: songVocalPath,
+          ),
+        ),
+    transitionBuilder:
+        (_, anim, __, child) => SlideTransition(
+          position: Tween(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+          child: child,
+        ),
   );
 }
 
@@ -108,30 +112,29 @@ class _ExportDrawer extends StatefulWidget {
 class _ExportDrawerState extends State<_ExportDrawer> {
   String? _status;
   bool _statusOk = true;
-  String? _busy; // 'wav' | 'stems' while rendering (shows a spinner, blocks taps)
+  String? _busy; // Export stays busy through both rendering and sharing.
   // null = whole song; otherwise the index of the single section (loop) to export.
   int? _selectedSection;
 
   // The sections that the current export targets: the whole song, or just the
   // one selected loop. The render functions already flatten any list (with each
   // section's repeats), so a single-element list exports only that loop.
-  List<Section> get _scopeSections => _selectedSection == null
-      ? widget.sections
-      : [widget.sections[_selectedSection!]];
+  List<Section> get _scopeSections =>
+      _selectedSection == null
+          ? widget.sections
+          : [widget.sections[_selectedSection!]];
 
   // The export title: the song title, plus the section name when a single loop
   // is selected so files don't collide and are easy to tell apart.
-  String get _scopeTitle => _selectedSection == null
-      ? widget.title
-      : '${widget.title} - ${widget.sections[_selectedSection!].name}';
+  String get _scopeTitle =>
+      _selectedSection == null
+          ? widget.title
+          : '${widget.title} - ${widget.sections[_selectedSection!].name}';
 
   void _note(String m, {bool ok = true}) {
     setState(() {
       _status = m;
       _statusOk = ok;
-    });
-    Future.delayed(const Duration(milliseconds: 2400), () {
-      if (mounted) setState(() => _status = null);
     });
   }
 
@@ -143,39 +146,81 @@ class _ExportDrawerState extends State<_ExportDrawer> {
     return box.localToGlobal(Offset.zero) & box.size;
   }
 
-  Future<void> _share(List<XFile> files, String text) async {
+  Future<void> _share(List<XFile> files, String text, {String? warning}) async {
+    if (!mounted) return;
     try {
-      await SharePlus.instance.share(
-        ShareParams(files: files, text: text, sharePositionOrigin: _shareOrigin()),
+      final result = await SharePlus.instance.share(
+        ShareParams(
+          files: files,
+          text: text,
+          sharePositionOrigin: _shareOrigin(),
+        ),
       );
+      if (!mounted) return;
+      final l = L10n.of(context);
+      final message = switch (result.status) {
+        ShareResultStatus.success => l.ltExportShared,
+        ShareResultStatus.dismissed => l.ltExportShareCancelled,
+        ShareResultStatus.unavailable => l.ltExportShareUnconfirmed,
+      };
+      _note(warning == null ? message : '$message\n$warning');
     } catch (e) {
       debugPrint('[export] share failed: $e');
+      if (mounted) _note(L10n.of(context).ltExportShareFailed, ok: false);
     }
   }
 
   Future<void> _doWav() async {
     if (_busy != null) return;
-    setState(() => _busy = 'wav');
+    setState(() {
+      _busy = 'wav';
+      _status = null;
+    });
     try {
-      final res = await exportWavSong(_scopeSections, widget.bpm, widget.swing, widget.vol, _scopeTitle,
-          melodyProgram: widget.melodyProgram,
-          bassProgram: widget.bassProgram,
-          melodyDecProgram: widget.melodyDecProgram,
-          drumProgram: widget.drumProgram,
-          extras: widget.extras,
-          instruments: widget.instruments,
-          songVocalPath: widget.songVocalPath,
-          fallbackName: widget.songId);
+      final res = await exportWavSong(
+        _scopeSections,
+        widget.bpm,
+        widget.swing,
+        widget.vol,
+        _scopeTitle,
+        melodyProgram: widget.melodyProgram,
+        bassProgram: widget.bassProgram,
+        melodyDecProgram: widget.melodyDecProgram,
+        drumProgram: widget.drumProgram,
+        extras: widget.extras,
+        instruments: widget.instruments,
+        songVocalPath: widget.songVocalPath,
+        fallbackName: widget.songId,
+      );
       final file = res.file;
-      await _share([XFile(file.path, mimeType: 'audio/wav')], '$_scopeTitle.wav');
-      ClarityService.instance.event('export_wav');
+      ProductAnalytics.instance.track(
+        ProductEvent.exportWav,
+        properties: {
+          'feature': 'export',
+          'export_type': 'wav',
+          'scope': _selectedSection == null ? 'song' : 'section',
+        },
+      );
       if (mounted) {
-        _note(res.skippedVocals > 0
-            ? L10n.of(context).ltExportVocalSkipped(res.skippedVocals)
-            : L10n.of(context).ltExportSaved(file.uri.pathSegments.last));
+        await _share(
+          [XFile(file.path, mimeType: 'audio/wav')],
+          '$_scopeTitle.wav',
+          warning:
+              res.skippedVocals > 0
+                  ? L10n.of(context).ltExportVocalSkipped(res.skippedVocals)
+                  : null,
+        );
       }
     } catch (e, st) {
       debugPrint('[export] wav failed: $e\n$st');
+      ProductAnalytics.instance.track(
+        ProductEvent.exportFailed,
+        properties: const {
+          'feature': 'export',
+          'export_type': 'wav',
+          'error_code': 'render',
+        },
+      );
       if (mounted) _note(L10n.of(context).ltExportFailed, ok: false);
     }
     if (mounted) setState(() => _busy = null);
@@ -183,35 +228,62 @@ class _ExportDrawerState extends State<_ExportDrawer> {
 
   Future<void> _doStems() async {
     if (_busy != null) return;
-    setState(() => _busy = 'stems');
+    setState(() {
+      _busy = 'stems';
+      _status = null;
+    });
     try {
-      final files = await exportStems(_scopeSections, widget.bpm, widget.swing, widget.vol, _scopeTitle,
-          melodyProgram: widget.melodyProgram,
-          bassProgram: widget.bassProgram,
-          melodyDecProgram: widget.melodyDecProgram,
-          drumProgram: widget.drumProgram,
-          extras: widget.extras,
-          instruments: widget.instruments,
-          songVocalPath: widget.songVocalPath,
-          fallbackName: widget.songId);
+      final files = await exportStems(
+        _scopeSections,
+        widget.bpm,
+        widget.swing,
+        widget.vol,
+        _scopeTitle,
+        melodyProgram: widget.melodyProgram,
+        bassProgram: widget.bassProgram,
+        melodyDecProgram: widget.melodyDecProgram,
+        drumProgram: widget.drumProgram,
+        extras: widget.extras,
+        instruments: widget.instruments,
+        songVocalPath: widget.songVocalPath,
+        fallbackName: widget.songId,
+      );
       if (files.isEmpty) {
         if (mounted) _note(L10n.of(context).ltExportFailed, ok: false);
       } else {
-        await _share(
-          [for (final f in files) XFile(f.path)],
-          '${widget.title} stems',
+        ProductAnalytics.instance.track(
+          ProductEvent.exportStems,
+          properties: {
+            'feature': 'export',
+            'export_type': 'stems',
+            'scope': _selectedSection == null ? 'song' : 'section',
+          },
         );
-        ClarityService.instance.event('export_stems');
-        if (mounted) _note(L10n.of(context).ltExportSaved('${files.length} stems'));
+        await _share([
+          for (final f in files) XFile(f.path),
+        ], '${widget.title} stems');
       }
     } catch (e, st) {
       debugPrint('[export] stems failed: $e\n$st');
+      ProductAnalytics.instance.track(
+        ProductEvent.exportFailed,
+        properties: const {
+          'feature': 'export',
+          'export_type': 'stems',
+          'error_code': 'render',
+        },
+      );
       if (mounted) _note(L10n.of(context).ltExportFailed, ok: false);
     }
     if (mounted) setState(() => _busy = null);
   }
 
   Future<void> _doMidi() async {
+    if (_busy != null) return;
+    setState(() {
+      _busy = 'midi';
+      _status = null;
+    });
     debugPrint('[export] _doMidi start title=${widget.title}');
     try {
       final file = await exportMidiSong(
@@ -227,27 +299,31 @@ class _ExportDrawerState extends State<_ExportDrawer> {
         fallbackName: widget.songId,
       );
       debugPrint('[export] midi written: ${file.path}');
-      // 파일 저장 후 iOS 의 share sheet 로 사용자에게 노출 — Documents 폴더가
-      // sandboxed 라 share 없이는 사용자가 꺼낼 수 없음.
-      final params = ShareParams(
-        files: [XFile(file.path, mimeType: 'audio/midi')],
-        text: '$_scopeTitle.mid',
-        sharePositionOrigin: _shareOrigin(),
+      ProductAnalytics.instance.track(
+        ProductEvent.exportMidi,
+        properties: {
+          'feature': 'export',
+          'export_type': 'midi',
+          'scope': _selectedSection == null ? 'song' : 'section',
+        },
       );
-      try {
-        final r = await SharePlus.instance.share(params);
-        debugPrint('[export] share result: ${r.status} ${r.raw}');
-        ClarityService.instance.event('export_midi');
-      } catch (shareErr) {
-        // share 실패해도 파일은 저장됐으니 saved 메시지는 보여줌.
-        debugPrint('[export] share failed: $shareErr');
-      }
-      if (!mounted) return;
-      _note(L10n.of(context).ltExportSaved(file.uri.pathSegments.last));
+      await _share([
+        XFile(file.path, mimeType: 'audio/midi'),
+      ], '$_scopeTitle.mid');
     } catch (e, st) {
       debugPrint('[export] midi export failed: $e\n$st');
+      ProductAnalytics.instance.track(
+        ProductEvent.exportFailed,
+        properties: const {
+          'feature': 'export',
+          'export_type': 'midi',
+          'error_code': 'render',
+        },
+      );
       if (!mounted) return;
       _note(L10n.of(context).ltExportFailed, ok: false);
+    } finally {
+      if (mounted) setState(() => _busy = null);
     }
   }
 
@@ -255,7 +331,10 @@ class _ExportDrawerState extends State<_ExportDrawer> {
   Widget build(BuildContext context) {
     final l = L10n.of(context);
     final secCount = widget.sections.length;
-    final totalBars = widget.sections.fold<int>(0, (a, s) => a + s.bars * s.repeats);
+    final totalBars = widget.sections.fold<int>(
+      0,
+      (a, s) => a + s.bars * s.repeats,
+    );
     return Material(
       color: Colors.transparent,
       child: Container(
@@ -275,18 +354,45 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Flexible(
-                    child: Text(l.ltExportTitle(widget.title),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: LTType.inter(size: 18, weight: FontWeight.w800, color: LT.t1)),
+                    child: Text(
+                      l.ltExportTitle(widget.title),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LTType.inter(
+                        size: 18,
+                        weight: FontWeight.w800,
+                        color: LT.t1,
+                      ),
+                    ),
                   ),
-                  IconBtn(icon: LtIcons.close, tooltip: l.close, onTap: () => Navigator.of(context).pop()),
+                  IconBtn(
+                    icon: LtIcons.close,
+                    tooltip: l.close,
+                    onTap: () => Navigator.of(context).pop(),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              Text(l.ltExportMeta(secCount, totalBars, widget.bpm),
-                  style: LTType.mono(size: 11, color: LT.t3)),
+              Text(
+                l.ltExportMeta(secCount, totalBars, widget.bpm),
+                style: LTType.mono(size: 11, color: LT.t3),
+              ),
               const SizedBox(height: 12),
+              if (_status != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      _status!,
+                      style: LTType.inter(
+                        size: 12,
+                        weight: FontWeight.w700,
+                        color: _statusOk ? LT.lime : LT.danger,
+                      ),
+                    ),
+                  ),
+                ),
               // 본문 — 화면 작을 때 (landscape 폰) 스크롤로 overflow 회피.
               Expanded(
                 child: SingleChildScrollView(
@@ -295,8 +401,14 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                     children: [
                       // Export scope: whole song, or a single loop (section).
                       if (secCount > 1) ...[
-                        Text(l.ltExportScopeLabel,
-                            style: LTType.inter(size: 11, weight: FontWeight.w700, color: LT.t2)),
+                        Text(
+                          l.ltExportScopeLabel,
+                          style: LTType.inter(
+                            size: 11,
+                            weight: FontWeight.w700,
+                            color: LT.t2,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
@@ -305,19 +417,36 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                             _ScopeChip(
                               label: l.ltExportScopeAll,
                               selected: _selectedSection == null,
-                              onTap: _busy != null ? null : () => setState(() => _selectedSection = null),
+                              onTap:
+                                  _busy != null
+                                      ? null
+                                      : () => setState(
+                                        () => _selectedSection = null,
+                                      ),
                             ),
                             for (var i = 0; i < widget.sections.length; i++)
                               _ScopeChip(
                                 label: widget.sections[i].name,
                                 selected: _selectedSection == i,
-                                onTap: _busy != null ? null : () => setState(() => _selectedSection = i),
+                                onTap:
+                                    _busy != null
+                                        ? null
+                                        : () => setState(
+                                          () => _selectedSection = i,
+                                        ),
                               ),
                           ],
                         ),
                         const SizedBox(height: 16),
                       ],
-                      _Row(icon: LtIcons.piano, title: l.ltExportMidiTitle, sub: l.ltExportMidiSub, color: LT.lime, onTap: _doMidi),
+                      _Row(
+                        icon: LtIcons.piano,
+                        title: l.ltExportMidiTitle,
+                        sub: l.ltExportMidiSub,
+                        color: LT.lime,
+                        busy: _busy == 'midi',
+                        onTap: _busy == null ? _doMidi : null,
+                      ),
                       const SizedBox(height: 12),
                       // WAV / Stems — on-device SF2 render (instrumental mix;
                       // each section's vocal recording is added to Stems as-is).
@@ -326,7 +455,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                         title: l.ltExportWavTitle,
                         sub: l.ltExportWavSub,
                         busy: _busy == 'wav',
-                        onTap: _doWav,
+                        onTap: _busy == null ? _doWav : null,
                       ),
                       const SizedBox(height: 12),
                       _Row(
@@ -334,33 +463,26 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                         title: l.ltExportStemsTitle,
                         sub: l.ltExportStemsSub,
                         busy: _busy == 'stems',
-                        onTap: _doStems,
+                        onTap: _busy == null ? _doStems : null,
                       ),
                       const SizedBox(height: 12),
                       // Share — saves the MIDI + opens the OS share sheet.
-                      _Row(icon: LtIcons.iosShare, title: l.ltExportShareTitle, sub: l.ltExportShareSub, onTap: _doMidi),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 18,
-                        child: Center(
-                          child: _status == null
-                              ? const SizedBox.shrink()
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Ms(_statusOk ? LtIcons.checkCircle : LtIcons.info, size: 14, color: _statusOk ? LT.lime : LT.danger),
-                                    const SizedBox(width: 5),
-                                    Text(_status!,
-                                        style: LTType.inter(
-                                            size: 12, weight: FontWeight.w700, color: _statusOk ? LT.lime : LT.danger)),
-                                  ],
-                                ),
-                        ),
+                      _Row(
+                        icon: LtIcons.iosShare,
+                        title: l.ltExportShareTitle,
+                        sub: l.ltExportShareSub,
+                        busy: _busy == 'midi',
+                        onTap: _busy == null ? _doMidi : null,
                       ),
+                      const SizedBox(height: 12),
                       const SizedBox(height: 16),
                       Text(
                         l.ltExportFooter,
-                        style: LTType.inter(size: 11, color: LT.t3, height: 1.5),
+                        style: LTType.inter(
+                          size: 11,
+                          color: LT.t3,
+                          height: 1.5,
+                        ),
                       ),
                     ],
                   ),
@@ -411,7 +533,14 @@ class _ScopeChip extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.icon, required this.title, required this.sub, this.color, this.onTap, this.busy = false});
+  const _Row({
+    required this.icon,
+    required this.title,
+    required this.sub,
+    this.color,
+    this.onTap,
+    this.busy = false,
+  });
   final IconData icon;
   final String title;
   final String sub;
@@ -424,7 +553,7 @@ class _Row extends StatelessWidget {
     return GestureDetector(
       onTap: busy ? null : onTap,
       child: Opacity(
-        opacity: busy ? 0.6 : 1,
+        opacity: busy || onTap == null ? 0.6 : 1,
         child: Container(
           height: 60,
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -442,14 +571,27 @@ class _Row extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t1)),
+                    Text(
+                      title,
+                      style: LTType.inter(
+                        size: 14,
+                        weight: FontWeight.w700,
+                        color: LT.t1,
+                      ),
+                    ),
                     Text(sub, style: LTType.inter(size: 11, color: LT.t2)),
                   ],
                 ),
               ),
               busy
                   ? const SizedBox(
-                      width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: LT.lime))
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: LT.lime,
+                    ),
+                  )
                   : const Ms(LtIcons.download, size: 20, color: LT.t3),
             ],
           ),
