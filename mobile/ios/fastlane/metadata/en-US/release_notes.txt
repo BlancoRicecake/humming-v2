@@ -1,5 +1,6 @@
 What's new
 
+- Fixed an issue where the app could close immediately after launch on some iPhone and iPad devices.
 - Compare three backing options for each mood and apply only the one you choose.
 - Manage section order, repeats and duplicates, and lock melody, chords, bass or drums from the song structure view.
 - Refine hum-to-melody results safely with melody locking, pitch comparison and review tools.

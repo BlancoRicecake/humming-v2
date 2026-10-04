@@ -116,12 +116,31 @@ module HumTrackRelease
     raise ArgumentError, "Apple has not made version #{version} editable yet; retry submission without uploading another build"
   end
 
-  def self.require_google_plist!
-    path = File.join(MOBILE, "ios/Runner/GoogleService-Info.plist")
+  # firebase_core auto-runs FirebaseApp.configure() at plugin registration
+  # whenever this plist exists, so a Sign-In-only plist (no GOOGLE_APP_ID)
+  # aborts every launch before Dart starts (iOS 1.0.9 build 38 incident).
+  # The file must carry both the Firebase app keys and the Google Sign-In keys.
+  IOS_BUNDLE_ID = "com.humtrack.app"
+  GOOGLE_PLIST_REQUIRED_KEYS = %w[
+    GOOGLE_APP_ID API_KEY GCM_SENDER_ID PROJECT_ID BUNDLE_ID CLIENT_ID REVERSED_CLIENT_ID
+  ].freeze
+
+  def self.require_google_plist!(path: File.join(MOBILE, "ios/Runner/GoogleService-Info.plist"))
     raise ArgumentError, "Missing production GoogleService-Info.plist" unless File.file?(path)
     contents = File.read(path)
-    if contents.include?("CI_COMPILE_ONLY") || !contents.include?("CLIENT_ID")
+    if contents.include?("CI_COMPILE_ONLY")
       raise ArgumentError, "A production GoogleService-Info.plist is required for distribution"
+    end
+    values = contents.scan(%r{<key>([^<]+)</key>\s*<string>([^<]*)</string>}).to_h
+    missing = GOOGLE_PLIST_REQUIRED_KEYS.reject { |key| values[key].to_s.strip != "" }
+    unless missing.empty?
+      raise ArgumentError, "GoogleService-Info.plist is missing: #{missing.join(', ')}"
+    end
+    unless values["GOOGLE_APP_ID"].match?(/\A1:\d+:ios:[0-9a-f]+\z/)
+      raise ArgumentError, "GoogleService-Info.plist GOOGLE_APP_ID is not an iOS Firebase app ID"
+    end
+    unless values["BUNDLE_ID"] == IOS_BUNDLE_ID
+      raise ArgumentError, "GoogleService-Info.plist BUNDLE_ID does not match #{IOS_BUNDLE_ID}"
     end
   end
 

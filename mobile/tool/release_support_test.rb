@@ -163,4 +163,60 @@ class ReleaseSupportTest < Minitest::Test
     assert_equal ["1.0.6", 33], HumTrackRelease.version(env: {"HUMTRACK_VERSION" => "1.0.6", "HUMTRACK_BUILD_NUMBER" => "33"})
     assert_raises(ArgumentError) { HumTrackRelease.version(env: {"HUMTRACK_BUILD_NUMBER" => "33; command"}) }
   end
+
+  def write_plist(dir, entries)
+    body = entries.map { |k, v| "<key>#{k}</key>\n<string>#{v}</string>" }.join("\n")
+    path = File.join(dir, "GoogleService-Info.plist")
+    File.write(path, "<plist version=\"1.0\"><dict>\n#{body}\n</dict></plist>")
+    path
+  end
+
+  def complete_plist
+    {
+      "API_KEY" => "AIzaTest", "GCM_SENDER_ID" => "123", "PROJECT_ID" => "humtrack-test",
+      "GOOGLE_APP_ID" => "1:123:ios:abc123", "BUNDLE_ID" => "com.humtrack.app",
+      "CLIENT_ID" => "123-x.apps.googleusercontent.com",
+      "REVERSED_CLIENT_ID" => "com.googleusercontent.apps.123-x", "PLIST_VERSION" => "1",
+    }
+  end
+
+  def test_google_plist_accepts_merged_firebase_and_sign_in_keys
+    Dir.mktmpdir do |dir|
+      HumTrackRelease.require_google_plist!(path: write_plist(dir, complete_plist))
+    end
+  end
+
+  def test_google_plist_rejects_sign_in_only_file
+    Dir.mktmpdir do |dir|
+      sign_in_only = complete_plist.slice("BUNDLE_ID", "CLIENT_ID", "REVERSED_CLIENT_ID", "PLIST_VERSION")
+      error = assert_raises(ArgumentError) do
+        HumTrackRelease.require_google_plist!(path: write_plist(dir, sign_in_only))
+      end
+      assert_includes error.message, "GOOGLE_APP_ID"
+    end
+  end
+
+  def test_google_plist_rejects_firebase_only_file
+    Dir.mktmpdir do |dir|
+      firebase_only = complete_plist.reject { |k, _| %w[CLIENT_ID REVERSED_CLIENT_ID].include?(k) }
+      error = assert_raises(ArgumentError) do
+        HumTrackRelease.require_google_plist!(path: write_plist(dir, firebase_only))
+      end
+      assert_includes error.message, "CLIENT_ID"
+    end
+  end
+
+  def test_google_plist_rejects_android_app_id_and_wrong_bundle
+    Dir.mktmpdir do |dir|
+      assert_raises(ArgumentError) do
+        HumTrackRelease.require_google_plist!(path: write_plist(dir, complete_plist.merge("GOOGLE_APP_ID" => "1:123:android:abc123")))
+      end
+      assert_raises(ArgumentError) do
+        HumTrackRelease.require_google_plist!(path: write_plist(dir, complete_plist.merge("BUNDLE_ID" => "com.other.app")))
+      end
+      assert_raises(ArgumentError) do
+        HumTrackRelease.require_google_plist!(path: File.join(dir, "missing.plist"))
+      end
+    end
+  end
 end
