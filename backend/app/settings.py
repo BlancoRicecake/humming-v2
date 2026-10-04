@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     presign_ttl_sec: int = 300
     # /iap/verify makes an outbound Apple/Google call per request — cap per user.
     iap_verify_per_minute: int = 10
+    # /health/iap-notifications: alert when a store has owed a notification
+    # for longer than this without one arriving.
+    iap_notification_max_age_days: int = 5
 
     @property
     def is_production(self) -> bool:

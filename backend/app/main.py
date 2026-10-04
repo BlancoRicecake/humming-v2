@@ -39,6 +39,7 @@ from .routes import projects as projects_routes
 from .routes import storage as storage_routes
 from .routes import iap as iap_routes
 from .routes import health as health_routes
+from .routes import iap_health as iap_health_routes
 from .routes import account as account_routes
 
 logger = logging.getLogger("soundlab")
@@ -286,6 +287,7 @@ app.add_middleware(
 
 # --- New P0 routers ---------------------------------------------------------
 app.include_router(health_routes.router)
+app.include_router(iap_health_routes.router)
 app.include_router(projects_routes.router)
 app.include_router(storage_routes.router)
 app.include_router(iap_routes.router)
