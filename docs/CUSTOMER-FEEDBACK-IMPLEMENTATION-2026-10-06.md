@@ -28,3 +28,15 @@ Android AAB: C:/src/humming-v2/mobile/build/internal-test-1.0.12-41/HumTrack-1.0
 SHA-256: 157e49bb80fa432265047b31a7bb1839a1265aa81139701c7ed4c9e011fb8f0c
 
 검증 영수증은 같은 폴더 verification.json, Windows 합성 입력 실행 증거는 C:/src/humming-v2/mobile/build/customer-flow-41/evidence/smoke.json에 있다. 최종 업로드/메일 상태는 후속 기록으로 명시한다. 운영 배포는 사용자의 내부 테스트 확인 후 진행한다.
+
+Windows 표준 lib/main.dart 미리보기: C:/src/humming-v2/mobile/build/customer-flow-41/HumTrack-Windows-1.0.12-41-preview.zip
+SHA-256: a71207b7d5fc972ddd3c163816ea2261251f2d66f586f09257e297088c8a0bd3
+소스 커밋: b87fd46. Windows에도 기존 서비스 설정을 포함했지만 실제 데스크톱 로그인 완료를 검증한 것은 아니다.
+
+## 내부 테스트 전달 완료
+
+Google Play 내부 트랙의 1.0.12(41), status completed를 API 재조회로 확인했다. 업로드 SHA-256은 검증된 AAB와 동일하다. 운영 트랙은 1.0.10(39)이며 변경하지 않았다. Play의 자동 검토 설정에 따라 changesNotSentForReview 매개변수는 사용하지 않았다.
+
+설치 링크 https://play.google.com/apps/internaltest/4701278899500552203 및 기기 확인 항목을 jlionk200@gmail.com으로 연결된 Gmail 계정(hermosear98@gmail.com)에서 발송했다. SENT 메시지 ID 1a110491e154e45e. 사용자 설치·테스트 완료를 뜻하지 않는다. 메일은 새 지원 계정에서 발송한 것이 아니며 humtrack@gmail.com 수신 확인은 여전히 남아 있다. 웹사이트 게시 및 스토어 지원 연락처 변경도 수행하지 않았다.
+
+최종 영수증: 내부 테스트 폴더 play-upload-receipt.json, verification.json, email-receipt.json, test-checklist.txt. 운영 배포는 사용자 확인을 기다린다. 임시 빌드 설정과 작업용 서명 속성 복사본은 제거했고 원본 자격 증명/키는 보존했다.
