@@ -81,12 +81,15 @@ class EngineApi {
   /// engine_api 가 looptap 모델에 의존하지 않게 한다.
   Future<List<T>> _catalogRaw<T>(T Function(Map<String, dynamic>) map) async {
     final r = await _dio.get<List<dynamic>>('/soundfonts');
-    return (r.data ?? []).map((e) => map((e as Map).cast<String, dynamic>())).toList();
+    return (r.data ?? [])
+        .map((e) => map((e as Map).cast<String, dynamic>()))
+        .toList();
   }
 
   /// 사운드폰트 카탈로그 — [fromJson] 으로 각 행을 매핑해 반환.
-  Future<List<T>> soundfontCatalogMapped<T>(T Function(Map<String, dynamic>) fromJson) =>
-      _catalogRaw(fromJson);
+  Future<List<T>> soundfontCatalogMapped<T>(
+    T Function(Map<String, dynamic>) fromJson,
+  ) => _catalogRaw(fromJson);
 
   /// 사운드폰트 SF2 파일을 [savePath] 로 **스트리밍 다운로드**(디스크로 직접 흘려보내
   /// 메모리에 통째로 올리지 않음 — 수백 MB 폰트 OOM 방지). [onProgress] 는
@@ -127,8 +130,12 @@ class EngineApi {
 
     if (r.statusCode == 416) {
       if (await target.exists()) await target.delete();
-      return downloadSoundfontToFile(id, savePath,
-          onProgress: onProgress, expectedBytes: expectedBytes);
+      return downloadSoundfontToFile(
+        id,
+        savePath,
+        onProgress: onProgress,
+        expectedBytes: expectedBytes,
+      );
     }
     // 206 이면 이어쓰기, 200 이면 서버가 Range 를 무시한 것이므로 처음부터.
     final resuming = r.statusCode == 206 && start > 0;
@@ -136,7 +143,8 @@ class EngineApi {
 
     final total = _totalBytesOf(r, fallback: expectedBytes, from: start);
     final sink = target.openWrite(
-        mode: resuming ? FileMode.writeOnlyAppend : FileMode.writeOnly);
+      mode: resuming ? FileMode.writeOnlyAppend : FileMode.writeOnly,
+    );
     var received = start;
     try {
       await for (final chunk in r.data!.stream) {
@@ -152,7 +160,11 @@ class EngineApi {
 
   /// 전체 크기 추정: `Content-Range: bytes a-b/TOTAL` → TOTAL,
   /// 아니면 Content-Length + 이미 받은 [from], 아니면 [fallback].
-  int _totalBytesOf(Response<dynamic> r, {required int fallback, required int from}) {
+  int _totalBytesOf(
+    Response<dynamic> r, {
+    required int fallback,
+    required int from,
+  }) {
     final cr = r.headers.value('content-range');
     if (cr != null) {
       final slash = cr.lastIndexOf('/');
@@ -170,13 +182,18 @@ class EngineApi {
   /// 컨테이너는 Opus(.caf/.ogg) 또는 AAC(.m4a). 서버 ffmpeg pipe 가 magic bytes 로 판별 — filename 무시.
   Future<AnalyzeResponse> analyze(
     String wavPath,
-    AnalyzeOptions options,
-  ) async {
+    AnalyzeOptions options, {
+    CancelToken? cancelToken,
+  }) async {
     final form = FormData.fromMap({
       'audio': await MultipartFile.fromFile(wavPath, filename: 'input.opus'),
       'options': jsonEncode(options.toJson()),
     });
-    final r = await _dio.post<Map<String, dynamic>>('/analyze', data: form);
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/analyze',
+      data: form,
+      cancelToken: cancelToken,
+    );
     return AnalyzeResponse.fromJson(r.data!);
   }
 

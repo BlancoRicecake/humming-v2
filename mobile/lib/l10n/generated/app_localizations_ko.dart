@@ -2443,4 +2443,107 @@ class L10nKo extends L10n {
 
   @override
   String get ltFirstSongHint => '허밍 → 반주 → 저장\n로그인 없이 무료로 시작해요.';
+
+  @override
+  String get ltFilesTitle => '내보낸 파일';
+
+  @override
+  String get ltFilesHint =>
+      '공유한 파일도 여기에 남습니다. ‘파일에 저장’에서 HumTrack 밖의 저장 위치를 선택하세요.';
+
+  @override
+  String get ltFilesIosHint =>
+      '공유한 파일도 여기에 남습니다. ‘다시 공유’를 누르고 공유 화면에서 ‘파일에 저장’을 선택하세요.';
+
+  @override
+  String get ltFilesEmpty => '아직 내보낸 파일이 없습니다.';
+
+  @override
+  String get ltFilesShare => '다시 공유';
+
+  @override
+  String get ltFilesSave => '파일에 저장';
+
+  @override
+  String get ltFilesSaved => '선택한 위치에 저장했습니다.';
+
+  @override
+  String get ltFilesSaveCancelled => '저장을 취소했습니다. 내보낸 파일은 여기에 남아 있습니다.';
+
+  @override
+  String get ltFilesActionFailed =>
+      '저장하거나 공유하지 못했습니다. 내보낸 파일은 여기에 남아 있으니 다시 시도하세요.';
+
+  @override
+  String get ltFilesLoadFailed => '내보낸 파일을 불러오지 못했습니다. 새로고침으로 다시 시도하세요.';
+
+  @override
+  String get ltMidiTitle => 'MIDI로 변환';
+
+  @override
+  String get ltMidiHint =>
+      '한 사람이 부른 멜로디를 악기 트랙으로 만듭니다. 원본 보컬은 그대로 남습니다. 잘라낸 이 클립만 서버로 전송해 분석합니다. 여러 목소리나 반주가 섞이면 정확도가 낮아질 수 있습니다.';
+
+  @override
+  String get ltMidiPiano => '피아노';
+
+  @override
+  String get ltMidiGuitar => '기타';
+
+  @override
+  String get ltMidiSynth => '신스';
+
+  @override
+  String get ltMidiConvert => '변환하기';
+
+  @override
+  String get ltMidiAnalyzing => '보컬을 분석 중입니다… 안전하게 취소할 수 있습니다.';
+
+  @override
+  String get ltMidiInvalidAudio => '이 클립의 오디오를 읽을 수 없습니다. 다른 녹음을 선택하세요.';
+
+  @override
+  String get ltMidiOutsideSection =>
+      '클립이 현재 구간을 벗어납니다. 구간 안으로 자르거나 이동한 뒤 변환하세요.';
+
+  @override
+  String get ltMidiFailed => '보컬을 분석하지 못했습니다. 원본은 안전합니다. 연결을 확인하고 다시 시도하세요.';
+
+  @override
+  String get ltMidiPreviewFailed => '미리 듣기를 재생하지 못했습니다. 다시 시도하세요.';
+
+  @override
+  String get ltMidiRawPitch => '원래 음높이 사용';
+
+  @override
+  String get ltMidiOctaveDown => '옥타브 내리기';
+
+  @override
+  String get ltMidiOctaveUp => '옥타브 올리기';
+
+  @override
+  String ltMidiOctave(int value) {
+    return '옥타브: $value';
+  }
+
+  @override
+  String get ltMidiOriginal => '보컬 듣기';
+
+  @override
+  String get ltMidiInstrument => '악기 듣기';
+
+  @override
+  String get ltMidiStop => '미리 듣기 정지';
+
+  @override
+  String get ltMidiAddTrack => '악기 트랙 추가';
+
+  @override
+  String get ltMidiSelectedClip => '이 녹음의 잘라낸 범위 변환';
+
+  @override
+  String get ltMidiTargetSound => '드롭한 트랙의 소리';
+
+  @override
+  String get ltGuidedKeepVocal => '목소리 그대로 녹음';
 }

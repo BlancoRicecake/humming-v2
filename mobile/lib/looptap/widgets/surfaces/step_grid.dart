@@ -53,7 +53,8 @@ class StepGrid extends StatefulWidget {
   State<StepGrid> createState() => _StepGridState();
 }
 
-class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin {
+class _StepGridState extends State<StepGrid>
+    with SingleTickerProviderStateMixin {
   final GlobalKey _laneKey = GlobalKey();
   _Draft? _draft;
   String? _mode; // 'paint' | 'erase'
@@ -63,8 +64,10 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
   int _winOffset = 0;
 
   // gentle pulse for the active hold-drag preview ("release to place")
-  late final AnimationController _pulse =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 700))..repeat(reverse: true);
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 700),
+  );
 
   @override
   void dispose() {
@@ -92,7 +95,10 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
     if (box == null) return null;
     final local = box.globalToLocal(global);
     final size = box.size;
-    if (local.dx < 0 || local.dy < 0 || local.dx > size.width || local.dy > size.height) {
+    if (local.dx < 0 ||
+        local.dy < 0 ||
+        local.dx > size.width ||
+        local.dy > size.height) {
       // clamp instead of rejecting so drags that slip past the edge still track
     }
     return (
@@ -112,6 +118,7 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
       widget.onErase(rung, h.step);
     } else {
       _mode = 'paint';
+      _pulse.repeat(reverse: true);
       setState(() => _draft = _Draft(h.row, rung, h.step, h.step));
     }
   }
@@ -133,6 +140,7 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
     if (_mode == 'paint' && _draft != null) {
       widget.onPlace(_draft!.rung, _draft!.a, _draft!.b);
     }
+    _pulse.stop();
     setState(() => _draft = null);
     _mode = null;
   }
@@ -149,25 +157,30 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
               // pitch window — the grid then reaches the full slide range.
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onVerticalDragStart: widget.onWindowChanged == null
-                    ? null
-                    : (_) {
-                        _winAccum = 0;
-                        _winOffset = widget.windowOffset;
-                      },
-                onVerticalDragUpdate: widget.onWindowChanged == null
-                    ? null
-                    : (d) {
-                        _winAccum += d.delta.dy;
-                        const sens = 24.0; // px per pitch step
-                        // drag down → reveal higher pitches (offset increases)
-                        while (_winAccum.abs() >= sens) {
-                          final dir = _winAccum > 0 ? 1 : -1;
-                          _winAccum -= dir * sens;
-                          _winOffset = (_winOffset + dir).clamp(0, widget.maxOffset);
-                          widget.onWindowChanged!(_winOffset);
-                        }
-                      },
+                onVerticalDragStart:
+                    widget.onWindowChanged == null
+                        ? null
+                        : (_) {
+                          _winAccum = 0;
+                          _winOffset = widget.windowOffset;
+                        },
+                onVerticalDragUpdate:
+                    widget.onWindowChanged == null
+                        ? null
+                        : (d) {
+                          _winAccum += d.delta.dy;
+                          const sens = 24.0; // px per pitch step
+                          // drag down → reveal higher pitches (offset increases)
+                          while (_winAccum.abs() >= sens) {
+                            final dir = _winAccum > 0 ? 1 : -1;
+                            _winAccum -= dir * sens;
+                            _winOffset = (_winOffset + dir).clamp(
+                              0,
+                              widget.maxOffset,
+                            );
+                            widget.onWindowChanged!(_winOffset);
+                          }
+                        },
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -179,17 +192,27 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Icon(Icons.keyboard_arrow_up,
-                                size: 13,
-                                color: widget.windowOffset < widget.maxOffset
-                                    ? widget.accent
-                                    : LT.t3.withValues(alpha: 0.25)),
-                            Icon(Icons.drag_indicator, size: 11, color: LT.t3.withValues(alpha: 0.4)),
-                            Icon(Icons.keyboard_arrow_down,
-                                size: 13,
-                                color: widget.windowOffset > 0
-                                    ? widget.accent
-                                    : LT.t3.withValues(alpha: 0.25)),
+                            Icon(
+                              Icons.keyboard_arrow_up,
+                              size: 13,
+                              color:
+                                  widget.windowOffset < widget.maxOffset
+                                      ? widget.accent
+                                      : LT.t3.withValues(alpha: 0.25),
+                            ),
+                            Icon(
+                              Icons.drag_indicator,
+                              size: 11,
+                              color: LT.t3.withValues(alpha: 0.4),
+                            ),
+                            Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 13,
+                              color:
+                                  widget.windowOffset > 0
+                                      ? widget.accent
+                                      : LT.t3.withValues(alpha: 0.25),
+                            ),
                           ],
                         ),
                       ),
@@ -203,9 +226,15 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
                                 alignment: Alignment.centerRight,
                                 child: Padding(
                                   padding: const EdgeInsets.only(right: 4),
-                                  child: Text(n.name,
-                                      style: LTType.mono(
-                                          size: 9, weight: FontWeight.w700, color: n.degree == 0 ? widget.accent : LT.t3)),
+                                  child: Text(
+                                    n.name,
+                                    style: LTType.mono(
+                                      size: 9,
+                                      weight: FontWeight.w700,
+                                      color:
+                                          n.degree == 0 ? widget.accent : LT.t3,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -221,23 +250,29 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
                   onPointerDown: _down,
                   onPointerMove: _move,
                   onPointerUp: _up,
+                  onPointerCancel: (_) {
+                    _pulse.stop();
+                    setState(() => _draft = null);
+                    _mode = null;
+                  },
                   behavior: HitTestBehavior.opaque,
                   child: AnimatedBuilder(
                     animation: _pulse,
-                    builder: (_, __) => CustomPaint(
-                      key: _laneKey,
-                      size: Size.infinite,
-                      painter: _GridPainter(
-                        rows: _rows,
-                        notes: widget.notes,
-                        draft: _draft,
-                        playStep: widget.playStep,
-                        steps: widget.steps,
-                        beats: beats,
-                        accent: widget.accent,
-                        pulse: _draft != null ? _pulse.value : 0,
-                      ),
-                    ),
+                    builder:
+                        (_, __) => CustomPaint(
+                          key: _laneKey,
+                          size: Size.infinite,
+                          painter: _GridPainter(
+                            rows: _rows,
+                            notes: widget.notes,
+                            draft: _draft,
+                            playStep: widget.playStep,
+                            steps: widget.steps,
+                            beats: beats,
+                            accent: widget.accent,
+                            pulse: _draft != null ? _pulse.value : 0,
+                          ),
+                        ),
                   ),
                 ),
               ),
@@ -251,7 +286,10 @@ class _StepGridState extends State<StepGrid> with SingleTickerProviderStateMixin
             children: [
               for (var b = 0; b < beats; b++)
                 Expanded(
-                  child: Text('${b + 1}', style: LTType.mono(size: 9, color: LT.t3)),
+                  child: Text(
+                    '${b + 1}',
+                    style: LTType.mono(size: 9, color: LT.t3),
+                  ),
                 ),
             ],
           ),
@@ -304,10 +342,16 @@ class _GridPainter extends CustomPainter {
       for (var b = 0; b < beats; b++) {
         final x = b * (w / beats);
         if (b.isEven) {
-          canvas.drawRect(Rect.fromLTWH(x, top + gap / 2, w / beats, rowH - gap), altPaint);
+          canvas.drawRect(
+            Rect.fromLTWH(x, top + gap / 2, w / beats, rowH - gap),
+            altPaint,
+          );
         }
         if (b > 0) {
-          canvas.drawRect(Rect.fromLTWH(x, top + gap / 2, 1, rowH - gap), guidePaint);
+          canvas.drawRect(
+            Rect.fromLTWH(x, top + gap / 2, 1, rowH - gap),
+            guidePaint,
+          );
         }
       }
     }
@@ -321,14 +365,20 @@ class _GridPainter extends CustomPainter {
 
     // notes
     final notePaint = Paint()..color = accent;
-    final glow = Paint()
-      ..color = accent.withValues(alpha: 0.6)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    final glow =
+        Paint()
+          ..color = accent.withValues(alpha: 0.6)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
     for (var r = 0; r < rows.length; r++) {
       final midi = rows[r].midi;
       for (final n in notes.where((n) => n.midi == midi)) {
         final rect = RRect.fromRectAndRadius(
-          Rect.fromLTWH(n.step * stepW, r * rowH + gap, n.dur * stepW - 2, rowH - gap * 2),
+          Rect.fromLTWH(
+            n.step * stepW,
+            r * rowH + gap,
+            n.dur * stepW - 2,
+            rowH - gap * 2,
+          ),
           const Radius.circular(4),
         );
         canvas.drawRRect(rect, glow);
@@ -382,7 +432,11 @@ class _GridPainter extends CustomPainter {
         Rect.fromLTWH(gripX - 1.5, top - 2, 3, bh + 4),
         Paint()..color = Colors.white,
       );
-      canvas.drawCircle(Offset(gripX, cy), 7 + 1.5 * pulse, Paint()..color = Colors.white);
+      canvas.drawCircle(
+        Offset(gripX, cy),
+        7 + 1.5 * pulse,
+        Paint()..color = Colors.white,
+      );
       canvas.drawCircle(Offset(gripX, cy), 3.5, Paint()..color = accent);
 
       // length readout near the grip
@@ -397,7 +451,10 @@ class _GridPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      final labelX = (movingRight ? gripX + 6 : gripX - 6 - tp.width).clamp(0.0, w - tp.width);
+      final labelX = (movingRight ? gripX + 6 : gripX - 6 - tp.width).clamp(
+        0.0,
+        w - tp.width,
+      );
       final labelY = (top - tp.height - 2).clamp(0.0, h - tp.height);
       // label chip
       canvas.drawRRect(

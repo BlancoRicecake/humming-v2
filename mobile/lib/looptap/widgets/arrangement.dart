@@ -12,6 +12,13 @@ import '../music/theory.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
 
+class VocalClipDrag {
+  const VocalClipDrag(this.trackId, this.clipIndex, this.clip);
+  final String trackId;
+  final int clipIndex;
+  final VocalClip clip;
+}
+
 class PitchRange {
   const PitchRange(this.min, this.max);
   final int min;
@@ -38,6 +45,7 @@ class Arrangement extends StatelessWidget {
     this.onAddTrack,
     this.onReorder,
     this.onMoveClip,
+    this.onConvertClip,
     this.playing = false,
   });
 
@@ -68,11 +76,13 @@ class Arrangement extends StatelessWidget {
   /// Hold-and-drag a vocal/audio clip chunk along its lane to retime it
   /// ([newStartStep]); null disables. The chunk snaps to other chunks' edges and
   /// the playhead.
-  final void Function(String trackId, int clipIndex, int newStartStep)? onMoveClip;
+  final void Function(String trackId, int clipIndex, int newStartStep)?
+  onMoveClip;
 
   /// Whether the transport is playing — the reorder slow-mo is skipped while
   /// playing so the global timeDilation never dips the music tempo.
   final bool playing;
+  final void Function(VocalClipDrag clip, String targetTrack)? onConvertClip;
 
   static const double _rowH = 44.0;
 
@@ -87,10 +97,12 @@ class Arrangement extends StatelessWidget {
       onToggleMute: () => onToggleMute(m.id),
       steps: steps,
       range: ranges[m.id],
+      onConvertClip: onConvertClip,
       // long-press the label chip to drag-reorder (null = disabled).
       reorderIndex: onReorder == null ? null : i,
       playStep: playStep,
-      onMoveClip: onMoveClip == null ? null : (ci, st) => onMoveClip!(m.id, ci, st),
+      onMoveClip:
+          onMoveClip == null ? null : (ci, st) => onMoveClip!(m.id, ci, st),
     );
   }
 
@@ -100,76 +112,83 @@ class Arrangement extends StatelessWidget {
     final lanesHeight = tracks.length * (_rowH + _rowGap);
     return ClipRect(
       child: Stack(
-      children: [
-        // Fixed-height rows in a reorderable list — long-press a label chip to
-        // drag it up/down; the others animate out of the way. The "+ Track"
-        // footer sits right under the last chip (non-reorderable).
-        ReorderableListView.builder(
-          padding: EdgeInsets.zero,
-          buildDefaultDragHandles: false,
-          itemCount: tracks.length,
-          onReorderItem: onReorder ?? (_, __) {},
-          // Flutter hardcodes the reorder animation at 250ms with no knob, so we
-          // slow it ~25% (×1.33) for the duration of the drag, restoring normal
-          // speed on drop. timeDilation is global, so we only apply it while
-          // stopped — never dipping the music tempo during playback.
-          onReorderStart: (_) {
-            if (!playing) timeDilation = 1.33;
-          },
-          onReorderEnd: (_) => timeDilation = 1.0,
-          proxyDecorator: (child, index, anim) =>
-              Material(type: MaterialType.transparency, child: child),
-          footer: onAddTrack == null ? null : _AddTrackRow(onTap: onAddTrack!),
-          itemBuilder: (context, i) => Padding(
-            key: ValueKey(tracks[i].id),
-            padding: EdgeInsets.only(bottom: _rowGap),
-            child: SizedBox(height: _rowH, child: _rowFor(i)),
-          ),
-        ),
-        // playhead spanning the lane area — draggable to scrub when onSeek is set.
-        Positioned(
-          left: _labelW + _gap,
-          right: 0,
-          top: 0,
-          height: lanesHeight,
-          child: LayoutBuilder(
-            builder: (context, c) {
-              void seek(Offset p) =>
-                  onSeek?.call((p.dx / c.maxWidth * steps).clamp(0, steps.toDouble()));
-              // Only the head listens to the clock, so the lane list below is
-              // not rebuilt every frame (audit C22).
-              final line = ValueListenableBuilder<double>(
-                valueListenable: playStep,
-                builder: (context, ps, _) => Stack(
-                  children: [
-                    Positioned(
-                      left: (ps / steps) * c.maxWidth,
-                      top: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 2,
-                        decoration: BoxDecoration(
-                          color: LT.t1.withValues(alpha: 0.9),
-                          boxShadow: [BoxShadow(color: LT.t1, blurRadius: 6)],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-              if (onSeek == null) return IgnorePointer(child: line);
-              // Horizontal drag scrubs; taps still fall through to lane rows
-              // (translucent) so tapping a lane keeps selecting its track.
-              return GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onHorizontalDragStart: (d) => seek(d.localPosition),
-                onHorizontalDragUpdate: (d) => seek(d.localPosition),
-                child: line,
-              );
+        children: [
+          // Fixed-height rows in a reorderable list — long-press a label chip to
+          // drag it up/down; the others animate out of the way. The "+ Track"
+          // footer sits right under the last chip (non-reorderable).
+          ReorderableListView.builder(
+            padding: EdgeInsets.zero,
+            buildDefaultDragHandles: false,
+            itemCount: tracks.length,
+            onReorderItem: onReorder ?? (_, __) {},
+            // Flutter hardcodes the reorder animation at 250ms with no knob, so we
+            // slow it ~25% (×1.33) for the duration of the drag, restoring normal
+            // speed on drop. timeDilation is global, so we only apply it while
+            // stopped — never dipping the music tempo during playback.
+            onReorderStart: (_) {
+              if (!playing) timeDilation = 1.33;
             },
+            onReorderEnd: (_) => timeDilation = 1.0,
+            proxyDecorator:
+                (child, index, anim) =>
+                    Material(type: MaterialType.transparency, child: child),
+            footer:
+                onAddTrack == null ? null : _AddTrackRow(onTap: onAddTrack!),
+            itemBuilder:
+                (context, i) => Padding(
+                  key: ValueKey(tracks[i].id),
+                  padding: EdgeInsets.only(bottom: _rowGap),
+                  child: SizedBox(height: _rowH, child: _rowFor(i)),
+                ),
           ),
-        ),
-      ],
+          // playhead spanning the lane area — draggable to scrub when onSeek is set.
+          Positioned(
+            left: _labelW + _gap,
+            right: 0,
+            top: 0,
+            height: lanesHeight,
+            child: LayoutBuilder(
+              builder: (context, c) {
+                void seek(Offset p) => onSeek?.call(
+                  (p.dx / c.maxWidth * steps).clamp(0, steps.toDouble()),
+                );
+                // Only the head listens to the clock, so the lane list below is
+                // not rebuilt every frame (audit C22).
+                final line = ValueListenableBuilder<double>(
+                  valueListenable: playStep,
+                  builder:
+                      (context, ps, _) => Stack(
+                        children: [
+                          Positioned(
+                            left: (ps / steps) * c.maxWidth,
+                            top: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 2,
+                              decoration: BoxDecoration(
+                                color: LT.t1.withValues(alpha: 0.9),
+                                boxShadow: [
+                                  BoxShadow(color: LT.t1, blurRadius: 6),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                );
+                if (onSeek == null) return IgnorePointer(child: line);
+                // Horizontal drag scrubs; taps still fall through to lane rows
+                // (translucent) so tapping a lane keeps selecting its track.
+                return GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragStart: (d) => seek(d.localPosition),
+                  onHorizontalDragUpdate: (d) => seek(d.localPosition),
+                  child: line,
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -188,6 +207,7 @@ class _Row extends StatelessWidget {
     required this.playStep,
     this.reorderIndex,
     this.onMoveClip,
+    this.onConvertClip,
   });
 
   final TrackMeta meta;
@@ -206,6 +226,7 @@ class _Row extends StatelessWidget {
   /// Only read at drag time (to snap a clip to the head) — never in build.
   final ValueListenable<double> playStep;
   final void Function(int clipIndex, int newStartStep)? onMoveClip;
+  final void Function(VocalClipDrag clip, String targetTrack)? onConvertClip;
 
   @override
   Widget build(BuildContext context) {
@@ -220,31 +241,47 @@ class _Row extends StatelessWidget {
       child: Row(
         children: [
           if (reorderIndex != null) ...[
-            Icon(Icons.drag_indicator, size: 11, color: LT.t3.withValues(alpha: 0.5)),
+            Icon(
+              Icons.drag_indicator,
+              size: 11,
+              color: LT.t3.withValues(alpha: 0.5),
+            ),
             const SizedBox(width: 1),
           ],
           Ms(meta.icon, size: 11, color: selected ? meta.color : LT.t2),
           const SizedBox(width: 5),
           Expanded(
-            child: Text(meta.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: LTType.inter(size: 10, weight: FontWeight.w700, color: selected ? LT.t1 : LT.t2)),
+            child: Text(
+              meta.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: LTType.inter(
+                size: 10,
+                weight: FontWeight.w700,
+                color: selected ? LT.t1 : LT.t2,
+              ),
+            ),
           ),
           GestureDetector(
             onTap: onToggleMute,
             behavior: HitTestBehavior.opaque,
-            child: Ms(muted ? LtIcons.volumeOff : LtIcons.volumeUp,
-                size: 11, color: muted ? LT.t3 : LT.t2),
+            child: Ms(
+              muted ? LtIcons.volumeOff : LtIcons.volumeUp,
+              size: 11,
+              color: muted ? LT.t3 : LT.t2,
+            ),
           ),
         ],
       ),
     );
     // long-press the chip → start a reorder drag.
     if (reorderIndex != null) {
-      chip = ReorderableDelayedDragStartListener(index: reorderIndex!, child: chip);
+      chip = ReorderableDelayedDragStartListener(
+        index: reorderIndex!,
+        child: chip,
+      );
     }
-    return GestureDetector(
+    final row = GestureDetector(
       onTap: onSelect,
       behavior: HitTestBehavior.opaque,
       child: Row(
@@ -258,24 +295,49 @@ class _Row extends StatelessWidget {
               decoration: BoxDecoration(
                 color: LT.bg,
                 borderRadius: BorderRadius.circular(LTRadius.chip),
-                border: Border.all(color: selected ? meta.color.withValues(alpha: 0.4) : LT.border),
+                border: Border.all(
+                  color:
+                      selected ? meta.color.withValues(alpha: 0.4) : LT.border,
+                ),
               ),
               clipBehavior: Clip.antiAlias,
-              child: (meta.kind == TrackKind.vocal && onMoveClip != null)
-                  ? _VocalLane(
-                      meta: meta,
-                      data: data,
-                      steps: steps,
-                      playStep: playStep,
-                      onMove: onMoveClip!,
-                    )
-                  : CustomPaint(
-                      painter: _LanePainter(meta: meta, data: data, steps: steps, range: range),
-                    ),
+              child:
+                  (meta.kind == TrackKind.vocal && onMoveClip != null)
+                      ? _VocalLane(
+                        meta: meta,
+                        data: data,
+                        steps: steps,
+                        playStep: playStep,
+                        onMove: onMoveClip!,
+                        canConvert: onConvertClip != null,
+                      )
+                      : CustomPaint(
+                        painter: _LanePainter(
+                          meta: meta,
+                          data: data,
+                          steps: steps,
+                          range: range,
+                        ),
+                      ),
             ),
           ),
         ],
       ),
+    );
+    if (onConvertClip == null || meta.kind != TrackKind.pitched) return row;
+    return DragTarget<VocalClipDrag>(
+      onWillAcceptWithDetails: (_) => true,
+      onAcceptWithDetails: (details) => onConvertClip!(details.data, meta.id),
+      builder:
+          (_, candidates, _) => DecoratedBox(
+            decoration: BoxDecoration(
+              border:
+                  candidates.isEmpty
+                      ? null
+                      : Border.all(color: meta.color, width: 2),
+            ),
+            child: row,
+          ),
     );
   }
 }
@@ -310,8 +372,14 @@ class _AddTrackRow extends StatelessWidget {
                   children: [
                     const Ms(LtIcons.add, size: 13, color: LT.t2),
                     const SizedBox(width: 3),
-                    Text(L10n.of(context).ltArrangeAddTrack,
-                        style: LTType.inter(size: 10, weight: FontWeight.w700, color: LT.t2)),
+                    Text(
+                      L10n.of(context).ltArrangeAddTrack,
+                      style: LTType.inter(
+                        size: 10,
+                        weight: FontWeight.w700,
+                        color: LT.t2,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -336,6 +404,7 @@ class _VocalLane extends StatefulWidget {
     required this.steps,
     required this.playStep,
     required this.onMove,
+    this.canConvert = false,
   });
 
   final TrackMeta meta;
@@ -343,6 +412,7 @@ class _VocalLane extends StatefulWidget {
   final int steps;
   final ValueListenable<double> playStep;
   final void Function(int clipIndex, int newStartStep) onMove;
+  final bool canConvert;
 
   @override
   State<_VocalLane> createState() => _VocalLaneState();
@@ -353,11 +423,13 @@ class _VocalLaneState extends State<_VocalLane> {
   int _grabOffset = 0; // steps between the grab point and the chunk start
   double _laneW = 1;
 
-  int _durOf(VocalClip c) => c.durSteps > 0 ? c.durSteps : (widget.steps - c.startStep);
+  int _durOf(VocalClip c) =>
+      c.durSteps > 0 ? c.durSteps : (widget.steps - c.startStep);
 
   void _onStart(LongPressStartDetails d) {
     final clips = widget.data.effectiveClips;
-    final pressStep = (d.localPosition.dx / _laneW).clamp(0.0, 1.0) * widget.steps;
+    final pressStep =
+        (d.localPosition.dx / _laneW).clamp(0.0, 1.0) * widget.steps;
     // topmost chunk under the finger (later clips draw on top)
     for (var i = clips.length - 1; i >= 0; i--) {
       final c = clips[i];
@@ -389,7 +461,9 @@ class _VocalLaneState extends State<_VocalLane> {
     final targets = <int>[0, widget.steps, widget.playStep.value.round()];
     for (var i = 0; i < clips.length; i++) {
       if (i == self) continue;
-      targets..add(clips[i].startStep)..add(clips[i].startStep + _durOf(clips[i]));
+      targets
+        ..add(clips[i].startStep)
+        ..add(clips[i].startStep + _durOf(clips[i]));
     }
     for (final t in targets) {
       if ((raw - t).abs() <= thresh) return t; // snap the start edge
@@ -402,36 +476,90 @@ class _VocalLaneState extends State<_VocalLane> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, c) {
-      _laneW = c.maxWidth <= 0 ? 1 : c.maxWidth;
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onLongPressStart: _onStart,
-        onLongPressMoveUpdate: _onMoveUpdate,
-        onLongPressEnd: (_) => setState(() => _grabIdx = null),
-        child: CustomPaint(
-          painter: _LanePainter(
-            meta: widget.meta,
-            data: widget.data,
-            steps: widget.steps,
-            range: null,
-            grabbedClip: _grabIdx,
+    return LayoutBuilder(
+      builder: (context, c) {
+        _laneW = c.maxWidth <= 0 ? 1 : c.maxWidth;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onLongPressStart: _onStart,
+          onLongPressMoveUpdate: _onMoveUpdate,
+          onLongPressEnd: (_) => setState(() => _grabIdx = null),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _LanePainter(
+                    meta: widget.meta,
+                    data: widget.data,
+                    steps: widget.steps,
+                    range: null,
+                    grabbedClip: _grabIdx,
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              if (widget.canConvert)
+                for (var i = 0; i < widget.data.effectiveClips.length; i++)
+                  _dragHandle(i, c.maxWidth),
+            ],
           ),
-          child: const SizedBox.expand(),
+        );
+      },
+    );
+  }
+
+  Widget _dragHandle(int index, double width) {
+    final clip = widget.data.effectiveClips[index];
+    if (clip.startStep < 0 || clip.startStep >= widget.steps) {
+      return const SizedBox.shrink();
+    }
+    final start = clip.startStep;
+    final duration = _durOf(clip).clamp(1, widget.steps - start);
+    return Positioned(
+      left: start / widget.steps * width,
+      width: duration / widget.steps * width,
+      top: 0,
+      bottom: 0,
+      child: Draggable<VocalClipDrag>(
+        hitTestBehavior: HitTestBehavior.opaque,
+        data: VocalClipDrag(widget.meta.id, index, clip.copy()),
+        // Desktop pointer dragging can cross lanes. A cancelled drop retimes
+        // the clip; mobile retains its existing hold-and-drag recognizer.
+        onDraggableCanceled: (_, offset) {
+          final box = context.findRenderObject() as RenderBox?;
+          if (box == null) return;
+          final local = box.globalToLocal(offset);
+          final newStep = (local.dx / _laneW * widget.steps).round().clamp(
+            0,
+            widget.steps - duration,
+          );
+          widget.onMove(index, newStep);
+        },
+        feedback: Material(
+          color: LT.pink,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              L10n.of(context).ltMidiTitle,
+              style: const TextStyle(color: Colors.black),
+            ),
+          ),
         ),
-      );
-    });
+        child: const SizedBox.expand(),
+      ),
+    );
   }
 }
 
 class _LanePainter extends CustomPainter {
-  _LanePainter(
-      {required this.meta,
-      required this.data,
-      required this.steps,
-      required this.range,
-      this.grabbedClip})
-      : _sig = _sigOf(data);
+  _LanePainter({
+    required this.meta,
+    required this.data,
+    required this.steps,
+    required this.range,
+    this.grabbedClip,
+  }) : _sig = _sigOf(data);
   final TrackMeta meta;
   final TrackData data;
   final int steps;
@@ -507,11 +635,14 @@ class _LanePainter extends CustomPainter {
       for (var ci = 0; ci < clips.length; ci++) {
         final c = clips[ci];
         final grabbed = ci == grabbedClip;
-        final fill = Paint()..color = meta.color.withValues(alpha: grabbed ? 0.30 : 0.16);
-        final stroke = Paint()
-          ..color = meta.color.withValues(alpha: grabbed ? 0.95 : 0.55)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = grabbed ? 2 : 1;
+        final fill =
+            Paint()
+              ..color = meta.color.withValues(alpha: grabbed ? 0.30 : 0.16);
+        final stroke =
+            Paint()
+              ..color = meta.color.withValues(alpha: grabbed ? 0.95 : 0.55)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = grabbed ? 2 : 1;
         final vp = Paint()..color = meta.color.withValues(alpha: 0.85);
         final x0 = (c.startStep / steps) * w;
         final wSteps = c.durSteps > 0 ? c.durSteps : (steps - c.startStep);
@@ -531,9 +662,10 @@ class _LanePainter extends CustomPainter {
             canvas.drawRRect(
               RRect.fromRectAndRadius(
                 Rect.fromCenter(
-                    center: Offset(bx, h / 2),
-                    width: (bw * 0.7).clamp(0.6, 4),
-                    height: bh.toDouble()),
+                  center: Offset(bx, h / 2),
+                  width: (bw * 0.7).clamp(0.6, 4),
+                  height: bh.toDouble(),
+                ),
                 const Radius.circular(1),
               ),
               vp,

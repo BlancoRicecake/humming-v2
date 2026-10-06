@@ -24,9 +24,10 @@ import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import '../policy_notice.dart';
 import 'lt_modal.dart';
+import 'export_library_screen.dart';
 
 /// Support contact — same address published in the legal docs.
-const String _kSupportEmail = 'heobusy@gmail.com';
+const String _kSupportEmail = 'humtrack@gmail.com';
 
 Future<void> showSettingsSheet(BuildContext context) {
   return showLtModal(context, width: 400, child: const _SettingsSheet());
@@ -156,6 +157,11 @@ class _SettingsSheetState extends State<_SettingsSheet> {
             value: _vocalLatencyMs,
             onChanged: _setVocalLatencyMs,
           ),
+        ),
+        _Row(
+          icon: LtIcons.iosShare,
+          title: l.ltFilesTitle,
+          onTap: () => showExportLibrary(context),
         ),
         _Row(
           icon: LtIcons.translate,

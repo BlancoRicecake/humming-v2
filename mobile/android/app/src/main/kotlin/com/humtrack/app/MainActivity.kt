@@ -15,6 +15,33 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "humtrack/exports").setMethodCallHandler { call, result ->
+            if (call.method != "saveExport") {
+                result.notImplemented()
+            } else if (pendingExport != null) {
+                result.error("busy", "A save dialog is already open", null)
+            } else {
+                try {
+                    val source = java.io.File(call.argument<String>("path") ?: "").canonicalFile
+                    val folder = java.io.File(io.flutter.util.PathUtils.getDataDirectory(this), "looptap/exports").canonicalFile
+                    require(source.parentFile == folder && source.isFile)
+                    require(source.extension.lowercase() in setOf("wav", "mid"))
+                    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = if (source.extension.lowercase() == "mid") "audio/midi" else "audio/wav"
+                        putExtra(Intent.EXTRA_TITLE, source.name)
+                    }
+                    pendingExport = result
+                    pendingExportFile = source
+                    startActivityForResult(intent, exportRequestCode)
+                } catch (e: Exception) {
+                    pendingExport = null
+                    pendingExportFile = null
+                    result.error("save_failed", "Could not open the save dialog", null)
+                }
+            }
+        }
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "hasHeadset" -> result.success(headsetRoute() != "none")
@@ -26,6 +53,41 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+
+    private val exportRequestCode = 8041
+    private var pendingExport: MethodChannel.Result? = null
+    private var pendingExportFile: java.io.File? = null
+
+    @Deprecated("Used for the system document picker")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != exportRequestCode) return
+        val result = pendingExport ?: return
+        val source = pendingExportFile
+        if (resultCode != RESULT_OK || data?.data == null || source == null) {
+            pendingExport = null
+            pendingExportFile = null
+            result.success(false)
+            return
+        }
+        val destination = data.data!!
+        // File copying must not block note input or playback on the UI thread.
+        Thread {
+            try {
+                val output = contentResolver.openOutputStream(destination, "w")
+                    ?: throw java.io.IOException("No output stream")
+                output.use { sink -> source.inputStream().use { it.copyTo(sink) } }
+                runOnUiThread { pendingExport = null; pendingExportFile = null; result.success(true) }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    pendingExport = null
+                    pendingExportFile = null
+                    result.error("save_failed", "Could not write the selected file", null)
+                }
+            }
+        }.start()
     }
 
     private fun openAppSettings(): Boolean {

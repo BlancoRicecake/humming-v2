@@ -26,6 +26,7 @@ import '../../models/models.dart' as eng;
 import '../audio/loop_audio.dart';
 import '../models/loop_models.dart';
 import '../music/hum_map.dart';
+import '../music/vocal_midi.dart';
 import '../music/melody_review.dart';
 import '../music/instruments.dart';
 import '../music/song_util.dart';
@@ -56,6 +57,7 @@ import '../widgets/sheets/melody_review_sheet.dart';
 import '../widgets/sheets/song_plan_sheet.dart';
 import '../widgets/sheets/vocal_record_modal.dart';
 import '../widgets/sheets/vocal_editor.dart';
+import '../widgets/sheets/vocal_midi_sheet.dart';
 import '../widgets/surfaces/drum_surface.dart';
 import '../widgets/surfaces/fill_launchpad.dart';
 import '../widgets/surfaces/live_pads.dart';
@@ -2319,9 +2321,54 @@ class _EditScreenState extends State<EditScreen>
     }
   }
 
+  bool _vocalConversionOpen = false;
+
+  Future<void> _convertDroppedClip(
+    VocalClipDrag source,
+    String targetId,
+  ) async {
+    if (_vocalConversionOpen || _songSection != null) return;
+    final section = _sec;
+    final clips = section.tracks[source.trackId]?.effectiveClips;
+    if (clips == null ||
+        source.clipIndex >= clips.length ||
+        clips[source.clipIndex].path != source.clip.path) {
+      return;
+    }
+    final target = _editMetas.where((m) => m.id == targetId).firstOrNull;
+    if (target == null || target.kind != TrackKind.pitched) return;
+    _vocalConversionOpen = true;
+    _stopAll();
+    try {
+      final conversion = await showVocalMidiSheet(
+        context,
+        clip: clips[source.clipIndex],
+        bpm: _bpm,
+        bars: section.bars,
+        keyRoot: _keyRoot,
+        scale: _scale,
+        swing: _swing,
+        initialProgram: _instruments[targetId] ?? target.defaultProgram,
+      );
+      if (!mounted || conversion == null || !identical(section, _sec)) return;
+      _pushUndo();
+      setState(() {
+        final id = 'melody_x${DateTime.now().microsecondsSinceEpoch}';
+        addVocalMidiTrack(_sections, section.id, id, conversion);
+        _instruments[id] = conversion.program;
+        _activeId = id;
+        _inputModes[id] = 'grid';
+      });
+    } finally {
+      _vocalConversionOpen = false;
+    }
+  }
+
   // Open the clip editor (trim/fade/gain + sound processing). Returns the
   // edited vocal TrackData; we swap it in, push undo, and re-prepare playback.
-  Future<void> _openVocalEditor() async {
+  Future<void> _openVocalEditor({bool convertImmediately = false}) async {
+    _stopAll();
+    final section = _sec;
     final vid = _vocalId;
     final t = _trackIn(_tracks, vid);
     if (t.effectiveClips.isEmpty) return;
@@ -2331,14 +2378,37 @@ class _EditScreenState extends State<EditScreen>
       bpm: _bpm,
       bars: _sec.bars,
       songId: widget.song.id,
-      sectionId: _sec.id,
+      sectionId: section.id,
+      keyRoot: _keyRoot,
+      scale: _scale,
+      swing: _swing,
+      convertImmediately: convertImmediately,
     );
-    if (edited == null || !mounted) return;
+    if (edited == null || !mounted || !identical(section, _sec)) return;
     _pushUndo();
     _stopVocal();
-    setState(() => _tracks[vid] = edited);
+    setState(() {
+      _tracks[vid] = edited.vocal;
+      final conversion = edited.converted;
+      if (conversion != null) {
+        final id = addVocalMidiTrack(
+          _sections,
+          section.id,
+          'melody_x${DateTime.now().microsecondsSinceEpoch}',
+          conversion,
+          useEmptyMelodyLane: _guided,
+        );
+        _instruments[id] = conversion.program;
+        _activeId = id;
+        _inputModes[id] = 'grid';
+        if (_guided && id != 'melody') {
+          _trackGuidedExit('editor');
+          _guided = false;
+        }
+      }
+    });
     _vocalMix.remove(_sec.id); // edits change the lane → rebounce
-    final first = edited.vocalPath;
+    final first = edited.vocal.vocalPath;
     if (first != null) _audio.prepareVocal(LoopStorage.resolveVocal(first));
   }
 
@@ -2987,14 +3057,33 @@ class _EditScreenState extends State<EditScreen>
                 if (_guided)
                   Positioned.fill(
                     child: GuidedHumPanel(
-                      hasNotes:
-                          _activeTrack.pitchNotes.isNotEmpty ||
-                          (_tracks['vocal']?.effectiveClips.isNotEmpty ??
-                              false),
+                      hasNotes: _tracks.values.any(
+                        (t) =>
+                            t.pitchNotes.isNotEmpty ||
+                            t.drumNotes.isNotEmpty ||
+                            t.effectiveClips.isNotEmpty,
+                      ),
+                      hasMelody:
+                          _tracks['melody']?.pitchNotes.isNotEmpty ?? false,
                       playing: _playing,
                       saved: !_dirty && _savedAt != null,
                       onBack: _backWithSave,
-                      onRecord: _openHum,
+                      onRecord: () {
+                        setState(() => _activeId = 'melody');
+                        _openHum();
+                      },
+                      onRecordVocal: () {
+                        setState(() => _activeId = 'vocal');
+                        _openVocalRecord();
+                      },
+                      onConvertVocal:
+                          (_tracks['vocal']?.effectiveClips.isNotEmpty ?? false)
+                              ? () {
+                                setState(() => _activeId = 'vocal');
+                                _openVocalEditor(convertImmediately: true);
+                              }
+                              : null,
+                      onExport: _exportOrPaywall,
                       onSample: () async {
                         _stopAll();
                         await Navigator.of(context).push(
@@ -3074,40 +3163,34 @@ class _EditScreenState extends State<EditScreen>
                         flex: _desktop ? (_timelineShare * 1000).round() : 2,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
-                          child: ValueListenableBuilder<double>(
-                            valueListenable: _playStep,
-                            builder:
-                                (_, ps, __) => _timelineViewport(
-                                  Arrangement(
-                                    section: _songSection ?? _sec,
-                                    tracks: _orderedMetas(_songSection ?? _sec),
-                                    activeId: _activeId,
-                                    mutes: _mutes,
-                                    onSelect:
-                                        (id) => setState(() => _activeId = id),
-                                    onToggleMute: _toggleMute,
-                                    // editing only (song-preview is read-only)
-                                    onAddTrack:
-                                        _songSection == null
-                                            ? _openAddTrack
-                                            : null,
-                                    onReorder:
-                                        _songSection == null
-                                            ? _reorderTracks
-                                            : null,
-                                    onMoveClip:
-                                        _songSection == null
-                                            ? _moveVocalClip
-                                            : null,
-                                    playing: _playing,
-                                    playStep: _playStep,
-                                    steps: _steps,
-                                    ranges: _ranges,
-                                    // song-preview is read-only → no scrubbing there
-                                    onSeek:
-                                        _songSection == null ? _seekTo : null,
-                                  ),
-                                ),
+                          // Arrangement owns a listenable playhead. Rebuilding
+                          // every lane for each clock tick wastes input frames.
+                          child: _timelineViewport(
+                            Arrangement(
+                              section: _songSection ?? _sec,
+                              tracks: _orderedMetas(_songSection ?? _sec),
+                              activeId: _activeId,
+                              mutes: _mutes,
+                              onSelect: (id) => setState(() => _activeId = id),
+                              onToggleMute: _toggleMute,
+                              // editing only (song-preview is read-only)
+                              onAddTrack:
+                                  _songSection == null ? _openAddTrack : null,
+                              onReorder:
+                                  _songSection == null ? _reorderTracks : null,
+                              onMoveClip:
+                                  _songSection == null ? _moveVocalClip : null,
+                              onConvertClip:
+                                  _desktop && _songSection == null
+                                      ? _convertDroppedClip
+                                      : null,
+                              playing: _playing,
+                              playStep: _playStep,
+                              steps: _steps,
+                              ranges: _ranges,
+                              // song-preview is read-only → no scrubbing there
+                              onSeek: _songSection == null ? _seekTo : null,
+                            ),
                           ),
                         ),
                       ),
@@ -3864,6 +3947,10 @@ class _EditScreenState extends State<EditScreen>
                 : null,
         onClearSong: _songVocalPath != null ? _clearSongVocal : null,
         onEdit: vt.effectiveClips.isNotEmpty ? _openVocalEditor : null,
+        onConvert:
+            vt.effectiveClips.isNotEmpty
+                ? () => _openVocalEditor(convertImmediately: true)
+                : null,
         onAutotune: _openAutotune,
         onRevert: vt.vocalOrigPath != null ? _revertAutotune : null,
         onClear: () {
