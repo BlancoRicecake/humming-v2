@@ -15,6 +15,7 @@ import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import 'paywall_sheet.dart';
+import 'export_library_screen.dart';
 
 Future<void> showExportDrawer(
   BuildContext context, {
@@ -399,6 +400,15 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      TextButton.icon(
+                        onPressed:
+                            _busy == null
+                                ? () => showExportLibrary(context)
+                                : null,
+                        icon: const Icon(Icons.folder_open),
+                        label: Text(l.ltFilesTitle),
+                      ),
+                      const SizedBox(height: 12),
                       // Export scope: whole song, or a single loop (section).
                       if (secCount > 1) ...[
                         Text(

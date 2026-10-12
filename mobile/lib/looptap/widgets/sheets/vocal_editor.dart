@@ -4,6 +4,7 @@
 // network — and honored by export/playback via bounceVocalClips. Heavier DSP
 // (EQ/reverb/comp/delay/stretch/pitch) round-trips the backend /process_fx,
 // which bakes a new WAV and records an FxNode in the clip's history.
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -16,6 +17,8 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../audio/loop_audio.dart';
 import '../../models/loop_models.dart';
 import '../../music/theory.dart';
+import '../../music/vocal_midi.dart';
+import 'vocal_midi_sheet.dart';
 import '../../music/wav_codec.dart';
 import '../../music/wav_export.dart';
 import '../../state/loop_storage.dart';
@@ -24,24 +27,41 @@ import '../../theme/tokens.dart';
 
 /// Opens the editor for [vocal]'s clips and resolves to the edited TrackData,
 /// or null when cancelled. [bpm]/[bars] give the section's grid for placement.
-Future<TrackData?> openVocalEditor(
+class VocalEditorResult {
+  const VocalEditorResult(this.vocal, [this.converted]);
+  final TrackData vocal;
+  final VocalMidiResult? converted;
+}
+
+Future<VocalEditorResult?> openVocalEditor(
   BuildContext context, {
   required TrackData vocal,
   required int bpm,
   required int bars,
   required String songId,
   required String sectionId,
+  required String keyRoot,
+  required String scale,
+  required double swing,
+  bool convertImmediately = false,
 }) {
-  return Navigator.of(context).push<TrackData>(MaterialPageRoute(
-    fullscreenDialog: true,
-    builder: (_) => VocalEditorScreen(
-      vocal: vocal,
-      bpm: bpm,
-      bars: bars,
-      songId: songId,
-      sectionId: sectionId,
+  return Navigator.of(context).push<VocalEditorResult>(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder:
+          (_) => VocalEditorScreen(
+            vocal: vocal,
+            bpm: bpm,
+            bars: bars,
+            songId: songId,
+            sectionId: sectionId,
+            keyRoot: keyRoot,
+            scale: scale,
+            swing: swing,
+            convertImmediately: convertImmediately,
+          ),
     ),
-  ));
+  );
 }
 
 class VocalEditorScreen extends StatefulWidget {
@@ -52,6 +72,10 @@ class VocalEditorScreen extends StatefulWidget {
     required this.bars,
     required this.songId,
     required this.sectionId,
+    required this.keyRoot,
+    required this.scale,
+    required this.swing,
+    this.convertImmediately = false,
   });
 
   final TrackData vocal;
@@ -59,6 +83,9 @@ class VocalEditorScreen extends StatefulWidget {
   final int bars;
   final String songId;
   final String sectionId;
+  final String keyRoot, scale;
+  final double swing;
+  final bool convertImmediately;
 
   @override
   State<VocalEditorScreen> createState() => _VocalEditorScreenState();
@@ -84,6 +111,11 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
     final src = widget.vocal.effectiveClips;
     _clips = src.isEmpty ? [] : [for (final c in src) c.copy()];
     if (_clips.isNotEmpty) _loadSrc(_clip.path);
+    if (widget.convertImmediately && _clips.length == 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_convertToMidi());
+      });
+    }
   }
 
   @override
@@ -135,7 +167,10 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
     final src = _src[c.path];
     if (src == null) return;
     final a = c.trimStart.clamp(0, src.samples.length);
-    final b = (c.trimEnd == -1 ? src.samples.length : c.trimEnd).clamp(a, src.samples.length);
+    final b = (c.trimEnd == -1 ? src.samples.length : c.trimEnd).clamp(
+      a,
+      src.samples.length,
+    );
     if (b - a < 1) return;
     c.peaks = peaksFromPcm(trimPcm(src.samples, a, b), buckets: 64);
   }
@@ -216,14 +251,14 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
   /// Display name for an FX node type (the codes are persisted in the clip's
   /// history, so they stay English on disk and are localized only here).
   String _fxName(L10n l, String type) => switch (type) {
-        'eq' => l.ltFxEq,
-        'reverb' => l.ltFxReverb,
-        'comp' => l.ltFxComp,
-        'delay' => l.ltFxDelay,
-        'stretch' => l.ltFxStretch,
-        'pitch' => l.ltFxPitch,
-        _ => type,
-      };
+    'eq' => l.ltFxEq,
+    'reverb' => l.ltFxReverb,
+    'comp' => l.ltFxComp,
+    'delay' => l.ltFxDelay,
+    'stretch' => l.ltFxStretch,
+    'pitch' => l.ltFxPitch,
+    _ => type,
+  };
 
   // ── server FX (bakes a new WAV + records an FxNode) ───────────────────────
   Future<void> _applyFx(String fxType, Map<String, dynamic> params) async {
@@ -261,9 +296,11 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
       await _loadSrc(persisted); // re-measures durSteps for the new file
     } catch (e) {
       if (mounted) {
-        _toast(e is EngineApiException
-            ? e.message
-            : L10n.of(context).ltVocalEditorProcessFailed);
+        _toast(
+          e is EngineApiException
+              ? e.message
+              : L10n.of(context).ltVocalEditorProcessFailed,
+        );
       }
     } finally {
       if (mounted) {
@@ -301,20 +338,25 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
 
   void _nudgeStart(int deltaSteps) {
     final maxStep = stepsForBars(widget.bars) - 1;
-    setState(() => _clip.startStep = (_clip.startStep + deltaSteps).clamp(0, maxStep));
+    setState(
+      () => _clip.startStep = (_clip.startStep + deltaSteps).clamp(0, maxStep),
+    );
   }
 
   // ── preview (full multi-clip bounce → temp WAV → play) ────────────────────
   Future<void> _preview({bool dryOriginal = false}) async {
-    final clips = dryOriginal
-        ? [for (final c in _clips) (c.copy()..origPathToDry())]
-        : _clips;
+    final clips =
+        dryOriginal
+            ? [for (final c in _clips) (c.copy()..origPathToDry())]
+            : _clips;
     // ensure all sources are loaded
     final sources = <String, ({Float32List pcm, int sampleRate})>{};
     for (final c in clips) {
       await _loadSrc(c.path);
       final s = _src[c.path];
-      if (s != null) sources[c.path] = (pcm: s.samples, sampleRate: s.sampleRate);
+      if (s != null) {
+        sources[c.path] = (pcm: s.samples, sampleRate: s.sampleRate);
+      }
     }
     if (sources.isEmpty) return;
     final lane = bounceVocalClips(clips, widget.bars, widget.bpm, sources);
@@ -327,234 +369,330 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
     await _audio.playVocal(f.path, vol: 1.0);
   }
 
+  Future<void> _convertToMidi() async {
+    if (_busy || _clips.isEmpty) return;
+    _audio.stopVocal();
+    final result = await showVocalMidiSheet(
+      context,
+      clip: _clip,
+      bpm: widget.bpm,
+      bars: widget.bars,
+      keyRoot: widget.keyRoot,
+      scale: widget.scale,
+      swing: widget.swing,
+    );
+    if (mounted && result != null) _done(result);
+  }
+
   // ── save / cancel ─────────────────────────────────────────────────────────
-  void _done() {
+  void _done([VocalMidiResult? converted]) {
     final out = TrackData(clips: _clips);
     // mirror first clip to legacy fields so the surface waveform shows
     if (_clips.isNotEmpty) {
       out.vocalPath = _clips.first.path;
-      out.clip = _clips.first.peaks.isNotEmpty ? _clips.first.peaks : widget.vocal.clip;
+      out.clip =
+          _clips.first.peaks.isNotEmpty
+              ? _clips.first.peaks
+              : widget.vocal.clip;
       out.vocalOrigPath = _clips.first.origPath;
     }
     out.vocalAligned = widget.vocal.vocalAligned;
     out.vocalBpm = widget.vocal.vocalBpm;
     out.vocalBars = widget.vocal.vocalBars;
-    Navigator.of(context).pop(out);
+    Navigator.of(context).pop(VocalEditorResult(out, converted));
   }
 
   void _toast(String m) => ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(m), duration: const Duration(milliseconds: 1600)),
-      );
+    SnackBar(content: Text(m), duration: const Duration(milliseconds: 1600)),
+  );
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: LT.bg,
       body: SafeArea(
-        child: _clips.isEmpty
-            ? Center(
-                child: Text(L10n.of(context).ltVocalEditorNoTake,
-                    style: const TextStyle(color: LT.t2)))
-            : Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _header(),
-                    const SizedBox(height: 10),
-                    _clipLane(), // pinned up top to free vertical space
-                    const SizedBox(height: 10),
-                    // Middle scrolls so the controls never overflow on short
-                    // screens; header + takes + transport stay pinned.
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            SizedBox(height: 132, child: _waveCard()),
-                            const SizedBox(height: 14),
-                            _editGroup(),
-                            const SizedBox(height: 10),
-                            _effectsGroup(),
-                          ],
+        child:
+            _clips.isEmpty
+                ? Center(
+                  child: Text(
+                    L10n.of(context).ltVocalEditorNoTake,
+                    style: const TextStyle(color: LT.t2),
+                  ),
+                )
+                : Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _header(),
+                      const SizedBox(height: 10),
+                      _clipLane(), // pinned up top to free vertical space
+                      const SizedBox(height: 10),
+                      // Middle scrolls so the controls never overflow on short
+                      // screens; header + takes + transport stay pinned.
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(height: 132, child: _waveCard()),
+                              const SizedBox(height: 14),
+                              FilledButton.icon(
+                                onPressed: _busy ? null : _convertToMidi,
+                                icon: const Icon(Icons.piano),
+                                label: Text(L10n.of(context).ltMidiTitle),
+                              ),
+                              Text(L10n.of(context).ltMidiSelectedClip),
+                              const SizedBox(height: 10),
+                              _editGroup(),
+                              const SizedBox(height: 10),
+                              _effectsGroup(),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    _transport(),
-                  ],
+                      const SizedBox(height: 12),
+                      _transport(),
+                    ],
+                  ),
                 ),
-              ),
       ),
     );
   }
 
   // ── reusable bits ─────────────────────────────────────────────────────────
   Widget _group(String title, Widget child, {Widget? trailing}) => Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        decoration: BoxDecoration(
-          color: LT.surface,
-          borderRadius: BorderRadius.circular(LTRadius.card),
-          border: Border.all(color: LT.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+    decoration: BoxDecoration(
+      color: LT.surface,
+      borderRadius: BorderRadius.circular(LTRadius.card),
+      border: Border.all(color: LT.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(children: [
-              LtLabel(title),
-              const Spacer(),
-              if (trailing != null) trailing,
-            ]),
-            const SizedBox(height: 9),
-            child,
+            LtLabel(title),
+            const Spacer(),
+            if (trailing != null) trailing,
           ],
         ),
-      );
+        const SizedBox(height: 9),
+        child,
+      ],
+    ),
+  );
 
   Widget _header() {
     final l = L10n.of(context);
     return Row(
-        children: [
-          IconBtn(icon: LtIcons.close, tooltip: l.cancel, onTap: () => Navigator.of(context).pop()),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(l.ltVocalEditorTitle,
-                  style: LTType.inter(size: 17, weight: FontWeight.w800, color: LT.t1)),
-              Text(l.ltVocalEditorMeta(_clips.length, widget.bpm, widget.bars),
-                  style: LTType.mono(size: 11, weight: FontWeight.w600, color: LT.t3)),
-            ],
-          ),
-          const Spacer(),
-          if (_status.isNotEmpty) ...[
-            const SizedBox(
-                width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: LT.pink)),
-            const SizedBox(width: 8),
-            Text(_status, style: LTType.mono(size: 12, weight: FontWeight.w600, color: LT.pink)),
-            const SizedBox(width: 12),
+      children: [
+        IconBtn(
+          icon: LtIcons.close,
+          tooltip: l.cancel,
+          onTap: () => Navigator.of(context).pop(),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              l.ltVocalEditorTitle,
+              style: LTType.inter(
+                size: 17,
+                weight: FontWeight.w800,
+                color: LT.t1,
+              ),
+            ),
+            Text(
+              l.ltVocalEditorMeta(_clips.length, widget.bpm, widget.bars),
+              style: LTType.mono(
+                size: 11,
+                weight: FontWeight.w600,
+                color: LT.t3,
+              ),
+            ),
           ],
-          Pill(label: l.done, icon: LtIcons.checkCircle, tone: PillTone.lime, height: 40, onTap: _done),
+        ),
+        const Spacer(),
+        if (_status.isNotEmpty) ...[
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2, color: LT.pink),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _status,
+            style: LTType.mono(
+              size: 12,
+              weight: FontWeight.w600,
+              color: LT.pink,
+            ),
+          ),
+          const SizedBox(width: 12),
         ],
-      );
+        Pill(
+          label: l.done,
+          icon: LtIcons.checkCircle,
+          tone: PillTone.lime,
+          height: 40,
+          onTap: _done,
+        ),
+      ],
+    );
   }
 
   Widget _clipLane() {
     final l = L10n.of(context);
     return SizedBox(
-        height: 38,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          itemCount: _clips.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
-          itemBuilder: (_, i) {
-            final sel = i == _sel;
-            final c = _clips[i];
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  _sel = i;
-                  _selA = _selB = null;
-                });
-                _loadSrc(c.path);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: sel ? LT.pink : LT.surface2,
-                  borderRadius: BorderRadius.circular(LTRadius.pill),
-                  border: Border.all(color: sel ? Colors.transparent : LT.border),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
+      height: 38,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _clips.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final sel = i == _sel;
+          final c = _clips[i];
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _sel = i;
+                _selA = _selB = null;
+              });
+              _loadSrc(c.path);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: sel ? LT.pink : LT.surface2,
+                borderRadius: BorderRadius.circular(LTRadius.pill),
+                border: Border.all(color: sel ? Colors.transparent : LT.border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   Ms(LtIcons.mic, size: 13, color: sel ? LT.bg : LT.t2),
                   const SizedBox(width: 6),
-                  Text(l.ltVocalEditorTake(i + 1),
-                      style: LTType.inter(
-                          size: 12, weight: FontWeight.w700, color: sel ? LT.bg : LT.t1)),
+                  Text(
+                    l.ltVocalEditorTake(i + 1),
+                    style: LTType.inter(
+                      size: 12,
+                      weight: FontWeight.w700,
+                      color: sel ? LT.bg : LT.t1,
+                    ),
+                  ),
                   if (c.fx.isNotEmpty) ...[
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
                       decoration: BoxDecoration(
                         color: (sel ? LT.bg : LT.pink).withValues(alpha: 0.18),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text(l.ltVocalEditorFxCount(c.fx.length),
-                          style: LTType.mono(
-                              size: 9, weight: FontWeight.w700, color: sel ? LT.bg : LT.pink)),
+                      child: Text(
+                        l.ltVocalEditorFxCount(c.fx.length),
+                        style: LTType.mono(
+                          size: 9,
+                          weight: FontWeight.w700,
+                          color: sel ? LT.bg : LT.pink,
+                        ),
+                      ),
                     ),
                   ],
-                ]),
+                ],
               ),
-            );
-          },
-        ),
-      );
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Widget _waveCard() {
     final src = _curSrc;
     final n = src?.samples.length ?? 1;
-    return LayoutBuilder(builder: (context, c) {
-      return GestureDetector(
-        onHorizontalDragStart: (d) => setState(() {
-          _selA = (d.localPosition.dx / c.maxWidth).clamp(0.0, 1.0);
-          _selB = _selA;
-        }),
-        onHorizontalDragUpdate: (d) =>
-            setState(() => _selB = (d.localPosition.dx / c.maxWidth).clamp(0.0, 1.0)),
-        onTap: () => setState(() => _selA = _selB = null),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF181012), Color(0xFF120E10)],
-            ),
-            borderRadius: BorderRadius.circular(LTRadius.card),
-            border: Border.all(color: LT.border),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(children: [
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _WavePainter(
-                  // full source so the trim window stays adjustable; falls back
-                  // to the stored (trimmed) peaks until the source loads.
-                  peaks: src != null
-                      ? peaksFromPcm(src.samples, buckets: 220)
-                      : _clip.peaks,
-                  trimStart: n == 0 ? 0 : _clip.trimStart / n,
-                  trimEnd: _clip.trimEnd == -1 ? 1.0 : (n == 0 ? 1.0 : _clip.trimEnd / n),
-                  selA: _selA,
-                  selB: _selB,
-                  fadeIn: _clip.fadeInMs,
-                  fadeOut: _clip.fadeOutMs,
-                ),
+    return LayoutBuilder(
+      builder: (context, c) {
+        return GestureDetector(
+          onHorizontalDragStart:
+              (d) => setState(() {
+                _selA = (d.localPosition.dx / c.maxWidth).clamp(0.0, 1.0);
+                _selB = _selA;
+              }),
+          onHorizontalDragUpdate:
+              (d) => setState(
+                () => _selB = (d.localPosition.dx / c.maxWidth).clamp(0.0, 1.0),
               ),
+          onTap: () => setState(() => _selA = _selB = null),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF181012), Color(0xFF120E10)],
+              ),
+              borderRadius: BorderRadius.circular(LTRadius.card),
+              border: Border.all(color: LT.border),
             ),
-            // caption row: hint + live edit readout
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 8,
-              child: Row(children: [
-                Text(
-                  (_selA != null && _selB != null)
-                      ? L10n.of(context).ltVocalEditorDragSet
-                      : L10n.of(context).ltVocalEditorDragHint,
-                  style: LTType.mono(size: 10, weight: FontWeight.w600, color: LT.t3),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _WavePainter(
+                      // full source so the trim window stays adjustable; falls back
+                      // to the stored (trimmed) peaks until the source loads.
+                      peaks:
+                          src != null
+                              ? peaksFromPcm(src.samples, buckets: 220)
+                              : _clip.peaks,
+                      trimStart: n == 0 ? 0 : _clip.trimStart / n,
+                      trimEnd:
+                          _clip.trimEnd == -1
+                              ? 1.0
+                              : (n == 0 ? 1.0 : _clip.trimEnd / n),
+                      selA: _selA,
+                      selB: _selB,
+                      fadeIn: _clip.fadeInMs,
+                      fadeOut: _clip.fadeOutMs,
+                    ),
+                  ),
                 ),
-                const Spacer(),
-                _readout(),
-              ]),
+                // caption row: hint + live edit readout
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 8,
+                  child: Row(
+                    children: [
+                      Text(
+                        (_selA != null && _selB != null)
+                            ? L10n.of(context).ltVocalEditorDragSet
+                            : L10n.of(context).ltVocalEditorDragHint,
+                        style: LTType.mono(
+                          size: 10,
+                          weight: FontWeight.w600,
+                          color: LT.t3,
+                        ),
+                      ),
+                      const Spacer(),
+                      _readout(),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ]),
-        ),
-      );
-    });
+          ),
+        );
+      },
+    );
   }
 
   Widget _readout() {
@@ -571,108 +709,159 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
     }
     if (_clip.gain != 1.0) parts.add('${_gainDb()}dB');
     if (parts.isEmpty) return const SizedBox.shrink();
-    return Text(parts.join(' · '),
-        style: LTType.mono(size: 10, weight: FontWeight.w700, color: LT.pink));
+    return Text(
+      parts.join(' · '),
+      style: LTType.mono(size: 10, weight: FontWeight.w700, color: LT.pink),
+    );
   }
 
   Widget _editGroup() {
     final l = L10n.of(context);
     return _group(
-        l.ltVocalEditorEditGroup,
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
+      l.ltVocalEditorEditGroup,
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          _tool(
+            l.ltVocalEditorTrim,
+            LtIcons.straighten,
+            (_selA != null && _selB != null) ? _trimToSelection : null,
+          ),
+          _tool(
+            l.ltVocalEditorFadeIn(_clip.fadeInMs),
+            LtIcons.chevronRight,
+            () => _bumpFade(fadeIn: true),
+          ),
+          _tool(
+            l.ltVocalEditorFadeOut(_clip.fadeOutMs),
+            LtIcons.chevronLeft,
+            () => _bumpFade(fadeIn: false),
+          ),
+          _tool(l.ltVocalEditorGainDown, LtIcons.remove, () => _bumpGain(-1)),
+          _tool('${_gainDb()} dB', LtIcons.volumeUp, null),
+          _tool(l.ltVocalEditorGainUp, LtIcons.add, () => _bumpGain(1)),
+          _tool(
+            l.ltVocalEditorNormalize,
+            LtIcons.tune,
+            _curSrc == null ? null : _normalize,
+          ),
+        ],
+      ),
+      trailing: GestureDetector(
+        onTap: _resetEdits,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _tool(l.ltVocalEditorTrim, LtIcons.straighten,
-                (_selA != null && _selB != null) ? _trimToSelection : null),
-            _tool(l.ltVocalEditorFadeIn(_clip.fadeInMs), LtIcons.chevronRight, () => _bumpFade(fadeIn: true)),
-            _tool(l.ltVocalEditorFadeOut(_clip.fadeOutMs), LtIcons.chevronLeft, () => _bumpFade(fadeIn: false)),
-            _tool(l.ltVocalEditorGainDown, LtIcons.remove, () => _bumpGain(-1)),
-            _tool('${_gainDb()} dB', LtIcons.volumeUp, null),
-            _tool(l.ltVocalEditorGainUp, LtIcons.add, () => _bumpGain(1)),
-            _tool(l.ltVocalEditorNormalize, LtIcons.tune, _curSrc == null ? null : _normalize),
-          ],
-        ),
-        trailing: GestureDetector(
-          onTap: _resetEdits,
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
             const Ms(LtIcons.undo, size: 13, color: LT.t3),
             const SizedBox(width: 4),
-            Text(l.ltVocalEditorReset,
-                style: LTType.mono(size: 10, weight: FontWeight.w700, color: LT.t3)),
-          ]),
+            Text(
+              l.ltVocalEditorReset,
+              style: LTType.mono(
+                size: 10,
+                weight: FontWeight.w700,
+                color: LT.t3,
+              ),
+            ),
+          ],
         ),
-      );
+      ),
+    );
   }
 
   Widget _effectsGroup() {
     final l = L10n.of(context);
     return _group(
-        l.ltVocalEditorEffectsGroup,
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _fxBtn(l.ltFxEq, 'eq', {'low': 3.0, 'mid': 0.0, 'high': 4.0}),
-                _fxBtn(l.ltFxReverb, 'reverb', {'wet': 0.3, 'decay': 1.4}),
-                _fxBtn(l.ltFxComp, 'comp', {'threshold': -18.0, 'ratio': 3.0}),
-                _fxBtn(l.ltFxDelay, 'delay', {'time': 300.0, 'feedback': 0.35, 'wet': 0.3}),
-                _fxBtn(l.ltFxSlower, 'stretch', {'ratio': 1.2}),
-                _fxBtn(l.ltFxFaster, 'stretch', {'ratio': 0.85}),
-                _fxBtn(l.ltFxPitchUp, 'pitch', {'semitones': 2.0}),
-                _fxBtn(l.ltFxPitchDown, 'pitch', {'semitones': -2.0}),
-              ],
-            ),
-            if (_clip.fx.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Container(height: 1, color: LT.border),
-              const SizedBox(height: 10),
-              _fxChain(),
+      l.ltVocalEditorEffectsGroup,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _fxBtn(l.ltFxEq, 'eq', {'low': 3.0, 'mid': 0.0, 'high': 4.0}),
+              _fxBtn(l.ltFxReverb, 'reverb', {'wet': 0.3, 'decay': 1.4}),
+              _fxBtn(l.ltFxComp, 'comp', {'threshold': -18.0, 'ratio': 3.0}),
+              _fxBtn(l.ltFxDelay, 'delay', {
+                'time': 300.0,
+                'feedback': 0.35,
+                'wet': 0.3,
+              }),
+              _fxBtn(l.ltFxSlower, 'stretch', {'ratio': 1.2}),
+              _fxBtn(l.ltFxFaster, 'stretch', {'ratio': 0.85}),
+              _fxBtn(l.ltFxPitchUp, 'pitch', {'semitones': 2.0}),
+              _fxBtn(l.ltFxPitchDown, 'pitch', {'semitones': -2.0}),
             ],
+          ),
+          if (_clip.fx.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(height: 1, color: LT.border),
+            const SizedBox(height: 10),
+            _fxChain(),
           ],
-        ),
-        trailing: Text(l.ltVocalEditorServerTag,
-            style: LTType.mono(size: 9, weight: FontWeight.w700, color: LT.t3)),
-      );
+        ],
+      ),
+      trailing: Text(
+        l.ltVocalEditorServerTag,
+        style: LTType.mono(size: 9, weight: FontWeight.w700, color: LT.t3),
+      ),
+    );
   }
 
   Widget _fxChain() {
     final l = L10n.of(context);
     return Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          for (var i = 0; i < _clip.fx.length; i++)
-            GestureDetector(
-              onTap: () => _removeFx(i),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: LT.pink.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(LTRadius.pill),
-                  border: Border.all(color: LT.pink.withValues(alpha: 0.4)),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text(l.ltVocalEditorFxChainItem(i + 1, _fxName(l, _clip.fx[i].type)),
-                      style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.t1)),
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (var i = 0; i < _clip.fx.length; i++)
+          GestureDetector(
+            onTap: () => _removeFx(i),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: LT.pink.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(LTRadius.pill),
+                border: Border.all(color: LT.pink.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    l.ltVocalEditorFxChainItem(
+                      i + 1,
+                      _fxName(l, _clip.fx[i].type),
+                    ),
+                    style: LTType.mono(
+                      size: 11,
+                      weight: FontWeight.w700,
+                      color: LT.t1,
+                    ),
+                  ),
                   const SizedBox(width: 6),
                   const Ms(LtIcons.close, size: 13, color: LT.pink),
-                ]),
+                ],
               ),
             ),
-        ],
-      );
+          ),
+      ],
+    );
   }
 
   Widget _tool(String label, IconData icon, VoidCallback? onTap) => Opacity(
-        opacity: onTap == null ? 0.4 : 1,
-        child: Pill(label: label, icon: icon, tone: PillTone.surface, height: 36, onTap: onTap),
-      );
+    opacity: onTap == null ? 0.4 : 1,
+    child: Pill(
+      label: label,
+      icon: icon,
+      tone: PillTone.surface,
+      height: 36,
+      onTap: onTap,
+    ),
+  );
 
-  Widget _fxBtn(String label, String fx, Map<String, dynamic> params) => Opacity(
+  Widget _fxBtn(String label, String fx, Map<String, dynamic> params) =>
+      Opacity(
         opacity: _busy ? 0.4 : 1,
         child: Pill(
           label: label,
@@ -687,61 +876,84 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
   Widget _transport() {
     final l = L10n.of(context);
     return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: LT.surface,
-          borderRadius: BorderRadius.circular(LTRadius.card),
-          border: Border.all(color: LT.border),
-        ),
-        child: Row(
-          children: [
-            IconBtn(
-                icon: LtIcons.playArrow,
-                tooltip: l.ltVocalEditorPreview,
-                size: 46,
-                onTap: () => _preview()),
-            const SizedBox(width: 8),
-            IconBtn(icon: LtIcons.stop, tooltip: l.pendingStop, size: 46, onTap: _audio.stopVocal),
-            const SizedBox(width: 8),
-            Pill(label: 'A / B', icon: LtIcons.restore, height: 42, onTap: () => _preview(dryOriginal: true)),
-            const Spacer(),
-            // clip timing nudge
-            Container(
-              decoration: BoxDecoration(
-                color: LT.surface2,
-                borderRadius: BorderRadius.circular(LTRadius.pill),
-                border: Border.all(color: LT.border),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: LT.surface,
+        borderRadius: BorderRadius.circular(LTRadius.card),
+        border: Border.all(color: LT.border),
+      ),
+      child: Row(
+        children: [
+          IconBtn(
+            icon: LtIcons.playArrow,
+            tooltip: l.ltVocalEditorPreview,
+            size: 46,
+            onTap: () => _preview(),
+          ),
+          const SizedBox(width: 8),
+          IconBtn(
+            icon: LtIcons.stop,
+            tooltip: l.pendingStop,
+            size: 46,
+            onTap: _audio.stopVocal,
+          ),
+          const SizedBox(width: 8),
+          Pill(
+            label: 'A / B',
+            icon: LtIcons.restore,
+            height: 42,
+            onTap: () => _preview(dryOriginal: true),
+          ),
+          const Spacer(),
+          // clip timing nudge
+          Container(
+            decoration: BoxDecoration(
+              color: LT.surface2,
+              borderRadius: BorderRadius.circular(LTRadius.pill),
+              border: Border.all(color: LT.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 IconBtn(
-                    icon: LtIcons.chevronLeft,
-                    tooltip: l.ltVocalEditorEarlier,
-                    size: 38,
-                    onTap: () => _nudgeStart(-1)),
+                  icon: LtIcons.chevronLeft,
+                  tooltip: l.ltVocalEditorEarlier,
+                  size: 38,
+                  onTap: () => _nudgeStart(-1),
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(l.ltVocalEditorStep(_clip.startStep),
-                      style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.t1)),
+                  child: Text(
+                    l.ltVocalEditorStep(_clip.startStep),
+                    style: LTType.mono(
+                      size: 11,
+                      weight: FontWeight.w700,
+                      color: LT.t1,
+                    ),
+                  ),
                 ),
                 IconBtn(
-                    icon: LtIcons.chevronRight,
-                    tooltip: l.ltVocalEditorLater,
-                    size: 38,
-                    onTap: () => _nudgeStart(1)),
-              ]),
+                  icon: LtIcons.chevronRight,
+                  tooltip: l.ltVocalEditorLater,
+                  size: 38,
+                  onTap: () => _nudgeStart(1),
+                ),
+              ],
             ),
-            if (_clips.length > 1) ...[
-              const SizedBox(width: 8),
-              IconBtn(
-                  icon: LtIcons.delete,
-                  tooltip: l.ltVocalEditorDeleteTake,
-                  size: 42,
-                  color: LT.danger,
-                  onTap: () => _deleteClip(_sel)),
-            ],
+          ),
+          if (_clips.length > 1) ...[
+            const SizedBox(width: 8),
+            IconBtn(
+              icon: LtIcons.delete,
+              tooltip: l.ltVocalEditorDeleteTake,
+              size: 42,
+              color: LT.danger,
+              onTap: () => _deleteClip(_sel),
+            ),
           ],
-        ),
-      );
+        ],
+      ),
+    );
   }
 
   String _gainDb() {
@@ -787,8 +999,11 @@ class _WavePainter extends CustomPainter {
     final w = size.width;
 
     // faint center baseline
-    canvas.drawLine(Offset(0, mid), Offset(w, mid),
-        Paint()..color = LT.t1.withValues(alpha: 0.06));
+    canvas.drawLine(
+      Offset(0, mid),
+      Offset(w, mid),
+      Paint()..color = LT.t1.withValues(alpha: 0.06),
+    );
 
     // dim outside the trim window
     final dim = Paint()..color = Colors.black.withValues(alpha: 0.45);
@@ -802,7 +1017,8 @@ class _WavePainter extends CustomPainter {
         final frac = (i + 0.5) / peaks.length;
         final inTrim = frac >= trimStart && frac <= trimEnd;
         final h = (peaks[i].clamp(0.0, 1.0)) * (size.height * 0.44);
-        final bar = Paint()..color = inTrim ? LT.pink : LT.t3.withValues(alpha: 0.5);
+        final bar =
+            Paint()..color = inTrim ? LT.pink : LT.t3.withValues(alpha: 0.5);
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromLTWH(i * bw + bw * 0.1, mid - h, bw * 0.8, h * 2),
@@ -814,9 +1030,10 @@ class _WavePainter extends CustomPainter {
     }
 
     // fade ramps drawn as guide lines from the trim edges
-    final fadePaint = Paint()
-      ..color = LT.lime.withValues(alpha: 0.85)
-      ..strokeWidth = 1.5;
+    final fadePaint =
+        Paint()
+          ..color = LT.lime.withValues(alpha: 0.85)
+          ..strokeWidth = 1.5;
     if (fadeIn > 0) {
       final x0 = trimStart * w;
       final x1 = x0 + (fadeIn / 3000).clamp(0.0, 0.4) * w;
@@ -833,10 +1050,13 @@ class _WavePainter extends CustomPainter {
       final a = (selA! < selB! ? selA! : selB!) * w;
       final b = (selA! < selB! ? selB! : selA!) * w;
       canvas.drawRect(
-          Rect.fromLTRB(a, 0, b, size.height), Paint()..color = LT.lime.withValues(alpha: 0.18));
-      final edge = Paint()
-        ..color = LT.lime
-        ..strokeWidth = 2;
+        Rect.fromLTRB(a, 0, b, size.height),
+        Paint()..color = LT.lime.withValues(alpha: 0.18),
+      );
+      final edge =
+          Paint()
+            ..color = LT.lime
+            ..strokeWidth = 2;
       canvas.drawLine(Offset(a, 0), Offset(a, size.height), edge);
       canvas.drawLine(Offset(b, 0), Offset(b, size.height), edge);
       // grab handles

@@ -54,7 +54,7 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
    - 회사는 결제 직후 첫 Pro 기능 사용 직전에 위 사실을 사용자에게 명확히 표시(consent surface)합니다. 사용자가 "즉시 사용에 동의하며 철회권이 제한됨을 확인"하는 명시적 동의를 제공하기 전에는 Pro 기능을 활성화하지 않습니다.
 3. **7일 무료 체험 (Introductory Offer)**:
    - 체험 기간 중에는 결제가 발생하지 않으므로 환불 대상이 아닙니다.
-   - 체험 종료 후 자동으로 첫 결제가 발생한 직후, **Pro 기능을 사용하지 않은 상태**에서는 결제일로부터 7일 이내 회사 (`heobusy@gmail.com`) 또는 스토어에 요청 시 환불을 검토합니다.
+   - 체험 종료 후 자동으로 첫 결제가 발생한 직후, **Pro 기능을 사용하지 않은 상태**에서는 결제일로부터 7일 이내 회사 (`humtrack@gmail.com`) 또는 스토어에 요청 시 환불을 검토합니다.
 
 #### EU 소비자권리지침 (2011/83/EU)
 
@@ -79,7 +79,7 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
 
 ### 5. 미성년자 결제 취소
 
-만 19세 미만 회원이 법정대리인의 동의 없이 결제한 경우, 「민법」 제5조에 따라 법정대리인은 결제를 취소할 수 있습니다. 다만 회사는 결제 카드 정보를 직접 보유하지 않으므로, 실제 환불 처리는 Apple / Google 의 환불 절차를 통해 진행됩니다. `heobusy@gmail.com` 으로 미성년자 결제임을 통보해 주시면 회사가 스토어 환불 요청을 적극 지원합니다.
+만 19세 미만 회원이 법정대리인의 동의 없이 결제한 경우, 「민법」 제5조에 따라 법정대리인은 결제를 취소할 수 있습니다. 다만 회사는 결제 카드 정보를 직접 보유하지 않으므로, 실제 환불 처리는 Apple / Google 의 환불 절차를 통해 진행됩니다. `humtrack@gmail.com` 으로 미성년자 결제임을 통보해 주시면 회사가 스토어 환불 요청을 적극 지원합니다.
 
 ### 6. 회사가 직접 환불을 검토하는 케이스
 
@@ -89,7 +89,7 @@ HumTrack Pro 구독은 **Apple App Store 또는 Google Play 의 인앱결제(IAP
 2. **회사 측 서비스 장애**: 회사 측 원인으로 **연속 7일 이상** 핵심 기능(허밍 분석, 또는 Pro 전용 기능인 WAV/MIDI/스템 내보내기·곡 무제한 저장) 사용 불가
 3. **회사가 약관을 중대하게 위반**한 경우
 
-요청 채널: `heobusy@gmail.com`
+요청 채널: `humtrack@gmail.com`
 - 첨부: 스토어 영수증 ID, 발생 일시, 증빙 자료 (스크린샷 등)
 - **SLA**: 영업일 기준 5일 이내 1차 회신, 필요 시 추가 조사 후 14일 이내 최종 결정
 
@@ -147,7 +147,7 @@ Canceling your subscription stops the **next** renewal; it does **not** trigger 
 For **annual** auto-renewals, we send a pre-renewal notice via your registered email or app push at least **7 days** before the renewal charge, per the 2022 amendment to the Korean Electronic Commerce Act Enforcement Decree. Monthly subscriptions are not mandated but we may send courtesy notifications.
 
 ### 5. Minors
-Purchases by minors under 19 (Korea) without parental consent may be voidable under Korean Civil Code §5. We do not hold the payment instrument; the actual refund is processed by Apple/Google. Email `heobusy@gmail.com` and we will assist with the store refund request.
+Purchases by minors under 19 (Korea) without parental consent may be voidable under Korean Civil Code §5. We do not hold the payment instrument; the actual refund is processed by Apple/Google. Email `humtrack@gmail.com` and we will assist with the store refund request.
 
 ### 6. Company-Initiated Refund Review
 We do not run our own billing. Where store-level refunds fall short, we may **supplement** with goodwill compensation (e.g., extra free time) for:
@@ -155,7 +155,7 @@ We do not run our own billing. Where store-level refunds fall short, we may **su
 2. Service outage caused by us lasting **7+ consecutive days** affecting core features (humming analysis, or the Pro-only WAV/MIDI/stem export and unlimited saved songs).
 3. Material breach of these Terms by us.
 
-Submit to `heobusy@gmail.com` with store receipt ID, timestamp, evidence. **SLA: first response within 5 business days; final decision within 14 days.**
+Submit to `humtrack@gmail.com` with store receipt ID, timestamp, evidence. **SLA: first response within 5 business days; final decision within 14 days.**
 
 ### 7. Non-Refundable
 - Change of mind beyond statutory withdrawal windows.
@@ -181,5 +181,5 @@ Refund or cancellation does **not** delete your data. Your songs, vocals and MID
 
 ## 연락처
 
-- **이메일**: heobusy@gmail.com
+- **이메일**: humtrack@gmail.com
 - **운영자**: 에르모세아르 / 대표 김동현

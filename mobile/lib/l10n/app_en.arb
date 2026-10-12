@@ -840,5 +840,52 @@
   "@ltMelodyConfidence": {"placeholders": {"percent": {"type": "int"}}},
   "ltMelodyNoIssues": "No notes need attention.",
   "ltMelodyLocked": "Lock my melody",
-  "ltMelodyLockedHint": "Changing the backing will keep this melody."
+  "ltMelodyLockedHint": "Changing the backing will keep this melody.",
+  "ltFirstSongTitle": "Make your first song",
+  "ltFirstSongHint": "Hum → add backing → save\nStart free, no sign-in needed."
+,
+
+  "ltFilesTitle": "Exported files",
+  "ltFilesHint": "Files stay here after sharing. Choose Save to files to select a folder outside HumTrack.",
+  "ltFilesIosHint": "Files stay here after sharing. Tap Share again, then Save to Files in the share sheet.",
+  "ltFilesEmpty": "No exported files yet.",
+  "ltFilesShare": "Share again",
+  "ltFilesSave": "Save to files",
+  "ltFilesSaved": "Saved to the location you selected.",
+  "ltFilesSaveCancelled": "Saving cancelled. Your export is still here.",
+  "ltFilesActionFailed": "Could not save or share this file. Your export remains here; try again.",
+  "ltFilesLoadFailed": "Could not load exported files. Tap refresh to retry."
+,
+
+  "ltMidiTitle": "Convert to MIDI",
+  "ltMidiHint": "Turn one sung melody into an instrument track. Your original vocal stays unchanged. Only this trimmed clip is sent to the server for analysis. Mixed voices or backing music may not convert accurately.",
+  "ltMidiPiano": "Piano",
+  "ltMidiGuitar": "Guitar",
+  "ltMidiSynth": "Synth",
+  "ltMidiConvert": "Convert",
+  "ltMidiAnalyzing": "Analyzing your vocal… You can cancel safely.",
+  "ltMidiInvalidAudio": "This clip has no readable audio. Try another take.",
+  "ltMidiOutsideSection": "The clip extends beyond this section. Trim or move it inside the section before converting.",
+  "ltMidiFailed": "Could not analyze the vocal. Your original is safe. Check your connection and retry.",
+  "ltMidiPreviewFailed": "Could not play the preview. You can retry.",
+  "ltMidiRawPitch": "Use original pitches",
+  "ltMidiOctaveDown": "Lower octave",
+  "ltMidiOctaveUp": "Raise octave",
+  "ltMidiOctave": "Octave: {value}",
+  "ltMidiOriginal": "Listen to vocal",
+  "ltMidiInstrument": "Listen to instrument",
+  "ltMidiStop": "Stop preview",
+  "ltMidiAddTrack": "Add instrument track",
+  "ltMidiSelectedClip": "Convert this trimmed take",
+  "@ltMidiOctave": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  }
+,
+  "ltMidiTargetSound": "Dropped track sound"
+,
+  "ltGuidedKeepVocal": "Keep my voice recording"
 }

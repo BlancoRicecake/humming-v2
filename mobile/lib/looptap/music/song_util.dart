@@ -3,10 +3,9 @@
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:path_provider/path_provider.dart';
-
 import '../../audio/backup_exclusion.dart';
 import '../models/loop_models.dart';
+import '../state/loop_storage.dart';
 import 'theory.dart';
 
 /// A whole song flattened to one timeline (sections in order × repeats).
@@ -48,7 +47,9 @@ FlatSong flattenSong(List<Section> sections) {
       if (n.step < 0 || n.step >= secSteps) continue;
       final dur = math.min(n.dur, secSteps - n.step);
       if (dur <= 0) continue;
-      out.add(PitchNote(midi: n.midi, freq: n.freq, step: n.step + off, dur: dur));
+      out.add(
+        PitchNote(midi: n.midi, freq: n.freq, step: n.step + off, dur: dur),
+      );
     }
   }
 
@@ -84,8 +85,16 @@ FlatSong flattenSong(List<Section> sections) {
       off += st;
     }
   }
-  return FlatSong(m, b, d, math.max(16, off),
-      melodyDec: md, beatDec: bd, extraPitched: exP, extraDrums: exD);
+  return FlatSong(
+    m,
+    b,
+    d,
+    math.max(16, off),
+    melodyDec: md,
+    beatDec: bd,
+    extraPitched: exP,
+    extraDrums: exD,
+  );
 }
 
 /// 30-bar waveform thumbnail (screens.jsx buildWave) from a flattened song.
@@ -97,7 +106,14 @@ List<double> buildWave(FlatSong flat) {
   }
 
   for (final n in flat.drums) {
-    bump(n.step, n.kind == 'kick' ? 0.55 : n.kind == 'snare' ? 0.42 : 0.18);
+    bump(
+      n.step,
+      n.kind == 'kick'
+          ? 0.55
+          : n.kind == 'snare'
+          ? 0.42
+          : 0.18,
+    );
   }
   for (final n in flat.beatDec) {
     bump(n.step, 0.14);
@@ -138,7 +154,9 @@ List<PitchNote> genBass(List<Rung> bassLadder, int bars) {
   for (var bar = 0; bar < bars; bar++) {
     final n = bassLadder[const [0, 0, 2, 3][bar % 4]];
     for (final o in const [0, 8]) {
-      out.add(PitchNote(midi: n.midi, freq: n.freq, step: bar * 16 + o, dur: 4));
+      out.add(
+        PitchNote(midi: n.midi, freq: n.freq, step: bar * 16 + o, dur: 4),
+      );
     }
   }
   return out;
@@ -177,7 +195,7 @@ String exportFileName(String title, {String fallback = 'loop'}) {
 /// song, so it must not eat the user's iCloud quota. The exclusion is best
 /// effort and never throws — an export must never fail because of it.
 Future<Directory> exportsFolder() async {
-  final dir = await getApplicationDocumentsDirectory();
+  final dir = await LoopStorage.documentsDirectory();
   final folder = Directory('${dir.path}/looptap/exports');
   if (!await folder.exists()) await folder.create(recursive: true);
   await excludeFromBackup(folder.path);

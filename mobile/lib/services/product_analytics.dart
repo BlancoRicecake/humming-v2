@@ -15,6 +15,11 @@ abstract interface class ProductAnalyticsSink {
 }
 
 abstract final class ProductEvent {
+  static const firstSongPromptViewed = 'first_song_prompt_viewed';
+  static const guidedExited = 'guided_exited';
+  static const paywallClosed = 'paywall_closed';
+  static const restoreStarted = 'restore_started';
+  static const restoreCompleted = 'restore_completed';
   static const appStarted = 'app_started';
   static const signedIn = 'signed_in';
   static const guidedStarted = 'guided_started';
@@ -40,6 +45,11 @@ abstract final class ProductEvent {
   static const purchaseRestored = 'purchase_restored';
 
   static const allowed = <String>{
+    firstSongPromptViewed,
+    guidedExited,
+    paywallClosed,
+    restoreStarted,
+    restoreCompleted,
     appStarted,
     signedIn,
     guidedStarted,
@@ -92,7 +102,28 @@ class ProductAnalytics {
       'hum_recording',
       'vocal_recording',
     },
-    'entry_source': {'new_song', 'export', 'songQuota', 'upgrade'},
+    'entry_source': {
+      'first_song',
+      'new_song',
+      'editor',
+      'export',
+      'songQuota',
+      'upgrade',
+    },
+    'stage': {'empty', 'music', 'backing', 'saved'},
+    'exit_reason': {'back', 'editor'},
+    'save_method': {'manual', 'autosave', 'back'},
+    'outcome': {
+      'dismissed',
+      'purchased',
+      'restored',
+      'alreadyActive',
+      'nothingFound',
+      'error',
+      'auth_cancelled',
+      'pending',
+      'in_progress',
+    },
     'error_code': {
       'unknown',
       'no_notes',

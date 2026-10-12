@@ -300,4 +300,54 @@ void main() {
       'storeError',
     ]);
   });
+  test(
+    'new funnel events accept fixed outcomes and reject user content',
+    () async {
+      final sink = _FakeSink();
+      final analytics = ProductAnalytics(sinks: [sink]);
+      for (final name in [
+        ProductEvent.firstSongPromptViewed,
+        ProductEvent.guidedExited,
+        ProductEvent.paywallClosed,
+        ProductEvent.restoreStarted,
+        ProductEvent.restoreCompleted,
+      ]) {
+        await analytics.track(
+          name,
+          properties: const {
+            'entry_source': 'first_song',
+            'stage': 'saved',
+            'save_method': 'back',
+            'exit_reason': 'editor',
+            'outcome': 'auth_cancelled',
+            'email': 'person@example.com',
+            'song_title': 'private song',
+            'audio_path': '/private/recording.wav',
+          },
+        );
+      }
+      expect(sink.events, hasLength(5));
+      for (final event in sink.events) {
+        expect(event.$2['outcome'], 'auth_cancelled');
+        expect(event.$2['stage'], 'saved');
+        expect(event.$2.keys, isNot(contains('email')));
+        expect(event.$2.keys, isNot(contains('song_title')));
+        expect(event.$2.keys, isNot(contains('audio_path')));
+      }
+      await analytics.track(
+        ProductEvent.guidedExited,
+        properties: const {
+          'stage': 'my song title',
+          'outcome': 'person@example.com',
+          'exit_reason': '/private/recording.wav',
+        },
+      );
+      expect(sink.events.last.$2.keys, isNot(contains('stage')));
+      expect(sink.events.last.$2.keys, isNot(contains('outcome')));
+      expect(sink.events.last.$2.keys, isNot(contains('exit_reason')));
+      await analytics.setConsent(false);
+      await analytics.track(ProductEvent.restoreStarted);
+      expect(sink.events, hasLength(6));
+    },
+  );
 }

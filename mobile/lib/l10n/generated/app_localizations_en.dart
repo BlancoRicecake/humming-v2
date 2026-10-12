@@ -2522,4 +2522,119 @@ class L10nEn extends L10n {
   @override
   String get ltMelodyLockedHint =>
       'Changing the backing will keep this melody.';
+
+  @override
+  String get ltFirstSongTitle => 'Make your first song';
+
+  @override
+  String get ltFirstSongHint =>
+      'Hum → add backing → save\nStart free, no sign-in needed.';
+
+  @override
+  String get ltFilesTitle => 'Exported files';
+
+  @override
+  String get ltFilesHint =>
+      'Files stay here after sharing. Choose Save to files to select a folder outside HumTrack.';
+
+  @override
+  String get ltFilesIosHint =>
+      'Files stay here after sharing. Tap Share again, then Save to Files in the share sheet.';
+
+  @override
+  String get ltFilesEmpty => 'No exported files yet.';
+
+  @override
+  String get ltFilesShare => 'Share again';
+
+  @override
+  String get ltFilesSave => 'Save to files';
+
+  @override
+  String get ltFilesSaved => 'Saved to the location you selected.';
+
+  @override
+  String get ltFilesSaveCancelled =>
+      'Saving cancelled. Your export is still here.';
+
+  @override
+  String get ltFilesActionFailed =>
+      'Could not save or share this file. Your export remains here; try again.';
+
+  @override
+  String get ltFilesLoadFailed =>
+      'Could not load exported files. Tap refresh to retry.';
+
+  @override
+  String get ltMidiTitle => 'Convert to MIDI';
+
+  @override
+  String get ltMidiHint =>
+      'Turn one sung melody into an instrument track. Your original vocal stays unchanged. Only this trimmed clip is sent to the server for analysis. Mixed voices or backing music may not convert accurately.';
+
+  @override
+  String get ltMidiPiano => 'Piano';
+
+  @override
+  String get ltMidiGuitar => 'Guitar';
+
+  @override
+  String get ltMidiSynth => 'Synth';
+
+  @override
+  String get ltMidiConvert => 'Convert';
+
+  @override
+  String get ltMidiAnalyzing => 'Analyzing your vocal… You can cancel safely.';
+
+  @override
+  String get ltMidiInvalidAudio =>
+      'This clip has no readable audio. Try another take.';
+
+  @override
+  String get ltMidiOutsideSection =>
+      'The clip extends beyond this section. Trim or move it inside the section before converting.';
+
+  @override
+  String get ltMidiFailed =>
+      'Could not analyze the vocal. Your original is safe. Check your connection and retry.';
+
+  @override
+  String get ltMidiPreviewFailed =>
+      'Could not play the preview. You can retry.';
+
+  @override
+  String get ltMidiRawPitch => 'Use original pitches';
+
+  @override
+  String get ltMidiOctaveDown => 'Lower octave';
+
+  @override
+  String get ltMidiOctaveUp => 'Raise octave';
+
+  @override
+  String ltMidiOctave(int value) {
+    return 'Octave: $value';
+  }
+
+  @override
+  String get ltMidiOriginal => 'Listen to vocal';
+
+  @override
+  String get ltMidiInstrument => 'Listen to instrument';
+
+  @override
+  String get ltMidiStop => 'Stop preview';
+
+  @override
+  String get ltMidiAddTrack => 'Add instrument track';
+
+  @override
+  String get ltMidiSelectedClip => 'Convert this trimmed take';
+
+  @override
+  String get ltMidiTargetSound => 'Dropped track sound';
+
+  @override
+  String get ltGuidedKeepVocal => 'Keep my voice recording';
 }

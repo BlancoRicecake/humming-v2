@@ -8,6 +8,7 @@ class GuidedHumPanel extends StatelessWidget {
   const GuidedHumPanel({
     super.key,
     required this.hasNotes,
+    this.hasMelody,
     required this.playing,
     required this.saved,
     required this.onBack,
@@ -17,6 +18,9 @@ class GuidedHumPanel extends StatelessWidget {
     required this.onSave,
     required this.onEdit,
     this.onSample,
+    this.onRecordVocal,
+    this.onConvertVocal,
+    this.onExport,
     this.onBacking,
     this.onPreviewBacking,
     this.onApplyBacking,
@@ -33,8 +37,10 @@ class GuidedHumPanel extends StatelessWidget {
     this.onReviewMelody,
   });
   final bool hasNotes, playing, saved;
+  final bool? hasMelody;
   final VoidCallback onBack, onRecord, onListen, onInstrument, onSave, onEdit;
   final VoidCallback? onSample, onUndo, onSongPlan;
+  final VoidCallback? onRecordVocal, onConvertVocal, onExport;
   final ValueChanged<BackingStyle>? onBacking;
   final ValueChanged<int>? onPreviewBacking, onApplyBacking;
   final BackingStyle? backingStyle;
@@ -87,13 +93,31 @@ class GuidedHumPanel extends StatelessWidget {
             icon: const Icon(Icons.mic),
             label: Text(hasNotes ? l.ltGuidedMore : l.ltGuidedRecord),
           ),
-          if (hasNotes)
+          if (hasMelody ?? hasNotes)
             OutlinedButton(
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
               ),
               onPressed: onInstrument,
               child: Text(l.ltGuidedSound),
+            ),
+          if (onRecordVocal != null)
+            OutlinedButton.icon(
+              onPressed: onRecordVocal,
+              icon: const Icon(Icons.mic_none),
+              label: Text(l.ltGuidedKeepVocal),
+            ),
+          if (onConvertVocal != null)
+            OutlinedButton.icon(
+              onPressed: onConvertVocal,
+              icon: const Icon(Icons.piano),
+              label: Text(l.ltMidiTitle),
+            ),
+          if (hasNotes && onExport != null)
+            OutlinedButton.icon(
+              onPressed: onExport,
+              icon: const Icon(Icons.ios_share),
+              label: Text(l.projectOptionExport),
             ),
           if (onSample != null)
             OutlinedButton.icon(
@@ -106,7 +130,7 @@ class GuidedHumPanel extends StatelessWidget {
             ),
         ],
       ),
-      if (hasNotes) ...[
+      if (hasMelody ?? hasNotes) ...[
         const SizedBox(height: 12),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,

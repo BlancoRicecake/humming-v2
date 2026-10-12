@@ -19,7 +19,7 @@ HumTrack은 흥얼거린 멜로디 한 줄을 진짜 곡으로 만들어주는 �
 - 보컬 녹음은 AI 학습에 절대 사용되지 않습니다
 - 작업물은 기기에 저장되며 클라우드 동기화는 제공하지 않습니다
 
-문의: heobusy@gmail.com
+문의: humtrack@gmail.com
 이용약관: https://hum-track.com/terms
 개인정보처리방침: https://hum-track.com/privacy
 환불 정책: https://hum-track.com/refund

@@ -1,0 +1,42 @@
+# HumTrack 고객 의견 개선 실행 기록 — 2026-10-06
+
+## 구현
+기준 395e7cb, 브랜치 codex/humtrack-feedback-plan, 앱 1.0.12(41). 기존 40 산출물과 원래 체크아웃은 보존했다.
+
+- 보컬 화면과 클립 편집기에 MIDI 변환 진입점을 추가했다. 피아노/기타/신스 선택, 서버 전송 안내, 진행/취소/재시도, 원본과 악기 미리 듣기, 보정 전 피치 및 옥타브 조정 후 확정한다.
+- 선택 클립의 현재 오디오·trim·fade·gain과 실제 배치 위치를 반영한다. BPM/키/스윙은 기존 분석 엔진에 전달한다. 임시 파일만 소유·삭제하고 영구 보컬은 보존한다. 섹션 밖 녹음과 60초 초과 입력은 안내하고, 분석 실패를 가짜 음표로 대체하지 않는다.
+- 확정 전 곡을 변경하지 않는다. 확정 시 새 악기 트랙을 만들며 기존 음표는 남긴다. 첫 곡 가이드에서는 빈 기본 멜로디 트랙을 사용해 반주 흐름을 유지한다. Undo 한 번으로 적용을 되돌린다.
+- 데스크톱 보컬→악기 트랙 드래그도 같은 변환 확인 화면을 연다. 대상 악기 음색을 초기값으로 사용하며 기존 음표를 덮어쓰지 않는다.
+- 설정/내보내기에서 지속적인 MIDI/WAV 파일 목록, 재공유와 저장 위치 선택을 제공한다. Android는 시스템 문서 생성 창, 데스크톱은 파일 선택 창, iOS는 공유 창의 파일 저장 기능을 안내한다.
+- 입력 중에만 그리드 애니메이션을 실행하고 재생 위치 갱신이 전체 Arrangement를 다시 만들지 않게 했다. 실제 기기의 지연 수치 개선을 입증한 결과는 아니다.
+- 첫 곡 가이드에 보컬로 남기기, 보컬 변환, 내보내기 진입점을 연결했다.
+- 앱/정책/웹/스토어 설명 원본의 문의 주소를 humtrack@gmail.com으로 통일했다. Gmail 소유권·수신 확인, 웹 게시 및 스토어 지원 주소 변경은 별도 운영 작업이다.
+
+## 검증
+- 전체 Flutter 테스트 213개 통과. 원본 보존/실패/늦은 응답 취소, trim/offset, 저장 구조, 가이드 적용, 내보내기 재탐색, 실제 드래그, EN/KO 작은 가로 화면을 포함한다.
+- Flutter analyze: No issues found.
+- 실제 Gradle 인증 보호 테스트 10개 통과.
+- Android 표준 debug APK 및 서명 release AAB 빌드 통과. 정상 동작했던 40의 인증·서버 설정 6개를 세 아키텍처에서 대조했다. 업로드 인증서는 39/40과 동일하다. bundletool 구조 검증 및 JAR 서명 검증 통과. QA entrypoint는 릴리스에 포함하지 않았다.
+- Windows 표준 실행 파일 빌드 통과. 별도 QA 실행에서 실제 분석 API와 합성 멜로디를 사용해 변환 → 저장/복원 → MIDI/WAV 생성 → 파일 목록 발견 → 네이티브 오디오 출력을 확인했다. 출력 framesWritten 24576, peak 1437. 사람의 허밍 인식 정확도나 실제 마이크 품질 검사로 해석하지 않는다.
+- Firebase 분석 수집은 false를 유지했다. Pro 권한/가격/결제 정책을 변경하거나 우회하지 않았다.
+
+## 확인이 남은 항목
+Android/iPhone 실제 마이크, Android 시스템 파일 저장의 실기기 동작, 실제 Google 로그인/세션 유지 및 구독 복원, Pixel 8 Pro 등에서 입력 지연 p95, 초보자 5명 사용성 테스트를 진행해야 한다. Mac/iOS 빌드·실행은 이번 Windows 환경에서 수행하지 않았다. Windows는 개발 미리보기이며 설치 프로그램 서명, 데스크톱 OAuth/구독 흐름 검증과 OS별 프로젝트 이식은 후속 작업이다. 지원 대상은 한 사람이 부른 멜로디이며 화음/반주 혼합의 정확도를 약속하지 않는다.
+
+## 산출물 및 출시
+Android AAB: C:/src/humming-v2/mobile/build/internal-test-1.0.12-41/HumTrack-1.0.12-41.aab
+SHA-256: 157e49bb80fa432265047b31a7bb1839a1265aa81139701c7ed4c9e011fb8f0c
+
+검증 영수증은 같은 폴더 verification.json, Windows 합성 입력 실행 증거는 C:/src/humming-v2/mobile/build/customer-flow-41/evidence/smoke.json에 있다. 최종 업로드/메일 상태는 후속 기록으로 명시한다. 운영 배포는 사용자의 내부 테스트 확인 후 진행한다.
+
+Windows 표준 lib/main.dart 미리보기: C:/src/humming-v2/mobile/build/customer-flow-41/HumTrack-Windows-1.0.12-41-preview.zip
+SHA-256: a71207b7d5fc972ddd3c163816ea2261251f2d66f586f09257e297088c8a0bd3
+소스 커밋: b87fd46. Windows에도 기존 서비스 설정을 포함했지만 실제 데스크톱 로그인 완료를 검증한 것은 아니다.
+
+## 내부 테스트 전달 완료
+
+Google Play 내부 트랙의 1.0.12(41), status completed를 API 재조회로 확인했다. 업로드 SHA-256은 검증된 AAB와 동일하다. 운영 트랙은 1.0.10(39)이며 변경하지 않았다. Play의 자동 검토 설정에 따라 changesNotSentForReview 매개변수는 사용하지 않았다.
+
+설치 링크 https://play.google.com/apps/internaltest/4701278899500552203 및 기기 확인 항목을 jlionk200@gmail.com으로 연결된 Gmail 계정(hermosear98@gmail.com)에서 발송했다. SENT 메시지 ID 1a110491e154e45e. 사용자 설치·테스트 완료를 뜻하지 않는다. 메일은 새 지원 계정에서 발송한 것이 아니며 humtrack@gmail.com 수신 확인은 여전히 남아 있다. 웹사이트 게시 및 스토어 지원 연락처 변경도 수행하지 않았다.
+
+최종 영수증: 내부 테스트 폴더 play-upload-receipt.json, verification.json, email-receipt.json, test-checklist.txt. 운영 배포는 사용자 확인을 기다린다. 임시 빌드 설정과 작업용 서명 속성 복사본은 제거했고 원본 자격 증명/키는 보존했다.

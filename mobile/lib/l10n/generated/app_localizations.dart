@@ -4457,6 +4457,210 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'반주를 바꿔도 이 멜로디는 유지됩니다.'**
   String get ltMelodyLockedHint;
+
+  /// No description provided for @ltFirstSongTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'첫 곡을 만들어 보세요'**
+  String get ltFirstSongTitle;
+
+  /// No description provided for @ltFirstSongHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍 → 반주 → 저장\n로그인 없이 무료로 시작해요.'**
+  String get ltFirstSongHint;
+
+  /// No description provided for @ltFilesTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'내보낸 파일'**
+  String get ltFilesTitle;
+
+  /// No description provided for @ltFilesHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'공유한 파일도 여기에 남습니다. ‘파일에 저장’에서 HumTrack 밖의 저장 위치를 선택하세요.'**
+  String get ltFilesHint;
+
+  /// No description provided for @ltFilesIosHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'공유한 파일도 여기에 남습니다. ‘다시 공유’를 누르고 공유 화면에서 ‘파일에 저장’을 선택하세요.'**
+  String get ltFilesIosHint;
+
+  /// No description provided for @ltFilesEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'아직 내보낸 파일이 없습니다.'**
+  String get ltFilesEmpty;
+
+  /// No description provided for @ltFilesShare.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 공유'**
+  String get ltFilesShare;
+
+  /// No description provided for @ltFilesSave.
+  ///
+  /// In ko, this message translates to:
+  /// **'파일에 저장'**
+  String get ltFilesSave;
+
+  /// No description provided for @ltFilesSaved.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택한 위치에 저장했습니다.'**
+  String get ltFilesSaved;
+
+  /// No description provided for @ltFilesSaveCancelled.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장을 취소했습니다. 내보낸 파일은 여기에 남아 있습니다.'**
+  String get ltFilesSaveCancelled;
+
+  /// No description provided for @ltFilesActionFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장하거나 공유하지 못했습니다. 내보낸 파일은 여기에 남아 있으니 다시 시도하세요.'**
+  String get ltFilesActionFailed;
+
+  /// No description provided for @ltFilesLoadFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'내보낸 파일을 불러오지 못했습니다. 새로고침으로 다시 시도하세요.'**
+  String get ltFilesLoadFailed;
+
+  /// No description provided for @ltMidiTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI로 변환'**
+  String get ltMidiTitle;
+
+  /// No description provided for @ltMidiHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'한 사람이 부른 멜로디를 악기 트랙으로 만듭니다. 원본 보컬은 그대로 남습니다. 잘라낸 이 클립만 서버로 전송해 분석합니다. 여러 목소리나 반주가 섞이면 정확도가 낮아질 수 있습니다.'**
+  String get ltMidiHint;
+
+  /// No description provided for @ltMidiPiano.
+  ///
+  /// In ko, this message translates to:
+  /// **'피아노'**
+  String get ltMidiPiano;
+
+  /// No description provided for @ltMidiGuitar.
+  ///
+  /// In ko, this message translates to:
+  /// **'기타'**
+  String get ltMidiGuitar;
+
+  /// No description provided for @ltMidiSynth.
+  ///
+  /// In ko, this message translates to:
+  /// **'신스'**
+  String get ltMidiSynth;
+
+  /// No description provided for @ltMidiConvert.
+  ///
+  /// In ko, this message translates to:
+  /// **'변환하기'**
+  String get ltMidiConvert;
+
+  /// No description provided for @ltMidiAnalyzing.
+  ///
+  /// In ko, this message translates to:
+  /// **'보컬을 분석 중입니다… 안전하게 취소할 수 있습니다.'**
+  String get ltMidiAnalyzing;
+
+  /// No description provided for @ltMidiInvalidAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 클립의 오디오를 읽을 수 없습니다. 다른 녹음을 선택하세요.'**
+  String get ltMidiInvalidAudio;
+
+  /// No description provided for @ltMidiOutsideSection.
+  ///
+  /// In ko, this message translates to:
+  /// **'클립이 현재 구간을 벗어납니다. 구간 안으로 자르거나 이동한 뒤 변환하세요.'**
+  String get ltMidiOutsideSection;
+
+  /// No description provided for @ltMidiFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'보컬을 분석하지 못했습니다. 원본은 안전합니다. 연결을 확인하고 다시 시도하세요.'**
+  String get ltMidiFailed;
+
+  /// No description provided for @ltMidiPreviewFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'미리 듣기를 재생하지 못했습니다. 다시 시도하세요.'**
+  String get ltMidiPreviewFailed;
+
+  /// No description provided for @ltMidiRawPitch.
+  ///
+  /// In ko, this message translates to:
+  /// **'원래 음높이 사용'**
+  String get ltMidiRawPitch;
+
+  /// No description provided for @ltMidiOctaveDown.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브 내리기'**
+  String get ltMidiOctaveDown;
+
+  /// No description provided for @ltMidiOctaveUp.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브 올리기'**
+  String get ltMidiOctaveUp;
+
+  /// No description provided for @ltMidiOctave.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브: {value}'**
+  String ltMidiOctave(int value);
+
+  /// No description provided for @ltMidiOriginal.
+  ///
+  /// In ko, this message translates to:
+  /// **'보컬 듣기'**
+  String get ltMidiOriginal;
+
+  /// No description provided for @ltMidiInstrument.
+  ///
+  /// In ko, this message translates to:
+  /// **'악기 듣기'**
+  String get ltMidiInstrument;
+
+  /// No description provided for @ltMidiStop.
+  ///
+  /// In ko, this message translates to:
+  /// **'미리 듣기 정지'**
+  String get ltMidiStop;
+
+  /// No description provided for @ltMidiAddTrack.
+  ///
+  /// In ko, this message translates to:
+  /// **'악기 트랙 추가'**
+  String get ltMidiAddTrack;
+
+  /// No description provided for @ltMidiSelectedClip.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 녹음의 잘라낸 범위 변환'**
+  String get ltMidiSelectedClip;
+
+  /// No description provided for @ltMidiTargetSound.
+  ///
+  /// In ko, this message translates to:
+  /// **'드롭한 트랙의 소리'**
+  String get ltMidiTargetSound;
+
+  /// No description provided for @ltGuidedKeepVocal.
+  ///
+  /// In ko, this message translates to:
+  /// **'목소리 그대로 녹음'**
+  String get ltGuidedKeepVocal;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

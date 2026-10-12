@@ -18,32 +18,41 @@ class VocalSurface extends StatelessWidget {
     this.onAutotune,
     this.onRevert,
     this.onEdit,
+    this.onConvert,
     this.onRecordSong,
     this.onClearSong,
   });
 
   /// Peaks of the committed take (null when nothing is recorded).
   final List<double>? clip;
+
   /// Opens the loop-aligned record modal.
   final VoidCallback onRecord;
   final VoidCallback onClear;
+
   /// Opens the autotune presets (shown when a clip exists).
   final VoidCallback? onAutotune;
+
   /// Swaps back to the pre-autotune take (shown when one exists).
   final VoidCallback? onRevert;
+
   /// Opens the clip editor (trim/fade/gain + sound processing). Shown when a
   /// clip exists.
   final VoidCallback? onEdit;
+  final VoidCallback? onConvert;
+
   /// Records ONE continuous take over the whole song. Shown only when the
   /// arrangement spans more than one section instance.
   final VoidCallback? onRecordSong;
+
   /// Clears the song-level take. Non-null only when one exists.
   final VoidCallback? onClearSong;
 
   @override
   Widget build(BuildContext context) {
     final l = L10n.of(context);
-    final wave = (clip != null && clip!.isNotEmpty) ? clip! : List.filled(64, 0.05);
+    final wave =
+        (clip != null && clip!.isNotEmpty) ? clip! : List.filled(64, 0.05);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
@@ -65,7 +74,10 @@ class VocalSurface extends StatelessWidget {
                     child: Container(
                       width: 62,
                       height: 62,
-                      decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle),
+                      decoration: const BoxDecoration(
+                        color: LT.danger,
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
                 ),
@@ -73,7 +85,11 @@ class VocalSurface extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 clip != null ? l.ltVocalRecorded : l.ltVocalTapToRecord,
-                style: LTType.mono(size: 13, weight: FontWeight.w700, color: LT.t2),
+                style: LTType.mono(
+                  size: 13,
+                  weight: FontWeight.w700,
+                  color: LT.t2,
+                ),
               ),
               if (onRecordSong != null) ...[
                 const SizedBox(height: 8),
@@ -83,7 +99,11 @@ class VocalSurface extends StatelessWidget {
                     onClearSong != null
                         ? l.ltVocalReRecOverSong
                         : l.ltVocalRecOverSong,
-                    style: LTType.mono(size: 11, weight: FontWeight.w700, color: LT.pink),
+                    style: LTType.mono(
+                      size: 11,
+                      weight: FontWeight.w700,
+                      color: LT.pink,
+                    ),
                   ),
                 ),
               ],
@@ -93,7 +113,11 @@ class VocalSurface extends StatelessWidget {
                   onTap: onClearSong,
                   child: Text(
                     l.ltVocalClearSongTake,
-                    style: LTType.mono(size: 10, weight: FontWeight.w600, color: LT.t3),
+                    style: LTType.mono(
+                      size: 10,
+                      weight: FontWeight.w600,
+                      color: LT.t3,
+                    ),
                   ),
                 ),
               ],
@@ -129,30 +153,57 @@ class VocalSurface extends StatelessWidget {
           ),
           if (clip != null) ...[
             const SizedBox(width: 24),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (onEdit != null) ...[
-                  IconBtn(icon: LtIcons.edit, tooltip: l.ltVocalEdit, size: 40, onTap: onEdit!),
-                  const SizedBox(height: 8),
-                ],
-                if (onAutotune != null)
-                  IconBtn(
-                      icon: LtIcons.autoFix,
-                      tooltip: l.ltEditorAutotuneTitle,
+            SizedBox(
+              width: 156,
+              child: SingleChildScrollView(
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    if (onConvert != null) ...[
+                      TextButton.icon(
+                        onPressed: onConvert,
+                        icon: const Icon(Icons.piano, size: 18),
+                        label: Text(l.ltMidiTitle),
+                      ),
+                    ],
+                    if (onEdit != null) ...[
+                      IconBtn(
+                        icon: LtIcons.edit,
+                        tooltip: l.ltVocalEdit,
+                        size: 40,
+                        onTap: onEdit!,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (onAutotune != null)
+                      IconBtn(
+                        icon: LtIcons.autoFix,
+                        tooltip: l.ltEditorAutotuneTitle,
+                        size: 40,
+                        onTap: onAutotune!,
+                      ),
+                    if (onRevert != null) ...[
+                      const SizedBox(height: 8),
+                      IconBtn(
+                        icon: LtIcons.restore,
+                        tooltip: l.editTransportOriginal,
+                        size: 40,
+                        onTap: onRevert!,
+                      ),
+                    ],
+                    if (onAutotune != null || onRevert != null)
+                      const SizedBox(height: 8),
+                    IconBtn(
+                      icon: LtIcons.delete,
+                      tooltip: l.ltVocalClear,
                       size: 40,
-                      onTap: onAutotune!),
-                if (onRevert != null) ...[
-                  const SizedBox(height: 8),
-                  IconBtn(
-                      icon: LtIcons.restore,
-                      tooltip: l.editTransportOriginal,
-                      size: 40,
-                      onTap: onRevert!),
-                ],
-                if (onAutotune != null || onRevert != null) const SizedBox(height: 8),
-                IconBtn(icon: LtIcons.delete, tooltip: l.ltVocalClear, size: 40, onTap: onClear),
-              ],
+                      onTap: onClear,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ],

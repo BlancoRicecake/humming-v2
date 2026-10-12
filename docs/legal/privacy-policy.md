@@ -26,7 +26,7 @@
 - **곡·보컬·MIDI 등 작업물은 회원의 기기에만 저장됩니다** — 클라우드에 업로드하거나 보관하지 않습니다. 회사가 보유하는 것은 계정 정보와 구독 기록뿐입니다.
 - 결제 카드 정보는 Apple / Google 만 보유하며, 우리는 영수증 ID 외 카드 정보에 접근할 수 없습니다.
 - 광고 추적 / ATT 권한 / 위치 / 연락처 / 사진 접근 ❌ — 마이크만 사용합니다.
-- 데이터 열람·수정·삭제·이전 요청은 언제든 가능합니다 → `heobusy@gmail.com`
+- 데이터 열람·수정·삭제·이전 요청은 언제든 가능합니다 → `humtrack@gmail.com`
 
 ---
 
@@ -34,7 +34,7 @@
 
 ### 1. 개인정보 처리자
 - **개인정보 처리자(Controller)**: 에르모세아르 (대표: 김동현)
-- **연락처**: heobusy@gmail.com
+- **연락처**: humtrack@gmail.com
 - **사업장 주소**: 경기도 용인시 기흥구 공세로 150-29, B01-G160호
 - **사업자등록번호**: 106-16-34319
 
@@ -105,9 +105,9 @@ EU/EEA 거주자의 개인정보가 한국 또는 미국으로 이전되는 경�
 
 ### 6. 이용자 권리
 
-회원은 다음 권리를 보유하며, `heobusy@gmail.com` 또는 앱 내 "설정 → 계정 삭제"를 통해 행사할 수 있습니다:
+회원은 다음 권리를 보유하며, `humtrack@gmail.com` 또는 앱 내 "설정 → 계정 삭제"를 통해 행사할 수 있습니다:
 
-Firebase Analytics의 향후 수집은 앱의 **설정 → 익명 사용 분석**에서 언제든 끌 수 있습니다. 이미 수집된 분석 데이터의 삭제는 `heobusy@gmail.com`으로 요청할 수 있습니다.
+Firebase Analytics의 향후 수집은 앱의 **설정 → 익명 사용 분석**에서 언제든 끌 수 있습니다. 이미 수집된 분석 데이터의 삭제는 `humtrack@gmail.com`으로 요청할 수 있습니다.
 
 - **(한국 PIPA)** 개인정보 열람·정정·삭제·처리정지·동의 철회 요구권
 - **(GDPR, EU/EEA/UK)** 열람, 정정, 삭제, 처리 제한, 데이터 이동성, 처리 이의권, 감독기구 진정권 (예: 독일 BfDI, 프랑스 CNIL, 아일랜드 DPC). 자동화된 의사결정 거부권 — **본 서비스는 법적 효력이 있는 자동화된 결정을 수행하지 않습니다.**
@@ -133,7 +133,7 @@ Firebase Analytics의 향후 수집은 앱의 **설정 → 익명 사용 분석*
 
 ### 9. 개인정보보호 책임자
 - **책임자**: 김동현 (대표)
-- **이메일**: heobusy@gmail.com
+- **이메일**: humtrack@gmail.com
 - **EU 대리인 (GDPR Art. 27)**: 현재 별도 지정하지 않습니다. EU 사용자는 GDPR 상의 모든 권리 (열람·정정·삭제·이동성·이의·진정 등) 를 위 이메일을 통해 행사하실 수 있으며, 회사가 직접 응답합니다. 향후 EU 사용자 비중이 의미있는 수준으로 증가할 경우 EU 내 대리인을 지정하고 본 방침 개정을 통해 사전 고지합니다.
 
 EU 거주자는 본 처리방침의 권리 행사가 충분치 않다고 판단될 경우 거주국 데이터보호감독기구에 진정을 제기할 권리를 가집니다.
@@ -147,7 +147,7 @@ EU 거주자는 본 처리방침의 권리 행사가 충분치 않다고 판단�
 
 ### 1. Controller
 - **Data Controller**: Hermosear (Representative: Kim Dong Hyun)
-- **Contact**: heobusy@gmail.com
+- **Contact**: humtrack@gmail.com
 - **Address**: 150-29 Gongse-ro, Giheung-gu, Yongin-si, Gyeonggi-do, Republic of Korea (B01-G160)
 - **Business Registration**: 106-16-34319
 
@@ -209,9 +209,9 @@ International transfers (EU→US, EU→KR) rely on the **EU Commission Standard 
 - **CCPA/CPRA (California)**: right to know, delete, correct, opt out of sale/share, limit sensitive PI, non-discrimination. **We do not sell or share personal information** for cross-context behavioral advertising. Categories sold in the past 12 months: **none**.
 - **PIPA (Korea)**: access, correction, deletion, suspension of processing, withdrawal of consent.
 
-Submit requests to `heobusy@gmail.com` or via Settings → Delete Account. **SLA: confirmation in 3 business days; deletion within 72 hours; other requests within 1 month (GDPR), extendable to 2 months for complex cases.**
+Submit requests to `humtrack@gmail.com` or via Settings → Delete Account. **SLA: confirmation in 3 business days; deletion within 72 hours; other requests within 1 month (GDPR), extendable to 2 months for complex cases.**
 
-You can stop future Firebase Analytics collection at any time under **Settings → Anonymous usage analytics**. Email `heobusy@gmail.com` to request deletion of analytics data already collected.
+You can stop future Firebase Analytics collection at any time under **Settings → Anonymous usage analytics**. Email `humtrack@gmail.com` to request deletion of analytics data already collected.
 
 Pro Members can export their MIDI/WAV directly in-app. Bulk backend data export UI is planned for a P1 release; meanwhile available on email request.
 
@@ -222,7 +222,7 @@ TLS 1.3 in transit; encryption at rest for the account, subscription and receipt
 We do not knowingly collect data from children under 14 (under 13 for U.S. COPPA). App Store / Google Play age rating is set to restrict download. Parents may contact us to delete a child's data.
 
 ### 9. Data Protection
-- **Privacy lead**: Kim Dong Hyun (Representative), heobusy@gmail.com
+- **Privacy lead**: Kim Dong Hyun (Representative), humtrack@gmail.com
 - **EU Representative (GDPR Art. 27)**: Not designated at this time. EU/EEA users may exercise all GDPR rights (access, rectification, erasure, portability, objection, complaint, etc.) directly via the email above and we will respond. We will appoint an EU representative and amend this policy if EU usage grows to a material level.
 
 EU/EEA residents may also lodge a complaint with their national supervisory authority if they consider this insufficient.
@@ -245,5 +245,5 @@ We give 30 days' in-app and email notice for material changes. Minor edits are r
 
 ## 연락처
 
-- **이메일**: heobusy@gmail.com
+- **이메일**: humtrack@gmail.com
 - **운영자**: 에르모세아르 / 대표 김동현

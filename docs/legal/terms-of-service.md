@@ -125,7 +125,7 @@
 - **대표자**: 김동현
 - **사업장 주소**: 경기도 용인시 기흥구 공세로 150-29, B01-G160호
 - **전화번호**: 010-9611-1711
-- **이메일**: heobusy@gmail.com
+- **이메일**: humtrack@gmail.com
 - **사업자등록번호**: 106-16-34319
 - **통신판매업 신고번호**: 2024-용인기흥-2437
 - **호스팅 서비스 제공자**: Fly.io, Inc. (백엔드), Cloudflare, Inc. (CDN/스토리지), Supabase, Inc. (DB/인증)
@@ -203,7 +203,7 @@ You may close your account anytime via Settings → Delete Account. Closing the 
 - **Representative**: Kim Dong Hyun (김동현)
 - **Address**: 150-29 Gongse-ro, Giheung-gu, Yongin-si, Gyeonggi-do, Republic of Korea (B01-G160)
 - **Phone**: +82-10-9611-1711
-- **Email**: heobusy@gmail.com
+- **Email**: humtrack@gmail.com
 - **Business Registration Number**: 106-16-34319
 - **E-Commerce Registration Number**: 2024-Yongin-Giheung-2437
 - **Hosting Providers**: Fly.io, Inc.; Cloudflare, Inc.; Supabase, Inc.
@@ -221,6 +221,6 @@ You may close your account anytime via Settings → Delete Account. Closing the 
 
 ## 연락처
 
-- **이메일**: heobusy@gmail.com
+- **이메일**: humtrack@gmail.com
 - **웹사이트**: https://hum-track.com
 - **운영자**: 에르모세아르 / 대표 김동현

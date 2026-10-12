@@ -26,6 +26,7 @@ import '../../models/models.dart' as eng;
 import '../audio/loop_audio.dart';
 import '../models/loop_models.dart';
 import '../music/hum_map.dart';
+import '../music/vocal_midi.dart';
 import '../music/melody_review.dart';
 import '../music/instruments.dart';
 import '../music/song_util.dart';
@@ -56,6 +57,7 @@ import '../widgets/sheets/melody_review_sheet.dart';
 import '../widgets/sheets/song_plan_sheet.dart';
 import '../widgets/sheets/vocal_record_modal.dart';
 import '../widgets/sheets/vocal_editor.dart';
+import '../widgets/sheets/vocal_midi_sheet.dart';
 import '../widgets/surfaces/drum_surface.dart';
 import '../widgets/surfaces/fill_launchpad.dart';
 import '../widgets/surfaces/live_pads.dart';
@@ -65,7 +67,13 @@ import '../widgets/transport_bar.dart';
 import '../../services/product_analytics.dart';
 
 class EditScreen extends StatefulWidget {
-  const EditScreen({super.key, required this.song, this.guidedStart = false});
+  const EditScreen({
+    super.key,
+    required this.song,
+    this.guidedStart = false,
+    this.guidedEntrySource = 'new_song',
+  });
+  final String guidedEntrySource;
   final bool guidedStart;
   final Song song;
 
@@ -464,6 +472,66 @@ class _EditScreenState extends State<EditScreen>
   DateTime? _savedAt;
   bool _savedFlash = false;
   bool _guidedSaveTracked = false;
+  bool _guidedExitTracked = false;
+  late String _guidedEntrySource = widget.guidedEntrySource;
+
+  bool get _hasSongContent =>
+      _songVocalPath != null ||
+      _sections.any(
+        (section) => section.tracks.values.any(
+          (track) =>
+              track.pitchNotes.isNotEmpty ||
+              track.drumNotes.isNotEmpty ||
+              track.effectiveClips.isNotEmpty,
+        ),
+      );
+
+  void _trackGuidedStart(String source) {
+    _guidedEntrySource = source;
+    _guidedExitTracked = false;
+    _guidedSaveTracked = false;
+    ProductAnalytics.instance.track(
+      ProductEvent.guidedStarted,
+      properties: {'feature': 'guided_creation', 'entry_source': source},
+    );
+  }
+
+  // Only a successful durable save of actual music completes the funnel.
+  // Include automatic/back saves so a user who never taps Save is not lost.
+  void _trackGuidedSave(String method) {
+    if (!_guided || _guidedSaveTracked || !_hasSongContent) return;
+    _guidedSaveTracked = true;
+    ProductAnalytics.instance.track(
+      ProductEvent.guidedSongSaved,
+      properties: {
+        'feature': 'guided_creation',
+        'entry_source': _guidedEntrySource,
+        'save_method': method,
+      },
+    );
+  }
+
+  void _trackGuidedExit(String reason) {
+    if (!_guided || _guidedExitTracked) return;
+    _guidedExitTracked = true;
+    ProductAnalytics.instance.track(
+      ProductEvent.guidedExited,
+      properties: {
+        'feature': 'guided_creation',
+        'entry_source': _guidedEntrySource,
+        'stage':
+            _guidedSaveTracked
+                ? 'saved'
+                : _guidedAppliedCandidate != null
+                ? 'backing'
+                : _hasSongContent
+                ? 'music'
+                : 'empty',
+        'exit_reason': reason,
+      },
+    );
+  }
+
   Timer? _flashTimer;
 
   @override
@@ -471,13 +539,7 @@ class _EditScreenState extends State<EditScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (widget.guidedStart) {
-      ProductAnalytics.instance.track(
-        ProductEvent.guidedStarted,
-        properties: const {
-          'feature': 'guided_creation',
-          'entry_source': 'new_song',
-        },
-      );
+      _trackGuidedStart(widget.guidedEntrySource);
     }
     // apply this song's chosen instruments (per pitched channel), then warm the synth
     _audio.setPrograms({
@@ -541,6 +603,7 @@ class _EditScreenState extends State<EditScreen>
       // an untouched brand-new song doesn't earn a library slot yet (C15)
       if (_isPristineNew(store)) return;
       await store.upsert(_snapshot());
+      _trackGuidedSave('autosave');
       if (!mounted) return;
       _saveErrorShown = false;
       setState(() {
@@ -2258,9 +2321,54 @@ class _EditScreenState extends State<EditScreen>
     }
   }
 
+  bool _vocalConversionOpen = false;
+
+  Future<void> _convertDroppedClip(
+    VocalClipDrag source,
+    String targetId,
+  ) async {
+    if (_vocalConversionOpen || _songSection != null) return;
+    final section = _sec;
+    final clips = section.tracks[source.trackId]?.effectiveClips;
+    if (clips == null ||
+        source.clipIndex >= clips.length ||
+        clips[source.clipIndex].path != source.clip.path) {
+      return;
+    }
+    final target = _editMetas.where((m) => m.id == targetId).firstOrNull;
+    if (target == null || target.kind != TrackKind.pitched) return;
+    _vocalConversionOpen = true;
+    _stopAll();
+    try {
+      final conversion = await showVocalMidiSheet(
+        context,
+        clip: clips[source.clipIndex],
+        bpm: _bpm,
+        bars: section.bars,
+        keyRoot: _keyRoot,
+        scale: _scale,
+        swing: _swing,
+        initialProgram: _instruments[targetId] ?? target.defaultProgram,
+      );
+      if (!mounted || conversion == null || !identical(section, _sec)) return;
+      _pushUndo();
+      setState(() {
+        final id = 'melody_x${DateTime.now().microsecondsSinceEpoch}';
+        addVocalMidiTrack(_sections, section.id, id, conversion);
+        _instruments[id] = conversion.program;
+        _activeId = id;
+        _inputModes[id] = 'grid';
+      });
+    } finally {
+      _vocalConversionOpen = false;
+    }
+  }
+
   // Open the clip editor (trim/fade/gain + sound processing). Returns the
   // edited vocal TrackData; we swap it in, push undo, and re-prepare playback.
-  Future<void> _openVocalEditor() async {
+  Future<void> _openVocalEditor({bool convertImmediately = false}) async {
+    _stopAll();
+    final section = _sec;
     final vid = _vocalId;
     final t = _trackIn(_tracks, vid);
     if (t.effectiveClips.isEmpty) return;
@@ -2270,14 +2378,37 @@ class _EditScreenState extends State<EditScreen>
       bpm: _bpm,
       bars: _sec.bars,
       songId: widget.song.id,
-      sectionId: _sec.id,
+      sectionId: section.id,
+      keyRoot: _keyRoot,
+      scale: _scale,
+      swing: _swing,
+      convertImmediately: convertImmediately,
     );
-    if (edited == null || !mounted) return;
+    if (edited == null || !mounted || !identical(section, _sec)) return;
     _pushUndo();
     _stopVocal();
-    setState(() => _tracks[vid] = edited);
+    setState(() {
+      _tracks[vid] = edited.vocal;
+      final conversion = edited.converted;
+      if (conversion != null) {
+        final id = addVocalMidiTrack(
+          _sections,
+          section.id,
+          'melody_x${DateTime.now().microsecondsSinceEpoch}',
+          conversion,
+          useEmptyMelodyLane: _guided,
+        );
+        _instruments[id] = conversion.program;
+        _activeId = id;
+        _inputModes[id] = 'grid';
+        if (_guided && id != 'melody') {
+          _trackGuidedExit('editor');
+          _guided = false;
+        }
+      }
+    });
     _vocalMix.remove(_sec.id); // edits change the lane → rebounce
-    final first = edited.vocalPath;
+    final first = edited.vocal.vocalPath;
     if (first != null) _audio.prepareVocal(LoopStorage.resolveVocal(first));
   }
 
@@ -2756,6 +2887,7 @@ class _EditScreenState extends State<EditScreen>
   Future<void> _saveNow() async {
     try {
       await context.read<LoopStore>().upsert(_snapshot());
+      _trackGuidedSave('manual');
     } catch (_) {
       ProductAnalytics.instance.track(
         _guided ? ProductEvent.guidedSongFailed : ProductEvent.songSaveFailed,
@@ -2778,13 +2910,6 @@ class _EditScreenState extends State<EditScreen>
     _flashTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _savedFlash = false);
     });
-    if (_guided && !_guidedSaveTracked) {
-      _guidedSaveTracked = true;
-      ProductAnalytics.instance.track(
-        ProductEvent.guidedSongSaved,
-        properties: const {'feature': 'guided_creation'},
-      );
-    }
   }
 
   /// A brand-new song the user never touched — not in the library yet, no
@@ -2827,7 +2952,10 @@ class _EditScreenState extends State<EditScreen>
     _leaving = true;
     final store = context.read<LoopStore>();
     try {
-      if (!_isPristineNew(store)) await store.upsert(_snapshot());
+      if (!_isPristineNew(store)) {
+        await store.upsert(_snapshot());
+        _trackGuidedSave('back');
+      }
       // editor session over → undo stack (the last holder of replaced takes) is
       // gone, so unreferenced vocal files are safe to drop.
       await store.sweepVocals();
@@ -2837,7 +2965,10 @@ class _EditScreenState extends State<EditScreen>
       _handleSaveFailure();
       return; // Keep the editor and its undo history available for retry.
     }
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) {
+      _trackGuidedExit('back');
+      Navigator.of(context).pop();
+    }
   }
 
   /// Pro 활성이면 export drawer, 아니면 paywall 먼저. paywall 닫힌 시점에
@@ -2926,14 +3057,33 @@ class _EditScreenState extends State<EditScreen>
                 if (_guided)
                   Positioned.fill(
                     child: GuidedHumPanel(
-                      hasNotes:
-                          _activeTrack.pitchNotes.isNotEmpty ||
-                          (_tracks['vocal']?.effectiveClips.isNotEmpty ??
-                              false),
+                      hasNotes: _tracks.values.any(
+                        (t) =>
+                            t.pitchNotes.isNotEmpty ||
+                            t.drumNotes.isNotEmpty ||
+                            t.effectiveClips.isNotEmpty,
+                      ),
+                      hasMelody:
+                          _tracks['melody']?.pitchNotes.isNotEmpty ?? false,
                       playing: _playing,
                       saved: !_dirty && _savedAt != null,
                       onBack: _backWithSave,
-                      onRecord: _openHum,
+                      onRecord: () {
+                        setState(() => _activeId = 'melody');
+                        _openHum();
+                      },
+                      onRecordVocal: () {
+                        setState(() => _activeId = 'vocal');
+                        _openVocalRecord();
+                      },
+                      onConvertVocal:
+                          (_tracks['vocal']?.effectiveClips.isNotEmpty ?? false)
+                              ? () {
+                                setState(() => _activeId = 'vocal');
+                                _openVocalEditor(convertImmediately: true);
+                              }
+                              : null,
+                      onExport: _exportOrPaywall,
                       onSample: () async {
                         _stopAll();
                         await Navigator.of(context).push(
@@ -2986,6 +3136,7 @@ class _EditScreenState extends State<EditScreen>
                       onSave: _saveNow,
                       onEdit: () {
                         _stopAll();
+                        _trackGuidedExit('editor');
                         setState(() => _guided = false);
                       },
                     ),
@@ -3012,40 +3163,34 @@ class _EditScreenState extends State<EditScreen>
                         flex: _desktop ? (_timelineShare * 1000).round() : 2,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
-                          child: ValueListenableBuilder<double>(
-                            valueListenable: _playStep,
-                            builder:
-                                (_, ps, __) => _timelineViewport(
-                                  Arrangement(
-                                    section: _songSection ?? _sec,
-                                    tracks: _orderedMetas(_songSection ?? _sec),
-                                    activeId: _activeId,
-                                    mutes: _mutes,
-                                    onSelect:
-                                        (id) => setState(() => _activeId = id),
-                                    onToggleMute: _toggleMute,
-                                    // editing only (song-preview is read-only)
-                                    onAddTrack:
-                                        _songSection == null
-                                            ? _openAddTrack
-                                            : null,
-                                    onReorder:
-                                        _songSection == null
-                                            ? _reorderTracks
-                                            : null,
-                                    onMoveClip:
-                                        _songSection == null
-                                            ? _moveVocalClip
-                                            : null,
-                                    playing: _playing,
-                                    playStep: _playStep,
-                                    steps: _steps,
-                                    ranges: _ranges,
-                                    // song-preview is read-only → no scrubbing there
-                                    onSeek:
-                                        _songSection == null ? _seekTo : null,
-                                  ),
-                                ),
+                          // Arrangement owns a listenable playhead. Rebuilding
+                          // every lane for each clock tick wastes input frames.
+                          child: _timelineViewport(
+                            Arrangement(
+                              section: _songSection ?? _sec,
+                              tracks: _orderedMetas(_songSection ?? _sec),
+                              activeId: _activeId,
+                              mutes: _mutes,
+                              onSelect: (id) => setState(() => _activeId = id),
+                              onToggleMute: _toggleMute,
+                              // editing only (song-preview is read-only)
+                              onAddTrack:
+                                  _songSection == null ? _openAddTrack : null,
+                              onReorder:
+                                  _songSection == null ? _reorderTracks : null,
+                              onMoveClip:
+                                  _songSection == null ? _moveVocalClip : null,
+                              onConvertClip:
+                                  _desktop && _songSection == null
+                                      ? _convertDroppedClip
+                                      : null,
+                              playing: _playing,
+                              playStep: _playStep,
+                              steps: _steps,
+                              ranges: _ranges,
+                              // song-preview is read-only → no scrubbing there
+                              onSeek: _songSection == null ? _seekTo : null,
+                            ),
                           ),
                         ),
                       ),
@@ -3207,6 +3352,7 @@ class _EditScreenState extends State<EditScreen>
             setState(() {
               _activeId = 'melody';
               _guided = true;
+              _trackGuidedStart('editor');
             });
           },
         ),
@@ -3801,6 +3947,10 @@ class _EditScreenState extends State<EditScreen>
                 : null,
         onClearSong: _songVocalPath != null ? _clearSongVocal : null,
         onEdit: vt.effectiveClips.isNotEmpty ? _openVocalEditor : null,
+        onConvert:
+            vt.effectiveClips.isNotEmpty
+                ? () => _openVocalEditor(convertImmediately: true)
+                : null,
         onAutotune: _openAutotune,
         onRevert: vt.vocalOrigPath != null ? _revertAutotune : null,
         onClear: () {

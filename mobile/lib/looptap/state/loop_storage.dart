@@ -24,8 +24,12 @@ class LoopStorage {
   @visibleForTesting
   static Directory? rootOverride;
 
+  /// Shared Documents root for songs, vocals and rendered exports.
+  static Future<Directory> documentsDirectory() async =>
+      rootOverride ?? await getApplicationDocumentsDirectory();
+
   static Future<Directory> _folder() async {
-    final dir = rootOverride ?? await getApplicationDocumentsDirectory();
+    final dir = await documentsDirectory();
     _docsPath = dir.path;
     final folder = Directory('${dir.path}/looptap');
     if (!await folder.exists()) await folder.create(recursive: true);
@@ -43,17 +47,26 @@ class LoopStorage {
   /// persisted as basenames (absolute paths break when the iOS app container
   /// UUID changes); anything that still looks absolute passes through as-is.
   static String resolveVocal(String nameOrPath) {
-    if (nameOrPath.contains('/') || nameOrPath.contains('\\')) return nameOrPath;
+    if (nameOrPath.contains('/') || nameOrPath.contains('\\')) {
+      return nameOrPath;
+    }
     final docs = _docsPath;
-    if (docs == null) return nameOrPath; // cache not warm — caller's IO will fail gracefully
+    if (docs == null) {
+      return nameOrPath; // cache not warm — caller's IO will fail gracefully
+    }
     return '$docs/looptap/vocals/$nameOrPath';
   }
 
-  static Future<File> _file() async => File('${(await _folder()).path}/songs.json');
-  static Future<File> _tmpFile() async => File('${(await _folder()).path}/songs.json.tmp');
-  static Future<File> _bakFile() async => File('${(await _folder()).path}/songs.json.bak');
-  static Future<File> _metaFile() async => File('${(await _folder()).path}/meta.json');
-  static Future<File> _userFile() async => File('${(await _folder()).path}/user.json');
+  static Future<File> _file() async =>
+      File('${(await _folder()).path}/songs.json');
+  static Future<File> _tmpFile() async =>
+      File('${(await _folder()).path}/songs.json.tmp');
+  static Future<File> _bakFile() async =>
+      File('${(await _folder()).path}/songs.json.bak');
+  static Future<File> _metaFile() async =>
+      File('${(await _folder()).path}/meta.json');
+  static Future<File> _userFile() async =>
+      File('${(await _folder()).path}/user.json');
 
   // True when songs.json EXISTED but couldn't be read/parsed (and no backup
   // rescued it) — the song list is then silently empty and neither seeding nor
@@ -73,7 +86,8 @@ class LoopStorage {
     File? f;
     try {
       _hasPreservedCorruption = await (await _folder()).list().any(
-        (entry) => entry.uri.pathSegments.last.startsWith('songs.json.corrupt-'),
+        (entry) =>
+            entry.uri.pathSegments.last.startsWith('songs.json.corrupt-'),
       );
       f = await _file();
       final bak = await _bakFile();
@@ -145,7 +159,9 @@ class LoopStorage {
         await f.copy(dest);
       }
       _hasPreservedCorruption = true;
-      debugPrint('[looptap] preserved unreadable songs file as ${dest.split('/').last}');
+      debugPrint(
+        '[looptap] preserved unreadable songs file as ${dest.split('/').last}',
+      );
     } catch (e) {
       debugPrint('[looptap] could not preserve corrupt songs file: $e');
     }
@@ -160,7 +176,10 @@ class LoopStorage {
     // is in flight. Only one writer may use songs.json.tmp at a time.
     final payload = Song.encodeList(songs);
     final result = _saveQueue.then((_) => _savePayload(payload));
-    _saveQueue = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _saveQueue = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
     return result;
   }
 
@@ -223,13 +242,21 @@ class LoopStorage {
   /// Copy a freshly-recorded vocal file into persistent storage and return its
   /// BASENAME under Documents/looptap/vocals/. Timestamped so a re-record never
   /// overwrites the take an undo snapshot still references.
-  static Future<String?> copyVocal(String srcPath, String songId, String sectionId) async {
+  static Future<String?> copyVocal(
+    String srcPath,
+    String songId,
+    String sectionId,
+  ) async {
     try {
       final dir = (await _folder()).path;
       final vocals = Directory('$dir/vocals');
       if (!await vocals.exists()) await vocals.create(recursive: true);
-      final ext = srcPath.contains('.') ? srcPath.substring(srcPath.lastIndexOf('.')) : '.wav';
-      final name = '${songId}_${sectionId}_${DateTime.now().millisecondsSinceEpoch}$ext';
+      final ext =
+          srcPath.contains('.')
+              ? srcPath.substring(srcPath.lastIndexOf('.'))
+              : '.wav';
+      final name =
+          '${songId}_${sectionId}_${DateTime.now().millisecondsSinceEpoch}$ext';
       await File(srcPath).copy('${vocals.path}/$name');
       return name;
     } catch (e) {
@@ -242,12 +269,17 @@ class LoopStorage {
   /// persistent storage; returns the BASENAME. [suffix] tags the variant
   /// (e.g. '_tuned') so files are tellable apart on disk.
   static Future<String?> saveVocalBytes(
-      List<int> bytes, String songId, String sectionId, {String suffix = ''}) async {
+    List<int> bytes,
+    String songId,
+    String sectionId, {
+    String suffix = '',
+  }) async {
     try {
       final dir = (await _folder()).path;
       final vocals = Directory('$dir/vocals');
       if (!await vocals.exists()) await vocals.create(recursive: true);
-      final name = '${songId}_${sectionId}_${DateTime.now().millisecondsSinceEpoch}$suffix.wav';
+      final name =
+          '${songId}_${sectionId}_${DateTime.now().millisecondsSinceEpoch}$suffix.wav';
       await File('${vocals.path}/$name').writeAsBytes(bytes);
       return name;
     } catch (e) {
@@ -271,7 +303,9 @@ class LoopStorage {
       // but if the list is empty while takes exist on disk, prefer keeping
       // them over an irreversible mass delete.
       if (songs.isEmpty && !await vocals.list().isEmpty) {
-        debugPrint('[looptap] sweepVocals skipped: empty song list with takes on disk');
+        debugPrint(
+          '[looptap] sweepVocals skipped: empty song list with takes on disk',
+        );
         return;
       }
       final referenced = <String>{};
@@ -282,7 +316,10 @@ class LoopStorage {
             final paths = <String?>[
               t.vocalPath,
               t.vocalOrigPath,
-              for (final c in t.clips ?? const <VocalClip>[]) ...[c.path, c.origPath],
+              for (final c in t.clips ?? const <VocalClip>[]) ...[
+                c.path,
+                c.origPath,
+              ],
             ];
             for (final p in paths) {
               if (p != null) {
@@ -298,7 +335,9 @@ class LoopStorage {
       }
       await for (final f in vocals.list()) {
         if (f is File && !referenced.contains(f.uri.pathSegments.last)) {
-          try { await f.delete(); } catch (_) {}
+          try {
+            await f.delete();
+          } catch (_) {}
         }
       }
     } catch (e) {

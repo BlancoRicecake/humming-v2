@@ -1,0 +1,1 @@
+Convert recorded vocals into instrument melodies and preview them. Find exported MIDI/WAV files again to share or save them. Improved first-song creation and reduced unnecessary editor updates.

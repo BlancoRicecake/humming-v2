@@ -19,7 +19,7 @@ A mobile DAW and music production app built for beginners, songwriters, beat mak
 - Vocal recordings are never used to train AI
 - Your work stays on your device; cloud sync is not available
 
-Contact: heobusy@gmail.com
+Contact: humtrack@gmail.com
 Terms: https://hum-track.com/terms
 Privacy Policy: https://hum-track.com/privacy
 Refund Policy: https://hum-track.com/refund
