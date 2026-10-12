@@ -10,7 +10,7 @@ Mac에서는 **출시 서명 빌드를 하지 않는다** (GitHub Actions 담당
 
 ## 모든 Mac 프롬프트에 들어가는 규칙
 
-- 저장소 위치는 `~/src/humming-v2` 하나. 다른 곳에 새로 clone하지 않는다.
+- 저장소 위치는 `~/WebstormProjects/humming-v2` 하나. 다른 곳에 새로 clone하지 않는다.
 - 시크릿 값(키, 비밀번호, plist 내용, .env 값)을 화면에 출력하지 않는다. 있는지·형식이 맞는지만 말한다.
 - 스토어 업로드, 심사 제출, 인증서 발급·폐기를 하지 않는다.
 - 끝에 정해진 형식의 **"Claude에게 전달할 결과"** 블록을 출력한다.
@@ -41,7 +41,7 @@ HumTrack(humming-v2) 저장소의 Mac 개발 환경을 점검해줘. 이번 작�
 - 스토어 업로드, 인증서 변경, git push, 커밋, 파일 삭제는 하지 마.
 
 1. 저장소 찾기
-   - ~/src/humming-v2 가 있는지 확인. 없으면 이 Mac에 있는 humming-v2 clone 위치를 모두 찾아서 경로만 알려줘 (새로 clone하지 마).
+   - ~/WebstormProjects/humming-v2 가 있는지 확인. 없으면 이 Mac에 있는 humming-v2 clone 위치를 모두 찾아서 경로만 알려줘 (새로 clone하지 마).
 2. git 상태 (저장소 안에서)
    - 현재 브랜치, `git status --short` 줄 수
    - `git fetch --prune origin` 실행

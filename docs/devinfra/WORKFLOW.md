@@ -7,7 +7,7 @@
 | 기기 | 기준 사본 | 추가 작업 공간 |
 |---|---|---|
 | Windows PC | `C:\src\humming-v2` | `C:\src\humming-v2\.worktrees\<이름>` |
-| Mac | `~/src/humming-v2` | `~/src/humming-v2/.worktrees/<이름>` |
+| Mac | `~/WebstormProjects/humming-v2` | `~/WebstormProjects/humming-v2/.worktrees/<이름>` |
 
 - `C:\dev\Handy_code\...`, `~/.codex/worktrees/...` 같은 다른 위치에 새 사본을 만들지 않는다. Codex를 쓸 때도 작업 폴더를 `.worktrees/` 아래로 지정한다.
 - 작업 공간은 일이 끝나면 push한 뒤 `git worktree remove`로 지운다.
