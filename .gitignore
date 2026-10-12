@@ -95,3 +95,4 @@ mobile/android/fastlane/README.md
 mobile/fastlane/
 
 .vercel
+.worktrees/
