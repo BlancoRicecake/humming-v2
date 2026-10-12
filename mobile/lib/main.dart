@@ -25,6 +25,7 @@ import 'services/iap_service.dart';
 import 'services/locale_service.dart';
 import 'services/observability_service.dart';
 import 'services/product_analytics.dart';
+import 'services/third_party_licenses.dart';
 
 /// 앱 전역 EngineApi 인스턴스 — IapService verify + 향후 다른 backend 호출 공용.
 late final EngineApi engineApi;
@@ -34,6 +35,7 @@ Future<void> main() async {
   // 시 아래 본문을 그대로 실행 — graceful-degrade). lib/services/observability_service.dart.
   await ObservabilityService.instance.bootstrap(() async {
     WidgetsFlutterBinding.ensureInitialized();
+    registerThirdPartyLicenses();
     if (Platform.isAndroid || Platform.isIOS) {
       await SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.landscapeLeft,

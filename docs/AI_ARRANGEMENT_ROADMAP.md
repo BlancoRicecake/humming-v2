@@ -31,16 +31,29 @@ The first release flow is:
 
 ## YuE2 boundary
 
-The YuE2 repository code is Apache-2.0, while the published model weights use
-CC BY-NC 4.0 and also require permission from the individual audio creators for
-generated songs. A paid HumTrack feature must not bundle, host, fine-tune, or
-serve those weights without a separate commercial agreement covering both
-model weights and the relevant output rights.
+**Corrected 2026-10-12.** The earlier statement here ("weights use CC BY-NC 4.0")
+is out of date. Since 2025-01-30 the YuE code **and weights** are released under
+Apache-2.0. The model card encourages commercial use of outputs, asks for the
+credit "YuE by HKUST/M-A-P", and states that users are solely responsible for
+generated content. (Checked 2026-10-12 on the GitHub repo and the
+`m-a-p/YuE-s2-1B-general` model card.)
 
-Safe work in this branch is limited to ideas and interfaces: hierarchical song
-planning, structured section/chord conditioning, editable outputs, and
-objective evaluation. No YuE2 source, weight, checkpoint, or generated asset is
-copied into HumTrack.
+The license is no longer the blocker. These still are:
+
+- **Training data is undisclosed.** 2025–2026 litigation (UMG/Sony v. Suno,
+  GEMA v. Suno) turns on training-data provenance, so the production gate
+  "training data permits commercial use" below cannot be passed yet.
+- **Hardware/cost.** The baseline needs about 24 GB GPU memory; local inference
+  on the 8 GB dev GPU is not supported, so any test needs a rented cloud GPU.
+- **Product rule.** YuE turns lyrics into a whole song. HumTrack's rule is that
+  the hummed melody stays the user's work, so YuE may only be evaluated as an
+  optional, clearly labelled AI suggestion that respects melody lock.
+
+Decision (Heo, 2026-10-12): YuE is an **experiment candidate only** — internal
+accounts behind `ARRANGEMENT_ENABLED=1`, outputs labelled as AI-generated, never
+shipped to users until every production gate below passes. Until then no YuE
+source, weight, checkpoint, or generated asset is copied into the product
+repository.
 
 Primary references:
 
@@ -75,6 +88,9 @@ only after:
 2. Test the guided flow with five beginners and measure completion, correction,
    candidate selection, export, and second-song rates.
 3. Select one commercial-safe symbolic arrangement provider or small model.
-4. Run it behind `ARRANGEMENT_ENABLED=1` for internal accounts only.
+4. Run it behind `ARRANGEMENT_ENABLED=1` for internal accounts only. YuE
+   (Apache-2.0, training data undisclosed) may be tested here as an
+   experiment candidate on a rented GPU; it cannot pass the production gate
+   until its training-data terms are known.
 5. Add audio continuation only after the symbolic workflow proves retention and
    after rights and per-generation cost are signed off.
