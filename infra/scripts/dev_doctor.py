@@ -152,6 +152,9 @@ def check_git(fetch):
                    "--format=%(refname:short)|%(upstream:short)|%(upstream:track)"])
     for line in refs.splitlines():
         name, upstream, track = (line.split("|") + ["", ""])[:3]
+        if (not upstream or "ahead" in track) and run(["git", "merge-base", "--is-ancestor", name, "origin/main"])[0] == 0:
+            report("INFO", "git", f"branch '{name}' committed history is already contained in origin/main (no unpublished commits)")
+            continue
         if not upstream:
             report("FAIL", "git", f"branch '{name}' is not on GitHub (no upstream) — push it or delete it")
         elif "gone" in track:

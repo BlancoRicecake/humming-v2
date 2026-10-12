@@ -3,6 +3,7 @@
 import json
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -72,6 +73,38 @@ class Fingerprints(unittest.TestCase):
         expected = {"defines": {"A": "1", "B": "2"}, "ios_plist": {"X": "9"}, "sentry_mobile_project_id": "1"}
         actual = {"defines": {"A": "1", "B": "3"}}
         self.assertEqual(d.compare_fingerprints(expected, actual), ["defines.B"])
+
+
+class GitChecks(unittest.TestCase):
+    def check_branch(self, refs, ancestor_code):
+        def fake_run(args, cwd=d.ROOT):
+            if args[1:3] == ["rev-parse", "--abbrev-ref"]:
+                return 0, "chore/devinfra\n"
+            if args[1] == "for-each-ref":
+                return 0, refs
+            if args[1] == "merge-base":
+                return ancestor_code, ""
+            return 0, ""
+        with patch.object(d, "results", []), patch.object(d, "run", side_effect=fake_run):
+            d.check_git(False)
+            return list(d.results)
+
+    def test_merged_unpublished_branch_is_not_a_failure(self):
+        for refs in ("merged||", "merged|origin/merged|[ahead 24]"):
+            with self.subTest(refs=refs):
+                rows = self.check_branch(refs, 0)
+                self.assertFalse(any(level == "FAIL" for level, _, _ in rows))
+                self.assertTrue(any("no unpublished commits" in msg for _, _, msg in rows))
+
+    def test_unmerged_unpublished_branch_still_fails(self):
+        for refs in ("feature||", "feature|origin/feature|[ahead 1]"):
+            with self.subTest(refs=refs):
+                rows = self.check_branch(refs, 1)
+                self.assertTrue(any(level == "FAIL" for level, _, _ in rows))
+
+    def test_missing_main_does_not_hide_unpublished_commits(self):
+        rows = self.check_branch("feature|origin/feature|[ahead 1]", 128)
+        self.assertTrue(any(level == "FAIL" for level, _, _ in rows))
 
 
 if __name__ == "__main__":
