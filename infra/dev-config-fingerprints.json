@@ -1,3 +1,11 @@
 {
+  "defines": {
+    "CLARITY_PROJECT_ID": "9600668ea998",
+    "ENGINE_URL": "5f582e79dcfc",
+    "GOOGLE_WEB_CLIENT_ID": "4ab266cba99a",
+    "SENTRY_DSN_MOBILE": "27f9ef381642",
+    "SUPABASE_ANON_KEY": "4474071bd731",
+    "SUPABASE_URL": "5773bfd37456"
+  },
   "sentry_mobile_project_id": "4511601866833920"
 }
