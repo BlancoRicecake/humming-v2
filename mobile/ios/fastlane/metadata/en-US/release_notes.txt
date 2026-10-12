@@ -1,11 +1,4 @@
-What's new
-
-- Fixed an issue where the app could close immediately after launch on some iPhone and iPad devices.
-- Compare three backing options for each mood and apply only the one you choose.
-- Manage section order, repeats and duplicates, and lock melody, chords, bass or drums from the song structure view.
-- Refine hum-to-melody results safely with melody locking, pitch comparison and review tools.
-- Preserve edits and vocal files when saving fails, with clearer feedback and retry support.
-- Keep full-song vocal recordings when duplicating a song.
-- Improve backup recovery and autosave reliability.
-- Improve recording and playback interruptions, subscription status checks, and Korean export filenames.
-- Expand Korean translations and add an in-app policy update notice.
+• Start your first song right from the home screen, no sign-in needed
+• Turn recorded vocal clips into instrument tracks (MIDI)
+• Exported files are easier to find
+• Updated open-source license notices

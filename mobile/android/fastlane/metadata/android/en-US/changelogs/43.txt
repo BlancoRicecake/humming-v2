@@ -1,0 +1,4 @@
+• Start your first song right from the home screen, no sign-in needed
+• Turn recorded vocal clips into instrument tracks (MIDI)
+• Exported files are easier to find
+• Updated open-source license notices
