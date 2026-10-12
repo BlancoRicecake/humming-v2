@@ -102,6 +102,15 @@ class Settings(BaseSettings):
     # for longer than this without one arriving.
     iap_notification_max_age_days: int = 5
 
+    # Priority analysis (app/priority.py). DSP = /analyze, /process_vocal,
+    # /process_fx, /autotune; render = FluidSynth endpoints. Slot counts are
+    # bounded by RAM on the 1 GB VM (see the gates in main.py).
+    priority_dsp_slots: int = 2
+    priority_dsp_pro_reserved: int = 1
+    priority_render_slots: int = 1
+    priority_render_pro_reserved: int = 0
+    priority_free_max_wait_sec: float = 5.0
+
     # Optional symbolic arrangement provider. Disabled by default so no
     # unlicensed model weights or provider credentials can enter production by
     # accident. The provider speaks the versioned HumTrack SongSpec contract.
