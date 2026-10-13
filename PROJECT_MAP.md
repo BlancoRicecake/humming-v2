@@ -54,6 +54,7 @@ Humtrack/                        ← 워크스페이스 컨테이너 (git 추적
 | 문서 | 성격 |
 |------|------|
 | `STATUS.md` | 사운드랩 **단일 기준 현황** — 현재상태 + 설계 근거·이력(구 MVP_SNAPSHOT 통합) |
+| [`vision/VISION-ROADMAP.md`](docs/vision/VISION-ROADMAP.md) | 제품 비전·단계의 기준. [음악 제품 검토](docs/vision/MUSIC-PRODUCT-REVIEW-2026-10-13.md) → [개선 계획](docs/vision/MUSIC-IMPROVEMENT-PLAN.md) → [개발 체크리스트](docs/vision/music-checklist.md)로 세부 작업 연결 |
 | `opus-integration-plan.md` | 모바일 업로드 Opus 인코딩 연구·권고 (2026-06-02) |
 | `experiments/` | 실험 **기록(.md/.txt)** — 드럼 파이프라인 계획, HumTrans 계획, 세션 요약, Basic Pitch 비교. *raw 출력(csv/json)은 `_archive/experiments/`로 이전* |
 | `legal/` | 개인정보·환불·이용약관·심사노트 |
