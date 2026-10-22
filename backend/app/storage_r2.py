@@ -75,6 +75,43 @@ def presign_get(key: str, *, expires_in: int = 300) -> Optional[str]:
     )
 
 
+def object_size(key: str) -> Optional[int]:
+    """Byte size of `key` from a HEAD request, or None if R2 not configured.
+
+    Raises FileNotFoundError when the object does not exist (never uploaded,
+    or the presigned PUT has not finished).
+    """
+    r2 = get_r2_client()
+    if r2 is None:
+        return None
+    s = get_settings()
+    try:
+        res = r2.head_object(Bucket=s.r2_bucket, Key=key)
+    except Exception as e:
+        code = str(getattr(e, "response", {}).get("Error", {}).get("Code", ""))
+        if code in ("404", "NoSuchKey", "NotFound"):
+            raise FileNotFoundError(key) from e
+        raise
+    return int(res.get("ContentLength") or 0)
+
+
+def prefix_bytes(prefix: str) -> Optional[int]:
+    """Total bytes stored beneath `prefix`, or None if R2 not configured.
+
+    Listing errors propagate: an under-count here would let quota checks pass.
+    """
+    r2 = get_r2_client()
+    if r2 is None:
+        return None
+    s = get_settings()
+    total = 0
+    paginator = r2.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=s.r2_bucket, Prefix=prefix):
+        for obj in page.get("Contents", []) or []:
+            total += int(obj.get("Size") or 0)
+    return total
+
+
 def delete_objects(keys: Iterable[str]) -> int:
     """Delete listed object keys. Returns count of deleted keys (best-effort)."""
     keys = list(keys)
