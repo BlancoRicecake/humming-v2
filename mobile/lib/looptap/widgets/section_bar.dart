@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import '../models/loop_models.dart';
+import '../music/section_links.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
 
@@ -37,6 +38,16 @@ class SectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final groups = linkGroupNumbers(sections);
+    final active =
+        activeIdx >= 0 && activeIdx < sections.length
+            ? sections[activeIdx]
+            : null;
+    final linked =
+        active?.linkId == null
+            ? 0
+            : sections.where((s) => s.linkId == active!.linkId).length;
+    final ko = Localizations.localeOf(context).languageCode == 'ko';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
       child: Row(
@@ -59,6 +70,7 @@ class SectionBar extends StatelessWidget {
                     // across reorder/duplicate (not the stale list position).
                     key: ValueKey(sections[i].id),
                     section: sections[i],
+                    linkGroup: groups[sections[i].linkId],
                     active: i == activeIdx,
                     canDelete: sections.length > 1,
                     onTap: () => onSwitch(i),
@@ -71,6 +83,16 @@ class SectionBar extends StatelessWidget {
               ),
             ),
           ),
+          if (linked > 1) ...[
+            const SizedBox(width: 8),
+            Text(
+              ko
+                  ? '연결된 구간 $linked개에 함께 적용'
+                  : 'Edits apply to $linked linked sections',
+              key: const ValueKey('section-link-notice'),
+              style: LTType.inter(size: 10, color: LT.t3),
+            ),
+          ],
           const SizedBox(width: 10),
           _PlaySongButton(songMode: songMode, onTap: onPlaySong),
         ],
@@ -83,6 +105,7 @@ class _Chip extends StatefulWidget {
   const _Chip({
     super.key,
     required this.section,
+    this.linkGroup,
     required this.active,
     required this.canDelete,
     required this.onTap,
@@ -93,6 +116,9 @@ class _Chip extends StatefulWidget {
   });
 
   final Section section;
+
+  /// AR-001 link group number (null = not linked).
+  final int? linkGroup;
   final bool active;
   final bool canDelete;
   final VoidCallback onTap;
@@ -134,6 +160,7 @@ class _ChipState extends State<_Chip> {
     return GestureDetector(
       onTap: a ? null : widget.onTap,
       onLongPress: widget.onLongPress,
+      onSecondaryTap: widget.onLongPress, // desktop right-click menu
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -144,6 +171,13 @@ class _ChipState extends State<_Chip> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.linkGroup != null) ...[
+              LinkBadge(
+                key: ValueKey('section-link-${s.id}'),
+                group: widget.linkGroup!,
+              ),
+              const SizedBox(width: 4),
+            ],
             if (a)
               IntrinsicWidth(
                 child: ConstrainedBox(
@@ -185,6 +219,29 @@ class _ChipState extends State<_Chip> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// AR-001: link icon + group number, tinted per group.
+class LinkBadge extends StatelessWidget {
+  const LinkBadge({super.key, required this.group});
+  final int group;
+
+  static const _colors = [LT.blue, LT.amber, LT.pink, LT.lime];
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _colors[(group - 1) % _colors.length];
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.link, size: 12, color: color),
+        Text(
+          '$group',
+          style: LTType.mono(size: 10, weight: FontWeight.w700, color: color),
+        ),
+      ],
     );
   }
 }

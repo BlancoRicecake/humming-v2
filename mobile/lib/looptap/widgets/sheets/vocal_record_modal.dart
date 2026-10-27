@@ -236,9 +236,16 @@ class _VocalRecordModalState extends State<_VocalRecordModal>
       scale: widget.scale,
       strength: 1.0,
     );
-    if (_closed || !mounted) {
+    // A lifecycle abort / interruption flips _phase off 'countin' without
+    // setting _closed — treat that as cancelled too.
+    if (_closed || _phase != 'countin' || !mounted) {
       // cancelled while the start was in flight — don't leak the native graph
-      if (started) await stopAutotuneMonitor();
+      // (the canceller's _stopMonitor ran before _monitorActive was set, and
+      // its session release may have landed before this start re-took it)
+      if (started) {
+        await stopAutotuneMonitor();
+        await releaseAutotuneMonitorSession();
+      }
       return;
     }
     _monitorActive = started;
@@ -347,11 +354,13 @@ class _VocalRecordModalState extends State<_VocalRecordModal>
       await _startMonitor(); // after the recorder owns the mic; fails soft
       if (_closed || _phase != 'countin' || !mounted) {
         _stopBacking();
+        _stopMonitor();
         String? p;
         try {
           p = await _rec.stop();
         } catch (_) {}
         _deleteQuiet(p);
+        await releaseAutotuneMonitorSession();
         await _restoreOutput();
         return;
       }
@@ -466,6 +475,10 @@ class _VocalRecordModalState extends State<_VocalRecordModal>
     // deactivated session).
     await releaseAutotuneMonitorSession();
     await _restoreOutput();
+    if (_closed) {
+      _deleteQuiet(path); // abandoned while stopping — skip the align
+      return;
+    }
     if (path == null) {
       _fail('noaudio');
       return;
@@ -489,6 +502,12 @@ class _VocalRecordModalState extends State<_VocalRecordModal>
     });
     // The raw capture is consumed — the aligned copy is all that's needed now.
     _deleteQuiet(path);
+    // Abandoned (system back → _cancel) while aligning — don't commit a take
+    // the user walked away from; drop the temp aligned copy too.
+    if (_closed) {
+      if (out != null) _deleteQuiet(out.path);
+      return;
+    }
     if (out == null) {
       _fail('failed');
       return;

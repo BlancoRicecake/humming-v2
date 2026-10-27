@@ -1,26 +1,29 @@
 // LoopTap — Vocal clip editor (실험: 자르기/붙이기/늘리기 + 사운드 가공).
 // Full-screen editor over the vocal lane. Light edits (trim/fade/gain/normalize)
 // are NON-DESTRUCTIVE VocalClip params applied instantly — no file write, no
-// network — and honored by export/playback via bounceVocalClips. Heavier DSP
-// (EQ/reverb/comp/delay/stretch/pitch) round-trips the backend /process_fx,
-// which bakes a new WAV and records an FxNode in the clip's history.
+// network — and honored by export/playback via bounceVocalClips. The effect
+// library runs locally in isolates; legacy EQ/reverb/comp/delay/stretch/pitch
+// and autotune use the server. Only a complete rendered chain is committed.
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../api/engine_api.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../audio/loop_audio.dart';
+import '../../audio/vocal_fx_processor.dart';
 import '../../models/loop_models.dart';
 import '../../music/theory.dart';
 import '../../music/vocal_midi.dart';
+import '../../music/vocal_fx.dart';
+import '../../music/vocal_fx_catalog.dart';
 import 'vocal_midi_sheet.dart';
 import '../../music/wav_codec.dart';
-import '../../music/wav_export.dart';
+import '../../music/vocal_comparison.dart';
 import '../../state/loop_storage.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
@@ -76,6 +79,8 @@ class VocalEditorScreen extends StatefulWidget {
     required this.scale,
     required this.swing,
     this.convertImmediately = false,
+    this.fxRenderer,
+    this.autoPreview = true,
   });
 
   final TrackData vocal;
@@ -86,6 +91,8 @@ class VocalEditorScreen extends StatefulWidget {
   final String keyRoot, scale;
   final double swing;
   final bool convertImmediately;
+  final VocalFxRenderer? fxRenderer;
+  final bool autoPreview;
 
   @override
   State<VocalEditorScreen> createState() => _VocalEditorScreenState();
@@ -99,6 +106,16 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
   double? _selA, _selB;
   bool _busy = false;
   String _status = '';
+  double _fxAmount = .7;
+  late bool _autoPreview = widget.autoPreview;
+  bool _previewDry = false, _previewPlaying = false, _previewLoading = false;
+  bool _previewLoop = true, _matchLevel = true;
+  StreamSubscription<bool>? _playbackSubscription;
+  int _previewGeneration = 0;
+  final Set<File> _previewFiles = {};
+
+  VocalFxRenderer get _fxRenderer =>
+      widget.fxRenderer ?? vocalFxRenderer(widget.songId, widget.sectionId);
 
   final _audio = LoopAudio.instance;
 
@@ -108,6 +125,11 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
   @override
   void initState() {
     super.initState();
+    _playbackSubscription = _audio.vocalPlaying.listen((playing) {
+      if (mounted && _previewPlaying != playing) {
+        setState(() => _previewPlaying = playing);
+      }
+    });
     final src = widget.vocal.effectiveClips;
     _clips = src.isEmpty ? [] : [for (final c in src) c.copy()];
     if (_clips.isNotEmpty) _loadSrc(_clip.path);
@@ -120,8 +142,21 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
 
   @override
   void dispose() {
-    _audio.stopVocal();
+    _previewGeneration++;
+    unawaited(_playbackSubscription?.cancel());
+    unawaited(_disposePreview());
     super.dispose();
+  }
+
+  Future<void> _disposePreview() async {
+    await _audio.stopVocal();
+    for (final file in _previewFiles) {
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // Best-effort cleanup of this editor's own previews.
+      }
+    }
   }
 
   Future<void> _loadSrc(String path) async {
@@ -250,54 +285,89 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
 
   /// Display name for an FX node type (the codes are persisted in the clip's
   /// history, so they stay English on disk and are localized only here).
-  String _fxName(L10n l, String type) => switch (type) {
-    'eq' => l.ltFxEq,
-    'reverb' => l.ltFxReverb,
-    'comp' => l.ltFxComp,
-    'delay' => l.ltFxDelay,
-    'stretch' => l.ltFxStretch,
-    'pitch' => l.ltFxPitch,
-    _ => type,
-  };
+  String _fxName(L10n l, String type) {
+    for (final effect in localVocalEffects) {
+      if (effect.type == type) {
+        return effect.label(l.localeName.startsWith('ko'));
+      }
+    }
+    return switch (type) {
+      'eq' => l.ltFxEq,
+      'reverb' => l.ltFxReverb,
+      'comp' => l.ltFxComp,
+      'delay' => l.ltFxDelay,
+      'stretch' => l.ltFxStretch,
+      'pitch' => l.ltFxPitch,
+      'autotune' => l.ltEditorAutotuneTitle,
+      _ => type,
+    };
+  }
 
-  // ── server FX (bakes a new WAV + records an FxNode) ───────────────────────
+  Future<void> _applyPreset(VocalEffectPreset preset) => _changeFx(
+    vocalPresetChain(_clip, preset),
+    status: preset.label(L10n.of(context).localeName.startsWith('ko')),
+  );
+
+  // ── transactional FX chain changes ──────────────────────────────────────
   Future<void> _applyFx(String fxType, Map<String, dynamic> params) async {
+    await _changeFx([
+      ..._clip.fx,
+      FxNode(type: fxType, params: params),
+    ], status: _fxName(L10n.of(context), fxType));
+  }
+
+  Future<void> _changeFx(List<FxNode> chain, {required String status}) async {
+    await _renderFxEdit(
+      (clip) =>
+          _fxRenderer.render(clip, chain, bpm: widget.bpm, bars: widget.bars),
+      status,
+    );
+  }
+
+  Future<void> _restoreOriginal() => _renderFxEdit(
+    (clip) =>
+        _fxRenderer.restoreOriginal(clip, bpm: widget.bpm, bars: widget.bars),
+    L10n.of(context).ltVocalEditorRestoreOriginal,
+  );
+
+  Future<void> _renderFxEdit(
+    Future<VocalClip> Function(VocalClip) render,
+    String status,
+  ) async {
     if (_busy) return;
-    final l = L10n.of(context);
+    final target = _clip;
+    final index = _sel;
+    final wasPlaying = _previewPlaying;
+    Duration? resumeAt;
+    var applied = false;
+    final previewGeneration = ++_previewGeneration;
     setState(() {
       _busy = true;
-      _status = l.ltVocalEditorFxProcessing(_fxName(l, fxType));
+      _previewLoading = false;
+      _previewPlaying = false;
+      _status = L10n.of(context).ltVocalEditorFxProcessing(status);
     });
     try {
-      final res = await EngineApi().processFx(
-        LoopStorage.resolveVocal(_clip.path),
-        fxType: fxType,
-        params: params,
-      );
-      final persisted = await LoopStorage.saveVocalBytes(
-        res.wav,
-        widget.songId,
-        widget.sectionId,
-        suffix: '_$fxType',
-      );
-      if (persisted == null) throw Exception('save failed');
-      if (!mounted) return;
+      if (wasPlaying) resumeAt = await _audio.vocalPosition();
+      await _audio.stopVocal();
+      final result = await render(target.copy());
+      if (!mounted ||
+          index >= _clips.length ||
+          !identical(_clips[index], target)) {
+        return;
+      }
       setState(() {
-        _clip.origPath ??= _clip.path; // first edit keeps the dry take
-        _clip.path = persisted;
-        _clip.peaks = res.peaks.isNotEmpty ? res.peaks : _clip.peaks;
-        _clip.fx.add(FxNode(type: fxType, params: params));
-        // the server returned the whole processed take — the old trim window
-        // referenced the previous file's samples, so reset it to the new audio.
-        _clip.trimStart = 0;
-        _clip.trimEnd = -1;
-        _src.remove(persisted);
+        _clips[index] = result;
+        _selA = _selB = null;
       });
-      await _loadSrc(persisted); // re-measures durSteps for the new file
+      await _loadSrc(result.path);
+      applied = true;
     } catch (e) {
       if (mounted) {
         _toast(
-          e is EngineApiException
+          e is VocalFxSourceMissing
+              ? L10n.of(context).ltVocalEditorFxSourceMissing
+              : e is EngineApiException
               ? e.message
               : L10n.of(context).ltVocalEditorProcessFailed,
         );
@@ -310,25 +380,23 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
         });
       }
     }
+    if (applied &&
+        mounted &&
+        previewGeneration == _previewGeneration &&
+        (_autoPreview || wasPlaying)) {
+      await _preview(startAt: wasPlaying ? resumeAt : Duration.zero);
+    }
   }
 
-  void _removeFx(int i) {
-    // History only — re-rendering the chain from origPath is a follow-up. For
-    // now removing a node restores the dry take and clears the chain so the
-    // user can re-apply cleanly.
-    final orig = _clip.origPath;
-    setState(() {
-      _clip.fx.removeAt(i);
-      if (_clip.fx.isEmpty && orig != null) {
-        _clip.path = orig;
-        _clip.origPath = null;
-        _loadSrc(orig);
-      }
-    });
+  Future<void> _removeFx(int i) async {
+    if (_busy) return;
+    final chain = _clip.fx.map((f) => f.copy()).toList()..removeAt(i);
+    await _changeFx(chain, status: _fxName(L10n.of(context), _clip.fx[i].type));
   }
 
   // ── multi-take lane ───────────────────────────────────────────────────────
   void _deleteClip(int i) {
+    if (_busy) return;
     if (_clips.length <= 1) return;
     setState(() {
       _clips.removeAt(i);
@@ -337,6 +405,7 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
   }
 
   void _nudgeStart(int deltaSteps) {
+    if (_busy) return;
     final maxStep = stepsForBars(widget.bars) - 1;
     setState(
       () => _clip.startStep = (_clip.startStep + deltaSteps).clamp(0, maxStep),
@@ -344,29 +413,103 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
   }
 
   // ── preview (full multi-clip bounce → temp WAV → play) ────────────────────
-  Future<void> _preview({bool dryOriginal = false}) async {
-    final clips =
-        dryOriginal
-            ? [for (final c in _clips) (c.copy()..origPathToDry())]
-            : _clips;
-    // ensure all sources are loaded
-    final sources = <String, ({Float32List pcm, int sampleRate})>{};
-    for (final c in clips) {
-      await _loadSrc(c.path);
-      final s = _src[c.path];
-      if (s != null) {
-        sources[c.path] = (pcm: s.samples, sampleRate: s.sampleRate);
+  Future<void> _preview({bool dryOriginal = false, Duration? startAt}) async {
+    if (_busy) return;
+    final generation = ++_previewGeneration;
+    final clips = [for (final c in _clips) c.copy()];
+    setState(() => _previewLoading = true);
+    try {
+      final sources = <String, WavData>{};
+      for (final c in clips) {
+        for (final path in {c.path, c.origPath ?? c.fxSourcePath ?? c.path}) {
+          final source =
+              _src[path] ??
+              parseWav(
+                await File(LoopStorage.resolveVocal(path)).readAsBytes(),
+              );
+          if (source == null || source.samples.isEmpty) {
+            throw const FormatException('Invalid comparison audio');
+          }
+          sources[path] = source;
+          _src[path] = source;
+        }
+        if (!mounted || generation != _previewGeneration) return;
+      }
+      final comparison = vocalComparison(
+        clips,
+        sources,
+        bars: widget.bars,
+        bpm: widget.bpm,
+        matchLevel: _matchLevel,
+      );
+      final pcm = dryOriginal ? comparison.original : comparison.processed;
+      if (pcm.isEmpty) throw const FormatException('Empty preview');
+      final bytes = encodeWavMono16(pcm, 44100);
+      final dir = await getTemporaryDirectory();
+      if (!mounted || generation != _previewGeneration) return;
+      final f = File(
+        '${dir.path}/lt_preview_${identityHashCode(this)}_$generation.wav',
+      );
+      _previewFiles.add(f);
+      await f.writeAsBytes(bytes, flush: true);
+      if (!mounted || generation != _previewGeneration) return;
+      final position =
+          startAt ??
+          (_previewPlaying ? await _audio.vocalPosition() : null) ??
+          Duration.zero;
+      if (!mounted || generation != _previewGeneration) return;
+      final lengthMs = (pcm.length / 44.1).floor();
+      final seek = Duration(
+        milliseconds: position.inMilliseconds % lengthMs.clamp(1, 1 << 31),
+      );
+      await _audio.stopVocal();
+      if (!mounted || generation != _previewGeneration) return;
+      final played = await _audio.playVocalChecked(
+        f.path,
+        vol: 1,
+        loop: _previewLoop,
+        position: seek,
+      );
+      if (!mounted || generation != _previewGeneration) return;
+      setState(() {
+        _previewDry = dryOriginal;
+        _previewPlaying = played;
+      });
+      if (!played) _toast(L10n.of(context).ltVocalPreviewFailed);
+    } catch (e) {
+      debugPrint('[vocal_preview] $e');
+      if (mounted && generation == _previewGeneration) {
+        setState(() => _previewPlaying = false);
+        _toast(L10n.of(context).ltVocalPreviewFailed);
+      }
+    } finally {
+      if (mounted && generation == _previewGeneration) {
+        setState(() => _previewLoading = false);
       }
     }
-    if (sources.isEmpty) return;
-    final lane = bounceVocalClips(clips, widget.bars, widget.bpm, sources);
-    if (lane.isEmpty) return;
-    final bytes = encodeWavMono16(lane, 44100);
-    final dir = await getTemporaryDirectory();
-    final f = File('${dir.path}/lt_preview.wav');
-    await f.writeAsBytes(bytes);
-    await _audio.stopVocal();
-    await _audio.playVocal(f.path, vol: 1.0);
+  }
+
+  void _stopPreview() {
+    _previewGeneration++;
+    setState(() {
+      _previewPlaying = false;
+      _previewLoading = false;
+    });
+    _audio.stopVocal();
+  }
+
+  bool _presetSelected(VocalEffectPreset preset) {
+    final effects = _clip.fx.where((f) => f.type != 'autotune').toList();
+    final target = preset.nodes();
+    if (effects.length != target.length) return false;
+    for (var i = 0; i < effects.length; i++) {
+      if (!effects[i].enabled ||
+          effects[i].type != target[i].type ||
+          !mapEquals(effects[i].params, target[i].params)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Future<void> _convertToMidi() async {
@@ -386,6 +529,7 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
 
   // ── save / cancel ─────────────────────────────────────────────────────────
   void _done([VocalMidiResult? converted]) {
+    if (_busy) return;
     final out = TrackData(clips: _clips);
     // mirror first clip to legacy fields so the surface waveform shows
     if (_clips.isNotEmpty) {
@@ -524,12 +668,16 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
             child: CircularProgressIndicator(strokeWidth: 2, color: LT.pink),
           ),
           const SizedBox(width: 8),
-          Text(
-            _status,
-            style: LTType.mono(
-              size: 12,
-              weight: FontWeight.w600,
-              color: LT.pink,
+          Flexible(
+            child: Text(
+              _status,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: LTType.mono(
+                size: 12,
+                weight: FontWeight.w600,
+                color: LT.pink,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -539,7 +687,7 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
           icon: LtIcons.checkCircle,
           tone: PillTone.lime,
           height: 40,
-          onTap: _done,
+          onTap: _busy ? null : _done,
         ),
       ],
     );
@@ -557,13 +705,16 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
           final sel = i == _sel;
           final c = _clips[i];
           return GestureDetector(
-            onTap: () {
-              setState(() {
-                _sel = i;
-                _selA = _selB = null;
-              });
-              _loadSrc(c.path);
-            },
+            onTap:
+                _busy
+                    ? null
+                    : () {
+                      setState(() {
+                        _sel = i;
+                        _selA = _selB = null;
+                      });
+                      _loadSrc(c.path);
+                    },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               alignment: Alignment.center,
@@ -622,15 +773,23 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
       builder: (context, c) {
         return GestureDetector(
           onHorizontalDragStart:
-              (d) => setState(() {
-                _selA = (d.localPosition.dx / c.maxWidth).clamp(0.0, 1.0);
-                _selB = _selA;
-              }),
+              _busy
+                  ? null
+                  : (d) => setState(() {
+                    _selA = (d.localPosition.dx / c.maxWidth).clamp(0.0, 1.0);
+                    _selB = _selA;
+                  }),
           onHorizontalDragUpdate:
-              (d) => setState(
-                () => _selB = (d.localPosition.dx / c.maxWidth).clamp(0.0, 1.0),
-              ),
-          onTap: () => setState(() => _selA = _selB = null),
+              _busy
+                  ? null
+                  : (d) => setState(
+                    () =>
+                        _selB = (d.localPosition.dx / c.maxWidth).clamp(
+                          0.0,
+                          1.0,
+                        ),
+                  ),
+          onTap: _busy ? null : () => setState(() => _selA = _selB = null),
           child: Container(
             decoration: BoxDecoration(
               gradient: const LinearGradient(
@@ -672,18 +831,22 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
                   bottom: 8,
                   child: Row(
                     children: [
-                      Text(
-                        (_selA != null && _selB != null)
-                            ? L10n.of(context).ltVocalEditorDragSet
-                            : L10n.of(context).ltVocalEditorDragHint,
-                        style: LTType.mono(
-                          size: 10,
-                          weight: FontWeight.w600,
-                          color: LT.t3,
+                      Expanded(
+                        child: Text(
+                          (_selA != null && _selB != null)
+                              ? L10n.of(context).ltVocalEditorDragSet
+                              : L10n.of(context).ltVocalEditorDragHint,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: LTType.mono(
+                            size: 10,
+                            weight: FontWeight.w600,
+                            color: LT.t3,
+                          ),
                         ),
                       ),
-                      const Spacer(),
-                      _readout(),
+                      const SizedBox(width: 8),
+                      Flexible(child: _readout()),
                     ],
                   ),
                 ),
@@ -711,6 +874,8 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
     if (parts.isEmpty) return const SizedBox.shrink();
     return Text(
       parts.join(' · '),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: LTType.mono(size: 10, weight: FontWeight.w700, color: LT.pink),
     );
   }
@@ -749,7 +914,7 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
         ],
       ),
       trailing: GestureDetector(
-        onTap: _resetEdits,
+        onTap: _busy ? null : _resetEdits,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -771,40 +936,142 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
 
   Widget _effectsGroup() {
     final l = L10n.of(context);
+    final korean = l.localeName.startsWith('ko');
     return _group(
       l.ltVocalEditorEffectsGroup,
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_clip.fx.isNotEmpty) ...[_fxChain(), const SizedBox(height: 10)],
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              if (_clip.fx.isNotEmpty)
+                _tool(
+                  l.ltVocalEditorClearFx,
+                  LtIcons.close,
+                  () => _changeFx([], status: l.ltVocalEditorClearFx),
+                ),
+              _tool(
+                l.ltVocalEditorRestoreOriginal,
+                LtIcons.restore,
+                _restoreOriginal,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          LtLabel(l.ltVocalFxPresets),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
-              _fxBtn(l.ltFxEq, 'eq', {'low': 3.0, 'mid': 0.0, 'high': 4.0}),
-              _fxBtn(l.ltFxReverb, 'reverb', {'wet': 0.3, 'decay': 1.4}),
-              _fxBtn(l.ltFxComp, 'comp', {'threshold': -18.0, 'ratio': 3.0}),
-              _fxBtn(l.ltFxDelay, 'delay', {
-                'time': 300.0,
-                'feedback': 0.35,
-                'wet': 0.3,
-              }),
-              _fxBtn(l.ltFxSlower, 'stretch', {'ratio': 1.2}),
-              _fxBtn(l.ltFxFaster, 'stretch', {'ratio': 0.85}),
-              _fxBtn(l.ltFxPitchUp, 'pitch', {'semitones': 2.0}),
-              _fxBtn(l.ltFxPitchDown, 'pitch', {'semitones': -2.0}),
+              for (final preset in vocalEffectPresets)
+                Pill(
+                  key: ValueKey('vocal-preset-${preset.id}'),
+                  label: preset.label(korean),
+                  icon: LtIcons.graphicEq,
+                  height: 36,
+                  tone:
+                      _presetSelected(preset)
+                          ? PillTone.lime
+                          : PillTone.surface,
+                  onTap: _busy ? null : () => _applyPreset(preset),
+                ),
             ],
           ),
-          if (_clip.fx.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Container(height: 1, color: LT.border),
-            const SizedBox(height: 10),
-            _fxChain(),
-          ],
+          const SizedBox(height: 6),
+          Text(
+            l.ltVocalFxPresetHint,
+            style: LTType.inter(size: 11, color: LT.t3),
+          ),
+          const SizedBox(height: 16),
+          LtLabel(l.ltVocalFxLocal),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final effect in localVocalEffects)
+                _tool(
+                  effect.label(korean),
+                  LtIcons.graphicEq,
+                  () => _applyFx(effect.type, {
+                    ...effect.params,
+                    'mix': _fxAmount,
+                  }),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                l.ltVocalFxAmount,
+                style: LTType.inter(size: 11, color: LT.t2),
+              ),
+              Expanded(
+                child: Slider(
+                  key: const ValueKey('vocal-fx-amount'),
+                  value: _fxAmount,
+                  min: .1,
+                  max: 1,
+                  divisions: 9,
+                  label: '${(_fxAmount * 100).round()}%',
+                  onChanged:
+                      _busy ? null : (v) => setState(() => _fxAmount = v),
+                ),
+              ),
+              Text(
+                '${(_fxAmount * 100).round()}%',
+                style: LTType.mono(size: 11),
+              ),
+            ],
+          ),
+          Text(
+            l.ltVocalFxAmountHint,
+            style: LTType.inter(size: 11, color: LT.t3),
+          ),
+          const SizedBox(height: 8),
+          Material(
+            color: Colors.transparent,
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Text(
+                l.ltVocalFxServer,
+                style: LTType.inter(size: 12, color: LT.t2),
+              ),
+              children: [
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _fxBtn(l.ltFxEq, 'eq', {
+                      'low': 3.0,
+                      'mid': 0.0,
+                      'high': 4.0,
+                    }),
+                    _fxBtn(l.ltFxReverb, 'reverb', {'wet': 0.3, 'decay': 1.4}),
+                    _fxBtn(l.ltFxComp, 'comp', {
+                      'threshold': -18.0,
+                      'ratio': 3.0,
+                    }),
+                    _fxBtn(l.ltFxDelay, 'delay', {
+                      'time': 300.0,
+                      'feedback': 0.35,
+                      'wet': 0.3,
+                    }),
+                    _fxBtn(l.ltFxSlower, 'stretch', {'ratio': 1.2}),
+                    _fxBtn(l.ltFxFaster, 'stretch', {'ratio': 0.85}),
+                    _fxBtn(l.ltFxPitchUp, 'pitch', {'semitones': 2.0}),
+                    _fxBtn(l.ltFxPitchDown, 'pitch', {'semitones': -2.0}),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
-      ),
-      trailing: Text(
-        l.ltVocalEditorServerTag,
-        style: LTType.mono(size: 9, weight: FontWeight.w700, color: LT.t3),
       ),
     );
   }
@@ -817,7 +1084,7 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
       children: [
         for (var i = 0; i < _clip.fx.length; i++)
           GestureDetector(
-            onTap: () => _removeFx(i),
+            onTap: _busy ? null : () => _removeFx(i),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -850,13 +1117,13 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
   }
 
   Widget _tool(String label, IconData icon, VoidCallback? onTap) => Opacity(
-    opacity: onTap == null ? 0.4 : 1,
+    opacity: _busy || onTap == null ? 0.4 : 1,
     child: Pill(
       label: label,
       icon: icon,
       tone: PillTone.surface,
       height: 36,
-      onTap: onTap,
+      onTap: _busy ? null : onTap,
     ),
   );
 
@@ -875,6 +1142,18 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
 
   Widget _transport() {
     final l = L10n.of(context);
+    final count = _clips.fold<int>(
+      0,
+      (n, c) => n + c.fx.where((f) => f.enabled).length,
+    );
+    final status =
+        _previewLoading
+            ? l.ltVocalPreviewLoading
+            : _previewPlaying
+            ? (_previewDry
+                ? l.ltVocalPreviewOriginalPlaying
+                : l.ltVocalPreviewProcessedPlaying)
+            : l.ltVocalPreviewStopped;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -882,75 +1161,131 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
         borderRadius: BorderRadius.circular(LTRadius.card),
         border: Border.all(color: LT.border),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          IconBtn(
-            icon: LtIcons.playArrow,
-            tooltip: l.ltVocalEditorPreview,
-            size: 46,
-            onTap: () => _preview(),
-          ),
-          const SizedBox(width: 8),
-          IconBtn(
-            icon: LtIcons.stop,
-            tooltip: l.pendingStop,
-            size: 46,
-            onTap: _audio.stopVocal,
-          ),
-          const SizedBox(width: 8),
-          Pill(
-            label: 'A / B',
-            icon: LtIcons.restore,
-            height: 42,
-            onTap: () => _preview(dryOriginal: true),
-          ),
-          const Spacer(),
-          // clip timing nudge
-          Container(
-            decoration: BoxDecoration(
-              color: LT.surface2,
-              borderRadius: BorderRadius.circular(LTRadius.pill),
-              border: Border.all(color: LT.border),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconBtn(
-                  icon: LtIcons.chevronLeft,
-                  tooltip: l.ltVocalEditorEarlier,
-                  size: 38,
-                  onTap: () => _nudgeStart(-1),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
-                    l.ltVocalEditorStep(_clip.startStep),
-                    style: LTType.mono(
-                      size: 11,
-                      weight: FontWeight.w700,
-                      color: LT.t1,
-                    ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  status,
+                  key: const ValueKey('vocal-preview-status'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LTType.inter(
+                    size: 12,
+                    color: _previewPlaying ? LT.lime : LT.t2,
                   ),
                 ),
-                IconBtn(
-                  icon: LtIcons.chevronRight,
-                  tooltip: l.ltVocalEditorLater,
-                  size: 38,
-                  onTap: () => _nudgeStart(1),
-                ),
-              ],
-            ),
+              ),
+              Text(
+                count == 0
+                    ? l.ltVocalPreviewNoEffects
+                    : '${l.ltVocalPreviewEffects}: $count',
+                style: LTType.inter(size: 11, color: LT.t2),
+              ),
+            ],
           ),
-          if (_clips.length > 1) ...[
-            const SizedBox(width: 8),
-            IconBtn(
-              icon: LtIcons.delete,
-              tooltip: l.ltVocalEditorDeleteTake,
-              size: 42,
-              color: LT.danger,
-              onTap: () => _deleteClip(_sel),
-            ),
-          ],
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Pill(
+                key: const ValueKey('vocal-preview-original'),
+                label: l.ltVocalPreviewOriginal,
+                icon: LtIcons.playArrow,
+                height: 40,
+                tone: _previewDry ? PillTone.lime : PillTone.surface,
+                onTap: _busy ? null : () => _preview(dryOriginal: true),
+              ),
+              Pill(
+                key: const ValueKey('vocal-preview-processed'),
+                label: l.ltVocalPreviewProcessed,
+                icon: LtIcons.playArrow,
+                height: 40,
+                tone: !_previewDry ? PillTone.lime : PillTone.surface,
+                onTap: _busy ? null : () => _preview(),
+              ),
+              IconBtn(
+                icon: LtIcons.stop,
+                tooltip: l.pendingStop,
+                size: 40,
+                onTap: _stopPreview,
+              ),
+              Pill(
+                key: const ValueKey('vocal-preview-loop'),
+                label: l.ltVocalPreviewLoop,
+                icon: LtIcons.restore,
+                height: 36,
+                tone: _previewLoop ? PillTone.lime : PillTone.surface,
+                onTap:
+                    _busy
+                        ? null
+                        : () {
+                          setState(() => _previewLoop = !_previewLoop);
+                          if (_previewPlaying) {
+                            unawaited(_preview(dryOriginal: _previewDry));
+                          }
+                        },
+              ),
+              Pill(
+                key: const ValueKey('vocal-preview-level'),
+                label: l.ltVocalPreviewLevel,
+                height: 36,
+                tone: _matchLevel ? PillTone.lime : PillTone.surface,
+                onTap:
+                    _busy
+                        ? null
+                        : () {
+                          setState(() => _matchLevel = !_matchLevel);
+                          if (_previewPlaying) {
+                            unawaited(_preview(dryOriginal: _previewDry));
+                          }
+                        },
+              ),
+              Pill(
+                key: const ValueKey('vocal-preview-auto'),
+                label: l.ltVocalPreviewAuto,
+                height: 36,
+                tone: _autoPreview ? PillTone.lime : PillTone.surface,
+                onTap:
+                    _busy
+                        ? null
+                        : () => setState(() => _autoPreview = !_autoPreview),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconBtn(
+                    icon: LtIcons.chevronLeft,
+                    tooltip: l.ltVocalEditorEarlier,
+                    size: 36,
+                    onTap: () => _nudgeStart(-1),
+                  ),
+                  Text(
+                    l.ltVocalEditorStep(_clip.startStep),
+                    style: LTType.mono(size: 11),
+                  ),
+                  IconBtn(
+                    icon: LtIcons.chevronRight,
+                    tooltip: l.ltVocalEditorLater,
+                    size: 36,
+                    onTap: () => _nudgeStart(1),
+                  ),
+                ],
+              ),
+              if (_clips.length > 1)
+                IconBtn(
+                  icon: LtIcons.delete,
+                  tooltip: l.ltVocalEditorDeleteTake,
+                  size: 40,
+                  color: LT.danger,
+                  onTap: () => _deleteClip(_sel),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -964,18 +1299,6 @@ class _VocalEditorScreenState extends State<VocalEditorScreen> {
 
 double _log10(double x) => math.log(x <= 0 ? 1e-9 : x) / math.ln10;
 double _pow10(double x) => math.pow(10, x).toDouble();
-
-extension VocalClipDry on VocalClip {
-  // For the A/B "original" preview: drop the fx-baked path back to the dry take
-  // when one exists (so the comparison is dry vs processed).
-  void origPathToDry() {
-    if (origPath != null) {
-      path = origPath!;
-      origPath = null;
-      fx.clear();
-    }
-  }
-}
 
 class _WavePainter extends CustomPainter {
   _WavePainter({

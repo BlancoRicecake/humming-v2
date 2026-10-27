@@ -31,8 +31,12 @@ class TransportBar extends StatelessWidget {
     required this.bars,
     required this.onBars,
     this.showRecord = true,
+    this.rangeLoop = false,
+    this.onLoop,
   });
 
+  final bool rangeLoop;
+  final VoidCallback? onLoop;
   final bool playing;
   final bool recording;
   final VoidCallback onPlay;
@@ -49,7 +53,8 @@ class TransportBar extends StatelessWidget {
   final ValueChanged<double> onSwing;
   final int bars; // 2 | 4
   final ValueChanged<int> onBars;
-  final bool showRecord; // hidden on the vocal track (it has its own record ring)
+  final bool
+  showRecord; // hidden on the vocal track (it has its own record ring)
 
   @override
   Widget build(BuildContext context) {
@@ -67,11 +72,29 @@ class TransportBar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconBtn(icon: LtIcons.straighten, active: metro, tooltip: l.metronomeTitle, onTap: () => onMetro(!metro)),
+                IconBtn(
+                  icon: LtIcons.straighten,
+                  active: metro,
+                  tooltip: l.metronomeTitle,
+                  onTap: () => onMetro(!metro),
+                ),
                 const SizedBox(width: 8),
-                IconBtn(icon: LtIcons.timer, active: countIn, tooltip: l.ltTransportCountIn, onTap: () => onCountIn(!countIn)),
+                IconBtn(
+                  icon: LtIcons.timer,
+                  active: countIn,
+                  tooltip: l.ltTransportCountIn,
+                  onTap: () => onCountIn(!countIn),
+                ),
                 const SizedBox(width: 8),
-                IconBtn(icon: LtIcons.repeat, active: true, tooltip: l.ltTransportLoopAlwaysOn),
+                IconBtn(
+                  icon: LtIcons.repeat,
+                  active: rangeLoop,
+                  tooltip:
+                      Localizations.localeOf(context).languageCode == 'ko'
+                          ? '구간 반복 전환'
+                          : 'Toggle range loop',
+                  onTap: onLoop,
+                ),
                 const SizedBox(width: 12),
                 _BpmStepper(bpm: bpm, onBpm: onBpm),
               ],
@@ -86,7 +109,12 @@ class TransportBar extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconBtn(icon: LtIcons.stop, size: 34, tooltip: l.pendingStop, onTap: onStop),
+            IconBtn(
+              icon: LtIcons.stop,
+              size: 34,
+              tooltip: l.pendingStop,
+              onTap: onStop,
+            ),
             const SizedBox(width: 12),
             // play
             GestureDetector(
@@ -97,9 +125,21 @@ class TransportBar extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: LT.lime,
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: LT.lime.withValues(alpha: 0.4), blurRadius: 20)],
+                  boxShadow: [
+                    BoxShadow(
+                      color: LT.lime.withValues(alpha: 0.4),
+                      blurRadius: 20,
+                    ),
+                  ],
                 ),
-                child: Center(child: Ms(playing ? LtIcons.pause : LtIcons.playArrow, size: 23, color: LT.bg, fill: 1)),
+                child: Center(
+                  child: Ms(
+                    playing ? LtIcons.pause : LtIcons.playArrow,
+                    size: 23,
+                    color: LT.bg,
+                    fill: 1,
+                  ),
+                ),
               ),
             ),
             if (showRecord) ...[
@@ -114,13 +154,24 @@ class TransportBar extends StatelessWidget {
                     color: recording ? LT.danger : LT.surface2,
                     shape: BoxShape.circle,
                     border: Border.all(color: LT.danger, width: 2),
-                    boxShadow: recording ? [BoxShadow(color: LT.danger.withValues(alpha: 0.53), blurRadius: 20)] : null,
+                    boxShadow:
+                        recording
+                            ? [
+                              BoxShadow(
+                                color: LT.danger.withValues(alpha: 0.53),
+                                blurRadius: 20,
+                              ),
+                            ]
+                            : null,
                   ),
                   child: Center(
                     child: Container(
                       width: 13,
                       height: 13,
-                      decoration: const BoxDecoration(color: LT.danger, shape: BoxShape.circle),
+                      decoration: const BoxDecoration(
+                        color: LT.danger,
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
                 ),
@@ -143,46 +194,63 @@ class TransportBar extends StatelessWidget {
               children: [
                 // Swing 컨트롤 — 라벨이 슬라이더 좌상단에 붙는 2-line 레이아웃.
                 // 1줄 인라인보다 세로 공간을 더 쓰지만 라벨이 슬라이더 컨텍스트로
-                // 즉시 묶여 보임.
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        LtLabel(l.ltTransportSwing, color: swing > 0 ? LT.lime : LT.t3),
-                        const SizedBox(width: 6),
-                        Text('${(swing * 100).round()}%',
-                            style: LTType.mono(size: 10, color: LT.t3)),
-                      ],
-                    ),
-                    SizedBox(
-                      width: 110,
-                      height: 18,
-                      child: SliderTheme(
-                        data: SliderThemeData(
-                          trackHeight: 3,
-                          activeTrackColor: LT.lime,
-                          inactiveTrackColor: LT.surface3,
-                          thumbColor: LT.lime,
-                          overlayShape: SliderComponentShape.noOverlay,
-                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                        ),
-                        child: Slider(
-                          min: 0,
-                          max: 60,
-                          value: (swing * 100).clamp(0, 60),
-                          onChanged: (v) => onSwing(v / 100),
+                // 즉시 묶여 보임. groove-001: Swing은 그루브 미지정 트랙에만 적용.
+                Tooltip(
+                  message:
+                      Localizations.localeOf(context).languageCode == 'ko'
+                          ? '그루브가 지정되지 않은 트랙에 적용'
+                          : 'Applies to tracks without a groove',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          LtLabel(
+                            l.ltTransportSwing,
+                            color: swing > 0 ? LT.lime : LT.t3,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${(swing * 100).round()}%',
+                            style: LTType.mono(size: 10, color: LT.t3),
+                          ),
+                        ],
+                      ),
+                      SizedBox(
+                        width: 110,
+                        height: 18,
+                        child: SliderTheme(
+                          data: SliderThemeData(
+                            trackHeight: 3,
+                            activeTrackColor: LT.lime,
+                            inactiveTrackColor: LT.surface3,
+                            thumbColor: LT.lime,
+                            overlayShape: SliderComponentShape.noOverlay,
+                            thumbShape: const RoundSliderThumbShape(
+                              enabledThumbRadius: 6,
+                            ),
+                          ),
+                          child: Slider(
+                            min: 0,
+                            max: 60,
+                            value: (swing * 100).clamp(0, 60),
+                            onChanged: (v) => onSwing(v / 100),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 10),
                 _BarsToggle(bars: bars, onBars: onBars),
                 const SizedBox(width: 10),
-                IconBtn(icon: LtIcons.backspace, tooltip: l.ltTransportClearTrack, onTap: onClear),
+                IconBtn(
+                  icon: LtIcons.backspace,
+                  tooltip: l.ltTransportClearTrack,
+                  onTap: onClear,
+                ),
               ],
             ),
           ),
@@ -224,6 +292,7 @@ class _BpmStepperState extends State<_BpmStepper> {
 
   Future<void> _editDirect() async {
     final v = await _promptBpm(context, _bpm);
+    if (!mounted) return; // stepper torn down while the dialog was up
     if (v != null && v != _bpm) {
       setState(() => _bpm = v);
       widget.onBpm(v);
@@ -253,7 +322,14 @@ class _BpmStepperState extends State<_BpmStepper> {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text('$_bpm', style: LTType.mono(size: 15, weight: FontWeight.w700, color: LT.t1)),
+                  Text(
+                    '$_bpm',
+                    style: LTType.mono(
+                      size: 15,
+                      weight: FontWeight.w700,
+                      color: LT.t1,
+                    ),
+                  ),
                   const SizedBox(width: 3),
                   Text('BPM', style: LTType.inter(size: 9, color: LT.t3)),
                 ],
@@ -281,11 +357,21 @@ class _StepBtn extends StatefulWidget {
 class _StepBtnState extends State<_StepBtn> {
   Timer? _hold;
   int _fires = 0;
+  // The pointer that owns the current hold. Extra fingers are ignored while
+  // held — otherwise a second down would orphan the first auto-repeat timer
+  // (ramping BPM forever) and a second up would end the wrong hold.
+  int? _pointer;
 
-  void _start() {
+  void _start(int pointer) {
+    if (_pointer != null) return;
+    _pointer = pointer;
+    _hold?.cancel();
     _fires = 0;
     widget.onStep(1); // immediate first step (also the plain-tap case)
-    _hold = Timer(const Duration(milliseconds: 360), _repeat); // hold delay before auto-repeat
+    _hold = Timer(
+      const Duration(milliseconds: 360),
+      _repeat,
+    ); // hold delay before auto-repeat
   }
 
   void _repeat() {
@@ -298,7 +384,9 @@ class _StepBtnState extends State<_StepBtn> {
     _hold = Timer(Duration(milliseconds: ms), _repeat);
   }
 
-  void _stop() {
+  void _stop(int pointer) {
+    if (pointer != _pointer) return;
+    _pointer = null;
     _hold?.cancel();
     _hold = null;
   }
@@ -314,14 +402,21 @@ class _StepBtnState extends State<_StepBtn> {
     // Listener (raw pointer) rather than GestureDetector: a long press never
     // gets stolen by the tap recognizer, so down/up reliably bracket the hold.
     return Listener(
-      onPointerDown: (_) => _start(),
-      onPointerUp: (_) => _stop(),
-      onPointerCancel: (_) => _stop(),
+      onPointerDown: (e) => _start(e.pointer),
+      onPointerUp: (e) => _stop(e.pointer),
+      onPointerCancel: (e) => _stop(e.pointer),
       child: SizedBox(
         width: 26,
         height: 26,
         child: Center(
-          child: Text(widget.glyph, style: LTType.inter(size: 18, weight: FontWeight.w700, color: LT.t1)),
+          child: Text(
+            widget.glyph,
+            style: LTType.inter(
+              size: 18,
+              weight: FontWeight.w700,
+              color: LT.t1,
+            ),
+          ),
         ),
       ),
     );
@@ -331,28 +426,40 @@ class _StepBtnState extends State<_StepBtn> {
 /// Direct BPM entry — a small modal with a numeric field. Returns the clamped
 /// value, or null on cancel / invalid.
 Future<int?> _promptBpm(BuildContext context, int current) {
-  final ctrl = TextEditingController(text: '$current')
-    ..selection = TextSelection(baseOffset: 0, extentOffset: '$current'.length);
   return showLtModal<int>(
     context,
     width: 260,
-    child: _BpmInput(ctrl: ctrl),
+    child: _BpmInput(initial: current),
   );
 }
 
 class _BpmInput extends StatefulWidget {
-  const _BpmInput({required this.ctrl});
-  final TextEditingController ctrl;
+  const _BpmInput({required this.initial});
+  final int initial;
 
   @override
   State<_BpmInput> createState() => _BpmInputState();
 }
 
 class _BpmInputState extends State<_BpmInput> {
+  // Owned here (not by _promptBpm) so it's disposed only once the dialog's
+  // TextField has left the tree — i.e. after the pop animation.
+  late final TextEditingController _ctrl = TextEditingController(
+    text: '${widget.initial}',
+  )..selection = TextSelection(
+    baseOffset: 0,
+    extentOffset: '${widget.initial}'.length,
+  );
   String? _error;
 
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
   void _submit() {
-    final v = int.tryParse(widget.ctrl.text.trim());
+    final v = int.tryParse(_ctrl.text.trim());
     if (v == null || v < _kBpmMin || v > _kBpmMax) {
       setState(() => _error = '$_kBpmMin–$_kBpmMax');
       return;
@@ -367,10 +474,13 @@ class _BpmInputState extends State<_BpmInput> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(l.ltTransportSetBpm, style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1)),
+        Text(
+          l.ltTransportSetBpm,
+          style: LTType.inter(size: 15, weight: FontWeight.w800, color: LT.t1),
+        ),
         const SizedBox(height: 14),
         TextField(
-          controller: widget.ctrl,
+          controller: _ctrl,
           autofocus: true,
           keyboardType: TextInputType.number,
           textAlign: TextAlign.center,
@@ -410,7 +520,14 @@ class _BpmInputState extends State<_BpmInput> {
                     borderRadius: BorderRadius.circular(LTRadius.pill),
                     border: Border.all(color: LT.border),
                   ),
-                  child: Text(l.cancel, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t2)),
+                  child: Text(
+                    l.cancel,
+                    style: LTType.inter(
+                      size: 14,
+                      weight: FontWeight.w700,
+                      color: LT.t2,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -425,7 +542,14 @@ class _BpmInputState extends State<_BpmInput> {
                     color: LT.lime,
                     borderRadius: BorderRadius.circular(LTRadius.pill),
                   ),
-                  child: Text(l.apply, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.bg)),
+                  child: Text(
+                    l.apply,
+                    style: LTType.inter(
+                      size: 14,
+                      weight: FontWeight.w800,
+                      color: LT.bg,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -464,8 +588,14 @@ class _BarsToggle extends StatelessWidget {
                   color: bars == b ? LT.lime : Colors.transparent,
                   borderRadius: BorderRadius.circular(LTRadius.pill),
                 ),
-                child: Text('$b',
-                    style: LTType.inter(size: 12, weight: FontWeight.w800, color: bars == b ? LT.bg : LT.t2)),
+                child: Text(
+                  '$b',
+                  style: LTType.inter(
+                    size: 12,
+                    weight: FontWeight.w800,
+                    color: bars == b ? LT.bg : LT.t2,
+                  ),
+                ),
               ),
             ),
         ],

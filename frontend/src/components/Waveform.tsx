@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Chunk, EnvelopeInfo, Waveform } from "../types";
 
 interface Props {
@@ -19,6 +19,21 @@ export function WaveformView({
   height = 180,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // bumped on element resize / DPR change so the backing store is re-sized and redrawn.
+  const [resizeTick, setResizeTick] = useState(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const bump = () => setResizeTick((t) => t + 1);
+    const ro = new ResizeObserver(bump);
+    ro.observe(canvas);
+    window.addEventListener("resize", bump);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", bump);
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -144,7 +159,7 @@ export function WaveformView({
       }
     }
 
-  }, [waveform, pitchTrack, envelope, chunks, showEnvelope, height]);
+  }, [waveform, pitchTrack, envelope, chunks, showEnvelope, height, resizeTick]);
 
   return (
     <canvas

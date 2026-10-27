@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import anyio
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 
@@ -252,9 +252,11 @@ class BodySizeLimitMiddleware:
     RecursionError on sampled requests. A Content-Length check needs none of
     that machinery, so we keep the middleware stack shallow.
 
-    Streaming uploads without Content-Length are NOT capped here (rare on
-    mobile); the upload endpoints additionally count bytes while reading the
-    upload (see _read_upload_capped).
+    Bodies without a usable Content-Length (chunked transfer encoding) are
+    capped by counting bytes as they are received: past the cap, ``receive``
+    raises a 413 HTTPException, which the body parser re-raises and FastAPI
+    turns into the response. The upload endpoints also count bytes while
+    reading the upload (see _read_upload_capped).
     """
 
     def __init__(self, app, max_bytes: int):
@@ -275,22 +277,68 @@ class BodySizeLimitMiddleware:
                         return
                 except ValueError:
                     pass
+            await self._call_counting(scope, receive, send)
+            return
         await self.app(scope, receive, send)
+
+    async def _call_counting(self, scope, receive, send):
+        seen = 0
+        exceeded = False
+        max_bytes = self.max_bytes
+
+        async def counting_receive():
+            nonlocal seen, exceeded
+            message = await receive()
+            if message.get("type") == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > max_bytes:
+                    exceeded = True
+                    raise HTTPException(413, f"body too large (>{max_bytes} bytes)")
+            return message
+
+        async def guarded_send(message):
+            # The body parser may rewrap our 413 as a generic 400; answer 413.
+            if not exceeded:
+                await send(message)
+            elif message["type"] == "http.response.start":
+                await JSONResponse(
+                    status_code=413,
+                    content={"detail": f"body too large (>{max_bytes} bytes)"},
+                )(scope, receive, send)
+
+        await self.app(scope, counting_receive, guarded_send)
 
 
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=_settings.max_body_bytes)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # local dev only — tighten in production via env
+    # CORS_ALLOW_ORIGINS (comma-separated); defaults to "*".
+    allow_origins=[o.strip() for o in _settings.cors_allow_origins.split(",") if o.strip()] or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # --- New P0 routers ---------------------------------------------------------
 app.include_router(health_routes.router)
+# Unauthenticated (optional IAP_HEALTH_TOKEN) and it scans every subscription
+# row: cap per IP. SlowAPIMiddleware skips decorated endpoints and leaves them
+# to the decorator's wrapper, so the wrapped function must be the route.
+_iap_health_ep = iap_health_routes.iap_notifications_health
+if limiter is not None:
+    _iap_health_ep = limiter.limit("6/minute")(_iap_health_ep)
+iap_health_routes.router.add_api_route("/health/iap-notifications", _iap_health_ep, methods=["GET"])
 app.include_router(iap_health_routes.router)
-app.include_router(projects_routes.router)
-app.include_router(storage_routes.router)
+
+
+def _require_cloud_sync() -> None:
+    # Cloud backup has no client yet; keep the endpoints dark (no quota or
+    # Pro gate on presign) until CLOUD_SYNC_ENABLED=1.
+    if not get_settings().cloud_sync_enabled:
+        raise HTTPException(404, "Not Found")
+
+
+app.include_router(projects_routes.router, dependencies=[Depends(_require_cloud_sync)])
+app.include_router(storage_routes.router, dependencies=[Depends(_require_cloud_sync)])
 app.include_router(iap_routes.router)
 app.include_router(account_routes.router)
 app.include_router(arrangements_routes.router)
@@ -575,19 +623,27 @@ async def assist(request: Request, payload: dict):
     notes_raw = payload.get("notes")
     if not isinstance(notes_raw, list):
         raise HTTPException(400, "missing notes[]")
+    if len(notes_raw) > render_mod.MAX_RENDER_NOTES:
+        raise HTTPException(400, f"too many notes ({len(notes_raw)} > {render_mod.MAX_RENDER_NOTES})")
     try:
         notes = [Note(**n) for n in notes_raw]
     except Exception as e:
         raise HTTPException(400, f"invalid note: {e}")
     opts_raw = payload.get("options") or {}
-    res = run_key_and_assistant(
-        notes,
-        bool(opts_raw.get("auto_key", True)),
-        bool(opts_raw.get("pitch_assistant", True)),
-        opts_raw.get("key_tonic"),
-        opts_raw.get("scale"),
-        assist_aggressive=bool(opts_raw.get("assist_aggressive", True)),
-    )
+    if not isinstance(opts_raw, dict):
+        raise HTTPException(400, "options must be an object")
+    # The assistant is O(n^2) in notes — keep it off the event loop and under
+    # the same CPU cap as the other DSP jobs.
+    async with _dsp_sem:
+        res = await anyio.to_thread.run_sync(functools.partial(
+            run_key_and_assistant,
+            notes,
+            bool(opts_raw.get("auto_key", True)),
+            bool(opts_raw.get("pitch_assistant", True)),
+            opts_raw.get("key_tonic"),
+            opts_raw.get("scale"),
+            assist_aggressive=bool(opts_raw.get("assist_aggressive", True)),
+        ))
     return {
         "notes": [n.model_dump() for n in notes],
         "detected_key": DetectedKey(
@@ -605,6 +661,17 @@ def _render_sample_rate(payload: dict) -> int:
         return render_mod.validate_sample_rate(payload.get("sample_rate") or 44100)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+def _int_field(payload: dict, key: str, lo: int, hi: int) -> int:
+    """``int(payload[key] or 0)`` bounded to lo..hi → 400 instead of a 500."""
+    try:
+        v = int(payload.get(key) or 0)
+    except (TypeError, ValueError, OverflowError):
+        raise HTTPException(400, f"invalid {key}")
+    if not (lo <= v <= hi):
+        raise HTTPException(400, f"{key} must be {lo}..{hi}")
+    return v
 
 
 def _check_render_notes(notes) -> None:
@@ -637,7 +704,8 @@ def render_capabilities():
     state = render_mod.get_state()
     return {
         "soundfont_available": render_mod.is_available(),
-        "sf2_path": state.sf2_path,
+        # Basename only — never expose the server filesystem path.
+        "sf2_path": os.path.basename(state.sf2_path) if state.sf2_path else None,
         "error": state.error,
         "available_programs": [{"id": pid, "name": name} for pid, name in render_mod.GM_PROGRAMS],
     }
@@ -657,8 +725,8 @@ def soundfont_presets():
 async def render_demo(request: Request, payload: dict):
     """Render the fixed audition phrase through one SF2 preset → WAV."""
     sample_rate = _render_sample_rate(payload)
-    bank = int(payload.get("bank") or 0)
-    program = int(payload.get("program") or 0)
+    bank = _int_field(payload, "bank", 0, 16383)
+    program = _int_field(payload, "program", 0, 127)
     _require_render_available()
     try:
         wav = await _run_render(render_mod.render_demo_to_wav, bank, program, sample_rate=sample_rate)
@@ -693,7 +761,7 @@ def _resolve_audition_source(source: str, payload: dict) -> Tuple[str, int, int]
     """
     if source == "gm":
         return (render_mod.get_state().sf2_path,
-                int(payload.get("bank") or 0), int(payload.get("program") or 0))
+                _int_field(payload, "bank", 0, 16383), _int_field(payload, "program", 0, 127))
     if source == "catalog":
         sid = str(payload.get("soundfont_id") or "")
         path = soundfonts_mod.entry_file(sid)
@@ -789,6 +857,23 @@ async def guitar_lab_render(request: Request, payload: dict):
         raise HTTPException(400, "repeats must be 1..64 and bpm 20..400")
     if len(str(art.get("pattern") or "")) > 256:
         raise HTTPException(400, "pattern too long (max 256 strokes)")
+    # Unbounded ms params would let one request render hours of audio.
+    for key, hi in (("ring_ms", 5000.0), ("strum_ms", 200.0), ("timing_jitter_ms", 50.0)):
+        if key in art:
+            try:
+                v = float(art[key])
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"invalid {key}")
+            if not math.isfinite(v) or not (0.0 <= v <= hi):
+                raise HTTPException(400, f"{key} must be 0..{hi:.0f}")
+            art[key] = v
+    strokes = max(1, len(str(art.get("pattern") or ""))) * repeats
+    if strokes * 60.0 / bpm / 2.0 > render_mod.MAX_RENDER_SECONDS:
+        raise HTTPException(400, "render too long")
+    try:
+        seed = int(seed) if seed is not None else None
+    except (TypeError, ValueError):
+        raise HTTPException(400, "invalid seed")
     _require_render_engine()
     # reuse the sound-picker source resolution (gm / catalog / sentinel -> sf2)
     try:
@@ -804,7 +889,7 @@ async def guitar_lab_render(request: Request, payload: dict):
             guitar_lab_mod.render_guitar_strum,
             sf2_path, sf_bank, sf_program,
             sample_rate=sample_rate,
-            seed=int(seed) if seed is not None else None,
+            seed=seed,
             **art,
         )
     except FileNotFoundError:
@@ -839,8 +924,8 @@ async def render_audio(request: Request, payload: dict):
     except Exception as e:
         raise HTTPException(400, f"invalid note: {e}")
     _check_render_notes(notes)
-    program = int(payload.get("program") or 0)
-    bank = int(payload.get("bank") or 0)
+    program = _int_field(payload, "program", 0, 127)
+    bank = _int_field(payload, "bank", 0, 16383)
     _require_render_available()
     try:
         wav = await _run_render(
@@ -868,7 +953,8 @@ async def render_mix(request: Request, payload: dict):
     tracks_raw = payload.get("tracks")
     if not isinstance(tracks_raw, list):
         raise HTTPException(400, "missing tracks[]")
-    total_raw = sum(len(tr.get("notes") or []) for tr in tracks_raw if isinstance(tr, dict))
+    total_raw = sum(len(tr.get("notes") or []) for tr in tracks_raw
+                    if isinstance(tr, dict) and isinstance(tr.get("notes") or [], list))
     if total_raw > render_mod.MAX_RENDER_NOTES:
         raise HTTPException(400, f"too many notes ({total_raw} > {render_mod.MAX_RENDER_NOTES})")
     tracks = []
@@ -900,7 +986,12 @@ async def export_midi(request: Request, payload: dict):
     - 멀티트랙(신규):    ``{tracks: [{notes: [...], program: int, channel: int}, ...],
                             tempo_bpm?: float}``
     """
-    tempo = float(payload.get("tempo_bpm") or 120.0)
+    try:
+        tempo = float(payload.get("tempo_bpm") or 120.0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "invalid tempo_bpm")
+    if not math.isfinite(tempo) or not (20.0 <= tempo <= 400.0):
+        raise HTTPException(400, "tempo_bpm must be 20..400")
     tracks_raw = payload.get("tracks")
     if isinstance(tracks_raw, list):
         tracks: list[dict] = []
@@ -909,23 +1000,38 @@ async def export_midi(request: Request, payload: dict):
                 notes = [Note(**n) for n in (tr.get("notes") or [])]
                 tracks.append({
                     "notes": notes,
-                    "program": int(tr.get("program") or 0),
-                    "channel": int(tr.get("channel") or 0),
+                    "program": _int_field(tr, "program", 0, 127),
+                    "channel": _int_field(tr, "channel", 0, 15),
                 })
+                if sum(len(t["notes"]) for t in tracks) > render_mod.MAX_RENDER_NOTES:
+                    raise HTTPException(400, f"too many notes (> {render_mod.MAX_RENDER_NOTES})")
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(400, f"invalid track: {e}")
-        data = tracks_to_midi_bytes(tracks, tempo_bpm=tempo)
+        all_notes = [n for t in tracks for n in t["notes"]]
+        build = functools.partial(tracks_to_midi_bytes, tracks, tempo_bpm=tempo)
     else:
         notes_raw = payload.get("notes")
         if not isinstance(notes_raw, list):
             raise HTTPException(400, "missing notes[] or tracks[]")
+        if len(notes_raw) > render_mod.MAX_RENDER_NOTES:
+            raise HTTPException(400, f"too many notes ({len(notes_raw)} > {render_mod.MAX_RENDER_NOTES})")
         try:
             notes = [Note(**n) for n in notes_raw]
         except Exception as e:
             raise HTTPException(400, f"invalid note: {e}")
-        program = int(payload.get("program") or 0)
-        bank = int(payload.get("bank") or 0)
-        data = notes_to_midi_bytes(notes, program=program, tempo_bpm=tempo, bank=bank)
+        all_notes = notes
+        program = _int_field(payload, "program", 0, 127)
+        bank = _int_field(payload, "bank", 0, 16383)
+        build = functools.partial(notes_to_midi_bytes, notes, program=program, tempo_bpm=tempo, bank=bank)
+    # Finite, non-negative times only (NaN/negative crash mido). A .mid is tiny,
+    # so allow a longer timeline than the audio render budget.
+    try:
+        render_mod.validate_notes(all_notes, max_seconds=3600.0)
+        data = build()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return Response(
         content=data,
         media_type="audio/midi",

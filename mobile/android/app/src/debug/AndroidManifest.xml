@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Dev-only: allow http:// to a LAN ENGINE_URL. The main manifest does
+         not set this, so release builds refuse cleartext traffic. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

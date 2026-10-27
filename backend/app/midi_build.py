@@ -2,11 +2,27 @@
 from __future__ import annotations
 
 import io
+import math
 from typing import Iterable, Sequence
 
 import mido
 
 from .schemas import Note
+
+
+def _sec_per_tick(tempo_bpm: float, ticks_per_beat: int) -> float:
+    """Seconds per tick; ValueError (not ZeroDivision/mido 500) on a bad tempo."""
+    tempo_bpm = float(tempo_bpm)
+    if not math.isfinite(tempo_bpm) or tempo_bpm <= 0:
+        raise ValueError("tempo_bpm must be a positive number")
+    return 60.0 / (tempo_bpm * ticks_per_beat)
+
+
+def _check_program_channel(program: int, channel: int) -> None:
+    if not 0 <= int(program) <= 127:
+        raise ValueError(f"program must be 0..127 (got {program})")
+    if not 0 <= int(channel) <= 15:
+        raise ValueError(f"channel must be 0..15 (got {channel})")
 
 
 def _build_inst_track(
@@ -16,6 +32,7 @@ def _build_inst_track(
     sec_per_tick: float,
 ) -> mido.MidiTrack:
     """노트 한 묶음을 단일 MidiTrack 으로 변환 (program_change + note_on/off)."""
+    _check_program_channel(program, channel)
     track = mido.MidiTrack()
     # 드럼 채널(9)에는 program_change 가 의미 없지만 호환을 위해 그대로 둠.
     track.append(mido.Message("program_change", program=int(program),
@@ -56,7 +73,7 @@ def tracks_to_midi_bytes(
     채널 충돌 방지/드럼 채널 강제는 호출 측에서 결정한 channel 을 그대로 사용.
     """
     mid = mido.MidiFile(type=1, ticks_per_beat=ticks_per_beat)
-    sec_per_tick = 60.0 / (tempo_bpm * ticks_per_beat)
+    sec_per_tick = _sec_per_tick(tempo_bpm, ticks_per_beat)
 
     # tempo 트랙 (conductor)
     tempo_track = mido.MidiTrack()
@@ -101,6 +118,8 @@ def notes_to_midi_bytes(
     number is the program change there.
     """
     mid = mido.MidiFile(type=1, ticks_per_beat=ticks_per_beat)
+    sec_per_tick = _sec_per_tick(tempo_bpm, ticks_per_beat)
+    _check_program_channel(program, 0)
 
     # --- tempo track
     tempo_track = mido.MidiTrack()
@@ -121,7 +140,6 @@ def notes_to_midi_bytes(
     inst_track.append(mido.Message("program_change", program=int(program),
                                    channel=inst_ch, time=0))
 
-    sec_per_tick = 60.0 / (tempo_bpm * ticks_per_beat)
     # Sort by start so we can emit deltas in order. We need to interleave
     # note_on/note_off events from possibly overlapping notes (chords) — flatten then sort.
     events: list[tuple[float, int, int, int, int]] = []  # (time, kind_rank, pitch, vel, channel)

@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 
 import '../../api/engine_api.dart';
@@ -34,6 +35,7 @@ class SoundfontEntry {
     required this.sfBank,
     required this.sfProgram,
     required this.midiFallback,
+    this.assetPath,
   });
 
   final String id;
@@ -47,40 +49,48 @@ class SoundfontEntry {
   final int sfProgram;
   final int midiFallback;
 
+  /// Optional bundled source: can be installed into the cache while offline.
+  final String? assetPath;
+
   static SoundfontEntry fromJson(Map<String, dynamic> j) => SoundfontEntry(
-        id: j['id'] as String,
-        slot: (j['slot'] as num).toInt(),
-        label: (j['label'] ?? '') as String,
-        role: (j['role'] ?? 'melody') as String,
-        category: (j['category'] ?? '') as String,
-        bytes: (j['bytes'] as num?)?.toInt() ?? 0,
-        sha256: (j['sha256'] ?? '') as String,
-        sfBank: (j['sf_bank'] as num?)?.toInt() ?? 0,
-        sfProgram: (j['sf_program'] as num?)?.toInt() ?? 0,
-        midiFallback: (j['midi_fallback'] as num?)?.toInt() ?? 0,
-      );
+    id: j['id'] as String,
+    slot: (j['slot'] as num).toInt(),
+    label: (j['label'] ?? '') as String,
+    role: (j['role'] ?? 'melody') as String,
+    category: (j['category'] ?? '') as String,
+    bytes: (j['bytes'] as num?)?.toInt() ?? 0,
+    sha256: (j['sha256'] ?? '') as String,
+    sfBank: (j['sf_bank'] as num?)?.toInt() ?? 0,
+    sfProgram: (j['sf_program'] as num?)?.toInt() ?? 0,
+    midiFallback: (j['midi_fallback'] as num?)?.toInt() ?? 0,
+    assetPath: j['asset'] as String?,
+  );
 
   Map<String, dynamic> toCache() => {
-        'id': id,
-        'slot': slot,
-        'label': label,
-        'role': role,
-        'category': category,
-        'bytes': bytes,
-        'sha256': sha256,
-        'sf_bank': sfBank,
-        'sf_program': sfProgram,
-        'midi_fallback': midiFallback,
-      };
+    'id': id,
+    'slot': slot,
+    'label': label,
+    'role': role,
+    'category': category,
+    'bytes': bytes,
+    'sha256': sha256,
+    'sf_bank': sfBank,
+    'sf_program': sfProgram,
+    'midi_fallback': midiFallback,
+    if (assetPath != null) 'asset': assetPath,
+  };
 }
 
 /// Catalog manifest + on-disk SF2 cache. Singleton: synth/export/picker all
 /// read the same downloaded-file registry.
 class SoundfontCatalog {
   SoundfontCatalog._();
+  @visibleForTesting
+  factory SoundfontCatalog.forTesting() => SoundfontCatalog._();
   static final SoundfontCatalog instance = SoundfontCatalog._();
 
   final Map<int, SoundfontEntry> _bySlot = {};
+  final Map<int, SoundfontEntry> _bundled = {};
   Directory? _dir;
   bool _manifestLoaded = false;
 
@@ -202,13 +212,28 @@ class SoundfontCatalog {
   /// catalog simply stays empty until [refresh] succeeds.
   Future<void> warm() async {
     if (_manifestLoaded) return;
+    // Load trusted bundled metadata independently of the Documents directory.
+    // These sounds must remain selectable even on first launch without a server.
+    try {
+      final raw = await rootBundle.loadString(
+        'assets/sounds/reference/catalog.json',
+      );
+      final entries = (jsonDecode(raw) as List).map(
+        (e) => SoundfontEntry.fromJson((e as Map).cast<String, dynamic>()),
+      );
+      _bundled.addEntries(entries.map((e) => MapEntry(e.slot, e)));
+      _bySlot.addAll(_bundled);
+    } catch (e) {
+      debugPrint('[soundfont] bundled catalog unavailable: $e');
+    }
     try {
       await _folder();
       final f = File('${_dir!.path}/catalog.json');
       if (await f.exists()) {
-        final list = (jsonDecode(await f.readAsString()) as List)
-            .map((e) => SoundfontEntry.fromJson(e as Map<String, dynamic>))
-            .toList();
+        final list =
+            (jsonDecode(await f.readAsString()) as List)
+                .map((e) => SoundfontEntry.fromJson(e as Map<String, dynamic>))
+                .toList();
         _replace(list);
       }
     } catch (e) {
@@ -222,7 +247,9 @@ class SoundfontCatalog {
   Future<bool> refresh() async {
     try {
       await _folder(); // inside the try: bootstrap fires this unawaited
-      final list = await EngineApi().soundfontCatalogMapped(SoundfontEntry.fromJson);
+      final list = await EngineApi().soundfontCatalogMapped(
+        SoundfontEntry.fromJson,
+      );
       _replace(list);
       final f = File('${_dir!.path}/catalog.json');
       await f.writeAsString(jsonEncode(list.map((e) => e.toCache()).toList()));
@@ -237,7 +264,9 @@ class SoundfontCatalog {
   void _replace(List<SoundfontEntry> list) {
     _bySlot
       ..clear()
-      ..addEntries(list.map((e) => MapEntry(e.slot, e)));
+      ..addEntries(list.map((e) => MapEntry(e.slot, e)))
+      // Preserve offline sources across a server refresh or an old cache.
+      ..addAll(_bundled);
   }
 
   /// Ensure the slot's SF2 is downloaded + verified; returns its local path or
@@ -246,7 +275,11 @@ class SoundfontCatalog {
   Future<String?> ensureDownloaded(int slot) {
     return _inFlight.putIfAbsent(
       slot,
-      () => _doDownload(slot).whenComplete(() => _inFlight.remove(slot)),
+      // Do not return remove()'s value: it is this very future. Returning it
+      // makes whenComplete await itself after the file has already been saved.
+      () => _doDownload(slot).whenComplete(() {
+        _inFlight.remove(slot);
+      }),
     );
   }
 
@@ -261,15 +294,22 @@ class SoundfontCatalog {
     final part = File('${f.path}.part');
     _setProgress(slot, 0);
     try {
-      await EngineApi().downloadSoundfontToFile(
-        e.id,
-        part.path,
-        expectedBytes: e.bytes,
-        onProgress: (recv, total) {
-          final t = total > 0 ? total : e.bytes;
-          if (t > 0) _setProgress(slot, (recv / t).clamp(0.0, 1.0));
-        },
-      );
+      if (e.assetPath != null) {
+        final data = await rootBundle.load(e.assetPath!);
+        await part.writeAsBytes(
+          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+        );
+      } else {
+        await EngineApi().downloadSoundfontToFile(
+          e.id,
+          part.path,
+          expectedBytes: e.bytes,
+          onProgress: (recv, total) {
+            final t = total > 0 ? total : e.bytes;
+            if (t > 0) _setProgress(slot, (recv / t).clamp(0.0, 1.0));
+          },
+        );
+      }
       final len = await part.length();
       if (e.bytes > 0 && len != e.bytes) {
         debugPrint('[soundfont] ${e.id} size mismatch $len/${e.bytes}');
@@ -297,8 +337,10 @@ class SoundfontCatalog {
       // size + sha256 verified rename below produces the real file. A
       // *corrupt* part is deleted above, before we get here.
       final partial = await part.exists() ? await part.length() : 0;
-      debugPrint('[soundfont] download ${e.id} failed at $partial bytes '
-          '(will resume): $err');
+      debugPrint(
+        '[soundfont] download ${e.id} failed at $partial bytes '
+        '(will resume): $err',
+      );
       return null;
     } finally {
       _setProgress(slot, null);

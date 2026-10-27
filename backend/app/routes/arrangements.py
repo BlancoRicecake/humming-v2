@@ -1,12 +1,17 @@
 """Feature-flagged adapter for a future symbolic arrangement provider."""
 from __future__ import annotations
 
+import logging
+
+import anyio
 import httpx
 from fastapi import APIRouter, Header, HTTPException
 
 from ..arrangement import ArrangementRequest, ArrangementResponse, enforce_locks
 from ..auth import extract_user_id
 from ..settings import get_settings
+
+log = logging.getLogger("soundlab")
 
 router = APIRouter(prefix="/arrangements", tags=["arrangements"])
 
@@ -42,7 +47,8 @@ async def generate(
     # Generation is an authenticated paid-resource boundary once enabled.
     # Feature-flag checks remain first so a disabled deployment exposes no auth
     # configuration details and continues to fail safely in local development.
-    extract_user_id(authorization, tag="arrangements")
+    # JWKS fetch / JWT verify is blocking — keep it off the event loop.
+    await anyio.to_thread.run_sync(lambda: extract_user_id(authorization, tag="arrangements"))
 
     headers = {"content-type": "application/json"}
     if settings.arrangement_api_key:
@@ -61,4 +67,6 @@ async def generate(
         enforce_locks(payload.song, result.candidates)
         return result
     except (httpx.HTTPError, ValueError) as exc:
-        raise HTTPException(502, f"arrangement provider rejected: {exc}") from exc
+        # Provider error text can carry upstream URLs/bodies — log, don't echo.
+        log.warning("arrangement provider rejected: %s", exc)
+        raise HTTPException(502, "arrangement provider rejected the request") from exc

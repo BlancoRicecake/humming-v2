@@ -1700,6 +1700,19 @@ class L10nEn extends L10n {
   String get ltExportStemsSub => 'Separate WAV per track';
 
   @override
+  String get ltExportNewVariation => 'Another variation';
+
+  @override
+  String get ltExportNewVariationSub =>
+      'Re-roll note chance and velocity variation (undoable)';
+
+  @override
+  String get ltExportNewVariationDone => 'New variation ready';
+
+  @override
+  String get ltExportMidiAllNotes => 'MIDI: include all notes (ignore chance)';
+
+  @override
   String get ltExportShareTitle => 'Share';
 
   @override
@@ -1976,10 +1989,10 @@ class L10nEn extends L10n {
   String get ltEditorHintGridDrums => 'tap cells to toggle';
 
   @override
-  String get ltEditorHintGridPitched => 'tap · drag to lengthen · auto-merge';
+  String get ltEditorHintGridPitched => 'Draw · select area · copy/paste';
 
   @override
-  String get ltEditorHintPads => 'rec, then tap';
+  String get ltEditorHintPads => 'Play while recording is on';
 
   @override
   String get ltDrumBeatGrid => 'Beat grid';
@@ -2206,7 +2219,7 @@ class L10nEn extends L10n {
   String get ltVocalEditorEffectsGroup => 'Effects';
 
   @override
-  String get ltVocalEditorReset => 'Reset';
+  String get ltVocalEditorReset => 'Reset edits';
 
   @override
   String get ltVocalEditorServerTag => 'server';
@@ -2637,4 +2650,71 @@ class L10nEn extends L10n {
 
   @override
   String get ltGuidedKeepVocal => 'Keep my voice recording';
+
+  @override
+  String get ltVocalEditorClearFx => 'Remove all effects';
+
+  @override
+  String get ltVocalEditorRestoreOriginal => 'Restore original';
+
+  @override
+  String get ltVocalEditorFxSourceMissing =>
+      'The source recording is missing. Existing audio and effects have been kept.';
+
+  @override
+  String get ltVocalFxPresets => 'Vocal presets';
+
+  @override
+  String get ltVocalFxPresetHint =>
+      'Presets keep autotune and replace the other effects.';
+
+  @override
+  String get ltVocalFxLocal => 'Add effects · on device';
+
+  @override
+  String get ltVocalFxAmount => 'Amount';
+
+  @override
+  String get ltVocalFxAmountHint =>
+      'Applies to the next individual effect you add.';
+
+  @override
+  String get ltVocalFxServer => 'Existing effects · internet required';
+
+  @override
+  String get ltVocalPreviewOriginal => 'Hear original';
+
+  @override
+  String get ltVocalPreviewProcessed => 'Hear effects';
+
+  @override
+  String get ltVocalPreviewOriginalPlaying => 'Playing original';
+
+  @override
+  String get ltVocalPreviewProcessedPlaying => 'Playing effects';
+
+  @override
+  String get ltVocalPreviewStopped => 'Stopped';
+
+  @override
+  String get ltVocalPreviewLoading => 'Preparing comparison…';
+
+  @override
+  String get ltVocalPreviewNoEffects => 'No effects applied';
+
+  @override
+  String get ltVocalPreviewEffects => 'Applied effects';
+
+  @override
+  String get ltVocalPreviewLoop => 'Loop section';
+
+  @override
+  String get ltVocalPreviewLevel => 'Match volume';
+
+  @override
+  String get ltVocalPreviewAuto => 'Hear after applying';
+
+  @override
+  String get ltVocalPreviewFailed =>
+      'Audio could not play. Check the file and output device.';
 }

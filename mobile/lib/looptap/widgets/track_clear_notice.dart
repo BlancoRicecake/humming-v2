@@ -11,11 +11,16 @@ void showTrackClearNotice(
   required String undoLabel,
   required VoidCallback onUndo,
 }) {
-  ScaffoldMessenger.of(context)
+  final messenger = ScaffoldMessenger.of(context);
+  messenger
     ..clearSnackBars()
     ..showSnackBar(
       SnackBar(
-        content: Text(message, style: const TextStyle(color: LT.t1)),
+        content: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: messenger.hideCurrentSnackBar,
+          child: Text(message, style: const TextStyle(color: LT.t1)),
+        ),
         behavior: SnackBarBehavior.floating,
         width: math.min(420, MediaQuery.sizeOf(context).width - 32),
         backgroundColor: LT.surface3,

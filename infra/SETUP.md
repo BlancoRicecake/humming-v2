@@ -13,7 +13,7 @@
 - CLI 도구 설치:
   ```bash
   brew install flyctl supabase/tap/supabase vercel-cli gh
-  npm i -g @cloudflare/wrangler
+  npm i -g wrangler
   ```
 
 ---
@@ -75,8 +75,8 @@
      SENTRY_DSN=... \
      POSTHOG_API_KEY=... \
      APPLE_SHARED_SECRET=... \
-     APPLE_BUNDLE_ID=com.example.humtrack \
-     GOOGLE_PACKAGE_NAME=com.example.humtrack \
+     APPLE_BUNDLE_ID=com.humtrack.app \
+     GOOGLE_PACKAGE_NAME=com.humtrack.app \
      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON='{...}' \
      IAP_WEBHOOK_SECRET=$(openssl rand -hex 24)
    ```

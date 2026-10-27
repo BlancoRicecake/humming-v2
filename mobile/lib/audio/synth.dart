@@ -45,13 +45,48 @@ class SynthEngine {
   /// so the click never disturbs the user's selected drum kit (ch9).
   static const int clickChannel = 15;
 
-  final MidiPro _midi = MidiPro();
+  MidiPro _midi = MidiPro();
 
   // iOS routes through MeltySynth instead of flutter_midi_pro's AVAudioUnitSampler
   // (which could not reliably select instruments — everything fell back to piano).
   // Android keeps flutter_midi_pro/FluidSynth. Each public method below forwards
   // to [_melty] when [_useMelty] is set; the flutter_midi_pro code runs otherwise.
-  static final bool _useMelty = Platform.isIOS || Platform.isWindows || Platform.isMacOS;
+  static final bool _platformMelty =
+      Platform.isIOS || Platform.isWindows || Platform.isMacOS;
+  bool _useMelty = _platformMelty;
+
+  /// Test hook: drive the flutter_midi_pro (Android) path with [midi], or
+  /// restore the platform engine with null. Resets the engine's caches.
+  @visibleForTesting
+  void debugUseMidiPro(MidiPro? midi, {int? loadedSfId}) {
+    _useMelty = midi == null ? _platformMelty : false;
+    _midi = midi ?? MidiPro();
+    _sfId = midi == null ? null : loadedSfId;
+    _loading = null;
+    _channelProgram.clear();
+    _channelSf.clear();
+    _sounding.clear();
+    _channelPan.clear();
+    _channelEpoch.clear();
+    _resetting.clear();
+    _roleGen.clear();
+  }
+
+  // gt-003: a channel-role reset still talking to the plugin. Every later
+  // call on that channel waits for it, so no stale stopNote/CC of the old
+  // role can land after the new role's set-up or notes.
+  final Map<int, Future<void>> _resetting = <int, Future<void>>{};
+
+  // gt-003: role generation per channel, bumped only by releaseChannel. An
+  // awaited soundfont/kit set-up that a role switch overtook commits
+  // nothing (no program, no binding, no voice).
+  final Map<int, int> _roleGen = <int, int>{};
+  bool _roleChanged(int channel, int gen) => (_roleGen[channel] ?? 0) != gen;
+
+  Future<void> _afterReset(int channel) async {
+    final pending = _resetting[channel];
+    if (pending != null) await pending;
+  }
   final MeltyEngine _melty = MeltyEngine();
   int? _sfId;
   Future<int>? _loading;
@@ -78,7 +113,12 @@ class SynthEngine {
   // them ringing forever (audit A9).
   final Map<int, Set<int>> _sounding = <int, Set<int>>{};
 
+  // mixer-001: last CC10 (pan) per channel, re-sent when the channel is bound
+  // to a different soundfont (each sfId is its own synth instance).
+  final Map<int, int> _channelPan = <int, int>{};
+
   // 재생 중인 (channel, pitch) → 예약된 release 타이머. stopAll 시 모두 취소.
+  final Map<int, int> _channelEpoch = {};
   final Map<int, Map<int, Timer>> _activeReleases = <int, Map<int, Timer>>{};
 
   bool get isLoaded => _useMelty ? _melty.isLoaded : _sfId != null;
@@ -90,14 +130,15 @@ class SynthEngine {
     return _loading ??= _midi
         .loadSoundfontAsset(assetPath: _sfAsset, bank: 0, program: 0)
         .then((id) {
-      _sfId = id;
-      debugPrint('[synth] loaded soundfont sfId=$id');
-      return id;
-    }).catchError((Object e, StackTrace st) {
-      _loading = null;
-      debugPrint('[synth] load failed: $e');
-      throw e;
-    });
+          _sfId = id;
+          debugPrint('[synth] loaded soundfont sfId=$id');
+          return id;
+        })
+        .catchError((Object e, StackTrace st) {
+          _loading = null;
+          debugPrint('[synth] load failed: $e');
+          throw e;
+        });
   }
 
   /// iOS: rebuild MeltyEngine's PCM output pipe under the current audio session
@@ -118,11 +159,26 @@ class SynthEngine {
         for (final pitch in notes) {
           try {
             await _midi.stopNote(channel: channel, key: pitch, sfId: prev);
-          } catch (_) {/* already silent */}
+          } catch (_) {
+            /* already silent */
+          }
         }
       }
     }
     _channelSf[channel] = sfId;
+    final pan = _channelPan[channel];
+    if (pan != null && prev != sfId) {
+      try {
+        await _midi.controlChange(
+          controller: 10,
+          value: pan,
+          channel: channel,
+          sfId: sfId,
+        );
+      } catch (_) {
+        /* plugin not ready — re-sent on the next bind / setPan */
+      }
+    }
   }
 
   void _markSounding(int channel, int pitch) =>
@@ -134,7 +190,11 @@ class SynthEngine {
   Future<void> _ensureProgram(int sfId, int channel, int program) async {
     if (_channelProgram[channel] == program) return;
     await _midi.selectInstrument(
-        sfId: sfId, channel: channel, bank: 0, program: program);
+      sfId: sfId,
+      channel: channel,
+      bank: 0,
+      program: program,
+    );
     _channelProgram[channel] = program;
   }
 
@@ -144,14 +204,15 @@ class SynthEngine {
     return _loading808 ??= _midi
         .loadSoundfontAsset(assetPath: _sf808Asset, bank: 0, program: 0)
         .then((id) {
-      _sf808Id = id;
-      debugPrint('[synth] loaded 808 soundfont sfId=$id');
-      return id;
-    }).catchError((Object e, StackTrace st) {
-      _loading808 = null;
-      debugPrint('[synth] 808 load failed: $e');
-      throw e;
-    });
+          _sf808Id = id;
+          debugPrint('[synth] loaded 808 soundfont sfId=$id');
+          return id;
+        })
+        .catchError((Object e, StackTrace st) {
+          _loading808 = null;
+          debugPrint('[synth] 808 load failed: $e');
+          throw e;
+        });
   }
 
   /// CC0 hip-hop kit soundfont 1회 로드 (lazy). 중복 호출은 동일 Future 공유.
@@ -160,27 +221,36 @@ class SynthEngine {
     return _loadingHipHop ??= _midi
         .loadSoundfontAsset(assetPath: _sfHipHopAsset, bank: 0, program: 0)
         .then((id) {
-      _sfHipHopId = id;
-      debugPrint('[synth] loaded hiphop kit sfId=$id');
-      return id;
-    }).catchError((Object e, StackTrace st) {
-      _loadingHipHop = null;
-      debugPrint('[synth] hiphop kit load failed: $e');
-      throw e;
-    });
+          _sfHipHopId = id;
+          debugPrint('[synth] loaded hiphop kit sfId=$id');
+          return id;
+        })
+        .catchError((Object e, StackTrace st) {
+          _loadingHipHop = null;
+          debugPrint('[synth] hiphop kit load failed: $e');
+          throw e;
+        });
   }
 
   /// 멜로딕 채널을 [program] 에 맞는 soundfont/instrument 로 바인딩하고, 그 채널이
   /// 써야 할 sfId 를 돌려준다. program == [program808] 이면 808 soundfont 로,
   /// 그 외 GM program 이면 메인 soundfont 로 라우팅. program == null 이면 기존
   /// 바인딩 유지(시퀀서 per-note 호출용).
-  Future<int> _bindChannel(int channel, int? program) async {
+  Future<int?> _bindChannel(int channel, int? program) async {
+    final gen = _roleGen[channel] ?? 0;
     final mainId = await ensureLoaded();
+    if (_roleChanged(channel, gen)) return null;
     if (program == null) return _channelSf[channel] ?? mainId;
     if (program == program808) {
       final sf8 = await _ensure808();
+      if (_roleChanged(channel, gen)) return null;
       if (_channelProgram[channel] != program808) {
-        await _midi.selectInstrument(sfId: sf8, channel: channel, bank: 0, program: 0);
+        await _midi.selectInstrument(
+          sfId: sf8,
+          channel: channel,
+          bank: 0,
+          program: 0,
+        );
         _channelProgram[channel] = program808;
       }
       await _bindSf(channel, sf8);
@@ -188,6 +258,7 @@ class SynthEngine {
     }
     if (isDynamicSlot(program)) {
       final bound = await _bindDynamic(channel, program);
+      if (_roleChanged(channel, gen)) return null;
       if (bound != null) return bound;
       // file not downloaded / load failed → fall back to grand piano so the
       // track still makes sound rather than going silent.
@@ -203,32 +274,70 @@ class SynthEngine {
   /// Bind a channel to a downloaded catalog soundfont (slot >= 1000). Returns
   /// its sfId, or null when the file isn't present yet / fails to load.
   Future<int?> _bindDynamic(int channel, int slot) async {
+    final gen = _roleGen[channel] ?? 0;
     final entry = SoundfontCatalog.instance.bySlot(slot);
     final path = SoundfontCatalog.instance.localPath(slot);
     if (entry == null || path == null) return null;
     int sfId;
     try {
-      sfId = await (_loadingSlot[slot] ??= _midi
-          .loadSoundfontFile(filePath: path, bank: entry.sfBank, program: entry.sfProgram)
-          .then((id) {
-        _slotSfId[slot] = id;
-        return id;
-      }).catchError((Object e) {
-        _loadingSlot[slot] = null;
-        throw e;
-      }));
+      sfId =
+          await (_loadingSlot[slot] ??= _midi
+              .loadSoundfontFile(
+                filePath: path,
+                bank: entry.sfBank,
+                program: entry.sfProgram,
+              )
+              .then((id) {
+                _slotSfId[slot] = id;
+                return id;
+              })
+              .catchError((Object e) {
+                _loadingSlot[slot] = null;
+                throw e;
+              }));
     } catch (e) {
       debugPrint('[synth] dynamic slot $slot load failed: $e');
       return null;
     }
+    if (_roleChanged(channel, gen)) return null;
     final marker = 100000 + slot; // distinct from GM (0-127) + drum (1000+prog)
     if (_channelProgram[channel] != marker) {
       await _midi.selectInstrument(
-          sfId: sfId, channel: channel, bank: entry.sfBank, program: entry.sfProgram);
+        sfId: sfId,
+        channel: channel,
+        bank: entry.sfBank,
+        program: entry.sfProgram,
+      );
       _channelProgram[channel] = marker;
     }
     await _bindSf(channel, sfId);
     return sfId;
+  }
+
+  /// MIDI control change on [channel] (e.g. CC10 pan, mixer-001). Android sends
+  /// it to the soundfont the channel is bound to; iOS/desktop go to MeltyEngine.
+  /// CC10 is remembered and re-sent when the channel moves to another
+  /// soundfont.
+  Future<void> controlChange(int channel, int controller, int value) async {
+    final v = value.clamp(0, 127);
+    if (_useMelty) {
+      _melty.controlChange(channel, controller, v);
+      return;
+    }
+    if (controller == 10) _channelPan[channel] = v;
+    await _afterReset(channel);
+    final sfId = _channelSf[channel] ?? _sfId;
+    if (sfId == null) return; // re-sent on the first bind after load
+    try {
+      await _midi.controlChange(
+        controller: controller,
+        value: v,
+        channel: channel,
+        sfId: sfId,
+      );
+    } catch (e) {
+      debugPrint('[synth] controlChange ch=$channel cc=$controller failed: $e');
+    }
   }
 
   /// 단음 재생. [release] 이후 자동으로 stopNote.
@@ -242,18 +351,33 @@ class SynthEngine {
   }) async {
     if (_useMelty) {
       return _melty.playNote(
-          channel: channel, pitch: pitch, velocity: velocity, program: program, release: release);
+        channel: channel,
+        pitch: pitch,
+        velocity: velocity,
+        program: program,
+        release: release,
+      );
     }
+    final epoch = _channelEpoch[channel] ?? 0;
+    await _afterReset(channel);
     final sfId = await _bindChannel(channel, program);
+    if (sfId == null) return; // the channel changed role meanwhile
 
     // 동일 키 중첩 방지.
     _cancelRelease(channel, pitch);
     try {
       await _midi.stopNote(channel: channel, key: pitch, sfId: sfId);
-    } catch (_) {/* 첫 재생이면 무시 */}
+    } catch (_) {
+      /* 첫 재생이면 무시 */
+    }
 
+    if ((_channelEpoch[channel] ?? 0) != epoch) return;
     await _midi.playNote(
-        channel: channel, key: pitch, velocity: velocity, sfId: sfId);
+      channel: channel,
+      key: pitch,
+      velocity: velocity,
+      sfId: sfId,
+    );
     _markSounding(channel, pitch);
 
     final timer = Timer(release, () async {
@@ -284,6 +408,9 @@ class SynthEngine {
   /// 킷 재선택을 회피.
   Future<void> ensureDrumKitOn(int channel, int program) async {
     if (_useMelty) return _melty.ensureDrumKitOn(channel, program);
+    final gen = _roleGen[channel] ?? 0;
+    await _afterReset(channel);
+    if (_roleChanged(channel, gen)) return;
     final marker = 1000 + program;
     if (_channelProgram[channel] == marker) return;
     // The hip-hop kit lives in its own soundfont; GM kits are bank 128 of the
@@ -301,6 +428,7 @@ class SynthEngine {
       // marker + sf binding; falls back to the GM standard kit when the file
       // isn't present yet.
       if (await _bindDynamic(channel, program) != null) return;
+      if (_roleChanged(channel, gen)) return;
       sfId = await ensureLoaded();
       bank = 128;
       prog = 0;
@@ -309,8 +437,14 @@ class SynthEngine {
       bank = 128;
       prog = program;
     }
+    if (_roleChanged(channel, gen)) return;
     try {
-      await _midi.selectInstrument(sfId: sfId, channel: channel, bank: bank, program: prog);
+      await _midi.selectInstrument(
+        sfId: sfId,
+        channel: channel,
+        bank: bank,
+        program: prog,
+      );
       _channelProgram[channel] = marker;
       await _bindSf(channel, sfId);
     } catch (e) {
@@ -319,7 +453,8 @@ class SynthEngine {
   }
 
   /// 기본 드럼 채널(9) 셋업.
-  Future<void> ensureDrumKit(int program) => ensureDrumKitOn(drumChannel, program);
+  Future<void> ensureDrumKit(int program) =>
+      ensureDrumKitOn(drumChannel, program);
 
   /// 하위호환 — 기본 Standard 키트(program 0).
   Future<void> ensureDrumChannel() => ensureDrumKit(0);
@@ -332,13 +467,22 @@ class SynthEngine {
     try {
       final sfId = await ensureLoaded();
       await _ensureProgram(sfId, clickChannel, 115); // GM Wood Block
-      await _midi.playNote(channel: clickChannel, key: pitch, velocity: accent ? 100 : 66, sfId: sfId);
+      await _midi.playNote(
+        channel: clickChannel,
+        key: pitch,
+        velocity: accent ? 100 : 66,
+        sfId: sfId,
+      );
       Timer(const Duration(milliseconds: 110), () async {
         try {
           await _midi.stopNote(channel: clickChannel, key: pitch, sfId: sfId);
-        } catch (_) {/* 이미 정지 */}
+        } catch (_) {
+          /* 이미 정지 */
+        }
       });
-    } catch (_) {/* 로드 전 무시 — 호출자가 fire-and-forget 이라 여기서 삼킨다 */}
+    } catch (_) {
+      /* 로드 전 무시 — 호출자가 fire-and-forget 이라 여기서 삼킨다 */
+    }
   }
 
   /// 노트온. release 타이머 없음 — 호출자가 noteOff 책임.
@@ -350,9 +494,18 @@ class SynthEngine {
     int? program,
   }) async {
     if (_useMelty) {
-      return _melty.noteOn(channel: channel, pitch: pitch, velocity: velocity, program: program);
+      return _melty.noteOn(
+        channel: channel,
+        pitch: pitch,
+        velocity: velocity,
+        program: program,
+      );
     }
+    final epoch = _channelEpoch[channel] ?? 0;
+    final gen = _roleGen[channel] ?? 0;
+    await _afterReset(channel);
     final mainId = await ensureLoaded();
+    if (_roleChanged(channel, gen)) return;
     int sfId = mainId;
     if (channel == drumChannel) {
       // 키트 선택은 play() 프리앰블에서 1회 수행. 시퀀서 per-note noteOn 은 program 을
@@ -362,8 +515,11 @@ class SynthEngine {
       sfId = _channelSf[drumChannel] ?? mainId;
     } else {
       // 멜로딕 채널 — 808/GM soundfont 라우팅. program==null 이면 기존 바인딩 유지.
-      sfId = await _bindChannel(channel, program);
+      final bound = await _bindChannel(channel, program);
+      if (bound == null) return;
+      sfId = bound;
     }
+    if ((_channelEpoch[channel] ?? 0) != epoch) return;
     final v = velocity.clamp(1, 127);
     final p = pitch.clamp(0, 127);
     try {
@@ -383,11 +539,89 @@ class SynthEngine {
     _markSilent(channel, p);
     try {
       await _midi.stopNote(channel: channel, key: p, sfId: sfId);
-    } catch (_) {/* 이미 정지 */}
+    } catch (_) {
+      /* 이미 정지 */
+    }
+  }
+
+  /// gt-003 channel-role switch: forget everything [channel] carried for its
+  /// previous role (kit/program cache, soundfont binding, pan) and stop its
+  /// voices, so a channel that was a drum track, an articulation voice or
+  /// another track's channel is set up from scratch by its next note.
+  Future<void> releaseChannel(int channel) {
+    _channelEpoch[channel] = (_channelEpoch[channel] ?? 0) + 1;
+    _roleGen[channel] = (_roleGen[channel] ?? 0) + 1;
+    if (_useMelty) {
+      _melty.releaseChannel(channel);
+      return Future<void>.value();
+    }
+    for (final timer in _activeReleases.remove(channel)?.values ?? <Timer>[]) {
+      timer.cancel();
+    }
+    // the old role's state is captured and cleared synchronously; only the
+    // plugin calls below are asynchronous, and they are chained after any
+    // earlier reset of this channel
+    final sfId = _channelSf.remove(channel) ?? _sfId;
+    final pitches = _sounding.remove(channel) ?? <int>{};
+    _channelProgram.remove(channel);
+    _channelPan.remove(channel);
+    final previous = _resetting[channel];
+    final done = () async {
+      if (previous != null) await previous;
+      await _resetOnPlugin(channel, sfId, pitches);
+    }();
+    _resetting[channel] = done;
+    return done.whenComplete(() {
+      if (identical(_resetting[channel], done)) _resetting.remove(channel);
+    });
+  }
+
+  Future<void> _resetOnPlugin(int channel, int? sfId, Set<int> pitches) async {
+    if (sfId == null) return;
+    for (final pitch in pitches) {
+      try {
+        await _midi.stopNote(channel: channel, key: pitch, sfId: sfId);
+      } catch (_) {
+        /* already stopped */
+      }
+    }
+    try {
+      // reset all controllers (volume 100, pan centre) on the old binding
+      await _midi.controlChange(
+        controller: 121,
+        value: 0,
+        channel: channel,
+        sfId: sfId,
+      );
+    } catch (_) {
+      /* plugin not ready */
+    }
+  }
+
+  /// Stop only this track, including its pending note-release timers.
+  Future<void> stopChannel(int channel) async {
+    _channelEpoch[channel] = (_channelEpoch[channel] ?? 0) + 1;
+    if (_useMelty) return _melty.stopChannel(channel);
+    for (final timer in _activeReleases.remove(channel)?.values ?? <Timer>[]) {
+      timer.cancel();
+    }
+    final pitches = _sounding.remove(channel) ?? <int>{};
+    final sfId = _channelSf[channel] ?? _sfId;
+    if (sfId == null) return;
+    for (final pitch in pitches) {
+      try {
+        await _midi.stopNote(channel: channel, key: pitch, sfId: sfId);
+      } catch (_) {
+        /* already stopped */
+      }
+    }
   }
 
   /// 모든 release 타이머 취소 + sfId 의 전 채널 음 정지.
   Future<void> stopAll() async {
+    for (var ch = 0; ch < 16; ch++) {
+      _channelEpoch[ch] = (_channelEpoch[ch] ?? 0) + 1;
+    }
     if (_useMelty) return _melty.stopAll();
     for (final m in _activeReleases.values) {
       for (final t in m.values) {
@@ -400,7 +634,9 @@ class SynthEngine {
       if (id == null) continue;
       try {
         await _midi.stopAllNotes(sfId: id);
-      } catch (_) {/* 로드 전이거나 plugin 미연결 — 무시 */}
+      } catch (_) {
+        /* 로드 전이거나 plugin 미연결 — 무시 */
+      }
     }
   }
 }

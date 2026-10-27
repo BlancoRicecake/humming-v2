@@ -1,5 +1,5 @@
 // LoopTap — arrangement strip + sweeping playhead (README §4.3, timeline.jsx).
-// One row per track (main + decoration layers): an 88px label chip + lane. The
+// One row per track: a fixed label column + a shared musical-time viewport. The
 // strip fills its space, or scrolls when there are more rows than fit. A white
 // playhead line sweeps across all lanes.
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -9,6 +9,9 @@ import 'package:flutter/scheduler.dart' show timeDilation;
 import '../../l10n/generated/app_localizations.dart';
 import '../models/loop_models.dart';
 import '../music/theory.dart';
+import '../music/audition.dart';
+import '../music/timeline_view.dart';
+import 'timeline_ruler.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
 
@@ -25,7 +28,7 @@ class PitchRange {
   final int max;
 }
 
-const double _labelW = 88;
+const double _defaultLabelW = 220;
 const double _gap = 8;
 const double _rowGap = 3;
 
@@ -47,14 +50,31 @@ class Arrangement extends StatelessWidget {
     this.onMoveClip,
     this.onConvertClip,
     this.playing = false,
+    this.solos = const {},
+    this.bypassSolo = false,
+    this.onToggleSolo,
+    this.loopRange,
+    this.view,
+    this.labelWidth = _defaultLabelW,
+    this.onLabelWidthChanged,
+    this.instrumentNames = const {},
   });
 
   final Section section;
+  final TimelineView? view;
+  TimelineView get visible => view ?? TimelineView(0, steps.toDouble());
+  final double labelWidth;
+  final ValueChanged<double>? onLabelWidthChanged;
+  final Map<String, String> instrumentNames;
 
   /// Ordered track metas to render (base 6 + added instances).
   final List<TrackMeta> tracks;
   final String activeId;
   final Map<String, bool> mutes;
+  final Set<String> solos;
+  final bool bypassSolo;
+  final ValueChanged<String>? onToggleSolo;
+  final PlaybackRange? loopRange;
   final ValueChanged<String> onSelect;
   final ValueChanged<String> onToggleMute;
 
@@ -90,9 +110,15 @@ class Arrangement extends StatelessWidget {
     final m = tracks[i];
     return _Row(
       meta: m,
+      labelWidth: labelWidth,
+      view: visible,
+      instrument: instrumentNames[m.id],
       data: section.tracks[m.id] ?? TrackData(),
       selected: m.id == activeId,
       muted: mutes[m.id] ?? false,
+      audible: trackIsAudible(m.id, mutes, solos, bypassSolo: bypassSolo),
+      solo: solos.contains(m.id),
+      onToggleSolo: onToggleSolo == null ? null : () => onToggleSolo!(m.id),
       onSelect: () => onSelect(m.id),
       onToggleMute: () => onToggleMute(m.id),
       steps: steps,
@@ -110,7 +136,7 @@ class Arrangement extends StatelessWidget {
   Widget build(BuildContext context) {
     // Playhead spans only the actual lanes (not the empty space / footer below).
     final lanesHeight = tracks.length * (_rowH + _rowGap);
-    return ClipRect(
+    final lanes = ClipRect(
       child: Stack(
         children: [
           // Fixed-height rows in a reorderable list — long-press a label chip to
@@ -133,7 +159,9 @@ class Arrangement extends StatelessWidget {
                 (child, index, anim) =>
                     Material(type: MaterialType.transparency, child: child),
             footer:
-                onAddTrack == null ? null : _AddTrackRow(onTap: onAddTrack!),
+                onAddTrack == null
+                    ? null
+                    : _AddTrackRow(onTap: onAddTrack!, labelWidth: labelWidth),
             itemBuilder:
                 (context, i) => Padding(
                   key: ValueKey(tracks[i].id),
@@ -143,15 +171,14 @@ class Arrangement extends StatelessWidget {
           ),
           // playhead spanning the lane area — draggable to scrub when onSeek is set.
           Positioned(
-            left: _labelW + _gap,
+            left: labelWidth + _gap,
             right: 0,
             top: 0,
             height: lanesHeight,
             child: LayoutBuilder(
               builder: (context, c) {
-                void seek(Offset p) => onSeek?.call(
-                  (p.dx / c.maxWidth * steps).clamp(0, steps.toDouble()),
-                );
+                void seek(Offset p) =>
+                    onSeek?.call(visible.stepAt(p.dx / c.maxWidth));
                 // Only the head listens to the clock, so the lane list below is
                 // not rebuilt every frame (audit C22).
                 final line = ValueListenableBuilder<double>(
@@ -159,20 +186,52 @@ class Arrangement extends StatelessWidget {
                   builder:
                       (context, ps, _) => Stack(
                         children: [
-                          Positioned(
-                            left: (ps / steps) * c.maxWidth,
-                            top: 0,
-                            bottom: 0,
-                            child: Container(
-                              width: 2,
-                              decoration: BoxDecoration(
-                                color: LT.t1.withValues(alpha: 0.9),
-                                boxShadow: [
-                                  BoxShadow(color: LT.t1, blurRadius: 6),
-                                ],
+                          if (loopRange != null)
+                            Positioned(
+                              left:
+                                  visible
+                                      .fraction(loopRange!.start)
+                                      .clamp(0.0, 1.0) *
+                                  c.maxWidth,
+                              width:
+                                  (visible
+                                          .fraction(loopRange!.end)
+                                          .clamp(0.0, 1.0) -
+                                      visible
+                                          .fraction(loopRange!.start)
+                                          .clamp(0.0, 1.0)) *
+                                  c.maxWidth,
+                              top: 0,
+                              bottom: 0,
+                              child: IgnorePointer(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: LT.lime.withValues(alpha: .06),
+                                    border: Border.symmetric(
+                                      vertical: BorderSide(
+                                        color: LT.lime.withValues(alpha: .5),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
+                          if (ps >= visible.start && ps < visible.end)
+                            Positioned(
+                              key: const ValueKey('timeline-playhead'),
+                              left: visible.fraction(ps) * c.maxWidth,
+                              top: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 2,
+                                decoration: BoxDecoration(
+                                  color: LT.t1.withValues(alpha: 0.9),
+                                  boxShadow: [
+                                    BoxShadow(color: LT.t1, blurRadius: 6),
+                                  ],
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                 );
@@ -191,6 +250,68 @@ class Arrangement extends StatelessWidget {
         ],
       ),
     );
+    final ko = Localizations.localeOf(context).languageCode == 'ko';
+    return Column(
+      children: [
+        SizedBox(
+          height: 28,
+          child: Row(
+            children: [
+              SizedBox(
+                width: labelWidth,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        ko ? '트랙 · 악기' : 'Track · instrument',
+                        style: const TextStyle(fontSize: 11, color: LT.t2),
+                      ),
+                    ),
+                    if (onLabelWidthChanged != null)
+                      Tooltip(
+                        message:
+                            ko
+                                ? '좌우로 끌어 이름 영역 조절'
+                                : 'Drag to resize track labels',
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.resizeLeftRight,
+                          child: GestureDetector(
+                            key: const ValueKey('track-label-resize'),
+                            behavior: HitTestBehavior.opaque,
+                            onHorizontalDragUpdate:
+                                (d) => onLabelWidthChanged!(
+                                  labelWidth + d.delta.dx,
+                                ),
+                            child: const SizedBox(
+                              width: 16,
+                              height: 28,
+                              child: Icon(
+                                Icons.drag_indicator,
+                                size: 13,
+                                color: LT.t3,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: _gap),
+              Expanded(
+                child: TimelineRuler(
+                  view: visible,
+                  steps: steps,
+                  loopRange: loopRange,
+                  onSeek: onSeek,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: lanes),
+      ],
+    );
   }
 }
 
@@ -205,15 +326,26 @@ class _Row extends StatelessWidget {
     required this.steps,
     required this.range,
     required this.playStep,
+    required this.labelWidth,
+    required this.view,
+    this.instrument,
     this.reorderIndex,
+    this.solo = false,
+    this.audible = true,
+    this.onToggleSolo,
     this.onMoveClip,
     this.onConvertClip,
   });
 
   final TrackMeta meta;
+  final double labelWidth;
+  final TimelineView view;
+  final String? instrument;
   final TrackData data;
   final bool selected;
   final bool muted;
+  final bool solo, audible;
+  final VoidCallback? onToggleSolo;
   final VoidCallback onSelect;
   final VoidCallback onToggleMute;
   final int steps;
@@ -230,48 +362,93 @@ class _Row extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget chip = Container(
-      width: _labelW,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        color: selected ? meta.color.withValues(alpha: 0.12) : LT.surface,
-        borderRadius: BorderRadius.circular(LTRadius.chip),
-        border: Border.all(color: selected ? meta.color : LT.border),
-      ),
-      child: Row(
-        children: [
-          if (reorderIndex != null) ...[
-            Icon(
-              Icons.drag_indicator,
-              size: 11,
-              color: LT.t3.withValues(alpha: 0.5),
-            ),
-            const SizedBox(width: 1),
-          ],
-          Ms(meta.icon, size: 11, color: selected ? meta.color : LT.t2),
-          const SizedBox(width: 5),
-          Expanded(
-            child: Text(
-              meta.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: LTType.inter(
-                size: 10,
-                weight: FontWeight.w700,
-                color: selected ? LT.t1 : LT.t2,
+    final name = data.label ?? instrument ?? meta.label;
+    final detail =
+        instrument != null && instrument != name ? instrument! : meta.label;
+    Widget chip = Tooltip(
+      message: '$name\n$detail',
+      child: Container(
+        key: ValueKey('track-label-${meta.id}'),
+        width: labelWidth,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: selected ? meta.color.withValues(alpha: 0.12) : LT.surface,
+          borderRadius: BorderRadius.circular(LTRadius.chip),
+          border: Border.all(color: selected ? meta.color : LT.border),
+        ),
+        child: Row(
+          children: [
+            if (reorderIndex != null) ...[
+              Icon(
+                Icons.drag_indicator,
+                size: 11,
+                color: LT.t3.withValues(alpha: 0.5),
+              ),
+              const SizedBox(width: 1),
+            ],
+            Ms(meta.icon, size: 11, color: selected ? meta.color : LT.t2),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    key: ValueKey('track-name-${meta.id}'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LTType.inter(
+                      size: 12,
+                      weight: FontWeight.w700,
+                      color: selected ? LT.t1 : LT.t2,
+                    ),
+                  ),
+                  if (detail != name)
+                    Text(
+                      detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LTType.inter(size: 10, color: LT.t3),
+                    ),
+                ],
               ),
             ),
-          ),
-          GestureDetector(
-            onTap: onToggleMute,
-            behavior: HitTestBehavior.opaque,
-            child: Ms(
-              muted ? LtIcons.volumeOff : LtIcons.volumeUp,
-              size: 11,
-              color: muted ? LT.t3 : LT.t2,
+            if (onToggleSolo != null)
+              Tooltip(
+                message: 'Solo',
+                child: GestureDetector(
+                  key: ValueKey('solo-${meta.id}'),
+                  onTap: onToggleSolo,
+                  behavior: HitTestBehavior.opaque,
+                  child: SizedBox(
+                    width: 22,
+                    height: 32,
+                    child: Center(
+                      child: Text(
+                        'S',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: solo ? LT.lime : LT.t3,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            GestureDetector(
+              key: ValueKey('mute-${meta.id}'),
+              onTap: onToggleMute,
+              behavior: HitTestBehavior.opaque,
+              child: Ms(
+                muted ? LtIcons.volumeOff : LtIcons.volumeUp,
+                size: 11,
+                color: muted ? LT.t3 : LT.t2,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
     // long-press the chip → start a reorder drag.
@@ -293,7 +470,7 @@ class _Row extends StatelessWidget {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: LT.bg,
+                color: audible ? LT.bg : LT.surface3,
                 borderRadius: BorderRadius.circular(LTRadius.chip),
                 border: Border.all(
                   color:
@@ -305,6 +482,7 @@ class _Row extends StatelessWidget {
                   (meta.kind == TrackKind.vocal && onMoveClip != null)
                       ? _VocalLane(
                         meta: meta,
+                        view: view,
                         data: data,
                         steps: steps,
                         playStep: playStep,
@@ -314,6 +492,7 @@ class _Row extends StatelessWidget {
                       : CustomPaint(
                         painter: _LanePainter(
                           meta: meta,
+                          view: view,
                           data: data,
                           steps: steps,
                           range: range,
@@ -344,7 +523,8 @@ class _Row extends StatelessWidget {
 
 /// Footer "+ Track" row, aligned under the label-chip column. Opens the picker.
 class _AddTrackRow extends StatelessWidget {
-  const _AddTrackRow({required this.onTap});
+  const _AddTrackRow({required this.onTap, required this.labelWidth});
+  final double labelWidth;
   final VoidCallback onTap;
 
   @override
@@ -360,7 +540,7 @@ class _AddTrackRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                width: _labelW,
+                width: labelWidth,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: LT.surface2,
@@ -400,6 +580,7 @@ class _AddTrackRow extends StatelessWidget {
 class _VocalLane extends StatefulWidget {
   const _VocalLane({
     required this.meta,
+    required this.view,
     required this.data,
     required this.steps,
     required this.playStep,
@@ -408,6 +589,7 @@ class _VocalLane extends StatefulWidget {
   });
 
   final TrackMeta meta;
+  final TimelineView view;
   final TrackData data;
   final int steps;
   final ValueListenable<double> playStep;
@@ -428,8 +610,7 @@ class _VocalLaneState extends State<_VocalLane> {
 
   void _onStart(LongPressStartDetails d) {
     final clips = widget.data.effectiveClips;
-    final pressStep =
-        (d.localPosition.dx / _laneW).clamp(0.0, 1.0) * widget.steps;
+    final pressStep = widget.view.stepAt(d.localPosition.dx / _laneW);
     // topmost chunk under the finger (later clips draw on top)
     for (var i = clips.length - 1; i >= 0; i--) {
       final c = clips[i];
@@ -450,7 +631,7 @@ class _VocalLaneState extends State<_VocalLane> {
     final clips = widget.data.effectiveClips;
     if (idx >= clips.length) return;
     final dur = _durOf(clips[idx]);
-    final stepF = (d.localPosition.dx / _laneW).clamp(0.0, 1.0) * widget.steps;
+    final stepF = widget.view.stepAt(d.localPosition.dx / _laneW);
     var raw = (stepF - _grabOffset).round();
     raw = _snap(raw, dur, clips, idx).clamp(0, widget.steps - 1);
     widget.onMove(idx, raw);
@@ -490,6 +671,7 @@ class _VocalLaneState extends State<_VocalLane> {
                 child: CustomPaint(
                   painter: _LanePainter(
                     meta: widget.meta,
+                    view: widget.view,
                     data: widget.data,
                     steps: widget.steps,
                     range: null,
@@ -516,8 +698,8 @@ class _VocalLaneState extends State<_VocalLane> {
     final start = clip.startStep;
     final duration = _durOf(clip).clamp(1, widget.steps - start);
     return Positioned(
-      left: start / widget.steps * width,
-      width: duration / widget.steps * width,
+      left: widget.view.fraction(start) * width,
+      width: duration / widget.view.length * width,
       top: 0,
       bottom: 0,
       child: Draggable<VocalClipDrag>(
@@ -529,10 +711,10 @@ class _VocalLaneState extends State<_VocalLane> {
           final box = context.findRenderObject() as RenderBox?;
           if (box == null) return;
           final local = box.globalToLocal(offset);
-          final newStep = (local.dx / _laneW * widget.steps).round().clamp(
-            0,
-            widget.steps - duration,
-          );
+          final newStep = widget.view
+              .stepAt(local.dx / _laneW)
+              .round()
+              .clamp(0, widget.steps - duration);
           widget.onMove(index, newStep);
         },
         feedback: Material(
@@ -555,12 +737,14 @@ class _VocalLaneState extends State<_VocalLane> {
 class _LanePainter extends CustomPainter {
   _LanePainter({
     required this.meta,
+    required this.view,
     required this.data,
     required this.steps,
     required this.range,
     this.grabbedClip,
   }) : _sig = _sigOf(data);
   final TrackMeta meta;
+  final TimelineView view;
   final TrackData data;
   final int steps;
   final PitchRange? range;
@@ -579,11 +763,15 @@ class _LanePainter extends CustomPainter {
     h = h * 31 + d.pitchNotes.length;
     for (final n in d.drumNotes) {
       h = h * 31 + n.kind.hashCode;
-      h = h * 31 + n.step;
+      h = h * 31 + (n.step + n.offsetSteps).hashCode;
+      h = h * 31 + (n.muted ? 1 : 0);
+      h = h * 31 + n.chance.hashCode;
     }
     for (final n in d.pitchNotes) {
       h = h * 31 + n.midi;
-      h = (h * 31 + n.step) * 31 + n.dur;
+      h = (h * 31 + n.startSteps.hashCode) * 31 + n.soundingSteps.hashCode;
+      h = h * 31 + (n.muted ? 1 : 0);
+      h = h * 31 + n.chance.hashCode;
     }
     h = h * 31 + (d.clip?.length ?? 0);
     // vocal chunks: position/size/identity so moving or editing a take redraws.
@@ -601,6 +789,19 @@ class _LanePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.clipRect(Offset.zero & size);
+    final beatWidth = size.width * 4 / view.length;
+    for (var step = (view.start / 4).ceil() * 4; step < view.end; step += 4) {
+      final bar = step % 16 == 0;
+      if (!bar && beatWidth < 16) continue;
+      final x = view.fraction(step) * size.width;
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        Paint()
+          ..color = bar ? LT.borderStrong : LT.border.withValues(alpha: .4),
+      );
+    }
     final p = Paint()..color = meta.color;
     final w = size.width, h = size.height;
 
@@ -619,8 +820,12 @@ class _LanePainter extends CustomPainter {
       for (var ri = 0; ri < rows.length; ri++) {
         final y = h * (ri + 0.5) / rows.length;
         for (final n in data.drumNotes.where((n) => n.kind == rows[ri])) {
-          final x = (n.step / steps) * w;
-          canvas.drawCircle(Offset(x + 2, y), 2, p);
+          final x = view.fraction(n.step + n.offsetSteps) * w;
+          canvas.drawCircle(
+            Offset(x + 2, y),
+            2,
+            n.muted ? (Paint()..color = meta.color.withValues(alpha: .3)) : p,
+          );
         }
       }
       return;
@@ -644,9 +849,9 @@ class _LanePainter extends CustomPainter {
               ..style = PaintingStyle.stroke
               ..strokeWidth = grabbed ? 2 : 1;
         final vp = Paint()..color = meta.color.withValues(alpha: 0.85);
-        final x0 = (c.startStep / steps) * w;
+        final x0 = view.fraction(c.startStep) * w;
         final wSteps = c.durSteps > 0 ? c.durSteps : (steps - c.startStep);
-        final cw = ((wSteps / steps) * w).clamp(4.0, w - x0);
+        final cw = ((wSteps / view.length) * w).clamp(4.0, double.infinity);
         final rect = RRect.fromRectAndRadius(
           Rect.fromLTWH(x0 + 1, 3, (cw - 2).clamp(3.0, w), h - 6),
           const Radius.circular(3),
@@ -678,17 +883,21 @@ class _LanePainter extends CustomPainter {
     // pitched / bass
     final r = range ?? const PitchRange(48, 72);
     final span = (r.max - r.min).clamp(1, 127);
+    final mutedPaint = Paint()..color = meta.color.withValues(alpha: .3);
     for (final n in data.pitchNotes) {
       final yNorm = 1 - (n.midi - r.min) / span;
       final y = (yNorm.clamp(0, 1)) * h;
-      final x = (n.step / steps) * w;
-      final nw = ((n.dur / steps) * w).clamp(2.5, w);
+      final x = view.fraction(n.startSteps) * w;
+      final nw = ((n.soundingSteps / view.length) * w).clamp(
+        2.5,
+        double.infinity,
+      );
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromLTWH(x, y - 2, nw.toDouble(), 4),
           const Radius.circular(2),
         ),
-        p,
+        n.muted ? mutedPaint : p,
       );
     }
   }
@@ -698,6 +907,8 @@ class _LanePainter extends CustomPainter {
       old._sig != _sig ||
       old.data != data ||
       old.steps != steps ||
+      old.view.start != view.start ||
+      old.view.end != view.end ||
       old.range != range ||
       old.grabbedClip != grabbedClip;
 }

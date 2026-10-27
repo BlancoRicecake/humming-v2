@@ -27,7 +27,6 @@ Future<void> showHumModal(
   required Future<void> Function(String audioPath) onConvert,
   required int bpm,
   required int bars,
-  double swing = 0,
   int countInBeats = 4,
   void Function(bool accent)? onClick,
   VoidCallback? startBacking,
@@ -274,6 +273,17 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
       if (await headsetRoute() == HeadsetRoute.none) {
         await overrideOutputToSpeaker();
       }
+      // Cancel / lifecycle abort may have landed during the awaits above —
+      // starting the backing now would leave it playing with no modal.
+      if (_closed || _finishing || _phase != 'countin' || !mounted) {
+        String? p;
+        try {
+          p = await _rec.stop();
+        } catch (_) {}
+        _deleteQuiet(p);
+        await _restoreOutput();
+        return;
+      }
       // Start the loop backing on the downbeat, right after recording opens, so
       // audio t≈0 lines up with loop step 0 (the engine absorbs the small
       // constant latency via its grid-phase estimate).
@@ -424,139 +434,148 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
       'error' => _errorText(l),
       _ => l.ltHumDone,
     };
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Ms(LtIcons.graphicEq, size: 18, color: widget.accent),
-            const SizedBox(width: 8),
-            Text(
-              l.ltHumModalTitle(widget.trackLabel),
-              style: LTType.inter(
-                size: 16,
-                weight: FontWeight.w800,
-                color: LT.t1,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: LTType.inter(
-            size: 12,
-            color: _phase == 'error' ? LT.danger : LT.t2,
-          ),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          height: 70,
-          child: Center(
-            child:
-                _phase == 'done'
-                    ? Ms(
-                      LtIcons.checkCircle,
-                      size: 48,
-                      color: widget.accent,
-                      fill: 1,
-                    )
-                    : _phase == 'error'
-                    ? Ms(LtIcons.info, size: 44, color: LT.danger)
-                    : _phase == 'countin'
-                    ? Text(
-                      '$_count',
-                      style: LTType.mono(
-                        size: 48,
-                        weight: FontWeight.w800,
-                        color: widget.accent,
-                      ),
-                    )
-                    : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        for (final l in _levels)
-                          Container(
-                            width: 5,
-                            height: (l * (_phase == 'listen' ? 64 : 24)).clamp(
-                              6,
-                              64,
-                            ),
-                            margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                            decoration: BoxDecoration(
-                              color: _phase == 'listen' ? widget.accent : LT.t3,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                      ],
-                    ),
-          ),
-        ),
-        const SizedBox(height: 22),
-        if (_phase == 'listen')
+    // System back must run _cancel (stop recorder, delete temp file,
+    // restore the output session) like vocal_record_modal does.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _cancel();
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: LT.danger,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 6),
+              Ms(LtIcons.graphicEq, size: 18, color: widget.accent),
+              const SizedBox(width: 8),
               Text(
-                time,
-                style: LTType.mono(
-                  size: 14,
-                  weight: FontWeight.w700,
-                  color: LT.danger,
+                l.ltHumModalTitle(widget.trackLabel),
+                style: LTType.inter(
+                  size: 16,
+                  weight: FontWeight.w800,
+                  color: LT.t1,
                 ),
               ),
-              const SizedBox(width: 14),
-              GestureDetector(
-                onTap: _finish,
-                child: Container(
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 26),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: widget.accent,
-                    borderRadius: BorderRadius.circular(999),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: LTType.inter(
+              size: 12,
+              color: _phase == 'error' ? LT.danger : LT.t2,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 70,
+            child: Center(
+              child:
+                  _phase == 'done'
+                      ? Ms(
+                        LtIcons.checkCircle,
+                        size: 48,
+                        color: widget.accent,
+                        fill: 1,
+                      )
+                      : _phase == 'error'
+                      ? Ms(LtIcons.info, size: 44, color: LT.danger)
+                      : _phase == 'countin'
+                      ? Text(
+                        '$_count',
+                        style: LTType.mono(
+                          size: 48,
+                          weight: FontWeight.w800,
+                          color: widget.accent,
+                        ),
+                      )
+                      : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (final l in _levels)
+                            Container(
+                              width: 5,
+                              height: (l * (_phase == 'listen' ? 64 : 24))
+                                  .clamp(6, 64),
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    _phase == 'listen' ? widget.accent : LT.t3,
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            ),
+                        ],
+                      ),
+            ),
+          ),
+          const SizedBox(height: 22),
+          if (_phase == 'listen')
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: LT.danger,
+                    shape: BoxShape.circle,
                   ),
-                  child: Text(
-                    l.ltHumConvert,
-                    style: LTType.inter(
-                      size: 14,
-                      weight: FontWeight.w800,
-                      color: LT.bg,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  time,
+                  style: LTType.mono(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: LT.danger,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                GestureDetector(
+                  onTap: _finish,
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 26),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: widget.accent,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      l.ltHumConvert,
+                      style: LTType.inter(
+                        size: 14,
+                        weight: FontWeight.w800,
+                        color: LT.bg,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 14),
-              _ghostBtn(l.cancel, _cancel),
-            ],
-          )
-        else if (_phase == 'countin')
-          _ghostBtn(l.cancel, _cancel)
-        else if (_phase == 'error')
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_permissionDenied) ...[
-                _solidBtn(l.retry, _requestPermissionThenCountIn),
-                const SizedBox(width: 8),
-                _ghostBtn(l.editOpenSettings, () => openAppSettings()),
-                const SizedBox(width: 8),
+                const SizedBox(width: 14),
+                _ghostBtn(l.cancel, _cancel),
               ],
-              _ghostBtn(l.close, _cancel),
-            ],
-          ),
-      ],
+            )
+          else if (_phase == 'countin')
+            _ghostBtn(l.cancel, _cancel)
+          else if (_phase == 'error')
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_permissionDenied) ...[
+                  _solidBtn(l.retry, _requestPermissionThenCountIn),
+                  const SizedBox(width: 8),
+                  _ghostBtn(l.editOpenSettings, () => openAppSettings()),
+                  const SizedBox(width: 8),
+                ],
+                _ghostBtn(l.close, _cancel),
+              ],
+            ),
+        ],
+      ),
     );
   }
 

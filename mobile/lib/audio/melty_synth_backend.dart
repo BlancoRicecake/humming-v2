@@ -12,7 +12,8 @@
 // HOW: each soundfont (main GM, 808, hip-hop, downloaded catalog slots) is its
 // own Synthesizer. Notes/programs are routed to the right Synthesizer per
 // channel; a single render loop sums every loaded synth's audio block and
-// streams it to the speaker. Drum channels set bank 128 (MeltySynth resolves
+// streams it to the speaker as interleaved STEREO Int16 (mixer-001: track pan
+// is CC10 on the channel, rendered by the synth itself). Drum channels set bank 128 (MeltySynth resolves
 // bank-128 presets on ANY channel, falling back to the Standard kit).
 //
 // Mirrors the public surface SynthEngine forwards to it: ensureLoaded, noteOn,
@@ -67,6 +68,9 @@ class MeltyEngine with WidgetsBindingObserver {
   static const int clickChannel = 15;
 
   static const int _sampleRate = 44100;
+  // Interleaved L/R output (mixer-001). Before pan existed the synth's stereo
+  // was folded to mono; a centred voice has L == R, so it sounds the same.
+  static const int _channels = 2;
   // PCM render block. ~23ms @44.1k. Render granularity + pad-tap latency floor.
   static const int _frames = 1024;
 
@@ -87,8 +91,10 @@ class MeltyEngine with WidgetsBindingObserver {
   // depth adds is irrelevant, and it survives multi-block main-thread stalls.
   static const int _idleThreshold = 1024;
   static const int _idleTarget = 2048; // ~46ms
-  static const int _recThreshold = 4096; // signal refill with ~93ms still buffered
-  static const int _recTarget = 8192; // ~186ms cushion against main-thread stalls
+  static const int _recThreshold =
+      4096; // signal refill with ~93ms still buffered
+  static const int _recTarget =
+      8192; // ~186ms cushion against main-thread stalls
   int _targetFrames = _idleTarget;
 
   // Master makeup gain applied before the soft limiter. MeltySynth renders well
@@ -110,6 +116,16 @@ class MeltyEngine with WidgetsBindingObserver {
   // AVAudioSession interruption began, feed error). Gates _onFeed too.
   bool _needsRebuild = false;
   bool _recovering = false;
+  // Output-unit release/setup sequences (rebuildOutput, _recover) must never
+  // interleave: two overlapping rebuilds could leave the unit in the wrong
+  // session category with _forRecording/_targetFrames out of step.
+  Future<void> _outputOps = Future<void>.value();
+
+  Future<void> _serialOutput(Future<void> Function() op) {
+    final next = _outputOps.then((_) => op());
+    _outputOps = next.catchError((Object _) {});
+    return next;
+  }
   int _recoverFailures = 0;
   static const int _maxRecoverFailures = 3;
   DateTime _lastRecoverAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -119,10 +135,12 @@ class MeltyEngine with WidgetsBindingObserver {
   Synthesizer? _main;
   Synthesizer? _s808;
   Synthesizer? _hiphop;
-  final Map<int, Synthesizer> _slots = <int, Synthesizer>{}; // catalog slot → synth
+  final Map<int, Synthesizer> _slots =
+      <int, Synthesizer>{}; // catalog slot → synth
 
   Future<void>? _loading;
-  final Map<int, Future<Synthesizer>?> _loadingSlot = <int, Future<Synthesizer>?>{};
+  final Map<int, Future<Synthesizer>?> _loadingSlot =
+      <int, Future<Synthesizer>?>{};
   bool _outputStarted = false;
 
   // channel → synth it's currently bound to (so noteOff/notes go to the right
@@ -137,13 +155,21 @@ class MeltyEngine with WidgetsBindingObserver {
   final Set<int> _drumChannels = <int>{drumChannel};
 
   // (channel, pitch) → scheduled release timer (for playNote auto note-off).
+  final Map<int, int> _channelEpoch = {};
+  final Map<int, int> _noteEpoch = {};
   final Map<int, Map<int, Timer>> _activeReleases = <int, Map<int, Timer>>{};
+
+  // mixer-001: last CC10 value per channel. Re-sent whenever the channel is
+  // bound to a different synth (instrument swap to 808 / catalog / kit font),
+  // and to the main synth once it loads.
+  final Map<int, int> _channelPan = <int, int>{};
 
   // Reusable render scratch (avoid per-callback allocation).
   final Float32List _bl = Float32List(_frames);
   final Float32List _br = Float32List(_frames);
-  final Float32List _acc = Float32List(_frames);
-  final Int16List _out = Int16List(_frames);
+  final Float32List _accL = Float32List(_frames);
+  final Float32List _accR = Float32List(_frames);
+  final Int16List _out = Int16List(_frames * _channels);
 
   bool get isLoaded => _main != null && _outputStarted;
 
@@ -152,7 +178,10 @@ class MeltyEngine with WidgetsBindingObserver {
 
   Future<void> _init() async {
     try {
-      _main = await _loadSynth(_sfAsset);
+      final main = _main = await _loadSynth(_sfAsset);
+      for (final e in _channelPan.entries) {
+        if (_channelSynth[e.key] == null) _sendPan(main, e.key, e.value);
+      }
       await _startOutput();
     } catch (e) {
       _loading = null; // allow retry
@@ -183,13 +212,17 @@ class MeltyEngine with WidgetsBindingObserver {
     final path = SoundfontCatalog.instance.localPath(slot);
     if (path == null) return null;
     try {
-      final s = await (_loadingSlot[slot] ??= () async {
-        final bytes = await File(path).readAsBytes();
-        return Synthesizer.loadByteData(
-          ByteData.sublistView(bytes),
-          SynthesizerSettings(sampleRate: _sampleRate, enableReverbAndChorus: true),
-        );
-      }());
+      final s =
+          await (_loadingSlot[slot] ??= () async {
+            final bytes = await File(path).readAsBytes();
+            return Synthesizer.loadByteData(
+              ByteData.sublistView(bytes),
+              SynthesizerSettings(
+                sampleRate: _sampleRate,
+                enableReverbAndChorus: true,
+              ),
+            );
+          }());
       _slots[slot] = s;
       return s;
     } catch (e) {
@@ -205,7 +238,7 @@ class MeltyEngine with WidgetsBindingObserver {
   Future<void> _startOutput() async {
     if (_outputStarted) return;
     await PcmOutput.setLogLevel(LogLevel.none); // silence per-feed [PCM] spam
-    await PcmOutput.setup(sampleRate: _sampleRate, channelCount: 1);
+    await PcmOutput.setup(sampleRate: _sampleRate, channelCount: _channels);
     _outputStarted = true;
     _targetFrames = _idleTarget;
     _forRecording = false;
@@ -234,7 +267,10 @@ class MeltyEngine with WidgetsBindingObserver {
       }
       return;
     }
-    if ((Platform.isWindows || Platform.isMacOS) && state == AppLifecycleState.inactive) return;
+    if ((Platform.isWindows || Platform.isMacOS) &&
+        state == AppLifecycleState.inactive) {
+      return;
+    }
     _feedPaused = true;
     if (state != AppLifecycleState.inactive) {
       // paused / hidden / detached: the RemoteIO unit gets stopped underneath
@@ -284,7 +320,7 @@ class MeltyEngine with WidgetsBindingObserver {
     }
     _lastRecoverAt = DateTime.now();
     _recovering = true;
-    _recover(reason).whenComplete(() => _recovering = false);
+    _serialOutput(() => _recover(reason)).whenComplete(() => _recovering = false);
   }
 
   Future<void> _recover(String reason) async {
@@ -293,13 +329,16 @@ class MeltyEngine with WidgetsBindingObserver {
       await PcmOutput.release();
       await PcmOutput.setup(
         sampleRate: _sampleRate,
-        channelCount: 1,
-        iosAudioCategory: _forRecording
-            ? IosAudioCategory.playAndRecord
-            : IosAudioCategory.playback,
+        channelCount: _channels,
+        iosAudioCategory:
+            _forRecording
+                ? IosAudioCategory.playAndRecord
+                : IosAudioCategory.playback,
       );
       _targetFrames = _forRecording ? _recTarget : _idleTarget;
-      PcmOutput.setFeedThreshold(_forRecording ? _recThreshold : _idleThreshold);
+      PcmOutput.setFeedThreshold(
+        _forRecording ? _recThreshold : _idleThreshold,
+      );
       PcmOutput.setFeedCallback(_onFeed);
       _needsRebuild = false;
       _recoverFailures = 0;
@@ -330,13 +369,18 @@ class MeltyEngine with WidgetsBindingObserver {
   /// earlier restart attempts went silent). Instead we prime the loop directly
   /// with one render block — that feed kicks AudioOutputUnitStart inside the
   /// native feed handler, which is what start() was supposed to do.
-  Future<void> rebuildOutput({required bool forRecording}) async {
+  Future<void> rebuildOutput({required bool forRecording}) =>
+      _serialOutput(() => _rebuildOutput(forRecording));
+
+  Future<void> _rebuildOutput(bool forRecording) async {
     if (!_outputStarted) {
       debugPrint('[rebuild] SKIP — output not started');
       return; // output never started — nothing to rebuild
     }
-    debugPrint('[rebuild] start forRecording=$forRecording '
-        'hwRate(before)=${await outputSampleRate()}');
+    debugPrint(
+      '[rebuild] start forRecording=$forRecording '
+      'hwRate(before)=${await outputSampleRate()}',
+    );
     await PcmOutput.release();
     if (!forRecording) {
       // Output unit is released; now force a clean session reset. Flipping the
@@ -345,14 +389,17 @@ class MeltyEngine with WidgetsBindingObserver {
       // renegotiates the IO from scratch. (.playAndRecord case skips this — it
       // must stay active to keep recording alive.)
       await resetToPlaybackSession();
-      debugPrint('[rebuild] after session reset hwRate=${await outputSampleRate()}');
+      debugPrint(
+        '[rebuild] after session reset hwRate=${await outputSampleRate()}',
+      );
     }
     await PcmOutput.setup(
       sampleRate: _sampleRate,
-      channelCount: 1,
-      iosAudioCategory: forRecording
-          ? IosAudioCategory.playAndRecord
-          : IosAudioCategory.playback,
+      channelCount: _channels,
+      iosAudioCategory:
+          forRecording
+              ? IosAudioCategory.playAndRecord
+              : IosAudioCategory.playback,
     );
     // Deep buffer while recording (survives main-thread stalls = no crackle),
     // shallow again after (responsive pad taps).
@@ -366,8 +413,10 @@ class MeltyEngine with WidgetsBindingObserver {
     _needsRebuild = false;
     _recoverFailures = 0;
     _onFeed(0); // manual prime — bypasses the _needsStart no-op in start()
-    debugPrint('[rebuild] done forRecording=$forRecording '
-        'hwRate(after)=${await outputSampleRate()}');
+    debugPrint(
+      '[rebuild] done forRecording=$forRecording '
+      'hwRate(after)=${await outputSampleRate()}',
+    );
   }
 
   // Called by flutter_pcm_sound whenever its buffer drops below the threshold.
@@ -399,11 +448,13 @@ class MeltyEngine with WidgetsBindingObserver {
     });
   }
 
-  // Render one _frames block: sum every loaded synth to mono Int16 in _out.
+  // Render one _frames block: sum every loaded synth into interleaved stereo
+  // Int16 in _out (L0 R0 L1 R1 ...).
   void _renderBlock() {
     final main = _main!;
     for (var i = 0; i < _frames; i++) {
-      _acc[i] = 0.0;
+      _accL[i] = 0.0;
+      _accR[i] = 0.0;
     }
     _mixSynth(main);
     if (_s808 != null) _mixSynth(_s808!);
@@ -416,9 +467,20 @@ class MeltyEngine with WidgetsBindingObserver {
       // louder), peaks saturate smoothly toward ±1 instead of clipping hard.
       // This also makes overall loudness more consistent — loud passes are gently
       // compressed rather than jumping in level. Output can never exceed ±1.
-      final v = _tanh(_acc[i] * _masterGain);
-      _out[i] = (v < 0 ? v * 32768 : v * 32767).round();
+      // Same gain + limiter on each channel, so a centred sound keeps its level.
+      _out[2 * i] = pcm16(_accL[i] * _masterGain);
+      _out[2 * i + 1] = pcm16(_accR[i] * _masterGain);
     }
+  }
+
+  /// Soft-limit one (pre-gain-applied) sample to Int16. Non-finite input
+  /// (a NaN from a misbehaving voice) maps to silence: `NaN.round()` throws,
+  /// and a throw inside the feed callback would silence output for good.
+  @visibleForTesting
+  static int pcm16(double x) {
+    if (!x.isFinite) return 0;
+    final v = _tanh(x);
+    return (v < 0 ? v * 32768 : v * 32767).round();
   }
 
   // tanh soft clipper. dart:math has no tanh, so compute it from exp; clamp the
@@ -433,7 +495,8 @@ class MeltyEngine with WidgetsBindingObserver {
   void _mixSynth(Synthesizer s) {
     s.render(_bl, _br);
     for (var i = 0; i < _frames; i++) {
-      _acc[i] += (_bl[i] + _br[i]) * 0.5; // stereo → mono
+      _accL[i] += _bl[i];
+      _accR[i] += _br[i];
     }
   }
 
@@ -447,16 +510,134 @@ class MeltyEngine with WidgetsBindingObserver {
     if (prev != null && !identical(prev, s)) {
       prev.noteOffAll(channel: channel); // natural release, not a hard cut
     }
+    if (!identical(prev, s)) {
+      // mixer-001: the new synth has never heard this channel's pan.
+      final pan = _channelPan[channel];
+      if (pan != null) _sendPan(s, channel, pan);
+    }
     _channelSynth[channel] = s;
+  }
+
+  void _sendPan(Synthesizer s, int channel, int value) {
+    s.processMidiMessage(
+      channel: channel,
+      command: 0xB0,
+      data1: 0x0A,
+      data2: value & 0x7f,
+    );
+  }
+
+  /// Send a MIDI control change to the synth [channel] is bound to (the main
+  /// GM synth until it is bound elsewhere). CC10 (pan) is remembered and
+  /// re-sent when the channel moves to another soundfont's synth.
+  void controlChange(int channel, int controller, int value) {
+    final v = value.clamp(0, 127);
+    if (controller == 0x0A) _channelPan[channel] = v;
+    final s = _channelSynth[channel] ?? _main;
+    if (s == null) return; // not loaded yet — pan is re-sent on load / bind
+    s.processMidiMessage(
+      channel: channel,
+      command: 0xB0,
+      data1: controller & 0x7f,
+      data2: v,
+    );
+  }
+
+  /// Test hooks: install a (fake) main synth and bind a channel directly.
+  @visibleForTesting
+  void debugSetMain(Synthesizer? s) => _main = s;
+
+  @visibleForTesting
+  void debugBind(int channel, Synthesizer s) => _bindSynth(channel, s);
+
+  @visibleForTesting
+  void debugReset() {
+    _main = null;
+    _loading = null;
+    _channelSynth.clear();
+    _channelPan.clear();
+    _channelProgram.clear();
+    _drumChannels
+      ..clear()
+      ..add(drumChannel);
+    _roleGen.clear();
+  }
+
+  /// Test hook: use [s] as the loaded GM synth (no asset load, no output),
+  /// so noteOn/noteOff/ensureDrumKitOn run their real routing on it.
+  @visibleForTesting
+  void debugInstallMain(Synthesizer s, {Future<void>? loading}) {
+    _main = s;
+    _loading = loading ?? Future<void>.value();
+  }
+
+  // gt-003: role generation per channel, bumped only by releaseChannel (a
+  // Stop must not cancel a kit/program set-up, a role switch must).
+  final Map<int, int> _roleGen = <int, int>{};
+
+  /// Test hook: whether [channel] is currently routed as a drum channel.
+  @visibleForTesting
+  bool debugIsDrumChannel(int channel) => _drumChannels.contains(channel);
+
+  /// gt-003 channel-role switch: forget everything [channel] carried for its
+  /// previous role (drum membership, kit/program cache, pan, synth binding)
+  /// and reset it on every synth: voices cut, controllers reset, bank 0,
+  /// program 0. The next noteOn/ensureDrumKitOn sets the new role up from
+  /// scratch. The base drum channel (9) stays percussion.
+  void releaseChannel(int channel) {
+    _channelEpoch[channel] = (_channelEpoch[channel] ?? 0) + 1;
+    _roleGen[channel] = (_roleGen[channel] ?? 0) + 1;
+    for (final timer in _activeReleases.remove(channel)?.values ?? <Timer>[]) {
+      timer.cancel();
+    }
+    if (channel != drumChannel) _drumChannels.remove(channel);
+    _channelProgram.remove(channel);
+    _channelPan.remove(channel);
+    _channelSynth.remove(channel);
+    for (final s in {_main, _s808, _hiphop, ..._slots.values}) {
+      if (s == null) continue;
+      s.noteOffAll(channel: channel, immediate: true);
+      s.processMidiMessage(
+        channel: channel,
+        command: 0xB0,
+        data1: 0x79, // reset all controllers (volume 100, pan centre)
+        data2: 0,
+      );
+      s.processMidiMessage(
+        channel: channel,
+        command: 0xB0,
+        data1: 0x00, // bank 0
+        data2: 0,
+      );
+      _programChange(s, channel, 0);
+    }
+  }
+
+  /// Interleaved stereo render of one block with [main] as the GM synth (test
+  /// hook: L/R kept apart, same gain + limiter per channel).
+  @visibleForTesting
+  Int16List debugRenderBlock(Synthesizer main) {
+    final prev = _main;
+    _main = main;
+    try {
+      _renderBlock();
+      return Int16List.fromList(_out);
+    } finally {
+      _main = prev;
+    }
   }
 
   // Bind a melodic channel to the synth/preset for [program] and return it.
   // program == null keeps the existing binding (per-note sequencer calls).
-  Future<Synthesizer> _bindMelodic(int channel, int? program) async {
+  // Returns null when the channel changed role (releaseChannel) while a
+  // soundfont was loading: the late completion must not bind anything.
+  Future<Synthesizer?> _bindMelodic(int channel, int? program) async {
     final main = _main!;
     if (program == null) return _channelSynth[channel] ?? main;
+    final gen = _roleGen[channel] ?? 0;
     if (program == program808) {
       final s = await _ensure808();
+      if ((_roleGen[channel] ?? 0) != gen) return null;
       if (_channelProgram[channel] != program808) {
         _programChange(s, channel, 0); // 808's single preset (default bank 0)
         _channelProgram[channel] = program808;
@@ -466,12 +647,17 @@ class MeltyEngine with WidgetsBindingObserver {
     }
     if (isDynamicSlot(program)) {
       final s = await _ensureSlot(program);
+      if ((_roleGen[channel] ?? 0) != gen) return null;
       if (s != null) {
         final entry = SoundfontCatalog.instance.bySlot(program);
         final marker = 100000 + program;
         if (_channelProgram[channel] != marker) {
-          _selectWithBank(s, channel,
-              bank: entry?.sfBank ?? 0, program: entry?.sfProgram ?? 0);
+          _selectWithBank(
+            s,
+            channel,
+            bank: entry?.sfBank ?? 0,
+            program: entry?.sfProgram ?? 0,
+          );
           _channelProgram[channel] = marker;
         }
         _bindSynth(channel, s);
@@ -488,8 +674,14 @@ class MeltyEngine with WidgetsBindingObserver {
   }
 
   void _selectGm(Synthesizer s, int channel, int program) {
-    if (_channelSynth[channel] == s && _channelProgram[channel] == program) return;
-    _programChange(s, channel, program); // melodic: default bank 0 (matches buildMidi)
+    if (_channelSynth[channel] == s && _channelProgram[channel] == program) {
+      return;
+    }
+    _programChange(
+      s,
+      channel,
+      program,
+    ); // melodic: default bank 0 (matches buildMidi)
     _channelProgram[channel] = program;
   }
 
@@ -499,29 +691,58 @@ class MeltyEngine with WidgetsBindingObserver {
   // cases, _selectWithBank only where the bank truly differs (catalog
   // soundfonts, or forcing 128 on a NON-percussion drum channel).
   void _programChange(Synthesizer s, int channel, int program) {
-    s.processMidiMessage(channel: channel, command: 0xC0, data1: program & 0x7f, data2: 0);
+    s.processMidiMessage(
+      channel: channel,
+      command: 0xC0,
+      data1: program & 0x7f,
+      data2: 0,
+    );
   }
 
-  void _selectWithBank(Synthesizer s, int channel, {required int bank, required int program}) {
-    s.processMidiMessage(channel: channel, command: 0xB0, data1: 0x00, data2: bank);
-    s.processMidiMessage(channel: channel, command: 0xC0, data1: program & 0x7f, data2: 0);
+  void _selectWithBank(
+    Synthesizer s,
+    int channel, {
+    required int bank,
+    required int program,
+  }) {
+    s.processMidiMessage(
+      channel: channel,
+      command: 0xB0,
+      data1: 0x00,
+      data2: bank,
+    );
+    s.processMidiMessage(
+      channel: channel,
+      command: 0xC0,
+      data1: program & 0x7f,
+      data2: 0,
+    );
   }
 
   /// Bind a (drum) channel to a kit. GM kits live in bank 128 of the main SF2;
   /// the hip-hop / catalog kits are their own soundfonts. Mirrors
   /// SynthEngine.ensureDrumKitOn.
   Future<void> ensureDrumKitOn(int channel, int program) async {
+    // gt-003: a role switch (releaseChannel) while this awaits drops the
+    // late commit — the channel never becomes percussion again
+    final gen = _roleGen[channel] ?? 0;
+    bool stale() => (_roleGen[channel] ?? 0) != gen;
     await ensureLoaded();
-    _drumChannels.add(channel); // remember: this channel plays drums, not melody
+    if (stale()) return;
+    _drumChannels.add(
+      channel,
+    ); // remember: this channel plays drums, not melody
     final marker = 1000 + program;
     if (_channelProgram[channel] == marker) return;
     Synthesizer s;
     int prog;
     if (program == kitHipHop) {
       s = await _ensureHipHop();
+      if (stale()) return;
       prog = 0;
     } else if (isDynamicSlot(program)) {
       final d = await _ensureSlot(program);
+      if (stale()) return;
       if (d != null) {
         s = d;
         prog = 0;
@@ -546,7 +767,8 @@ class MeltyEngine with WidgetsBindingObserver {
     _bindSynth(channel, s);
   }
 
-  Future<void> ensureDrumKit(int program) => ensureDrumKitOn(drumChannel, program);
+  Future<void> ensureDrumKit(int program) =>
+      ensureDrumKitOn(drumChannel, program);
 
   // ── playback ────────────────────────────────────────────────────────
   Future<void> noteOn({
@@ -555,25 +777,41 @@ class MeltyEngine with WidgetsBindingObserver {
     int velocity = 100,
     int? program,
   }) async {
+    final p = pitch.clamp(0, 127), key = channel * 128 + pitch.clamp(0, 127);
+    final generation = (_noteEpoch[key] ?? 0) + 1;
+    _noteEpoch[key] = generation;
+    _cancelRelease(channel, p);
+    final epoch = _channelEpoch[channel] ?? 0;
+    final gen = _roleGen[channel] ?? 0;
     await ensureLoaded();
+    if ((_roleGen[channel] ?? 0) != gen) return; // channel changed role
     _touchOutput();
     final Synthesizer s;
     if (_drumChannels.contains(channel)) {
-      // A drum channel: any non-null program is a KIT, not a GM melodic program.
       if (program != null) await ensureDrumKitOn(channel, program);
       s = _channelSynth[channel] ?? _main!;
     } else {
-      s = await _bindMelodic(channel, program);
+      final bound = await _bindMelodic(channel, program);
+      if (bound == null) return;
+      s = bound;
     }
-    s.noteOn(channel: channel, key: pitch.clamp(0, 127), velocity: velocity.clamp(1, 127));
+    if ((_channelEpoch[channel] ?? 0) != epoch ||
+        _noteEpoch[key] != generation) {
+      return;
+    }
+    s.noteOn(channel: channel, key: p, velocity: velocity.clamp(1, 127));
   }
 
   Future<void> noteOff({required int channel, required int pitch}) async {
+    final p = pitch.clamp(0, 127), key = channel * 128 + pitch.clamp(0, 127);
+    _noteEpoch[key] = (_noteEpoch[key] ?? 0) + 1;
+    _cancelRelease(channel, p);
     final s = _channelSynth[channel] ?? _main;
-    s?.noteOff(channel: channel, key: pitch.clamp(0, 127));
+    s?.noteOff(channel: channel, key: p);
   }
 
-  /// Play a note that auto-stops after [release] (single-tap preview / grid).
+  /// Every attack owns its release. A previous preview cannot silence a newly
+  /// held key, and an obsolete async load cannot restart a released key.
   Future<void> playNote({
     int channel = 0,
     required int pitch,
@@ -581,12 +819,22 @@ class MeltyEngine with WidgetsBindingObserver {
     int program = 0,
     Duration release = const Duration(milliseconds: 600),
   }) async {
-    final p = pitch.clamp(0, 127);
-    _cancelRelease(channel, p);
-    await noteOn(channel: channel, pitch: p, velocity: velocity, program: program);
+    final epoch = _channelEpoch[channel] ?? 0;
+    final p = pitch.clamp(0, 127), key = channel * 128 + pitch.clamp(0, 127);
+    final started = noteOn(
+      channel: channel,
+      pitch: p,
+      velocity: velocity,
+      program: program,
+    );
+    final generation = _noteEpoch[key];
+    await started;
+    if ((_channelEpoch[channel] ?? 0) != epoch ||
+        _noteEpoch[key] != generation) {
+      return;
+    }
     final timer = Timer(release, () {
-      noteOff(channel: channel, pitch: p);
-      _activeReleases[channel]?.remove(p);
+      if (_noteEpoch[key] == generation) noteOff(channel: channel, pitch: p);
     });
     (_activeReleases[channel] ??= <int, Timer>{})[p] = timer;
   }
@@ -608,11 +856,26 @@ class MeltyEngine with WidgetsBindingObserver {
       Timer(const Duration(milliseconds: 110), () {
         s.noteOff(channel: clickChannel, key: pitch);
       });
-    } catch (_) {/* not loaded yet — fire-and-forget */}
+    } catch (_) {
+      /* not loaded yet — fire-and-forget */
+    }
   }
 
   /// Cancel all release timers and silence every channel on every synth.
+  Future<void> stopChannel(int channel) async {
+    _channelEpoch[channel] = (_channelEpoch[channel] ?? 0) + 1;
+    for (final timer in _activeReleases.remove(channel)?.values ?? <Timer>[]) {
+      timer.cancel();
+    }
+    for (final s in {_main, _s808, _hiphop, ..._slots.values}) {
+      s?.noteOffAll(channel: channel, immediate: true);
+    }
+  }
+
   Future<void> stopAll() async {
+    for (var ch = 0; ch < 16; ch++) {
+      _channelEpoch[ch] = (_channelEpoch[ch] ?? 0) + 1;
+    }
     for (final m in _activeReleases.values) {
       for (final t in m.values) {
         t.cancel();

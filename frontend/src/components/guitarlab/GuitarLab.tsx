@@ -72,6 +72,14 @@ export function GuitarLab({ caps }: Props) {
   const [slotA, setSlotA] = useState<GuitarLabParams | null>(null);
   const [slotB, setSlotB] = useState<GuitarLabParams | null>(null);
   const playingRef = useRef<HTMLAudioElement | null>(null);
+  // Tags each render/play request; only the latest one may start/keep playing.
+  const playSeq = useRef(0);
+
+  useEffect(() => () => {
+    playSeq.current++;
+    playingRef.current?.pause();
+    playingRef.current = null;
+  }, []);
 
   const engineOk = !!caps?.soundfont_available;
 
@@ -111,15 +119,22 @@ export function GuitarLab({ caps }: Props) {
         playingRef.current.pause();
         playingRef.current = null;
       }
+      const seq = ++playSeq.current;
       setBusy(true);
       setErr(null);
       try {
         const blob = await guitarLabRender(sound, which);
-        playingRef.current = await playAudioBlob(blob);
+        if (seq !== playSeq.current) return;
+        const audio = await playAudioBlob(blob);
+        if (seq !== playSeq.current) {
+          audio.pause();
+          return;
+        }
+        playingRef.current = audio;
       } catch (e) {
-        setErr(String((e as Error)?.message ?? e));
+        if (seq === playSeq.current) setErr(String((e as Error)?.message ?? e));
       } finally {
-        setBusy(false);
+        if (seq === playSeq.current) setBusy(false);
       }
     },
     [engineOk, sounds, soundKey],
@@ -138,7 +153,7 @@ export function GuitarLab({ caps }: Props) {
     a.href = url;
     a.download = "guitar-lab-preset.json";
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, [sounds, soundKey, params]);
 
   const num = (

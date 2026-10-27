@@ -4,7 +4,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+from app.main import limiter
 from app.routes import iap_health
+from app.settings import get_settings
 from tests.iap_fixtures import FakeSupabase
 
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
@@ -58,6 +60,15 @@ def test_never_received_with_owed_event_alerts():
     assert r["stale"] is True and r["last_notification_at"] is None
 
 
+@pytest.fixture(autouse=True)
+def _reset_limiter():
+    if limiter is not None:
+        limiter.reset()
+    yield
+    if limiter is not None:
+        limiter.reset()
+
+
 @pytest.fixture
 def db(monkeypatch):
     fake = FakeSupabase()
@@ -93,3 +104,40 @@ def test_endpoint_ok_when_nothing_is_owed(db):
     with TestClient(app) as c:
         r = c.get("/health/iap-notifications")
     assert r.status_code == 200 and r.json()["ok"] is True
+
+def _seed_fresh(db):
+    now = datetime.now(timezone.utc)
+    db.tables["iap_notifications"] = [
+        {"notification_id": "a1", "store": "app_store", "received_at": iso(now - timedelta(hours=1))},
+    ]
+    db.tables["subscriptions"] = []
+
+
+def test_endpoint_requires_token_when_configured(db, monkeypatch):
+    _seed_fresh(db)
+    monkeypatch.setenv("IAP_HEALTH_TOKEN", "watch-secret")
+    get_settings.cache_clear()
+    try:
+        from app.main import app
+        with TestClient(app) as c:
+            assert c.get("/health/iap-notifications").status_code == 401
+            assert c.get("/health/iap-notifications",
+                         headers={"X-Health-Token": "nope"}).status_code == 401
+            assert c.get("/health/iap-notifications",
+                         headers={"X-Health-Token": "watch-secret"}).status_code == 200
+            assert c.get("/health/iap-notifications",
+                         headers={"Authorization": "Bearer watch-secret"}).status_code == 200
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.skipif(limiter is None, reason="slowapi not installed")
+def test_endpoint_is_rate_limited_per_ip(db):
+    _seed_fresh(db)
+    from app.main import app
+    with TestClient(app) as c:
+        codes = [c.get("/health/iap-notifications", headers={"fly-client-ip": "7.7.7.7"}).status_code
+                 for _ in range(10)]
+        assert codes[0] == 200 and 429 in codes
+        # another IP is unaffected
+        assert c.get("/health/iap-notifications", headers={"fly-client-ip": "8.8.8.8"}).status_code == 200

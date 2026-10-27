@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -77,3 +78,34 @@ def test_feature_flag_is_off_by_default() -> None:
             ),
         )
         assert response.status_code == 503
+
+def test_provider_error_detail_is_not_echoed(monkeypatch) -> None:
+    from app.routes import arrangements as arr_mod
+    from app.settings import get_settings
+
+    monkeypatch.setenv("ARRANGEMENT_ENABLED", "1")
+    monkeypatch.setenv("ARRANGEMENT_PROVIDER", "test")
+    monkeypatch.setenv("ARRANGEMENT_BASE_URL", "https://provider.internal.example")
+    get_settings.cache_clear()
+    monkeypatch.setattr(arr_mod, "extract_user_id", lambda *_a, **_k: "user-1")
+
+    def boom(request):
+        return httpx.Response(500, text="internal stack trace: secret-host:9000")
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient",
+                        lambda **kw: real(transport=httpx.MockTransport(boom), **kw))
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/arrangements/generate",
+                json=ArrangementRequest(song=SongSpec.model_validate(_song())).model_dump(
+                    by_alias=True
+                ),
+                headers={"Authorization": "Bearer x"},
+            )
+        assert response.status_code == 502
+        detail = response.json()["detail"]
+        assert "secret-host" not in detail and "provider.internal" not in detail
+    finally:
+        get_settings.cache_clear()

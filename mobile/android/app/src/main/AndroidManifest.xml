@@ -12,11 +12,13 @@
          modals pass manageBluetooth:false (no SCO routing), MainActivity only
          READS the output route (AudioManager.getDevices needs nothing), and
          the record plugin declares its own RECORD_AUDIO. -->
+    <!-- Cleartext (http://) is allowed only in src/debug + src/profile
+         manifests (LAN ENGINE_URL during development). Release builds keep
+         the platform default (cleartext refused). -->
     <application
         android:label="HumTrack"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules">

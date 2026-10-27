@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type RecorderState = "idle" | "requesting" | "recording" | "processing" | "ready" | "error";
 
@@ -44,9 +44,34 @@ export function useRecorder() {
       }, 100);
       setState("recording");
     } catch (e: any) {
+      // getUserMedia may have succeeded before MediaRecorder threw — release the mic.
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      mediaRecorderRef.current = null;
       setError(e?.message ?? String(e));
       setState("error");
     }
+  }, []);
+
+  // On unmount: stop the timer, the recorder and the mic tracks.
+  useEffect(() => () => {
+    if (intervalRef.current) {
+      window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    const rec = mediaRecorderRef.current;
+    if (rec) {
+      rec.ondataavailable = null;
+      rec.onstop = null;
+      if (rec.state !== "inactive") rec.stop();
+      mediaRecorderRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
   }, []);
 
   const stop = useCallback(() => {

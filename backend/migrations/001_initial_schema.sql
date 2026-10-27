@@ -103,6 +103,7 @@ alter table public.tracks        enable row level security;
 alter table public.chunks        enable row level security;
 alter table public.notes         enable row level security;
 alter table public.subscriptions enable row level security;
+alter table public.iap_notifications enable row level security;  -- service role only (003)
 
 -- projects: owner-only
 drop policy if exists projects_owner on public.projects;

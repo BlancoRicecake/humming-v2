@@ -6,6 +6,8 @@ import 'dart:math' as math;
 import '../../audio/backup_exclusion.dart';
 import '../models/loop_models.dart';
 import '../state/loop_storage.dart';
+import 'groove.dart';
+import 'note_random.dart';
 import 'theory.dart';
 
 /// A whole song flattened to one timeline (sections in order × repeats).
@@ -21,6 +23,7 @@ class FlatSong {
     this.beatDec = const [],
     this.extraPitched = const {},
     this.extraDrums = const {},
+    this.selfTimed = const {},
   });
   final List<PitchNote> melody;
   final List<PitchNote> bass;
@@ -31,33 +34,172 @@ class FlatSong {
   // Added track instances, flattened across sections, keyed by ref id.
   final Map<String, List<PitchNote>> extraPitched;
   final Map<String, List<DrumNote>> extraDrums;
+
+  /// groove-001: lanes whose timing is already final (a groove — and Swing
+  /// in their groove-less sections — is baked into the notes), so exporters
+  /// must not add Swing again.
+  final Set<String> selfTimed;
 }
 
-FlatSong flattenSong(List<Section> sections) {
+/// Lay [sections] out in order × repeats. Muted notes and drum hits are
+/// always dropped.
+/// With a [variationSeed] each note's chance / velocity variation is rolled
+/// per section repeat (pass = repeat index) and the surviving notes are baked
+/// in (fixed velocity, chance 1) — exports and Play Song then all use this
+/// one variation. Null keeps every non-muted note as written (analysis and
+/// previews).
+///
+/// With a [groove] context, every lane that has a groove in at least one
+/// section is "self-timed": grooves are applied to its notes here (start and
+/// velocity; chance/variation then use the grooved velocity) and Swing is
+/// baked into its groove-less sections; its id goes into
+/// [FlatSong.selfTimed]. Lanes without any groove are untouched, so a song
+/// without grooves flattens exactly as before.
+FlatSong flattenSong(
+  List<Section> sections, {
+  int? variationSeed,
+  GrooveContext? groove,
+}) {
+  final selfTimed = <String>{};
+  if (groove != null) {
+    for (final sec in sections) {
+      for (final id in [
+        'melody',
+        'melodyDec',
+        'bass',
+        'drums',
+        'beatDec',
+        for (final ref in sec.extras) ref.id,
+      ]) {
+        if (groove.resolve(sec, id) != null) selfTimed.add(id);
+      }
+    }
+  }
+  var current = sections.isEmpty ? null : sections.first;
+  // Groove / baked Swing for one note of a self-timed lane: new start
+  // (section steps) and velocity. Null for lanes the clock swings.
+  ({double start, int? velocity})? timed(
+    String trackId,
+    double start,
+    int step,
+    int? velocity,
+  ) {
+    if (!selfTimed.contains(trackId)) return null;
+    final g = groove!.resolve(current!, trackId);
+    if (g == null) {
+      return (start: start + swingOffset(step, groove.swing), velocity: velocity);
+    }
+    return applyGroove(
+      start,
+      velocity,
+      g.template,
+      g.assign,
+      amount: groove.amount,
+    );
+  }
+
   var off = 0;
   var secSteps = 0; // steps of the section being flattened
+  var secId = '', pass = 0;
   final m = <PitchNote>[], md = <PitchNote>[], b = <PitchNote>[];
   final d = <DrumNote>[], bd = <DrumNote>[];
   // Notes outside the section's current length (left behind when bars were
   // shrunk) are dropped, and a note running past the end is clamped — else
   // they'd leak into the NEXT section instance on the flat timeline (C7).
-  void pitched(TrackData? t, List<PitchNote> out) {
+  void pitched(TrackData? t, String trackId, List<PitchNote> out) {
     if (t == null) return;
-    for (final n in t.pitchNotes) {
-      if (n.step < 0 || n.step >= secSteps) continue;
-      final dur = math.min(n.dur, secSteps - n.step);
+    for (final src in t.pitchNotes) {
+      // deactivated notes never reach playback, exports or previews
+      if (src.muted) continue;
+      if (src.step < 0 || src.step >= secSteps) continue;
+      // gt-001: a stroke string whose offset falls past the section end is
+      // not scheduled (only offsets ≥ 1 step can get here; imports stay < 1).
+      if (src.startSteps >= secSteps) continue;
+      final dur = math.min(src.dur, secSteps - src.step);
       if (dur <= 0) continue;
+      final gr = timed(trackId, src.startSteps, src.step, src.velocity);
+      if (gr != null && src.stroke != null && gr.start >= secSteps) continue;
+      final base =
+          gr == null || gr.velocity == src.velocity
+              ? src
+              : src.copyWith(velocity: gr.velocity);
+      final n =
+          variationSeed == null
+              ? base
+              : realizePitchNote(
+                base,
+                seed: variationSeed,
+                sectionId: secId,
+                trackId: trackId,
+                pass: pass,
+              );
+      if (n == null) continue;
+      if (gr != null) {
+        final step = gr.start.floor();
+        final length = math.max(
+          1 / 16,
+          math.min(n.soundingSteps, secSteps - gr.start),
+        );
+        out.add(
+          n.copyWith(
+            chance: variationSeed == null ? null : 1.0,
+            velocityDeviation: variationSeed == null ? null : 0,
+            step: step + off,
+            offsetSteps: gr.start - step,
+            dur: math.max(1, length.ceil()),
+            durationSteps: length,
+          ),
+        );
+        continue;
+      }
       out.add(
-        PitchNote(midi: n.midi, freq: n.freq, step: n.step + off, dur: dur),
+        n.copyWith(
+          chance: variationSeed == null ? null : 1.0,
+          velocityDeviation: variationSeed == null ? null : 0,
+          step: n.step + off,
+          dur: dur,
+          durationSteps:
+              n.durationSteps == null
+                  ? null
+                  : math.min(
+                    n.soundingSteps,
+                    secSteps - n.step - n.offsetSteps,
+                  ),
+        ),
       );
     }
   }
 
-  void perc(TrackData? t, List<DrumNote> out) {
+  void perc(TrackData? t, String trackId, List<DrumNote> out) {
     if (t == null) return;
-    for (final n in t.drumNotes) {
-      if (n.step < 0 || n.step >= secSteps) continue;
-      out.add(DrumNote(kind: n.kind, step: n.step + off));
+    for (final src in t.drumNotes) {
+      if (src.muted) continue;
+      if (src.step < 0 || src.step >= secSteps) continue;
+      final gr = timed(trackId, src.startSteps, src.step, src.velocity);
+      final base =
+          gr == null || gr.velocity == src.velocity
+              ? src
+              : src.copyWith(velocity: gr.velocity);
+      final n =
+          variationSeed == null
+              ? base
+              : realizeDrumNote(
+                base,
+                seed: variationSeed,
+                sectionId: secId,
+                trackId: trackId,
+                pass: pass,
+              );
+      if (n == null) continue;
+      final step = gr == null ? n.step : gr.start.floor();
+      out.add(
+        n.copyWith(
+          chance: variationSeed == null ? null : 1.0,
+          velocityDeviation: variationSeed == null ? null : 0,
+          step: step + off,
+          offsetSteps: gr == null ? null : gr.start - step,
+        ),
+      );
     }
   }
 
@@ -67,19 +209,22 @@ FlatSong flattenSong(List<Section> sections) {
     final reps = sec.repeats;
     final st = stepsForBars(sec.bars);
     secSteps = st;
+    secId = sec.id;
+    current = sec;
     for (var r = 0; r < reps; r++) {
-      pitched(sec.tracks['melody'], m);
-      pitched(sec.tracks['melodyDec'], md);
-      pitched(sec.tracks['bass'], b);
-      perc(sec.tracks['drums'], d);
-      perc(sec.tracks['beatDec'], bd);
+      pass = r;
+      pitched(sec.tracks['melody'], 'melody', m);
+      pitched(sec.tracks['melodyDec'], 'melodyDec', md);
+      pitched(sec.tracks['bass'], 'bass', b);
+      perc(sec.tracks['drums'], 'drums', d);
+      perc(sec.tracks['beatDec'], 'beatDec', bd);
       // added instances: route by their base type's kind.
       for (final ref in sec.extras) {
         final drum = trackById(ref.type).kind == TrackKind.drums;
         if (drum) {
-          perc(sec.tracks[ref.id], exD[ref.id] ??= []);
+          perc(sec.tracks[ref.id], ref.id, exD[ref.id] ??= []);
         } else {
-          pitched(sec.tracks[ref.id], exP[ref.id] ??= []);
+          pitched(sec.tracks[ref.id], ref.id, exP[ref.id] ??= []);
         }
       }
       off += st;
@@ -94,6 +239,7 @@ FlatSong flattenSong(List<Section> sections) {
     beatDec: bd,
     extraPitched: exP,
     extraDrums: exD,
+    selfTimed: selfTimed,
   );
 }
 

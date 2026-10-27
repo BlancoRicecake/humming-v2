@@ -96,3 +96,15 @@ mobile/fastlane/
 
 .vercel
 .worktrees/
+
+# Regenerable eval output (HumBench / diag runs) — kept locally, not tracked.
+backend/runs/
+*.tsbuildinfo
+
+# Local build packages and historical staging copies stay within this workspace.
+
+# Local work products: builds, observation logs, the Studio prototype.
+# Reverse-engineering material lives outside the repo (C:/src/re-lab) and
+# must never be committed — see docs/specs/CLEANROOM.md.
+/artifacts/
+/studio/

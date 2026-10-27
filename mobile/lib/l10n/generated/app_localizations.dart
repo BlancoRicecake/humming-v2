@@ -3042,6 +3042,30 @@ abstract class L10n {
   /// **'트랙별 WAV 분리'**
   String get ltExportStemsSub;
 
+  /// No description provided for @ltExportNewVariation.
+  ///
+  /// In ko, this message translates to:
+  /// **'다른 변주로'**
+  String get ltExportNewVariation;
+
+  /// No description provided for @ltExportNewVariationSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'확률·세기 변화를 새로 뽑습니다 (되돌리기 가능)'**
+  String get ltExportNewVariationSub;
+
+  /// No description provided for @ltExportNewVariationDone.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 변주를 만들었습니다'**
+  String get ltExportNewVariationDone;
+
+  /// No description provided for @ltExportMidiAllNotes.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI: 확률 무시하고 모든 노트 포함'**
+  String get ltExportMidiAllNotes;
+
   /// No description provided for @ltExportShareTitle.
   ///
   /// In ko, this message translates to:
@@ -3519,13 +3543,13 @@ abstract class L10n {
   /// 멜로디 그리드 사용 힌트 (대문자로 표시됨)
   ///
   /// In ko, this message translates to:
-  /// **'탭 · 드래그로 길이 조절 · 자동 병합'**
+  /// **'입력 · 영역 선택 · 복사/붙여넣기'**
   String get ltEditorHintGridPitched;
 
   /// 패드 모드 힌트 — 녹음을 켜고 패드를 치라는 안내
   ///
   /// In ko, this message translates to:
-  /// **'녹음 후 탭'**
+  /// **'녹음을 켠 상태에서 연주'**
   String get ltEditorHintPads;
 
   /// 드럼 서피스 — 가운데 비트 그리드 섹션 라벨 (대문자로 표시됨)
@@ -3891,7 +3915,7 @@ abstract class L10n {
   /// 보컬 편집기 — 편집값 초기화
   ///
   /// In ko, this message translates to:
-  /// **'되돌리기'**
+  /// **'편집값 초기화'**
   String get ltVocalEditorReset;
 
   /// 이펙트가 서버에서 처리됨을 알리는 작은 태그
@@ -4661,6 +4685,132 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'목소리 그대로 녹음'**
   String get ltGuidedKeepVocal;
+
+  /// No description provided for @ltVocalEditorClearFx.
+  ///
+  /// In ko, this message translates to:
+  /// **'효과 전체 제거'**
+  String get ltVocalEditorClearFx;
+
+  /// No description provided for @ltVocalEditorRestoreOriginal.
+  ///
+  /// In ko, this message translates to:
+  /// **'원음 복원'**
+  String get ltVocalEditorRestoreOriginal;
+
+  /// No description provided for @ltVocalEditorFxSourceMissing.
+  ///
+  /// In ko, this message translates to:
+  /// **'원본 파일이 없어 효과를 변경할 수 없습니다. 기존 소리는 유지됩니다.'**
+  String get ltVocalEditorFxSourceMissing;
+
+  /// No description provided for @ltVocalFxPresets.
+  ///
+  /// In ko, this message translates to:
+  /// **'보컬 프리셋'**
+  String get ltVocalFxPresets;
+
+  /// No description provided for @ltVocalFxPresetHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'프리셋은 오토튠을 유지하고 나머지 효과를 교체합니다.'**
+  String get ltVocalFxPresetHint;
+
+  /// No description provided for @ltVocalFxLocal.
+  ///
+  /// In ko, this message translates to:
+  /// **'효과 추가 · 기기에서 처리'**
+  String get ltVocalFxLocal;
+
+  /// No description provided for @ltVocalFxAmount.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용 강도'**
+  String get ltVocalFxAmount;
+
+  /// No description provided for @ltVocalFxAmountHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'다음에 추가할 개별 효과에 적용됩니다.'**
+  String get ltVocalFxAmountHint;
+
+  /// No description provided for @ltVocalFxServer.
+  ///
+  /// In ko, this message translates to:
+  /// **'기존 효과 · 서버 연결 필요'**
+  String get ltVocalFxServer;
+
+  /// No description provided for @ltVocalPreviewOriginal.
+  ///
+  /// In ko, this message translates to:
+  /// **'원음 듣기'**
+  String get ltVocalPreviewOriginal;
+
+  /// No description provided for @ltVocalPreviewProcessed.
+  ///
+  /// In ko, this message translates to:
+  /// **'효과음 듣기'**
+  String get ltVocalPreviewProcessed;
+
+  /// No description provided for @ltVocalPreviewOriginalPlaying.
+  ///
+  /// In ko, this message translates to:
+  /// **'원음 재생 중'**
+  String get ltVocalPreviewOriginalPlaying;
+
+  /// No description provided for @ltVocalPreviewProcessedPlaying.
+  ///
+  /// In ko, this message translates to:
+  /// **'효과음 재생 중'**
+  String get ltVocalPreviewProcessedPlaying;
+
+  /// No description provided for @ltVocalPreviewStopped.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 정지'**
+  String get ltVocalPreviewStopped;
+
+  /// No description provided for @ltVocalPreviewLoading.
+  ///
+  /// In ko, this message translates to:
+  /// **'비교음 준비 중…'**
+  String get ltVocalPreviewLoading;
+
+  /// No description provided for @ltVocalPreviewNoEffects.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용된 효과 없음'**
+  String get ltVocalPreviewNoEffects;
+
+  /// No description provided for @ltVocalPreviewEffects.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용 효과'**
+  String get ltVocalPreviewEffects;
+
+  /// No description provided for @ltVocalPreviewLoop.
+  ///
+  /// In ko, this message translates to:
+  /// **'구간 반복'**
+  String get ltVocalPreviewLoop;
+
+  /// No description provided for @ltVocalPreviewLevel.
+  ///
+  /// In ko, this message translates to:
+  /// **'음량 맞춤'**
+  String get ltVocalPreviewLevel;
+
+  /// No description provided for @ltVocalPreviewAuto.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용 후 듣기'**
+  String get ltVocalPreviewAuto;
+
+  /// No description provided for @ltVocalPreviewFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'오디오를 재생하지 못했습니다. 파일과 출력 장치를 확인해주세요.'**
+  String get ltVocalPreviewFailed;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

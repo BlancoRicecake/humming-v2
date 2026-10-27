@@ -229,9 +229,38 @@ class EngineApi {
     required String scale,
     double strength = 1.0,
     double retuneMs = 80,
+  }) async => _autotuneVocal(
+    await MultipartFile.fromFile(path, filename: 'vocal.wav'),
+    keyTonic: keyTonic,
+    scale: scale,
+    strength: strength,
+    retuneMs: retuneMs,
+  );
+
+  Future<({Uint8List wav, List<double> peaks, double duration})>
+  autotuneVocalBytes(
+    Uint8List audio, {
+    required String keyTonic,
+    required String scale,
+    double strength = 1.0,
+    double retuneMs = 80,
+  }) => _autotuneVocal(
+    MultipartFile.fromBytes(audio, filename: 'vocal.wav'),
+    keyTonic: keyTonic,
+    scale: scale,
+    strength: strength,
+    retuneMs: retuneMs,
+  );
+
+  Future<({Uint8List wav, List<double> peaks, double duration})> _autotuneVocal(
+    MultipartFile audio, {
+    required String keyTonic,
+    required String scale,
+    required double strength,
+    required double retuneMs,
   }) async {
     final form = FormData.fromMap({
-      'audio': await MultipartFile.fromFile(path, filename: 'vocal.wav'),
+      'audio': audio,
       'key': keyTonic,
       'scale': scale,
       'strength': '$strength',
@@ -262,9 +291,29 @@ class EngineApi {
     String path, {
     required String fxType,
     Map<String, dynamic> params = const {},
+  }) async => _processFx(
+    await MultipartFile.fromFile(path, filename: 'vocal.wav'),
+    fxType: fxType,
+    params: params,
+  );
+
+  Future<({Uint8List wav, List<double> peaks, double duration})> processFxBytes(
+    Uint8List audio, {
+    required String fxType,
+    Map<String, dynamic> params = const {},
+  }) => _processFx(
+    MultipartFile.fromBytes(audio, filename: 'vocal.wav'),
+    fxType: fxType,
+    params: params,
+  );
+
+  Future<({Uint8List wav, List<double> peaks, double duration})> _processFx(
+    MultipartFile audio, {
+    required String fxType,
+    required Map<String, dynamic> params,
   }) async {
     final form = FormData.fromMap({
-      'audio': await MultipartFile.fromFile(path, filename: 'vocal.wav'),
+      'audio': audio,
       'fx_type': fxType,
       'params': jsonEncode(params),
     });

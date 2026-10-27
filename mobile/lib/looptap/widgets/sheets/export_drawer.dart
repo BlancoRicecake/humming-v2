@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
 import '../../models/loop_models.dart';
+import '../../music/guitar_articulation.dart';
 import '../../music/midi_export.dart';
 import '../../music/theory.dart';
 import '../../../services/product_analytics.dart';
@@ -14,6 +15,7 @@ import '../../music/wav_export.dart';
 import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
+import '../../music/groove.dart';
 import 'paywall_sheet.dart';
 import 'export_library_screen.dart';
 
@@ -25,6 +27,7 @@ Future<void> showExportDrawer(
   required int bpm,
   double swing = 0,
   Map<String, double> vol = const {},
+  Map<String, double> pan = const {},
   int melodyProgram = 0,
   int bassProgram = 33,
   int melodyDecProgram = 48,
@@ -32,6 +35,10 @@ Future<void> showExportDrawer(
   List<TrackRef> extras = const [],
   Map<String, int> instruments = const {},
   String? songVocalPath,
+  int? variationSeed,
+  int Function()? onNewVariation,
+  GrooveContext? groove,
+  ArticulationPlan? articulations,
 }) async {
   // Defence in depth: callers gate on proActive before opening, but re-check
   // here so no code path reaches the export UI without a current Pro verdict.
@@ -55,6 +62,7 @@ Future<void> showExportDrawer(
             bpm: bpm,
             swing: swing,
             vol: vol,
+            pan: pan,
             melodyProgram: melodyProgram,
             bassProgram: bassProgram,
             melodyDecProgram: melodyDecProgram,
@@ -62,6 +70,10 @@ Future<void> showExportDrawer(
             extras: extras,
             instruments: instruments,
             songVocalPath: songVocalPath,
+            variationSeed: variationSeed,
+            onNewVariation: onNewVariation,
+            groove: groove,
+            articulations: articulations,
           ),
         ),
     transitionBuilder:
@@ -83,6 +95,7 @@ class _ExportDrawer extends StatefulWidget {
     required this.bpm,
     required this.swing,
     required this.vol,
+    this.pan = const {},
     required this.melodyProgram,
     required this.bassProgram,
     required this.melodyDecProgram,
@@ -90,6 +103,10 @@ class _ExportDrawer extends StatefulWidget {
     required this.extras,
     required this.instruments,
     this.songVocalPath,
+    this.variationSeed,
+    this.onNewVariation,
+    this.groove,
+    this.articulations,
   });
   final String title;
   // file-name fallback when the title sanitises to nothing (C11)
@@ -98,6 +115,9 @@ class _ExportDrawer extends StatefulWidget {
   final int bpm;
   final double swing;
   final Map<String, double> vol;
+
+  /// mixer-001: per-track pan, baked into WAV/stems and (p != 0) the `.mid`.
+  final Map<String, double> pan;
   final int melodyProgram;
   final int bassProgram;
   final int melodyDecProgram;
@@ -105,6 +125,18 @@ class _ExportDrawer extends StatefulWidget {
   final List<TrackRef> extras;
   final Map<String, int> instruments;
   final String? songVocalPath;
+
+  /// The song's chance/variation seed; every export bakes this one variation.
+  final int? variationSeed;
+
+  /// Re-rolls the song seed (undoable in the editor) and returns the new one.
+  final int Function()? onNewVariation;
+
+  /// Track grooves (groove-001): exports sound like playback.
+  final GrooveContext? groove;
+
+  /// gt-003: the editor's articulation plan (the one live playback uses).
+  final ArticulationPlan? articulations;
 
   @override
   State<_ExportDrawer> createState() => _ExportDrawerState();
@@ -116,6 +148,14 @@ class _ExportDrawerState extends State<_ExportDrawer> {
   String? _busy; // Export stays busy through both rendering and sharing.
   // null = whole song; otherwise the index of the single section (loop) to export.
   int? _selectedSection;
+  late int? _seed = widget.variationSeed;
+  // MIDI only: every non-muted note as written, ignoring chance rolls.
+  bool _midiAllNotes = false;
+
+  /// Any note that may skip a pass (the variation buttons only matter then).
+  bool get _hasChance => widget.sections.any(
+    (s) => s.tracks.values.any((t) => t.pitchNotes.any((n) => n.chance < 1)),
+  );
 
   // The sections that the current export targets: the whole song, or just the
   // one selected loop. The render functions already flatten any list (with each
@@ -192,6 +232,10 @@ class _ExportDrawerState extends State<_ExportDrawer> {
         instruments: widget.instruments,
         songVocalPath: widget.songVocalPath,
         fallbackName: widget.songId,
+        variationSeed: _seed,
+        groove: widget.groove,
+        pan: widget.pan,
+        articulations: widget.articulations,
       );
       final file = res.file;
       ProductAnalytics.instance.track(
@@ -248,6 +292,10 @@ class _ExportDrawerState extends State<_ExportDrawer> {
         instruments: widget.instruments,
         songVocalPath: widget.songVocalPath,
         fallbackName: widget.songId,
+        variationSeed: _seed,
+        groove: widget.groove,
+        pan: widget.pan,
+        articulations: widget.articulations,
       );
       if (files.isEmpty) {
         if (mounted) _note(L10n.of(context).ltExportFailed, ok: false);
@@ -298,6 +346,11 @@ class _ExportDrawerState extends State<_ExportDrawer> {
         extras: widget.extras,
         instruments: widget.instruments,
         fallbackName: widget.songId,
+        variationSeed: _seed,
+        groove: widget.groove,
+        includeAllNotes: _midiAllNotes,
+        pan: widget.pan,
+        articulations: widget.articulations,
       );
       debugPrint('[export] midi written: ${file.path}');
       ProductAnalytics.instance.track(
@@ -457,6 +510,28 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                         busy: _busy == 'midi',
                         onTap: _busy == null ? _doMidi : null,
                       ),
+                      // gt-003: the .mid keeps sounding pitch and length only
+                      if (widget.articulations?.hasArticulations ?? false)
+                        Padding(
+                          key: const ValueKey('export-midi-articulation-note'),
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            Localizations.localeOf(context).languageCode ==
+                                    'ko'
+                                ? 'MIDI에는 기타 연주법의 실제 음높이와 길이가 '
+                                    '담깁니다. 팜뮤트·하모닉스 노트는 겹친 음이 '
+                                    '끊기지 않도록 별도 채널에 담기지만 음색은 '
+                                    '트랙의 GM 소리입니다. 근사 음색은 WAV·스템에만 '
+                                    '들어갑니다.'
+                                : 'The MIDI file keeps the sounding pitch and '
+                                    'length of guitar techniques. Palm-mute and '
+                                    'harmonic notes go on a separate channel so '
+                                    'overlapping notes are not cut, but they use '
+                                    "the track's GM sound. The tone "
+                                    'approximations are only in WAV and stems.',
+                            style: LTType.inter(size: 11, color: LT.t2),
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       // WAV / Stems — on-device SF2 render (instrumental mix;
                       // each section's vocal recording is added to Stems as-is).
@@ -485,6 +560,39 @@ class _ExportDrawerState extends State<_ExportDrawer> {
                         onTap: _busy == null ? _doMidi : null,
                       ),
                       const SizedBox(height: 12),
+                      if (_hasChance) ...[
+                        CheckboxListTile(
+                          key: const ValueKey('export-midi-all-notes'),
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: _midiAllNotes,
+                          onChanged:
+                              _busy != null
+                                  ? null
+                                  : (v) =>
+                                      setState(() => _midiAllNotes = v ?? false),
+                          title: Text(
+                            l.ltExportMidiAllNotes,
+                            style: LTType.inter(size: 12, color: LT.t2),
+                          ),
+                        ),
+                        if (widget.onNewVariation != null)
+                          _Row(
+                            key: const ValueKey('export-new-variation'),
+                            icon: LtIcons.graphicEq,
+                            title: l.ltExportNewVariation,
+                            sub: l.ltExportNewVariationSub,
+                            onTap:
+                                _busy == null
+                                    ? () {
+                                      final seed = widget.onNewVariation!();
+                                      setState(() => _seed = seed);
+                                      _note(l.ltExportNewVariationDone);
+                                    }
+                                    : null,
+                          ),
+                        const SizedBox(height: 12),
+                      ],
                       const SizedBox(height: 16),
                       Text(
                         l.ltExportFooter,
@@ -544,6 +652,7 @@ class _ScopeChip extends StatelessWidget {
 
 class _Row extends StatelessWidget {
   const _Row({
+    super.key,
     required this.icon,
     required this.title,
     required this.sub,

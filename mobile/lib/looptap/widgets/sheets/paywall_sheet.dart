@@ -5,6 +5,10 @@
 //   - canceled          → 조용히 버튼만 복구.
 //   - pending           → "승인 대기" 표시, 타임아웃 없이 최종 결과를 기다림.
 //   - verifyFailed 등   → "결제 확인됨 — 활성화 중, 안 보이면 구매 복원" 안내.
+//   - 타임아웃          → 스토어 시트가 열려 있는 동안은 재지 않는다. 스토어
+//                         결과가 도착해 서버 verify 가 시작되면
+//                         (IapService.onVerifyStarted) 그때부터 verify 최악
+//                         소요 시간만큼 기다리고, 넘으면 verifyFailed 문구.
 //   - restore           → LoopStore.restorePurchases() 의 결과(enum)로 문구 결정.
 // 모든 사용자 문구는 L10n (pay*) — audit M12.
 import 'dart:async';
@@ -113,10 +117,14 @@ class _PaywallSheetState extends State<_PaywallSheet> {
   String _selected = kProductYearly;
 
   StreamSubscription<IapResult>? _sub;
+  StreamSubscription<String>? _verifySub;
+  Timer? _verifyTimer;
+  Timer? _storeSafetyTimer;
   Completer<IapResult>? _purchase;
 
-  /// pending 이 아닐 때만 적용되는 결제 결과 대기 시간.
-  static const Duration _resultTimeout = Duration(seconds: 60);
+  /// 스토어 시트에서 아무 결과도 오지 않을 때의 안전장치 (pending 이면 무시).
+  /// 사용자가 스토어 시트에 머무는 시간은 정상이므로 넉넉하게.
+  static const Duration _storeSafetyTimeout = Duration(minutes: 10);
 
   @override
   void initState() {
@@ -152,6 +160,9 @@ class _PaywallSheetState extends State<_PaywallSheet> {
       },
     );
     _sub?.cancel();
+    _verifySub?.cancel();
+    _verifyTimer?.cancel();
+    _storeSafetyTimer?.cancel();
     // 시트가 닫혀도 대기 루프가 영원히 남지 않도록 — 결과는 LoopStore 가
     // onPurchaseResult 로 계속 받아 Pro 를 켠다.
     final c = _purchase;
@@ -201,11 +212,27 @@ class _PaywallSheetState extends State<_PaywallSheet> {
       },
     );
     // buy() 호출 직전에 listener 부착 — 해당 productId 의 결과만 받는다.
+    // (Android 에서 이미 다른 Pro 구독을 소유 중이면 그 상품 id 로 결과가 온다.)
     final completer = Completer<IapResult>();
     _purchase = completer;
+    String? ownedProductId;
+    bool matches(String id) => id == productId || id == ownedProductId;
+    void timeoutAsActivating() {
+      if (completer.isCompleted) return;
+      // 결제는 됐을 수 있다 — "실패" 대신 "활성화 중, 안 보이면 구매 복원".
+      completer.complete(
+        IapResult(
+          ok: false,
+          productId: productId,
+          error: IapError.verifyFailed,
+          message: 'timeout',
+        ),
+      );
+    }
+
     _sub?.cancel();
     _sub = IapService.instance.onPurchaseResult.listen((r) {
-      if (r.productId != productId) return;
+      if (!matches(r.productId)) return;
       if (r.error == IapError.pending) {
         // 중간 상태 — 최종 purchased/error 가 뒤따른다.
         if (mounted) setState(() => _pending = true);
@@ -213,18 +240,41 @@ class _PaywallSheetState extends State<_PaywallSheet> {
       }
       if (!completer.isCompleted) completer.complete(r);
     });
+    // 타임아웃은 스토어 결과가 도착해 서버 verify 가 시작된 뒤부터만 잰다.
+    _verifySub?.cancel();
+    _verifySub = IapService.instance.onVerifyStarted.listen((id) {
+      if (!matches(id)) return;
+      _storeSafetyTimer?.cancel();
+      _verifyTimer?.cancel();
+      _verifyTimer = Timer(
+        IapService.instance.verifyWorstCase,
+        timeoutAsActivating,
+      );
+    });
+    void onOwned(String id) => ownedProductId = id;
     final launchErr =
         productId == kProductYearly
-            ? await store.buyYearly()
-            : await store.buyMonthly();
+            ? await store.buyYearly(onAlreadyOwned: onOwned)
+            : await store.buyMonthly(onAlreadyOwned: onOwned);
     final IapResult result;
     if (launchErr != null) {
       result = IapResult(ok: false, productId: productId, error: launchErr);
     } else {
-      result = await _awaitResult(completer, productId);
+      if (!completer.isCompleted && _verifyTimer == null) {
+        _storeSafetyTimer = Timer(_storeSafetyTimeout, () {
+          if (!_pending) timeoutAsActivating();
+        });
+      }
+      result = await completer.future;
     }
     _sub?.cancel();
     _sub = null;
+    _verifySub?.cancel();
+    _verifySub = null;
+    _verifyTimer?.cancel();
+    _verifyTimer = null;
+    _storeSafetyTimer?.cancel();
+    _storeSafetyTimer = null;
     _purchase = null;
     if (!mounted) return;
     setState(() {
@@ -253,34 +303,6 @@ class _PaywallSheetState extends State<_PaywallSheet> {
       storeEnabled: store.iapEnabled,
     );
     if (msg != null) _toast(msg);
-  }
-
-  /// 결과 대기. 60초 타임아웃은 스토어가 pending 을 알리지 않은 경우에만 —
-  /// 승인 대기 중이면 최종 결과가 올 때까지 기다린다 (M5).
-  Future<IapResult> _awaitResult(
-    Completer<IapResult> c,
-    String productId,
-  ) async {
-    while (true) {
-      try {
-        return await c.future.timeout(_resultTimeout);
-      } on TimeoutException {
-        if (!mounted) {
-          return IapResult(
-            ok: false,
-            productId: productId,
-            error: IapError.canceled,
-          );
-        }
-        if (_pending) continue;
-        return IapResult(
-          ok: false,
-          productId: productId,
-          error: IapError.storeError,
-          message: 'timeout',
-        );
-      }
-    }
   }
 
   Future<void> _restore(LoopStore store) async {

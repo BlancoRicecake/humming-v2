@@ -121,12 +121,19 @@ class _NotePadsState extends State<NotePads> with SingleTickerProviderStateMixin
   // without ever swiping would trigger first-init inside dispose() — an unsafe
   // TickerMode lookup that throws.
   late final AnimationController _snap;
-  Animation<double>? _snapAnim;
+  // Built once: a fresh CurvedAnimation + listener per swipe would pile up
+  // listeners on the shared controller. A swipe end only retargets the tween.
+  late final CurvedAnimation _snapCurve;
+  final Tween<double> _snapTween = Tween<double>(begin: 0, end: 0);
+  late final Animation<double> _snapAnim;
 
   @override
   void initState() {
     super.initState();
     _snap = AnimationController(vsync: this, duration: const Duration(milliseconds: 260));
+    _snapCurve = CurvedAnimation(parent: _snap, curve: Curves.easeOutCubic);
+    _snapAnim = _snapTween.animate(_snapCurve)
+      ..addListener(() => setState(() => _scroll = _snapAnim.value));
   }
 
   double get _maxScroll =>
@@ -145,6 +152,7 @@ class _NotePadsState extends State<NotePads> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
+    _snapCurve.dispose();
     _snap.dispose();
     super.dispose();
   }
@@ -163,9 +171,9 @@ class _NotePadsState extends State<NotePads> with SingleTickerProviderStateMixin
   void _slideEnd() {
     _dragging = false;
     final target = _scroll.round().clamp(0, _maxScroll.round()).toDouble();
-    _snapAnim = Tween<double>(begin: _scroll, end: target)
-        .animate(CurvedAnimation(parent: _snap, curve: Curves.easeOutCubic))
-      ..addListener(() => setState(() => _scroll = _snapAnim!.value));
+    _snapTween
+      ..begin = _scroll
+      ..end = target;
     _snap.forward(from: 0).whenComplete(() => widget.onOffsetChanged(target.round()));
   }
 

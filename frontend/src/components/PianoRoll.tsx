@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import type { Note } from "../types";
 
 interface Props {
@@ -27,6 +27,21 @@ export function PianoRoll({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   // geometry captured each render so the click handler can hit-test.
   const geomRef = useRef<{ minP: number; rowH: number; dur: number; cssWidth: number } | null>(null);
+  // bumped on element resize / DPR change so the backing store is re-sized and redrawn.
+  const [resizeTick, setResizeTick] = useState(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const bump = () => setResizeTick((t) => t + 1);
+    const ro = new ResizeObserver(bump);
+    ro.observe(canvas);
+    window.addEventListener("resize", bump);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", bump);
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -113,7 +128,7 @@ export function PianoRoll({
         : `${NOTE_NAMES[((n.pitch % 12) + 12) % 12]}${Math.floor(n.pitch / 12) - 1}`;
       if (w > 22) ctx.fillText(label, x + 2, y + rowH - 3);
     });
-  }, [notes, duration, height, highlightNoteIndex, selectedIndex]);
+  }, [notes, duration, height, highlightNoteIndex, selectedIndex, resizeTick]);
 
   const handleClick = (e: MouseEvent<HTMLCanvasElement>) => {
     if (!onNoteClick) return;
@@ -123,7 +138,8 @@ export function PianoRoll({
     const rect = canvas.getBoundingClientRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
-    const t = ((px - 36) / (g.cssWidth - 36)) * g.dur;
+    // hit-test against the current layout width, not the width at last draw.
+    const t = ((px - 36) / (rect.width - 36)) * g.dur;
     // pitch row under the cursor
     const pitchAtY = g.minP + (height - 24 - py) / g.rowH;
     // pick the note whose time span contains t and whose pitch row is closest

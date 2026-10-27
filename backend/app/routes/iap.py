@@ -250,6 +250,14 @@ def _upsert_subscription(sb, *, user_id: str, store: str, product_id: str,
     if other and other.get("user_id") != user_id:
         if not allow_transfer:
             raise HTTPException(409, "receipt is linked to another account")
+        # A transfer must not replay an older snapshot over a newer state on
+        # the bound row (e.g. a pre-refund JWS onto a fresh account). Google
+        # verify passes no event_at because it always reads live state.
+        other_prev = _parse_ts(other.get("last_event_at"))
+        if other_prev and event_at and other_prev > event_at:
+            logger.warning("iap: refusing transfer of %s %s — receipt is older than "
+                           "the bound state (%s)", store, binding_col, other_prev.isoformat())
+            raise HTTPException(409, "receipt is linked to another account")
         logger.warning("iap: transferring %s %s from user %s to %s",
                        store, binding_col, other.get("user_id"), user_id)
         _release_binding(sb, other, reason="transferred")
@@ -330,6 +338,12 @@ def _apple_jwt() -> str:
         "bid": s.apple_bundle_id,
     }
     return pyjwt.encode(payload, pk, algorithm="ES256", headers=headers)
+
+
+def _apple_api_configured() -> bool:
+    s = get_settings()
+    return bool(s.resolve_apple_key_id() and s.resolve_apple_issuer()
+                and s.resolve_apple_private_key() and s.apple_bundle_id)
 
 
 async def _apple_lookup_transaction(transaction_id: str) -> dict:
@@ -764,11 +778,37 @@ def _google_log_state(sub: _GoogleSub, purchase_token: str) -> None:
     if sub.acknowledged or sub.status not in PRO_STATUSES:
         return
     # Google auto-refunds a purchase that is never acknowledged within 3 days.
-    # We deliberately do NOT acknowledge server-side (the client's
-    # completePurchase does it) — this makes a regression there visible.
-    logger.warning("google: entitled subscription %s (%s) is UNACKNOWLEDGED — "
-                   "Google refunds it after 3 days unless the client acknowledges",
+    # The client's completePurchase normally does it; _google_acknowledge is
+    # the server-side backstop.
+    logger.warning("google: entitled subscription %s (%s) is UNACKNOWLEDGED",
                    _mask_token(purchase_token), sub.api)
+
+
+async def _google_acknowledge(product_id: str, purchase_token: str) -> None:
+    """Acknowledge a Play subscription server-side. Best-effort: the client
+    acknowledges too, and a failure here must never fail the purchase."""
+    s = get_settings()
+    if not (s.google_package_name and product_id):
+        return
+    url = (
+        f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
+        f"{s.google_package_name}/purchases/subscriptions/{product_id}"
+        f"/tokens/{purchase_token}:acknowledge"
+    )
+    try:
+        token = await _google_access_token()
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(url, headers={"Authorization": f"Bearer {token}"}, json={})
+        if r.status_code >= 300:
+            logger.warning("google acknowledge %s → %s %s",
+                           _mask_token(purchase_token), r.status_code, r.text[:200])
+    except Exception as e:
+        logger.warning("google acknowledge %s failed: %s", _mask_token(purchase_token), e)
+
+
+async def _google_ack_if_needed(sub: _GoogleSub, product_id: str, purchase_token: str) -> None:
+    if not sub.acknowledged and sub.status in PRO_STATUSES:
+        await _google_acknowledge(product_id, purchase_token)
 
 
 async def _google_resolve_subscription(product_id: Optional[str],
@@ -803,13 +843,19 @@ async def _google_resolve_subscription(product_id: Optional[str],
 
 
 # --- routes -----------------------------------------------------------------
+async def _db(fn, *args, **kwargs):
+    """Run a blocking supabase-py call off the event loop — a slow PostgREST
+    response must not stall every other request (incl. /health)."""
+    return await anyio.to_thread.run_sync(lambda: fn(*args, **kwargs))
+
+
 @router.get("/status", response_model=IapStatusResponse)
 async def status(user: CurrentUser = Depends(get_current_user)):
     """Server-side entitlement verdict. The client must use ``pro`` from here
     (not the raw ``status`` string) to gate Pro features."""
     sb = require_supabase()
     try:
-        row = fetch_subscription(sb, user.id)
+        row = await _db(fetch_subscription, sb, user.id)
     except Exception:
         logger.exception("subscription lookup failed")
         raise HTTPException(500, "subscription lookup failed")
@@ -839,6 +885,11 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
     _throttle_verify(user.id, s.iap_verify_per_minute)
 
     if payload.store == "app_store":
+        # Without a bundle id the signature check alone would accept any app's
+        # transaction (any App Store app's JWS chains to Apple's root).
+        if s.is_production and not s.apple_bundle_id:
+            logger.error("APPLE_BUNDLE_ID unset in production — refusing Apple verify")
+            raise HTTPException(503, "apple verification not configured")
         raw = payload.receipt_data.strip()
         tx: dict = {}
         # Heuristic: StoreKit 2 transactionId is short numeric; legacy receipt
@@ -848,9 +899,19 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
         logger.info("iap verify user=%s len=%d jws=%s txid=%s",
                     user.id, len(raw), looks_like_jws, looks_like_txid)
         legacy_path = False
+        renewal: dict = {}
         if looks_like_jws:
             # StoreKit 2 JWS — verified locally against Apple's pinned root.
             tx = _decode_apple_jws_verified(raw)
+            # The JWS is a client-held snapshot (it outlives a refund), so
+            # prefer Apple's live state when the Server API is configured.
+            orig = str(tx.get("originalTransactionId") or "")
+            if orig and _apple_api_configured():
+                try:
+                    tx, renewal = await _apple_lookup_subscription(orig)
+                except HTTPException as e:
+                    logger.warning("apple live lookup failed (%s) — using the client JWS",
+                                   e.detail)
         elif looks_like_txid:
             info = await _apple_lookup_transaction(raw)
             signed = info.get("signedTransactionInfo")
@@ -893,11 +954,11 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
         if not orig_tx and not legacy_path:
             raise HTTPException(400, "apple: transaction has no originalTransactionId")
 
-        status_v, expires_at = _apple_status(tx)
+        status_v, expires_at = _apple_status(tx, renewal)
         original = _ms_to_dt(tx.get("originalPurchaseDate"))
         purchase = _ms_to_dt(tx.get("purchaseDate"))
         is_trial = status_v == "trial"
-        _upsert_subscription(
+        await _db(_upsert_subscription,
             sb, user_id=user.id, store="app_store", product_id=product_id,
             status=status_v, expires_at=expires_at,
             trial_ends_at=expires_at if is_trial else None,
@@ -935,7 +996,7 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
     product_id = sub.product_id or product_id
     trial_end = expires_at if sub.trial else None
     original = sub.start_at
-    _upsert_subscription(
+    await _db(_upsert_subscription,
         sb, user_id=user.id, store="play_store", product_id=product_id,
         status=status_v, expires_at=expires_at, trial_ends_at=trial_end,
         original_purchase_at=original, last_renewed_at=original,
@@ -943,6 +1004,7 @@ async def verify(payload: IapVerifyRequest, user: CurrentUser = Depends(get_curr
         purchase_token=str(purchase_token),
         transaction_id=sub.order_id,
     )
+    await _google_ack_if_needed(sub, product_id, str(purchase_token))
     return IapVerifyResponse(
         status=status_v, product_id=product_id, expires_at=expires_at,
         trial_ends_at=trial_end, store="play_store",
@@ -981,7 +1043,7 @@ async def apple_webhook(request: Request):
         raise HTTPException(400, "apple webhook: bundleId mismatch")
 
     sb = require_supabase()
-    state = _record_notification(sb, notif_id, "app_store", payload)
+    state = await _db(_record_notification, sb, notif_id, "app_store", payload)
     if state == "duplicate":
         return {"ok": True, "duplicate": True}
 
@@ -989,7 +1051,7 @@ async def apple_webhook(request: Request):
     signed_renew = data.get("signedRenewalInfo")
     if not signed_tx:
         logger.info("apple webhook %s/%s without signedTransactionInfo", notif_type, subtype)
-        _mark_notification(sb, notif_id)
+        await _db(_mark_notification, sb, notif_id)
         return {"ok": True}
 
     try:
@@ -998,16 +1060,16 @@ async def apple_webhook(request: Request):
         environment = _apple_check_environment(tx)
 
         orig_tx = str(tx.get("originalTransactionId") or "") or None
-        bound = _find_by_binding(sb, "app_store", "original_transaction_id", orig_tx)
+        bound = await _db(_find_by_binding, sb, "app_store", "original_transaction_id", orig_tx)
         user_id = (bound or {}).get("user_id") or tx.get("appAccountToken")
         if not user_id:
             logger.warning("apple webhook %s: originalTransactionId %s not bound to a user "
                            "(user has not re-verified since 002) — skipped", notif_type, orig_tx)
-            _mark_notification(sb, notif_id, error=f"no_user:{orig_tx}" if orig_tx else "no_user")
+            await _db(_mark_notification, sb, notif_id, error=f"no_user:{orig_tx}" if orig_tx else "no_user")
             return {"ok": True, "skipped": "no_user"}
 
         status_v, expires_at = _apple_status(tx, renew, notif_type)
-        row, outcome = _upsert_subscription(
+        row, outcome = await _db(_upsert_subscription,
             sb, user_id=user_id, store="app_store",
             product_id=tx.get("productId") or (bound or {}).get("product_id") or "",
             status=status_v, expires_at=expires_at,
@@ -1022,13 +1084,13 @@ async def apple_webhook(request: Request):
             allow_transfer=False,
         )
     except HTTPException as e:
-        _mark_notification(sb, notif_id, error=f"{e.status_code}: {e.detail}")
+        await _db(_mark_notification, sb, notif_id, error=f"{e.status_code}: {e.detail}")
         raise
     except Exception as e:
-        _mark_notification(sb, notif_id, error=str(e)[:500])
+        await _db(_mark_notification, sb, notif_id, error=str(e)[:500])
         logger.exception("apple webhook processing failed")
         raise HTTPException(500, "webhook processing failed")
-    _mark_notification(sb, notif_id)
+    await _db(_mark_notification, sb, notif_id)
     return {"ok": True, "status": status_v, "outcome": outcome}
 
 
@@ -1127,7 +1189,7 @@ async def google_webhook(request: Request):
         raise HTTPException(400, "invalid pubsub data")
 
     sb = require_supabase()
-    state = _record_notification(sb, msg_id, "play_store", data)
+    state = await _db(_record_notification, sb, msg_id, "play_store", data)
     if state == "duplicate":
         return {"ok": True, "duplicate": True}
 
@@ -1136,23 +1198,23 @@ async def google_webhook(request: Request):
     product_id = sub_n.get("subscriptionId")
     if not (purchase_token and product_id):
         logger.info("google webhook without subscriptionNotification (test push?)")
-        _mark_notification(sb, msg_id)
+        await _db(_mark_notification, sb, msg_id)
         return {"ok": True}
 
     try:
         detail = await _google_resolve_subscription(product_id, purchase_token)
         status_v, expires_at = detail.status, detail.expires_at
-        bound = _find_by_binding(sb, "play_store", "purchase_token", str(purchase_token))
+        bound = await _db(_find_by_binding, sb, "play_store", "purchase_token", str(purchase_token))
         if not bound and detail.linked_purchase_token:
             # Plan change: the new token replaces the one we have on file.
-            bound = _find_by_binding(sb, "play_store", "purchase_token",
+            bound = await _db(_find_by_binding, sb, "play_store", "purchase_token",
                                      detail.linked_purchase_token)
         user_id = (bound or {}).get("user_id") or detail.external_account_id
         if not user_id:
             logger.warning("google webhook: purchaseToken not bound to a user — skipped")
-            _mark_notification(sb, msg_id, error="no_user")
+            await _db(_mark_notification, sb, msg_id, error="no_user")
             return {"ok": True, "skipped": "no_user"}
-        row, outcome = _upsert_subscription(
+        row, outcome = await _db(_upsert_subscription,
             sb, user_id=user_id, store="play_store",
             product_id=detail.product_id or product_id,
             status=status_v, expires_at=expires_at,
@@ -1163,12 +1225,13 @@ async def google_webhook(request: Request):
             event_at=_ms_to_dt(int(data.get("eventTimeMillis") or 0) or None),
             allow_transfer=False,
         )
+        await _google_ack_if_needed(detail, detail.product_id or product_id, str(purchase_token))
     except HTTPException as e:
-        _mark_notification(sb, msg_id, error=f"{e.status_code}: {e.detail}")
+        await _db(_mark_notification, sb, msg_id, error=f"{e.status_code}: {e.detail}")
         raise
     except Exception as e:
-        _mark_notification(sb, msg_id, error=str(e)[:500])
+        await _db(_mark_notification, sb, msg_id, error=str(e)[:500])
         logger.exception("google webhook processing failed")
         raise HTTPException(500, "webhook processing failed")
-    _mark_notification(sb, msg_id)
+    await _db(_mark_notification, sb, msg_id)
     return {"ok": True, "status": status_v, "outcome": outcome}

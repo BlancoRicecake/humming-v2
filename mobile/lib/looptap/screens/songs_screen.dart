@@ -15,6 +15,7 @@ import '../widgets/sheets/account_sheet.dart';
 import '../widgets/sheets/key_sheet.dart' show ltScaleLabel;
 import '../widgets/sheets/paywall_sheet.dart';
 import '../widgets/sheets/settings_sheet.dart';
+import '../widgets/sheets/midi_import_sheet.dart';
 import 'edit_screen.dart';
 
 /// 비-Pro 사용자가 만들 수 있는 작업물 최대 개수.
@@ -33,7 +34,20 @@ class SongsScreen extends StatelessWidget {
   const SongsScreen({super.key});
 
   void _open(BuildContext context, Song song) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => EditScreen(song: song)));
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => EditScreen(song: song)));
+  }
+
+  Future<void> _importMidi(BuildContext context) async {
+    final store = context.read<LoopStore>();
+    if (atFreeQuota(store)) {
+      await showPaywallSheet(context, trigger: PaywallTrigger.songQuota);
+      if (!context.mounted || !store.proActive) return;
+    }
+    final song = await pickMidiPassage(context);
+    if (song == null || !context.mounted) return;
+    _open(context, song);
   }
 
   /// 새 작업물 생성. 비-Pro 가 quota (4개) 에 도달하면 paywall 우선 표시.
@@ -50,23 +64,37 @@ class SongsScreen extends StatelessWidget {
     // Demo songs are not the user's work. The first creation goes directly
     // to the guest-accessible guided editor, which also offers direct editing.
     final firstSong = userSongCount(store.songs) == 0;
-    final guided = firstSong ? true : await showDialog<bool>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(l.ltSongsNewSong),
-        children: [
-          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, true),
-              child: Text(l.ltGuidedStart)),
-          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, false),
-              child: Text(l.ltGuidedDirect)),
-        ],
+    final guided =
+        firstSong
+            ? true
+            : await showDialog<bool>(
+              context: context,
+              builder:
+                  (ctx) => SimpleDialog(
+                    title: Text(l.ltSongsNewSong),
+                    children: [
+                      SimpleDialogOption(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: Text(l.ltGuidedStart),
+                      ),
+                      SimpleDialogOption(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: Text(l.ltGuidedDirect),
+                      ),
+                    ],
+                  ),
+            );
+    if (!context.mounted || guided == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) => EditScreen(
+              song: store.createNew(),
+              guidedStart: guided,
+              guidedEntrySource: firstSong ? 'first_song' : 'new_song',
+            ),
       ),
     );
-    if (!context.mounted || guided == null) return;
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => EditScreen(song: store.createNew(), guidedStart: guided,
-          guidedEntrySource: firstSong ? 'first_song' : 'new_song'),
-    ));
   }
 
   @override
@@ -80,17 +108,23 @@ class SongsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(onNew: () => _new(context)),
+              _Header(
+                onNew: () => _new(context),
+                onImportMidi: () => _importMidi(context),
+              ),
               if (store.loaded) const PolicyNoticeBanner(),
               const SizedBox(height: 18),
               Expanded(
-                child: !store.loaded
-                    ? const Center(child: CircularProgressIndicator(color: LT.lime))
-                    : _Grid(
-                        songs: store.songs,
-                        onOpen: (s) => _open(context, s),
-                        onNew: () => _new(context),
-                      ),
+                child:
+                    !store.loaded
+                        ? const Center(
+                          child: CircularProgressIndicator(color: LT.lime),
+                        )
+                        : _Grid(
+                          songs: store.songs,
+                          onOpen: (s) => _open(context, s),
+                          onNew: () => _new(context),
+                        ),
               ),
             ],
           ),
@@ -101,8 +135,9 @@ class SongsScreen extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onNew});
+  const _Header({required this.onNew, required this.onImportMidi});
   final VoidCallback onNew;
+  final VoidCallback onImportMidi;
 
   @override
   Widget build(BuildContext context) {
@@ -127,10 +162,18 @@ class _Header extends StatelessWidget {
           children: [
             Text.rich(
               TextSpan(
-                style: LTType.inter(size: 20, weight: FontWeight.w800, color: LT.t1, letterSpacing: -0.4),
+                style: LTType.inter(
+                  size: 20,
+                  weight: FontWeight.w800,
+                  color: LT.t1,
+                  letterSpacing: -0.4,
+                ),
                 children: [
                   const TextSpan(text: 'Hum'),
-                  TextSpan(text: 'Track', style: const TextStyle(color: LT.lime)),
+                  TextSpan(
+                    text: 'Track',
+                    style: const TextStyle(color: LT.lime),
+                  ),
                 ],
               ),
             ),
@@ -138,15 +181,29 @@ class _Header extends StatelessWidget {
           ],
         ),
         const Spacer(),
+        TextButton(onPressed: onImportMidi, child: const Text('MIDI +')),
         if (context.watch<LoopStore>().proActive) ...[
           _ProBadge(onTap: () => showAccountSheet(context)),
           const SizedBox(width: 10),
         ],
-        IconBtn(icon: LtIcons.settings, size: 40, tooltip: l.ltSettingsTitle, onTap: () => showSettingsSheet(context)),
+        IconBtn(
+          icon: LtIcons.settings,
+          size: 40,
+          tooltip: l.ltSettingsTitle,
+          onTap: () => showSettingsSheet(context),
+        ),
         const SizedBox(width: 10),
         _MyPageButton(),
         const SizedBox(width: 10),
-        Pill(label: l.ltSongsNewSong, icon: LtIcons.add, tone: PillTone.lime, height: 40, fontSize: 14, horizontalPadding: 18, onTap: onNew),
+        Pill(
+          label: l.ltSongsNewSong,
+          icon: LtIcons.add,
+          tone: PillTone.lime,
+          height: 40,
+          fontSize: 14,
+          horizontalPadding: 18,
+          onTap: onNew,
+        ),
       ],
     );
   }
@@ -174,13 +231,15 @@ class _ProBadge extends StatelessWidget {
           children: [
             const Ms(LtIcons.workspacePremium, size: 18, color: LT.bg),
             const SizedBox(width: 6),
-            Text('PRO',
-                style: LTType.inter(
-                  size: 13,
-                  weight: FontWeight.w900,
-                  color: LT.bg,
-                  letterSpacing: 1,
-                )),
+            Text(
+              'PRO',
+              style: LTType.inter(
+                size: 13,
+                weight: FontWeight.w900,
+                color: LT.bg,
+                letterSpacing: 1,
+              ),
+            ),
           ],
         ),
       ),
@@ -192,7 +251,12 @@ class _MyPageButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<LoopStore>().user;
-    final initial = user == null ? null : ((user['name'] ?? 'U').isNotEmpty ? user['name']![0].toUpperCase() : 'U');
+    final initial =
+        user == null
+            ? null
+            : ((user['name'] ?? 'U').isNotEmpty
+                ? user['name']![0].toUpperCase()
+                : 'U');
     return GestureDetector(
       onTap: () => showAccountSheet(context),
       child: Container(
@@ -201,12 +265,22 @@ class _MyPageButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: user != null ? LT.lime : LT.surface2,
           shape: BoxShape.circle,
-          border: Border.all(color: user != null ? Colors.transparent : LT.border),
+          border: Border.all(
+            color: user != null ? Colors.transparent : LT.border,
+          ),
         ),
         child: Center(
-          child: user != null
-              ? Text(initial!, style: LTType.inter(size: 16, weight: FontWeight.w900, color: LT.bg))
-              : const Ms(LtIcons.person, size: 20, color: LT.t1),
+          child:
+              user != null
+                  ? Text(
+                    initial!,
+                    style: LTType.inter(
+                      size: 16,
+                      weight: FontWeight.w900,
+                      color: LT.bg,
+                    ),
+                  )
+                  : const Ms(LtIcons.person, size: 20, color: LT.t1),
         ),
       ),
     );
@@ -247,48 +321,15 @@ class _Grid extends StatelessWidget {
 
   Future<void> _renameSong(BuildContext context, Song song) async {
     final store = context.read<LoopStore>();
-    final l = L10n.of(context);
-    final controller = TextEditingController(text: song.title);
+    // The dialog owns (and disposes) its controller: disposing it here right
+    // after showDialog returns would race the route's exit animation.
     final newTitle = await showDialog<String>(
       context: context,
-      builder: (dctx) => AlertDialog(
-        backgroundColor: LT.surface,
-        title: Text(l.projectOptionRename, style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.t1)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: LTType.inter(size: 14, weight: FontWeight.w600, color: LT.t1),
-          cursorColor: LT.lime,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (v) => Navigator.of(dctx).pop(v),
-          decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: LT.surface2,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(LTRadius.control),
-              borderSide: const BorderSide(color: LT.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(LTRadius.control),
-              borderSide: const BorderSide(color: LT.lime),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(),
-            child: Text(l.cancel, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t3)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(controller.text),
-            child: Text(l.save, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.lime)),
-          ),
-        ],
-      ),
+      builder: (_) => _RenameDialog(initial: song.title),
     );
-    if (newTitle != null && newTitle.trim().isNotEmpty && newTitle != song.title) {
+    if (newTitle != null &&
+        newTitle.trim().isNotEmpty &&
+        newTitle != song.title) {
       try {
         await store.rename(song.id, newTitle);
       } catch (_) {
@@ -317,24 +358,46 @@ class _Grid extends StatelessWidget {
     final l = L10n.of(context);
     final ok = await showDialog<bool>(
       context: context,
-      builder: (dctx) => AlertDialog(
-        backgroundColor: LT.surface,
-        title: Text(
-          l.projectDeleteTitle(song.title),
-          style: LTType.inter(size: 16, weight: FontWeight.w800, color: LT.danger),
-        ),
-        content: Text(l.projectDeleteBody, style: LTType.inter(size: 13, color: LT.t1)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(false),
-            child: Text(l.cancel, style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t3)),
+      builder:
+          (dctx) => AlertDialog(
+            backgroundColor: LT.surface,
+            title: Text(
+              l.projectDeleteTitle(song.title),
+              style: LTType.inter(
+                size: 16,
+                weight: FontWeight.w800,
+                color: LT.danger,
+              ),
+            ),
+            content: Text(
+              l.projectDeleteBody,
+              style: LTType.inter(size: 13, color: LT.t1),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dctx).pop(false),
+                child: Text(
+                  l.cancel,
+                  style: LTType.inter(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: LT.t3,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dctx).pop(true),
+                child: Text(
+                  l.delete,
+                  style: LTType.inter(
+                    size: 14,
+                    weight: FontWeight.w800,
+                    color: LT.danger,
+                  ),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(true),
-            child: Text(l.delete, style: LTType.inter(size: 14, weight: FontWeight.w800, color: LT.danger)),
-          ),
-        ],
-      ),
     );
     if (ok == true) {
       try {
@@ -377,44 +440,55 @@ class _SongCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            // waveform thumbnail (30 bars; every 5th lime)
-            Container(
-              height: 64,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: LT.bg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: LT.border),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  for (var i = 0; i < song.wave.length; i++)
-                    Expanded(
-                      child: Container(
-                        height: (song.wave[i] * 44).clamp(2, 44),
-                        margin: const EdgeInsets.symmetric(horizontal: 1),
-                        decoration: BoxDecoration(
-                          color: i % 5 == 0 ? LT.lime : LT.surface3,
-                          borderRadius: BorderRadius.circular(2),
+                // waveform thumbnail (30 bars; every 5th lime)
+                Container(
+                  height: 64,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: LT.bg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: LT.border),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      for (var i = 0; i < song.wave.length; i++)
+                        Expanded(
+                          child: Container(
+                            height: (song.wave[i] * 44).clamp(2, 44),
+                            margin: const EdgeInsets.symmetric(horizontal: 1),
+                            decoration: BoxDecoration(
+                              color: i % 5 == 0 ? LT.lime : LT.surface3,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(song.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: LTType.inter(size: 14, weight: FontWeight.w700, color: LT.t1)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  song.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LTType.inter(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: LT.t1,
+                  ),
+                ),
                 const SizedBox(height: 6),
                 Text(
-                    l.ltSongCardMeta(song.key, ltScaleLabel(l, song.scale),
-                        song.bpm, song.bars),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: LTType.mono(size: 10, color: LT.t3)),
+                  l.ltSongCardMeta(
+                    song.key,
+                    ltScaleLabel(l, song.scale),
+                    song.bpm,
+                    song.bars,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LTType.mono(size: 10, color: LT.t3),
+                ),
               ],
             ),
           ),
@@ -467,37 +541,71 @@ class _CardMenu extends StatelessWidget {
       ),
       onSelected: (v) {
         switch (v) {
-          case 'rename': onRename(); break;
-          case 'duplicate': onDuplicate(); break;
-          case 'delete': onDelete(); break;
+          case 'rename':
+            onRename();
+            break;
+          case 'duplicate':
+            onDuplicate();
+            break;
+          case 'delete':
+            onDelete();
+            break;
         }
       },
-      itemBuilder: (_) => [
-        PopupMenuItem(
-          value: 'rename',
-          child: Row(children: [
-            const Ms(LtIcons.edit, size: 16, color: LT.t1),
-            const SizedBox(width: 10),
-            Text(l.projectOptionRename, style: LTType.inter(size: 13, weight: FontWeight.w600, color: LT.t1)),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'duplicate',
-          child: Row(children: [
-            const Ms(LtIcons.layers, size: 16, color: LT.t1),
-            const SizedBox(width: 10),
-            Text(l.projectOptionDuplicate, style: LTType.inter(size: 13, weight: FontWeight.w600, color: LT.t1)),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'delete',
-          child: Row(children: [
-            const Ms(LtIcons.delete, size: 16, color: LT.danger),
-            const SizedBox(width: 10),
-            Text(l.projectOptionDelete, style: LTType.inter(size: 13, weight: FontWeight.w600, color: LT.danger)),
-          ]),
-        ),
-      ],
+      itemBuilder:
+          (_) => [
+            PopupMenuItem(
+              value: 'rename',
+              child: Row(
+                children: [
+                  const Ms(LtIcons.edit, size: 16, color: LT.t1),
+                  const SizedBox(width: 10),
+                  Text(
+                    l.projectOptionRename,
+                    style: LTType.inter(
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: LT.t1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'duplicate',
+              child: Row(
+                children: [
+                  const Ms(LtIcons.layers, size: 16, color: LT.t1),
+                  const SizedBox(width: 10),
+                  Text(
+                    l.projectOptionDuplicate,
+                    style: LTType.inter(
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: LT.t1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  const Ms(LtIcons.delete, size: 16, color: LT.danger),
+                  const SizedBox(width: 10),
+                  Text(
+                    l.projectOptionDelete,
+                    style: LTType.inter(
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: LT.danger,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
     );
   }
 }
@@ -516,8 +624,14 @@ class _NewCard extends StatelessWidget {
           children: [
             const Ms(LtIcons.add, size: 28, color: LT.t2),
             const SizedBox(height: 8),
-            Text(L10n.of(context).ltSongsNewCard,
-                style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t2)),
+            Text(
+              L10n.of(context).ltSongsNewCard,
+              style: LTType.inter(
+                size: 13,
+                weight: FontWeight.w700,
+                color: LT.t2,
+              ),
+            ),
           ],
         ),
       ),
@@ -542,10 +656,11 @@ class DottedBorderBox extends StatelessWidget {
 class _DashedRectPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = LT.border
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
+    final paint =
+        Paint()
+          ..color = LT.border
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5;
     final rrect = RRect.fromRectAndRadius(
       Offset.zero & size,
       const Radius.circular(LTRadius.card),
@@ -563,4 +678,94 @@ class _DashedRectPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Rename prompt; pops the edited title (or null on cancel).
+class _RenameDialog extends StatefulWidget {
+  const _RenameDialog({required this.initial});
+  final String initial;
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L10n.of(context);
+    return AlertDialog(
+      backgroundColor: LT.surface,
+      title: Text(
+        l.projectOptionRename,
+        style: LTType.inter(
+          size: 16,
+          weight: FontWeight.w800,
+          color: LT.t1,
+        ),
+      ),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        style: LTType.inter(
+          size: 14,
+          weight: FontWeight.w600,
+          color: LT.t1,
+        ),
+        cursorColor: LT.lime,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (v) => Navigator.of(context).pop(v),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: true,
+          fillColor: LT.surface2,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 13,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(LTRadius.control),
+            borderSide: const BorderSide(color: LT.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(LTRadius.control),
+            borderSide: const BorderSide(color: LT.lime),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(
+            l.cancel,
+            style: LTType.inter(
+              size: 14,
+              weight: FontWeight.w700,
+              color: LT.t3,
+            ),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: Text(
+            l.save,
+            style: LTType.inter(
+              size: 14,
+              weight: FontWeight.w800,
+              color: LT.lime,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

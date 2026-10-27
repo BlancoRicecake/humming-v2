@@ -1,0 +1,194 @@
+[
+  {
+    "id": "freepats_bass_lately",
+    "slot": 1020,
+    "label": "Lately Bass (FreePats)",
+    "role": "bass",
+    "category": "Bass",
+    "file": "freepats_bass_lately.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 39,
+    "license": "CC0",
+    "bytes": 3993772,
+    "sha256": "466897ab10136f9745d35fffd385f8e0fde41ca4df3a89fb482333038f825028",
+    "asset": "assets/sounds/reference/freepats_bass_lately.sf2",
+    "source": "https://github.com/freepats/lately-bass/releases/download/2024-04-09/LatelyBass-SF2-20240409.7z",
+    "presets": [
+      {
+        "name": "Lately Bass",
+        "program": 0,
+        "bank": 0
+      }
+    ],
+    "archive_sha256": "5af4595187632a98e802893de32456beb6f0f865c20258c3ec35ff890b7f995e"
+  },
+  {
+    "id": "freepats_bass_synth1",
+    "slot": 1021,
+    "label": "Synth Bass 1 (FreePats)",
+    "role": "bass",
+    "category": "Bass",
+    "file": "freepats_bass_synth1.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 38,
+    "license": "CC0",
+    "bytes": 4382170,
+    "sha256": "a7b7105531fc245aa66308df0f316ae0eb7b4c7c09451ab78c3f80b52171d43c",
+    "asset": "assets/sounds/reference/freepats_bass_synth1.sf2",
+    "source": "https://github.com/freepats/synth-bass-1/releases/download/2019-07-23/SynthBass1-SF2-20190723.7z",
+    "presets": [
+      {
+        "name": "Synth Bass 1",
+        "program": 0,
+        "bank": 0
+      }
+    ],
+    "archive_sha256": "e8cf609b349a86d1002f47512c5e1a69fa44c2c8694b2d439b97617450340c1c"
+  },
+  {
+    "id": "freepats_bass_synth2",
+    "slot": 1022,
+    "label": "Synth Bass 2 (FreePats)",
+    "role": "bass",
+    "category": "Bass",
+    "file": "freepats_bass_synth2.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 39,
+    "license": "CC0",
+    "bytes": 4635192,
+    "sha256": "4a6266c02a53fe823db0239a3cab4c90ec0acd0a2a38ec03247d6f882b8bb9e7",
+    "asset": "assets/sounds/reference/freepats_bass_synth2.sf2",
+    "source": "https://github.com/freepats/synth-bass-2/releases/download/2021-04-05/SynthBass2-SF2-20210405.7z",
+    "presets": [
+      {
+        "name": "Synth Bass 2",
+        "program": 0,
+        "bank": 0
+      }
+    ],
+    "archive_sha256": "3b31b23cdefc5a72615251053c2fc618a0e2cb41d470308a97c697b120b59a9b"
+  },
+  {
+    "id": "freepats_pad_choir",
+    "slot": 1030,
+    "label": "Synth Pad Choir (FreePats)",
+    "role": "melody",
+    "category": "Pads & Textures",
+    "file": "freepats_pad_choir.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 91,
+    "license": "CC0",
+    "bytes": 14381582,
+    "sha256": "8688e074a15a40f2d9a251f9a642f67f91b1667ba6f4a1e765b9ee7347260c2d",
+    "asset": "assets/sounds/reference/freepats_pad_choir.sf2",
+    "source": "https://github.com/freepats/synth-pad-choir/releases/download/2020-05-16/SynthPadChoir-SF2-20200516.7z",
+    "presets": [
+      {
+        "name": "Synth Pad Choir",
+        "program": 0,
+        "bank": 0
+      }
+    ],
+    "archive_sha256": "4a6024721615d15bedff030a7e8259d380fdcef51f2a223961c69dfbbbdb39f1"
+  },
+  {
+    "id": "freepats_pad_sweep",
+    "slot": 1031,
+    "label": "Sweep Pad (FreePats)",
+    "role": "melody",
+    "category": "Pads & Textures",
+    "file": "freepats_pad_sweep.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 95,
+    "license": "CC0",
+    "bytes": 8414208,
+    "sha256": "5a09a1d8ab60d236907572a46af8b4211881e2f8c7325e75f782ad5d7acce433",
+    "asset": "assets/sounds/reference/freepats_pad_sweep.sf2",
+    "source": "https://github.com/freepats/sweep-pad/releases/download/2019-08-13/SweepPad-SF2-20190813.7z",
+    "presets": [
+      {
+        "name": "Sweep Pad",
+        "program": 0,
+        "bank": 0
+      }
+    ],
+    "archive_sha256": "2a2eb595b47e780fc633391f756e972e87512d61adcb9564c3c27b9ffca3fb63"
+  },
+  {
+    "id": "freepats_pad_newage",
+    "slot": 1032,
+    "label": "New Age Pad (FreePats)",
+    "role": "melody",
+    "category": "Pads & Textures",
+    "file": "freepats_pad_newage.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 88,
+    "license": "CC0",
+    "bytes": 9667326,
+    "sha256": "39a85b39e85a4115bcb8ab99ac2bde3070ab802ba60ca45e15ba34a6bde990f6",
+    "asset": "assets/sounds/reference/freepats_pad_newage.sf2",
+    "source": "https://github.com/freepats/new-age/releases/download/2019-07-30/NewAge-SF2-20190730.7z",
+    "presets": [
+      {
+        "name": "New Age",
+        "program": 0,
+        "bank": 0
+      }
+    ],
+    "archive_sha256": "016c4b1c3053cdf1067dbe4a0c3a4a8ceb1ae5de31433edde27785f35c3387f4"
+  },
+  {
+    "id": "freepats_pad_bowed",
+    "slot": 1033,
+    "label": "Bowed Pad (FreePats)",
+    "role": "melody",
+    "category": "Pads & Textures",
+    "file": "freepats_pad_bowed.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 92,
+    "license": "CC0",
+    "bytes": 25970842,
+    "sha256": "d20b2c26757c58665f83850515d68a7ecee11a87103f849be2406f026f9cf52a",
+    "asset": "assets/sounds/reference/freepats_pad_bowed.sf2",
+    "source": "https://github.com/freepats/synth-pad-bowed/releases/download/2019-07-19/SynthPadBowed-SF2-20190719.7z",
+    "presets": [
+      {
+        "name": "Synth Pad Bowed",
+        "program": 0,
+        "bank": 0
+      }
+    ],
+    "archive_sha256": "70a1db4b7bd33caf1f37187e29ff367d8c78d7043a6e36cf1b5e99f72412bb56"
+  },
+  {
+    "id": "freepats_nylon",
+    "slot": 1001,
+    "label": "Nylon Acoustic Guitar (FreePats)",
+    "role": "melody",
+    "category": "Guitar",
+    "file": "freepats_nylon.sf2",
+    "sf_bank": 0,
+    "sf_program": 0,
+    "midi_fallback": 24,
+    "license": "CC0",
+    "bytes": 19822546,
+    "sha256": "0d4c08ea8c1c8924b3829084b0c8778f6d6b906f331e44fde51bc159f76b03b9",
+    "source": "https://freepats.zenvoid.org/Guitar/SpanishClassicalGuitar/SpanishClassicalGuitar-SF2-20190618.7z",
+    "asset": "assets/sounds/reference/freepats_nylon.sf2",
+    "presets": [
+      {
+        "name": "Classical guitar",
+        "program": 0,
+        "bank": 0
+      }
+    ],
+    "archive_sha256": "8c192f1fc640a553199a4a43a17ae12354a6a05e3d6aad79bd43b5d29314ff51"
+  }
+]

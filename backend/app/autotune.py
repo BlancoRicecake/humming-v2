@@ -21,7 +21,7 @@ import soundfile as sf
 from fastapi import HTTPException
 from scipy.ndimage import median_filter
 
-from .analyze import _downsample_for_display, _ffmpeg_decode_to_pcm, _magic_is_wav, denoise_vocal_light
+from .analyze import _check_wav_header, _downsample_for_display, _ffmpeg_decode_to_pcm, _magic_is_wav, denoise_vocal_light
 from .scales import scale_pitch_classes
 
 AT_SR = 44100  # quality path — bypasses analyze.py's 22050 default
@@ -112,6 +112,7 @@ def retune_f0(
 
 def _decode_44k(file_bytes: bytes) -> Tuple[np.ndarray, int]:
     if _magic_is_wav(file_bytes):
+        _check_wav_header(file_bytes)
         try:
             y, sr = sf.read(io.BytesIO(file_bytes), dtype="float32", always_2d=False)
         except sf.LibsndfileError as e:  # corrupt/truncated WAV → client error

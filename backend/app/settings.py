@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     r2_endpoint: Optional[str] = None
     r2_bucket: Optional[str] = None
     r2_public_base_url: Optional[str] = None  # https://cdn.example.com
+    # /storage + /projects (cloud backup) answer 404 until the feature ships.
+    cloud_sync_enabled: bool = False
 
     # Apple App Store Server API
     # NOTE: App Store Server API JWTs use the App Store Connect issuer UUID
@@ -93,6 +95,9 @@ class Settings(BaseSettings):
     )
 
     # Misc
+    # Comma-separated CORS origins (CORS_ALLOW_ORIGINS). "*" keeps today's
+    # behaviour; set e.g. "https://humtrack.app" to tighten.
+    cors_allow_origins: str = "*"
     max_body_bytes: int = 2 * 1024 * 1024  # 2MB
     presign_max_bytes: int = 5 * 1024 * 1024  # 5MB
     presign_ttl_sec: int = 300
@@ -101,6 +106,9 @@ class Settings(BaseSettings):
     # /health/iap-notifications: alert when a store has owed a notification
     # for longer than this without one arriving.
     iap_notification_max_age_days: int = 5
+    # Optional shared token for /health/iap-notifications (X-Health-Token or
+    # Bearer). Unset = open, as before.
+    iap_health_token: Optional[str] = None
 
     # Optional symbolic arrangement provider. Disabled by default so no
     # unlicensed model weights or provider credentials can enter production by

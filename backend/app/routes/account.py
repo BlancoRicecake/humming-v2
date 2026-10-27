@@ -43,7 +43,8 @@ def _extract_user_id(auth_header: Optional[str]) -> str:
 @router.delete("/account", status_code=204)
 async def delete_account(authorization: Optional[str] = Header(default=None)):
     """현재 사용자의 Supabase 계정 삭제 (자기 자신만 가능)."""
-    user_id = _extract_user_id(authorization)
+    # JWKS fetch / JWT verify is blocking — keep it off the event loop.
+    user_id = await anyio.to_thread.run_sync(_extract_user_id, authorization)
 
     s = get_settings()
     supabase_url = (s.supabase_url or "").rstrip("/")

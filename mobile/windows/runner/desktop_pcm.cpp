@@ -77,7 +77,8 @@ void DesktopPcm::Release() {
   render_.Reset(); client_.Reset(); capacity_ = 0; started_ = false;
 }
 HRESULT DesktopPcm::Setup(int rate, int channels) {
-  if (rate != 44100 || channels != 1) return E_INVALIDARG;
+  // Mono or interleaved stereo 16-bit PCM (stereo since track pan, mixer-001).
+  if (rate != 44100 || (channels != 1 && channels != 2)) return E_INVALIDARG;
   Release();
   ComPtr<IMMDeviceEnumerator> enumerator;
   ComPtr<IMMDevice> device;

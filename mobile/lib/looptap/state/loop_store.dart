@@ -3,6 +3,7 @@
 // 노출하는 thin facade. 키 미설정 / 스토어 미가용 시 services 가 자체적으로
 // 비활성(enabled=false) 되므로 여기서는 그대로 흘려보낸다.
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -342,8 +343,12 @@ class LoopStore extends ChangeNotifier {
   Future<void> loadProducts() => IapService.instance.loadProducts();
 
   /// null = 스토어 시트가 떴음 (결과는 IapService.onPurchaseResult).
-  Future<IapError?> buyMonthly() => IapService.instance.buy(kProductMonthly);
-  Future<IapError?> buyYearly() => IapService.instance.buy(kProductYearly);
+  /// [onAlreadyOwned]: Android 에서 이미 다른 Pro 구독이 자동 갱신 중이라
+  /// 새 결제 대신 그 영수증을 검증할 때, 결과가 올 상품 id 로 호출된다.
+  Future<IapError?> buyMonthly({void Function(String)? onAlreadyOwned}) =>
+      IapService.instance.buy(kProductMonthly, onAlreadyOwned: onAlreadyOwned);
+  Future<IapError?> buyYearly({void Function(String)? onAlreadyOwned}) =>
+      IapService.instance.buy(kProductYearly, onAlreadyOwned: onAlreadyOwned);
 
   /// 구매 복원 (audit M6): 스토어 restore 를 요청하고 **첫 결과**(onPurchaseResult)
   /// 또는 pro 가 켜지는 상태 변화를 [timeout] 까지 기다린 뒤 /iap/status 로
@@ -561,29 +566,17 @@ class LoopStore extends ChangeNotifier {
       _changeSongs(() => LoopStorage.sweepVocals(_songs));
 
   /// 새 ID 로 deep-copy + " (copy)" suffix. 새 노래는 grid 맨 앞으로.
+  /// JSON 왕복으로 복제 — 필드를 하나씩 옮기면 generationLocks 처럼 새로
+  /// 추가된 필드가 조용히 빠진다. jsonEncode 를 거쳐 공유 참조도 남지 않는다.
   Future<Song> duplicate(Song src) async {
-    final dup = Song(
-      id: 'lt${DateTime.now().millisecondsSinceEpoch}',
-      title: '${src.title} (copy)',
-      key: src.key,
-      scale: src.scale,
-      bpm: src.bpm,
-      swing: src.swing,
-      bars: src.bars,
-      vol: Map.of(src.vol),
-      mutes: Map.of(src.mutes),
-      instruments: Map.of(src.instruments),
-      sections: src.sections.map((s) => s.deepCopy()).toList(),
-      wave: List<double>.of(src.wave),
-      songVocalPath: src.songVocalPath,
-      songVocalPeaks:
-          src.songVocalPeaks == null
-              ? null
-              : List<double>.of(src.songVocalPeaks!),
-      songVocalBpm: src.songVocalBpm,
-      songVocalBars: src.songVocalBars,
-      updatedAt: DateTime.now(),
-    );
+    final dup =
+        Song.fromJson(
+            (jsonDecode(jsonEncode(src.toJson())) as Map)
+                .cast<String, dynamic>(),
+          )
+          ..id = 'lt${DateTime.now().millisecondsSinceEpoch}'
+          ..title = '${src.title} (copy)'
+          ..updatedAt = DateTime.now();
     await upsert(dup);
     return dup;
   }

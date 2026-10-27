@@ -117,3 +117,21 @@ def test_readonly_dir_still_serves(catalog_dir, monkeypatch):
 
 def test_warm_hashes_reports_count(catalog_dir):
     assert sf.warm_hashes() == 2
+
+def test_sidecar_load_waits_for_hash_lock_and_sets_flag_after(catalog_dir):
+    """_load_sidecar mutates _HASH_CACHE; _save_sidecar iterates it under
+    _HASH_LOCK. The load must take the same lock (no "dict changed size"),
+    and the loaded flag must only flip once the data is in."""
+    import threading
+
+    (catalog_dir / sf.SIDECAR).write_text(json.dumps({"x.sf2:1": "f" * 64}), encoding="utf-8")
+    done = threading.Event()
+    with sf._HASH_LOCK:
+        t = threading.Thread(target=lambda: (sf._load_sidecar(catalog_dir), done.set()))
+        t.start()
+        assert not done.wait(0.2)            # blocked on the lock
+        assert sf._sidecar_loaded_for is None  # flag not set before the read
+    t.join(5)
+    assert done.is_set()
+    assert sf._sidecar_loaded_for == catalog_dir
+    assert sf._HASH_CACHE["x.sf2:1"] == "f" * 64

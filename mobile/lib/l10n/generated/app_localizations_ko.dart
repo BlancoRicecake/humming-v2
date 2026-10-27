@@ -1668,6 +1668,18 @@ class L10nKo extends L10n {
   String get ltExportStemsSub => '트랙별 WAV 분리';
 
   @override
+  String get ltExportNewVariation => '다른 변주로';
+
+  @override
+  String get ltExportNewVariationSub => '확률·세기 변화를 새로 뽑습니다 (되돌리기 가능)';
+
+  @override
+  String get ltExportNewVariationDone => '새 변주를 만들었습니다';
+
+  @override
+  String get ltExportMidiAllNotes => 'MIDI: 확률 무시하고 모든 노트 포함';
+
+  @override
   String get ltExportShareTitle => '공유';
 
   @override
@@ -1926,10 +1938,10 @@ class L10nKo extends L10n {
   String get ltEditorHintGridDrums => '셀을 탭해서 켜고 끄기';
 
   @override
-  String get ltEditorHintGridPitched => '탭 · 드래그로 길이 조절 · 자동 병합';
+  String get ltEditorHintGridPitched => '입력 · 영역 선택 · 복사/붙여넣기';
 
   @override
-  String get ltEditorHintPads => '녹음 후 탭';
+  String get ltEditorHintPads => '녹음을 켠 상태에서 연주';
 
   @override
   String get ltDrumBeatGrid => '비트 그리드';
@@ -2131,7 +2143,7 @@ class L10nKo extends L10n {
   String get ltVocalEditorEffectsGroup => '이펙트';
 
   @override
-  String get ltVocalEditorReset => '되돌리기';
+  String get ltVocalEditorReset => '편집값 초기화';
 
   @override
   String get ltVocalEditorServerTag => '서버';
@@ -2546,4 +2558,68 @@ class L10nKo extends L10n {
 
   @override
   String get ltGuidedKeepVocal => '목소리 그대로 녹음';
+
+  @override
+  String get ltVocalEditorClearFx => '효과 전체 제거';
+
+  @override
+  String get ltVocalEditorRestoreOriginal => '원음 복원';
+
+  @override
+  String get ltVocalEditorFxSourceMissing =>
+      '원본 파일이 없어 효과를 변경할 수 없습니다. 기존 소리는 유지됩니다.';
+
+  @override
+  String get ltVocalFxPresets => '보컬 프리셋';
+
+  @override
+  String get ltVocalFxPresetHint => '프리셋은 오토튠을 유지하고 나머지 효과를 교체합니다.';
+
+  @override
+  String get ltVocalFxLocal => '효과 추가 · 기기에서 처리';
+
+  @override
+  String get ltVocalFxAmount => '적용 강도';
+
+  @override
+  String get ltVocalFxAmountHint => '다음에 추가할 개별 효과에 적용됩니다.';
+
+  @override
+  String get ltVocalFxServer => '기존 효과 · 서버 연결 필요';
+
+  @override
+  String get ltVocalPreviewOriginal => '원음 듣기';
+
+  @override
+  String get ltVocalPreviewProcessed => '효과음 듣기';
+
+  @override
+  String get ltVocalPreviewOriginalPlaying => '원음 재생 중';
+
+  @override
+  String get ltVocalPreviewProcessedPlaying => '효과음 재생 중';
+
+  @override
+  String get ltVocalPreviewStopped => '재생 정지';
+
+  @override
+  String get ltVocalPreviewLoading => '비교음 준비 중…';
+
+  @override
+  String get ltVocalPreviewNoEffects => '적용된 효과 없음';
+
+  @override
+  String get ltVocalPreviewEffects => '적용 효과';
+
+  @override
+  String get ltVocalPreviewLoop => '구간 반복';
+
+  @override
+  String get ltVocalPreviewLevel => '음량 맞춤';
+
+  @override
+  String get ltVocalPreviewAuto => '적용 후 듣기';
+
+  @override
+  String get ltVocalPreviewFailed => '오디오를 재생하지 못했습니다. 파일과 출력 장치를 확인해주세요.';
 }

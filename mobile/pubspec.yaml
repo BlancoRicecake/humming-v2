@@ -139,6 +139,7 @@ flutter:
     - assets/sounds/GeneralUser-GS.sf2
     - assets/sounds/808.sf2
     - assets/sounds/hiphop_kit.sf2
+    - assets/sounds/reference/
     - assets/legal/
 
   # An image asset can refer to one or more resolution-specific "variants", see

@@ -42,12 +42,12 @@ CREATE TABLE IF NOT EXISTS public.cloud_quota (
 ALTER TABLE public.cloud_projects ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "own_cloud_projects" ON public.cloud_projects;
 CREATE POLICY "own_cloud_projects" ON public.cloud_projects
-  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+  FOR SELECT USING (auth.uid() = user_id);  -- writes: service-role RPC only (migration 003)
 
 ALTER TABLE public.cloud_quota ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "own_cloud_quota" ON public.cloud_quota;
 CREATE POLICY "own_cloud_quota" ON public.cloud_quota
-  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+  FOR SELECT USING (auth.uid() = user_id);  -- writes: service-role RPC only (migration 003)
 
 -- ── 4) 원자적 upsert + quota 증감 ───────────────────────────────────────────
 -- 백엔드 서비스 role 로 호출 (RLS bypass). user_id 명시 인자로 전달 — 이중 안전.

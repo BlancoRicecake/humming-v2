@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 // HumTrack — app entrypoint. Landscape tap-to-make-beats DAW.
 //
@@ -107,17 +108,23 @@ Future<void> main() async {
       }
     });
 
-    await Future.wait([
-      AuthService.instance.bootstrap(),
-      // init 직후 loadProducts() 까지 묶어서 호출 — paywall 진입 시 스토어 가격
-      // (ProductDetails.price) 이 즉시 표시되도록 (KRW 폴백 노출 회피).
-      IapService.instance.init().then(
-        (_) => IapService.instance.loadProducts(),
-      ),
-    ]);
+    // Auth 를 먼저 — Supabase 초기화 전에 StoreKit 이 부팅 replay 한 영수증이
+    // 토큰 없이 처리되는 race 를 줄인다 (그래도 늦게 오면 IapService 가 보류
+    // 후 로그인 세션에서 재처리).
+    await AuthService.instance.bootstrap();
+    // 스토어 가용성 체크가 멈춰도 앱 시작을 막지 않는다 — 타임아웃 후에도
+    // init 은 백그라운드에서 계속 진행된다.
+    try {
+      await IapService.instance.init().timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      debugPrint('[iap] init still running after 5s — continuing startup');
+    }
 
     // Clarity 세션 리플레이/히트맵으로 루트를 감싼다 (CLARITY_PROJECT_ID 미설정
     // 시 앱을 그대로 반환 — graceful-degrade). lib/services/clarity_service.dart.
     runApp(ProductAnalytics.instance.wrapSessionReplay(const LoopTapApp()));
+    // 상품 가격은 첫 화면 이후 백그라운드로 — paywall 진입 시 스토어 가격
+    // (ProductDetails.price) 이 대개 이미 준비돼 있고, 아니면 paywall 이 다시 로드.
+    unawaited(IapService.instance.loadProducts());
   });
 }

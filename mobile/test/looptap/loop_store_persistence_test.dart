@@ -62,6 +62,27 @@ void main() {
     },
   );
 
+  test('duplicate keeps generationLocks and does not share state', () async {
+    final source = Song(
+      id: 'locks',
+      title: 'Locked',
+      generationLocks: {'melody': false, 'bass': true},
+      bpm: 133,
+    );
+    await store.upsert(source);
+    final duplicate = await store.duplicate(source);
+    expect(duplicate.id, isNot(source.id));
+    expect(duplicate.title, 'Locked (copy)');
+    expect(duplicate.bpm, 133);
+    expect(duplicate.generationLocks, {'melody': false, 'bass': true});
+    final persisted = (await LoopStorage.load()).firstWhere(
+      (s) => s.id == duplicate.id,
+    );
+    expect(persisted.generationLocks, {'melody': false, 'bass': true});
+    duplicate.generationLocks['bass'] = false;
+    expect(source.generationLocks['bass'], isTrue);
+  });
+
   test(
     'failed delete keeps memory, persisted song and its vocal; retry succeeds',
     () async {

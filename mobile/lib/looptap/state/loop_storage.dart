@@ -14,6 +14,16 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/loop_models.dart';
 
+/// songs.json was written by a newer app (schema [found] > what this build
+/// knows); saving is refused so the newer data is never overwritten.
+class NewerSongsSchemaException implements Exception {
+  const NewerSongsSchemaException(this.found);
+  final int found;
+  @override
+  String toString() =>
+      'songs.json schema v$found is newer than v${Song.kSchemaVersion}';
+}
+
 class LoopStorage {
   // Documents path cache so vocal basenames can be resolved synchronously from
   // widgets/painters. Filled by [ensureDirs] (called at bootstrap + editor open).
@@ -188,6 +198,14 @@ class LoopStorage {
       final f = await _file();
       final tmp = await _tmpFile();
       final bak = await _bakFile();
+      // A newer app build wrote this library: overwriting it would drop the
+      // fields this build doesn't know (e.g. after a downgrade). Fail instead.
+      if (await f.exists()) {
+        final onDisk = Song.schemaVersionOf(await f.readAsString());
+        if (onDisk != null && onDisk > Song.kSchemaVersion) {
+          throw NewerSongsSchemaException(onDisk);
+        }
+      }
       await tmp.writeAsString(payload, flush: true);
       if (await f.exists()) {
         if (await bak.exists()) await bak.delete();
@@ -288,25 +306,40 @@ class LoopStorage {
     }
   }
 
+  /// The editor's live-preview section bounces (`_mix_<song>_<section>_<rev>.wav`)
+  /// are rebuilt on demand and never stored in a song, so they are always safe
+  /// to delete. User takes are named `<song>_<section>_<ts>…` (never `_mix_`).
+  static bool isRegenerableMix(String name) =>
+      name.startsWith('_mix_') && name.endsWith('.wav');
+
   /// Delete vocal files no song references anymore (re-record leftovers,
   /// cleared tracks, deleted sections). Safe to call once the editor's undo
   /// stack is gone — i.e. on leaving the edit screen.
   static Future<void> sweepVocals(List<Song> songs) async {
     // a failed load leaves [songs] silently empty — sweeping then would
     // mass-delete takes that are still referenced by the unreadable file.
-    // Likewise a partial load: the skipped songs' takes are still theirs.
-    if (_loadFailed || _skippedOnLoad > 0 || _hasPreservedCorruption) return;
+    // Likewise a partial load: the skipped songs' takes are still theirs, and
+    // so are those a preserved songs.json.corrupt-* may reference. In those
+    // cases only regenerable `_mix_*` editor bounces (never persisted in any
+    // song) are swept, so they can't pile up forever; user takes are kept.
+    var mixesOnly =
+        _loadFailed || _skippedOnLoad > 0 || _hasPreservedCorruption;
     try {
       final vocals = Directory('${(await _folder()).path}/vocals');
       if (!await vocals.exists()) return;
       // belt and braces: an empty library legitimately has no takes to keep,
       // but if the list is empty while takes exist on disk, prefer keeping
       // them over an irreversible mass delete.
-      if (songs.isEmpty && !await vocals.list().isEmpty) {
+      if (!mixesOnly &&
+          songs.isEmpty &&
+          await vocals.list().any(
+            (f) => !isRegenerableMix(f.uri.pathSegments.last),
+          )) {
         debugPrint(
-          '[looptap] sweepVocals skipped: empty song list with takes on disk',
+          '[looptap] sweepVocals: empty song list with takes on disk, '
+          'sweeping bounces only',
         );
-        return;
+        mixesOnly = true;
       }
       final referenced = <String>{};
       for (final song in songs) {
@@ -319,6 +352,7 @@ class LoopStorage {
               for (final c in t.clips ?? const <VocalClip>[]) ...[
                 c.path,
                 c.origPath,
+                c.fxSourcePath,
               ],
             ];
             for (final p in paths) {
@@ -334,7 +368,9 @@ class LoopStorage {
         }
       }
       await for (final f in vocals.list()) {
-        if (f is File && !referenced.contains(f.uri.pathSegments.last)) {
+        final name = f.uri.pathSegments.last;
+        if (mixesOnly && !isRegenerableMix(name)) continue;
+        if (f is File && !referenced.contains(name)) {
           try {
             await f.delete();
           } catch (_) {}

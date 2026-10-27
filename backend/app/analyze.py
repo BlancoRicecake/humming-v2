@@ -57,6 +57,27 @@ from .drum_onset import build_drum_notes
 TARGET_SR = 22050
 HOP = 256
 
+# Decoded-length guard: a few MB of low-bitrate Opus (or a WAV header claiming
+# sr=1) expands to tens of minutes of PCM and OOMs the 1 GB machine.
+MAX_AUDIO_SEC = float(os.environ.get("MAX_AUDIO_SECONDS", "300"))
+MIN_INPUT_SR, MAX_INPUT_SR = 8000, 192000
+
+
+def _check_audio_length(n_samples: int, sr: int) -> None:
+    if not (MIN_INPUT_SR <= sr <= MAX_INPUT_SR):
+        raise HTTPException(status_code=400, detail=f"unsupported sample rate: {sr}")
+    if n_samples > MAX_AUDIO_SEC * sr:
+        raise HTTPException(status_code=413, detail=f"audio too long (> {MAX_AUDIO_SEC:.0f}s)")
+
+
+def _check_wav_header(blob: bytes) -> None:
+    """Reject an over-long / odd-rate WAV from its header, before decoding."""
+    try:
+        hdr = sf.info(io.BytesIO(blob))
+    except Exception:
+        return  # unparseable here → the decoder reports it
+    _check_audio_length(int(hdr.frames), int(hdr.samplerate))
+
 # ============================================================================
 # Decoder probe / debug surface (Opus integration)
 # ============================================================================
@@ -102,6 +123,7 @@ def _ffprobe_info(blob: bytes) -> Dict[str, Optional[object]]:
         proc = subprocess.run(
             [
                 "ffprobe", "-v", "error",
+                "-protocol_whitelist", "pipe,file",  # no network/concat inputs
                 "-show_streams", "-show_format", "-of", "json",
                 "pipe:0",
             ],
@@ -150,16 +172,20 @@ def _ffmpeg_decode_to_pcm(
     everything else stays on stdin for zero-copy.
     """
     ac = 1 if mono else 2
-    use_tempfile = _magic_is_caf(blob)
+    # CAF and MP4 (moov atom often at the end) both need a seekable input.
+    use_tempfile = _magic_is_caf(blob) or _magic_is_mp4(blob)
     tmp_path: Optional[str] = None
     try:
         if use_tempfile:
-            with tempfile.NamedTemporaryFile(suffix=".caf", delete=False) as tmp:
+            suffix = ".caf" if _magic_is_caf(blob) else ".m4a"
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
                 tmp.write(blob)
                 tmp_path = tmp.name
             cmd = [
                 "ffmpeg", "-loglevel", "error",
+                "-protocol_whitelist", "pipe,file",  # no network/concat inputs
                 "-i", tmp_path,
+                "-t", str(MAX_AUDIO_SEC + 1),
                 "-f", "s16le", "-ac", str(ac), "-ar", str(target_sr),
                 "pipe:1",
             ]
@@ -167,7 +193,9 @@ def _ffmpeg_decode_to_pcm(
         else:
             cmd = [
                 "ffmpeg", "-loglevel", "error",
+                "-protocol_whitelist", "pipe,file",
                 "-i", "pipe:0",
+                "-t", str(MAX_AUDIO_SEC + 1),
                 "-f", "s16le", "-ac", str(ac), "-ar", str(target_sr),
                 "pipe:1",
             ]
@@ -198,6 +226,7 @@ def _ffmpeg_decode_to_pcm(
         raise HTTPException(status_code=400, detail=f"audio decode failed (ffmpeg): {err}")
 
     pcm = np.frombuffer(proc.stdout, dtype=np.int16).astype(np.float32) / 32768.0
+    _check_audio_length(len(pcm) // ac, target_sr)
     return pcm, target_sr
 
 
@@ -239,6 +268,7 @@ def _load_audio(file_bytes: bytes) -> Tuple[np.ndarray, int, DecodeInfo]:
     decoded_via: str
     if _magic_is_wav(file_bytes):
         # ---- Legacy WAV path (unchanged for regression safety) -----------------
+        _check_wav_header(file_bytes)
         bio = io.BytesIO(file_bytes)
         try:
             y, sr = sf.read(bio, dtype="float32", always_2d=False)
@@ -259,6 +289,9 @@ def _load_audio(file_bytes: bytes) -> Tuple[np.ndarray, int, DecodeInfo]:
                 bio = io.BytesIO(file_bytes)
                 y, sr = sf.read(bio, dtype="float32", always_2d=False)
                 decoded_via = "soundfile"
+                _check_audio_length(len(y), int(sr))
+            except HTTPException:
+                raise
             except Exception as exc:
                 raise HTTPException(
                     status_code=400,
@@ -632,6 +665,29 @@ def _swung_step_time(k: int, cell_sec: float, phase: float, swing: float) -> flo
     return t
 
 
+def _nearest_step(t: float, total_steps: int, cell_sec: float, phase: float, swing: float) -> int:
+    """Index in [0, total_steps) of the grid step nearest ``t`` (lowest k on ties).
+
+    Step times increase strictly with k (swing shifts odd steps by < a cell),
+    so the nearest step brackets t and lies within one step of
+    floor((t - phase) / cell). Scanning a +-2 window in ascending k with a
+    strict "<" gives exactly the full linear scan's answer and tie-break, at
+    O(1) per note instead of O(total_steps).
+    """
+    x = (t - phase) / cell_sec
+    if not math.isfinite(x):  # the full scan's answer for NaN/inf (all d equal)
+        return 0
+    k0 = int(math.floor(x))
+    best_k, best_d = 0, None
+    for k in range(max(0, k0 - 2), min(total_steps, k0 + 3)):
+        d = abs(t - _swung_step_time(k, cell_sec, phase, swing))
+        if best_d is None or d < best_d:
+            best_d, best_k = d, k
+    if best_d is None:  # window entirely outside the grid -> nearest end
+        return 0 if k0 < 0 else total_steps - 1
+    return best_k
+
+
 def _drum_bucket(n: Note) -> str:
     """Coarse kit piece, matching the client's _drumKind mapping, for per-step
     dedup so a single hit does not produce two stacked drum notes on one step."""
@@ -678,12 +734,7 @@ def _apply_loop_grid(notes: List[Note], opts: AnalyzeOptions, duration: float) -
         phase -= cell_sec
 
     def snap_step(t: float) -> int:
-        best_k, best_d = 0, None
-        for k in range(total_steps):
-            d = abs(t - _swung_step_time(k, cell_sec, phase, swing))
-            if best_d is None or d < best_d:
-                best_d, best_k = d, k
-        return best_k
+        return _nearest_step(t, total_steps, cell_sec, phase, swing)
 
     # Drop onsets outside the loop window (one half-cell of slack each side) so a
     # late tail past the loop end is not clamped onto the last step.

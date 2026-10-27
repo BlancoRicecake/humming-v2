@@ -5,13 +5,18 @@
 // the phone is offline or the API is down. It is a *fallback*, never a grant:
 //   - it only counts while the cached userId matches the signed-in user,
 //   - and only until `expiresAt + grace` (3 days) has passed,
+//   - and a cached `pro: true` only while the server confirmed it within the
+//     last 7 days ([EntitlementVerdict.maxOfflineAge]) — bounds offline Pro,
 //   - it is wiped on sign-out and dropped on a definitive `pro: false`.
 //
 // The same file also records when the startup restore()+verify last ran so it
 // can be throttled to once per 24h per user (M13 — /iap/verify is rate
 // limited server-side).
 //
-// Stored at <Documents>/looptap/entitlement.json. The parsing / eligibility
+// Stored at <Application Support>/looptap/entitlement.json — NOT Documents,
+// which iOS exposes in the Files app (UIFileSharingEnabled). Builds that wrote
+// <Documents>/looptap/entitlement.json are migrated once on first access (the
+// old file is copied over, then deleted). The parsing / eligibility
 // logic is pure Dart so it is unit-testable without platform channels
 // ([EntitlementCache.rootOverride] mirrors LoopStorage's test hook).
 import 'dart:convert';
@@ -36,6 +41,10 @@ class EntitlementVerdict {
   /// the server cannot be reached (covers billing retry / grace windows).
   static const Duration grace = Duration(days: 3);
 
+  /// A cached `pro: true` is honoured only this long after the server last
+  /// confirmed it — beyond that the user must reach the server again.
+  static const Duration maxOfflineAge = Duration(days: 7);
+
   final String userId;
   final bool pro;
   final DateTime checkedAt;
@@ -44,10 +53,12 @@ class EntitlementVerdict {
   final DateTime? expiresAt;
 
   /// Whether this cached verdict may stand in for the server for [userId] at
-  /// [now]. False for a different (or no) user, or once the entitlement is
-  /// past `expiresAt + grace`.
+  /// [now]. False for a different (or no) user, once the entitlement is
+  /// past `expiresAt + grace`, or (for `pro: true`) once the verdict is older
+  /// than [maxOfflineAge].
   bool isUsable(String? userId, DateTime now) {
     if (userId == null || userId != this.userId) return false;
+    if (pro && now.difference(checkedAt) > maxOfflineAge) return false;
     final exp = expiresAt;
     if (exp == null) return true;
     return exp.add(grace).isAfter(now);
@@ -183,15 +194,52 @@ class EntitlementCacheState {
 class EntitlementCache {
   EntitlementCache._();
 
-  /// Test hook: replaces the platform Documents dir.
+  /// Test hook: replaces the platform Application Support dir.
   @visibleForTesting
   static Directory? rootOverride;
 
+  /// Test hook: replaces the legacy Documents dir (migration source). When
+  /// only [rootOverride] is set, migration is skipped so tests never touch
+  /// the real Documents dir.
+  @visibleForTesting
+  static Directory? legacyRootOverride;
+
+  static const String _rel = 'looptap/entitlement.json';
+
+  static Future<File?> _legacyFile() async {
+    try {
+      final dir = legacyRootOverride ??
+          (rootOverride == null ? await getApplicationDocumentsDirectory() : null);
+      return dir == null ? null : File('${dir.path}/$_rel');
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<File> _file() async {
-    final dir = rootOverride ?? await getApplicationDocumentsDirectory();
+    final dir = rootOverride ?? await getApplicationSupportDirectory();
     final folder = Directory('${dir.path}/looptap');
     if (!await folder.exists()) await folder.create(recursive: true);
-    return File('${folder.path}/entitlement.json');
+    final f = File('${folder.path}/entitlement.json');
+    await _migrateLegacy(f);
+    return f;
+  }
+
+  /// One-time move Documents → Application Support. New file wins if both
+  /// exist; the old copy is deleted either way so the Files app no longer
+  /// shows it.
+  static Future<void> _migrateLegacy(File target) async {
+    final legacy = await _legacyFile();
+    if (legacy == null) return;
+    try {
+      if (!await legacy.exists()) return;
+      if (!await target.exists()) {
+        await target.writeAsString(await legacy.readAsString(), flush: true);
+      }
+      await legacy.delete();
+    } catch (e) {
+      debugPrint('[entitlement] legacy migration failed: $e');
+    }
   }
 
   static Future<EntitlementCacheState> load() async {

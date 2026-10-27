@@ -28,9 +28,13 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    from app.settings import get_settings
+    monkeypatch.setenv("CLOUD_SYNC_ENABLED", "1")
+    get_settings.cache_clear()
     with TestClient(app) as c:
         yield c
+    get_settings.cache_clear()
 
 
 @pytest.fixture

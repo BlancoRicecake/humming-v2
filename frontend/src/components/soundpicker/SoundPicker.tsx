@@ -71,6 +71,14 @@ export function SoundPicker({ caps }: Props) {
   const [curation, setCuration] = useState<CurationMap>(() => loadCuration());
   const [copied, setCopied] = useState(false);
   const playingRef = useRef<HTMLAudioElement | null>(null);
+  // Tags each audition request; only the latest one may start/keep playing.
+  const playSeq = useRef(0);
+
+  useEffect(() => () => {
+    playSeq.current++;
+    playingRef.current?.pause();
+    playingRef.current = null;
+  }, []);
 
   const engineOk = !!caps?.soundfont_available;
 
@@ -108,10 +116,17 @@ export function SoundPicker({ caps }: Props) {
         playingRef.current = null;
       }
       const id = piece ? `${item.key}#${piece}` : item.key;
+      const seq = ++playSeq.current;
       setLoadingKey(id);
       try {
         const blob = await auditionRender(toRenderRequest(item, piece));
-        playingRef.current = await playAudioBlob(blob);
+        if (seq !== playSeq.current) return;
+        const audio = await playAudioBlob(blob);
+        if (seq !== playSeq.current) {
+          audio.pause();
+          return;
+        }
+        playingRef.current = audio;
       } catch (e) {
         console.error("audition render failed", e);
       } finally {
@@ -161,7 +176,7 @@ export function SoundPicker({ caps }: Props) {
     a.href = url;
     a.download = "curation.json";
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, [buildExport]);
 
   const onCopy = useCallback(async () => {
