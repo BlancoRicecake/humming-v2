@@ -356,7 +356,7 @@ class _MidiPassageDialogState extends State<_MidiPassageDialog> {
           'Files with tempo changes or non-4/4 meter cannot be added (inspection only).',
         ),
         key: const ValueKey('midi-section-rejected'),
-        color: Colors.orangeAccent,
+        color: LT.amber,
       );
     }
     if (midi.bpm.round() != t.bpm) {
@@ -539,7 +539,7 @@ class _MidiPassageDialogState extends State<_MidiPassageDialog> {
               if (error != null)
                 Text(
                   error!,
-                  style: const TextStyle(color: Colors.orangeAccent),
+                  style: const TextStyle(color: LT.amber),
                 ),
             ],
           ),

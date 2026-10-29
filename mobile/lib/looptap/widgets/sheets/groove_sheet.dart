@@ -2,6 +2,7 @@
 // renaming all go through [GrooveSheetHost], which records undo steps and
 // keeps playback in sync; the sheet only renders the host's current state.
 import 'package:flutter/material.dart';
+import '../../theme/tokens.dart';
 
 import '../../music/groove.dart';
 
@@ -268,7 +269,7 @@ class _GrooveSheetState extends State<_GrooveSheet> {
               ],
             ),
             if (_error != null)
-              Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+              Text(_error!, style: const TextStyle(color: LT.danger)),
             for (final t in h.songGrooves)
               ListTile(
                 dense: true,

@@ -213,7 +213,7 @@ class _SampleWorkbenchState extends State<SampleWorkbench> {
                     padding: const EdgeInsets.all(12),
                     child: Text(
                       _error!,
-                      style: const TextStyle(color: Colors.redAccent),
+                      style: const TextStyle(color: LT.danger),
                     ),
                   ),
                 if (_files.isEmpty && !_busy)

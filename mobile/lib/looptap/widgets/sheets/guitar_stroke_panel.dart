@@ -8,6 +8,7 @@
 // gt-004 adds "줄별 울림 유지" next to the string actions, with its last
 // result line ("연장 N · 그대로 M" plus reasons).
 import 'package:flutter/material.dart';
+import '../../theme/tokens.dart';
 
 import '../../models/loop_models.dart'
     show
@@ -329,7 +330,7 @@ Future<GuitarPanelResult?> showGuitarStrokePanel(
                                   'channel): those notes play as normal.',
                           style: const TextStyle(
                             fontSize: 11,
-                            color: Colors.amber,
+                            color: LT.amber,
                           ),
                         ),
                       ),
