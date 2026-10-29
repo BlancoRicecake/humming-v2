@@ -2717,4 +2717,189 @@ class L10nEn extends L10n {
   @override
   String get ltVocalPreviewFailed =>
       'Audio could not play. Check the file and output device.';
+
+  @override
+  String get topBarBackToSongs => 'Back to songs';
+
+  @override
+  String topBarAutoSaved(String time) {
+    return 'Auto-saved $time';
+  }
+
+  @override
+  String get topBarRangeLoop => 'Toggle range loop';
+
+  @override
+  String get topBarPosition => 'Playhead (bar.beat.16th)';
+
+  @override
+  String get topBarBpmTap => 'Click to type a BPM';
+
+  @override
+  String get topBarKeyTap => 'Change key';
+
+  @override
+  String get topBarSongSettings => 'Song settings';
+
+  @override
+  String get topBarTempo => 'Tempo';
+
+  @override
+  String get topBarSwingHint => 'Applies to tracks without a groove';
+
+  @override
+  String get topBarSectionLength => 'Section length (bars)';
+
+  @override
+  String get topBarMore => 'More';
+
+  @override
+  String get topBarShortcuts => 'Keyboard shortcuts';
+
+  @override
+  String get topBarProBadge => 'PRO';
+
+  @override
+  String get shortcutPlay => 'Play / pause';
+
+  @override
+  String get shortcutRecord => 'Record';
+
+  @override
+  String get shortcutSave => 'Save';
+
+  @override
+  String get shortcutUndo => 'Undo';
+
+  @override
+  String get shortcutRedo => 'Redo';
+
+  @override
+  String get shortcutGroove => 'Groove';
+
+  @override
+  String get shortcutDuplicateLinked => 'Linked section duplicate';
+
+  @override
+  String get shortcutRangeLoop => 'Toggle range loop';
+
+  @override
+  String get shortcutMixer => 'Mixer';
+
+  @override
+  String get shortcutHelp => 'Keyboard shortcuts';
+
+  @override
+  String get shortcutHelpLegatoNote =>
+      'With the piano roll (select/edit) focused and notes to edit, Ctrl/⌘+L keeps doing legato (the whole track when nothing is selected); elsewhere it toggles the range loop.';
+
+  @override
+  String get shortcutHelpTypingNote =>
+      'Shortcuts are off while you type in a text field.';
+
+  @override
+  String get shortcutSectionWorkspace => 'Workspace';
+
+  @override
+  String get shortcutSectionPianoRoll => 'Piano roll (grid · select/edit)';
+
+  @override
+  String get shortcutSectionGuitar => 'Guitar track piano roll';
+
+  @override
+  String get shortcutSectionDrums => 'Drum grid (select mode)';
+
+  @override
+  String get shortcutEditDeselect => 'Clear selection';
+
+  @override
+  String get shortcutEditSelectAll => 'Select all';
+
+  @override
+  String get shortcutEditArpeggiate => 'Arpeggiate';
+
+  @override
+  String get shortcutEditCopy => 'Copy (selected notes)';
+
+  @override
+  String get shortcutEditPaste => 'Paste (also while drawing)';
+
+  @override
+  String get shortcutEditDuplicate => 'Duplicate';
+
+  @override
+  String get shortcutEditSplitPlayhead => 'Split at playhead';
+
+  @override
+  String get shortcutEditSplitSheet => 'Split options';
+
+  @override
+  String get shortcutEditGlue => 'Glue';
+
+  @override
+  String get shortcutEditLegato =>
+      'Legato (selection, or the whole track when nothing is selected)';
+
+  @override
+  String get shortcutEditQuantize => 'Quantize (selection, or the whole track)';
+
+  @override
+  String get shortcutEditQuantizeSettings => 'Quantize options';
+
+  @override
+  String get shortcutEditHumanize => 'Humanize (selection, or the whole track)';
+
+  @override
+  String get shortcutEditFitScale => 'Fit to scale (when the song has a scale)';
+
+  @override
+  String get shortcutEditChance => 'Chance up/down (with the chance lane open)';
+
+  @override
+  String get shortcutEditChordStampMode => 'Chord stamp mode on/off (any tool)';
+
+  @override
+  String get shortcutEditDelete => 'Delete';
+
+  @override
+  String get shortcutEditMute => 'Mute / unmute';
+
+  @override
+  String get shortcutEditChordBelow => 'Chord below the selected notes';
+
+  @override
+  String get shortcutEditChordType => 'Pick the chord type';
+
+  @override
+  String get shortcutEditMove => 'Move earlier/later';
+
+  @override
+  String get shortcutEditLength => 'Shorter/longer';
+
+  @override
+  String get shortcutEditSemitone => 'Semitone up/down';
+
+  @override
+  String get shortcutEditOctave => 'Octave up/down';
+
+  @override
+  String get shortcutGuitarStroke => 'Down/up stroke';
+
+  @override
+  String get shortcutGuitarStrings => 'Assign strings';
+
+  @override
+  String get shortcutGuitarRing => 'Ringing arpeggio';
+
+  @override
+  String get shortcutDrumToggleSelect => 'Draw ⇄ select mode (any mode)';
+
+  @override
+  String get shortcutDrumMoveFine => 'Nudge';
+
+  @override
+  String get shortcutDrumVelocity => 'Velocity up/down';
+
+  @override
+  String get shortcutDrumVelocityBig => 'Velocity up/down (big steps)';
 }

@@ -603,3 +603,30 @@ class _BarsToggle extends StatelessWidget {
     );
   }
 }
+
+
+// ui-001 stage 1: the desktop top bar's song-settings popover reuses the same
+// BPM stepper (40–220, hold to accelerate, tap the number to type), the same
+// direct BPM entry and the same 1|2|4 bars toggle as this bar. Thin public
+// wrappers keep these widgets single-sourced; the phone bar is unchanged.
+
+/// [_BpmStepper] for other bars.
+class BpmStepper extends StatelessWidget {
+  const BpmStepper({super.key, required this.bpm, required this.onBpm});
+  final int bpm;
+  final ValueChanged<int> onBpm;
+  @override
+  Widget build(BuildContext context) => _BpmStepper(bpm: bpm, onBpm: onBpm);
+}
+
+/// [_BarsToggle] for other bars.
+class BarsToggle extends StatelessWidget {
+  const BarsToggle({super.key, required this.bars, required this.onBars});
+  final int bars;
+  final ValueChanged<int> onBars;
+  @override
+  Widget build(BuildContext context) => _BarsToggle(bars: bars, onBars: onBars);
+}
+
+/// The direct BPM entry modal (null on cancel), clamped to 40–220.
+Future<int?> promptBpm(BuildContext context, int current) => _promptBpm(context, current);

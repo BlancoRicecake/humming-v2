@@ -10,11 +10,11 @@ import 'package:humming/looptap/screens/edit_screen.dart';
 import 'package:humming/looptap/screens/songs_screen.dart';
 import 'package:humming/looptap/state/loop_storage.dart';
 import 'package:humming/looptap/state/loop_store.dart';
+import 'package:humming/looptap/widgets/desktop_top_bar.dart';
 import 'package:humming/looptap/widgets/first_song_card.dart';
 import 'package:humming/looptap/widgets/arrangement.dart';
 import 'package:humming/looptap/widgets/guided_hum_panel.dart';
 import 'package:humming/looptap/widgets/desktop_workspace.dart';
-import 'package:humming/looptap/widgets/transport_bar.dart';
 import 'package:humming/looptap/widgets/audition_bar.dart';
 import 'package:humming/looptap/music/audition.dart';
 import 'package:humming/looptap/widgets/surfaces/step_grid.dart';
@@ -388,8 +388,9 @@ void main() {
       Arrangement arrangement() =>
           tester.widget<Arrangement>(find.byType(Arrangement));
       AuditionBar bar() => tester.widget<AuditionBar>(find.byType(AuditionBar));
-      TransportBar transport() =>
-          tester.widget<TransportBar>(find.byType(TransportBar));
+      // ui-001 stage 1: on desktop the transport lives in the top bar
+      DesktopTopBar transport() =>
+          tester.widget<DesktopTopBar>(find.byType(DesktopTopBar));
       expect(
         arrangement().tracks.firstWhere((t) => t.id == 'melody').label,
         'Tenor Sax · 4',

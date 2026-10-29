@@ -172,7 +172,10 @@ void main() {
       }
 
       expect(await saved(), {'drums': -0.5});
-      await tester.tap(find.byTooltip('Mixer'));
+      // ui-001 stage 1: desktop mixer = top bar more menu
+      await tester.tap(find.byKey(const ValueKey('top-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('top-more-mixer')));
       await tester.pumpAndSettle();
       final melody = find.byKey(const ValueKey('mixer-pan-melody'));
       final gesture = await tester.startGesture(tester.getCenter(melody));

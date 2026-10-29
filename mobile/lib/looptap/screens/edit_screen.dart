@@ -1,4 +1,6 @@
 import '../widgets/desktop_workspace.dart';
+import '../widgets/desktop_top_bar.dart';
+import '../widgets/shortcut_help.dart';
 import '../widgets/desktop_instrument.dart';
 import '../music/beginner_backing.dart';
 import '../widgets/sheets/sample_workbench.dart';
@@ -4351,6 +4353,20 @@ class _EditScreenState extends State<EditScreen>
       undo: _undoAction,
       redo: _redoAction,
       groove: () => _openGrooveSheet(),
+      // ui-001 stage 1. Not while recording / counting in (the audition bar's
+      // range controls are locked then too), nor during a song preview.
+      rangeLoop: () {
+        if (_recording || _countDown > 0 || _songSection != null) return;
+        _changeLoop(enabled: !_rangeLoop);
+      },
+      mixer: () {
+        if (_recording || _countDown > 0) return;
+        _openMixer();
+      },
+      help: () {
+        if (_recording || _countDown > 0) return;
+        showShortcutHelp(context);
+      },
       duplicateLinked: () {
         final focused = FocusManager.instance.primaryFocus?.context;
         if (focused?.findAncestorWidgetOfExactType<EditableText>() != null) {
@@ -4459,7 +4475,9 @@ class _EditScreenState extends State<EditScreen>
                 else
                   Column(
                     children: [
-                      _topBar(),
+                      // ui-001 stage 1: desktop = one 52 px top bar with the
+                      // transport; phone/tablet keep _topBar + TransportBar.
+                      if (_desktop) _desktopTopBar() else _topBar(),
                       SectionBar(
                         sections: _sections,
                         activeIdx: _activeIdx,
@@ -4626,6 +4644,7 @@ class _EditScreenState extends State<EditScreen>
                           ),
                         ),
                       ),
+                      if (!_desktop)
                       Container(
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                         decoration: const BoxDecoration(
@@ -4673,6 +4692,70 @@ class _EditScreenState extends State<EditScreen>
           ),
         ),
       ),
+    );
+  }
+
+  /// ui-001 stage 1: the desktop top bar. Same handlers as [_topBar] and the
+  /// phone [TransportBar]; the save button is gone (12 s autosave + Ctrl+S),
+  /// mixer and guided start moved to the more menu.
+  Widget _desktopTopBar() {
+    final l = L10n.of(context);
+    return DesktopTopBar(
+      titleController: _titleCtl,
+      onTitleChanged: (v) {
+        final wasDirty = _dirty;
+        _pushUndo(coalesce: true); // one undo entry per typing burst
+        _title = v;
+        if (!wasDirty) setState(() {});
+      },
+      dirty: _dirty,
+      savedAt: _savedAt,
+      savedFlash: _savedFlash,
+      onBack: _backWithSave,
+      metro: _metro,
+      onMetro: (v) {
+        setState(() => _metro = v);
+        LoopPrefs.instance.setMetro(v); // keep Settings in sync + persist
+      },
+      countIn: _countIn,
+      onCountIn: (v) => setState(() => _countIn = v),
+      rangeLoop: _rangeLoop && _songSection == null,
+      onLoop: () => _changeLoop(enabled: !_rangeLoop),
+      playing: _playing,
+      recording: _recording,
+      showRecord: trackById(_activeType).kind != TrackKind.vocal,
+      onPlay: _togglePlay,
+      onStop: _stopAll,
+      onRec: _armRecord,
+      playhead: _playStep,
+      bpm: _bpm,
+      onBpm: _setBpm,
+      keyLabel: '$_keyRoot ${ltScaleLabel(l, _scale)}',
+      onKey: _openKey,
+      swing: _swing,
+      onSwing: (v) {
+        _pushUndo(coalesce: true);
+        setState(() => _swing = v);
+      },
+      bars: _bars,
+      onBars: _setBars,
+      canUndo: _undo.isNotEmpty,
+      canRedo: _redo.isNotEmpty,
+      onUndo: _undoAction,
+      onRedo: _redoAction,
+      onMixer: _openMixer,
+      onGuide: () {
+        _stopAll();
+        setState(() {
+          _activeId = 'melody';
+          _guided = true;
+          _trackGuidedStart('editor');
+        });
+      },
+      onClear: _clearTrack,
+      onShortcuts: () => showShortcutHelp(context),
+      onExport: _exportOrPaywall,
+      pro: context.select<LoopStore, bool>((s) => s.proActive),
     );
   }
 

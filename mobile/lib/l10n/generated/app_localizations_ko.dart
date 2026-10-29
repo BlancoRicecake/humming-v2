@@ -2622,4 +2622,187 @@ class L10nKo extends L10n {
 
   @override
   String get ltVocalPreviewFailed => '오디오를 재생하지 못했습니다. 파일과 출력 장치를 확인해주세요.';
+
+  @override
+  String get topBarBackToSongs => '곡 목록으로';
+
+  @override
+  String topBarAutoSaved(String time) {
+    return '자동 저장됨 $time';
+  }
+
+  @override
+  String get topBarRangeLoop => '구간 반복 켜기/끄기';
+
+  @override
+  String get topBarPosition => '재생 위치 (마디.박.16분)';
+
+  @override
+  String get topBarBpmTap => '눌러서 BPM 입력';
+
+  @override
+  String get topBarKeyTap => '키 바꾸기';
+
+  @override
+  String get topBarSongSettings => '곡 설정';
+
+  @override
+  String get topBarTempo => '템포';
+
+  @override
+  String get topBarSwingHint => '그루브가 지정되지 않은 트랙에 적용';
+
+  @override
+  String get topBarSectionLength => '섹션 길이 (마디)';
+
+  @override
+  String get topBarMore => '더 보기';
+
+  @override
+  String get topBarShortcuts => '단축키 보기';
+
+  @override
+  String get topBarProBadge => 'PRO';
+
+  @override
+  String get shortcutPlay => '재생 / 일시정지';
+
+  @override
+  String get shortcutRecord => '녹음';
+
+  @override
+  String get shortcutSave => '저장';
+
+  @override
+  String get shortcutUndo => '실행 취소';
+
+  @override
+  String get shortcutRedo => '다시 실행';
+
+  @override
+  String get shortcutGroove => '그루브';
+
+  @override
+  String get shortcutDuplicateLinked => '섹션 연결 복제';
+
+  @override
+  String get shortcutRangeLoop => '구간 반복 켜기/끄기';
+
+  @override
+  String get shortcutMixer => '믹서';
+
+  @override
+  String get shortcutHelp => '단축키 보기';
+
+  @override
+  String get shortcutHelpLegatoNote =>
+      '피아노롤(선택 편집)에 포커스가 있고 고칠 노트가 있으면 Ctrl/⌘+L은 기존대로 레가토입니다(선택이 없으면 트랙 전체). 그 밖에는 구간 반복입니다.';
+
+  @override
+  String get shortcutHelpTypingNote => '글자를 입력하는 중에는 단축키가 동작하지 않습니다.';
+
+  @override
+  String get shortcutSectionWorkspace => '작업 공간';
+
+  @override
+  String get shortcutSectionPianoRoll => '피아노롤 (그리드 · 선택 편집)';
+
+  @override
+  String get shortcutSectionGuitar => '기타 트랙 피아노롤';
+
+  @override
+  String get shortcutSectionDrums => '드럼 그리드 (선택 모드)';
+
+  @override
+  String get shortcutEditDeselect => '선택 해제';
+
+  @override
+  String get shortcutEditSelectAll => '전체 선택';
+
+  @override
+  String get shortcutEditArpeggiate => '펼치기 (아르페지오)';
+
+  @override
+  String get shortcutEditCopy => '복사 (선택한 노트)';
+
+  @override
+  String get shortcutEditPaste => '붙여넣기 (입력 모드에서도)';
+
+  @override
+  String get shortcutEditDuplicate => '복제';
+
+  @override
+  String get shortcutEditSplitPlayhead => '재생 위치에서 자르기';
+
+  @override
+  String get shortcutEditSplitSheet => '자르기 설정';
+
+  @override
+  String get shortcutEditGlue => '이어 붙이기';
+
+  @override
+  String get shortcutEditLegato => '레가토 (선택한 노트, 선택이 없으면 트랙 전체)';
+
+  @override
+  String get shortcutEditQuantize => '퀀타이즈 (선택, 없으면 트랙 전체)';
+
+  @override
+  String get shortcutEditQuantizeSettings => '퀀타이즈 설정';
+
+  @override
+  String get shortcutEditHumanize => '휴머나이즈 (선택, 없으면 트랙 전체)';
+
+  @override
+  String get shortcutEditFitScale => '스케일에 맞추기 (곡에 스케일이 있을 때)';
+
+  @override
+  String get shortcutEditChance => '확률 올리기/내리기 (확률 막대가 열려 있을 때)';
+
+  @override
+  String get shortcutEditChordStampMode => '코드 찍기 모드 켜기/끄기 (모든 도구)';
+
+  @override
+  String get shortcutEditDelete => '삭제';
+
+  @override
+  String get shortcutEditMute => '소리 끄기/켜기';
+
+  @override
+  String get shortcutEditChordBelow => '선택한 노트 아래에 코드 깔기';
+
+  @override
+  String get shortcutEditChordType => '코드 종류 고르기';
+
+  @override
+  String get shortcutEditMove => '앞뒤로 옮기기';
+
+  @override
+  String get shortcutEditLength => '길이 줄이기/늘리기';
+
+  @override
+  String get shortcutEditSemitone => '반음 올리기/내리기';
+
+  @override
+  String get shortcutEditOctave => '옥타브 올리기/내리기';
+
+  @override
+  String get shortcutGuitarStroke => '다운/업 스트로크';
+
+  @override
+  String get shortcutGuitarStrings => '줄 배정';
+
+  @override
+  String get shortcutGuitarRing => '울림 아르페지오';
+
+  @override
+  String get shortcutDrumToggleSelect => '그리기 ⇄ 선택 모드 (모든 모드)';
+
+  @override
+  String get shortcutDrumMoveFine => '조금씩 옮기기';
+
+  @override
+  String get shortcutDrumVelocity => '세기 올리기/내리기';
+
+  @override
+  String get shortcutDrumVelocityBig => '세기 크게 올리기/내리기';
 }

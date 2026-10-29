@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/tokens.dart';
+import 'shortcut_help.dart';
 import '../music/audition.dart';
 import '../music/timeline_view.dart';
 
@@ -16,6 +17,9 @@ class DesktopCommands extends StatelessWidget {
     required this.child,
     this.groove,
     this.duplicateLinked,
+    this.rangeLoop,
+    this.mixer,
+    this.help,
   });
   final bool enabled;
   final VoidCallback play, record, save, undo, redo;
@@ -25,7 +29,37 @@ class DesktopCommands extends StatelessWidget {
 
   /// Ctrl/Cmd+Shift+D: linked duplicate of the active section (AR-001).
   final VoidCallback? duplicateLinked;
+
+  /// ui-001 stage 1: Ctrl/Cmd+L range loop, Ctrl/Cmd+M mixer, F1 and
+  /// Ctrl/Cmd+/ shortcut help. A focused piano roll with a selection keeps its
+  /// own Ctrl/Cmd+L (legato) — the grid handles it before it reaches here.
+  final VoidCallback? rangeLoop, mixer, help;
   final Widget child;
+
+  VoidCallback? _action(DesktopShortcutId id) => switch (id) {
+    DesktopShortcutId.play => play,
+    DesktopShortcutId.record => record,
+    DesktopShortcutId.save => save,
+    DesktopShortcutId.undo => undo,
+    DesktopShortcutId.redo => redo,
+    DesktopShortcutId.groove => groove,
+    DesktopShortcutId.duplicateLinked => duplicateLinked,
+    DesktopShortcutId.rangeLoop => rangeLoop,
+    DesktopShortcutId.mixer => mixer,
+    DesktopShortcutId.help => help,
+  };
+
+  /// The registered shortcut [event] triggers, from [kDesktopShortcuts].
+  static DesktopShortcutId? match(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isAltPressed) return null;
+    final command = keyboard.isControlPressed || keyboard.isMetaPressed;
+    for (final s in kDesktopShortcuts) {
+      if (s.command != command || s.shift != keyboard.isShiftPressed) continue;
+      if (s.letter ? _letter(event, s.key) : event.logicalKey == s.key) return s.id;
+    }
+    return null;
+  }
 
   /// Whether [event] is the shortcut [letter] (a-z). A Latin layout decides
   /// by the typed letter (AZERTY's Ctrl+Z stays on its Z key); a non-Latin
@@ -54,36 +88,8 @@ class DesktopCommands extends StatelessWidget {
         if (focused?.findAncestorWidgetOfExactType<EditableText>() != null) {
           return KeyEventResult.ignored;
         }
-        final keyboard = HardwareKeyboard.instance;
-        final command = keyboard.isControlPressed || keyboard.isMetaPressed;
-        VoidCallback? action;
-        if (!command &&
-            !keyboard.isAltPressed &&
-            !keyboard.isShiftPressed &&
-            event.logicalKey == LogicalKeyboardKey.space) {
-          action = play;
-        }
-        if (command && !keyboard.isAltPressed) {
-          if (_letter(event, LogicalKeyboardKey.keyS) &&
-              !keyboard.isShiftPressed) {
-            action = save;
-          }
-          if (_letter(event, LogicalKeyboardKey.keyR) &&
-              keyboard.isShiftPressed) {
-            action = record;
-          }
-          if (_letter(event, LogicalKeyboardKey.keyZ)) {
-            action = keyboard.isShiftPressed ? redo : undo;
-          }
-          if (_letter(event, LogicalKeyboardKey.keyG) &&
-              !keyboard.isShiftPressed) {
-            action = groove;
-          }
-          if (_letter(event, LogicalKeyboardKey.keyD) &&
-              keyboard.isShiftPressed) {
-            action = duplicateLinked;
-          }
-        }
+        final id = match(event);
+        final action = id == null ? null : _action(id);
         if (action == null) return KeyEventResult.ignored;
         if (event is KeyDownEvent) action();
         return KeyEventResult.handled;
@@ -182,8 +188,6 @@ class _DesktopTimelineState extends State<DesktopTimeline> {
   @override
   Widget build(BuildContext context) {
     final ko = Localizations.localeOf(context).languageCode == 'ko';
-    final mac = Theme.of(context).platform == TargetPlatform.macOS;
-    final mod = mac ? '⌘' : 'Ctrl';
     return Column(
       children: [
         SizedBox(
@@ -194,15 +198,9 @@ class _DesktopTimelineState extends State<DesktopTimeline> {
                 ko ? '타임라인' : 'Timeline',
                 style: const TextStyle(color: LT.t2, fontSize: 12),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Space ▶/Ⅱ   $mod+Shift+R ●   $mod+S ↓   $mod+Z ↶',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: LT.t3, fontSize: 11),
-                ),
-              ),
+              // ui-001 stage 1: the shortcut hint moved to the shortcut help
+              // window (F1, Ctrl/Cmd+/) and the top-bar tooltips.
+              const Spacer(),
               IconButton(
                 key: const ValueKey('timeline-zoom-out'),
                 visualDensity: VisualDensity.compact,

@@ -15,11 +15,11 @@ import 'package:humming/looptap/screens/edit_screen.dart';
 import 'package:humming/looptap/state/loop_storage.dart';
 import 'package:humming/looptap/state/loop_prefs.dart';
 import 'package:humming/looptap/state/loop_store.dart';
+import 'package:humming/looptap/widgets/desktop_top_bar.dart';
 import 'package:humming/looptap/widgets/arrangement.dart';
 import 'package:humming/looptap/widgets/desktop_instrument.dart';
 import 'package:humming/looptap/widgets/desktop_workspace.dart';
 import 'package:humming/looptap/widgets/section_bar.dart';
-import 'package:humming/looptap/widgets/transport_bar.dart';
 import 'package:provider/provider.dart';
 
 import '../support/offline_fonts.dart';
@@ -266,7 +266,8 @@ void main() {
       expect(identical(active(), b0), isTrue);
 
       // edit B (clear its drums) → A changes too; Undo restores both, shared
-      tester.widget<TransportBar>(find.byType(TransportBar)).onClear();
+      // ui-001 stage 1: desktop transport lives in the top bar
+      tester.widget<DesktopTopBar>(find.byType(DesktopTopBar)).onClear();
       await tester.pumpAndSettle();
       expect(bar().sections[0].tracks['drums']!.drumNotes, isEmpty);
       commands().undo();
@@ -279,7 +280,7 @@ void main() {
       // bars from A apply to B; repeats and names stay per section
       bar().onSwitch(0);
       await tester.pumpAndSettle();
-      tester.widget<TransportBar>(find.byType(TransportBar)).onBars(4);
+      tester.widget<DesktopTopBar>(find.byType(DesktopTopBar)).onBars(4);
       await tester.pumpAndSettle();
       expect(bar().sections[1].bars, 4);
       bar().onRepeats(1, 5);

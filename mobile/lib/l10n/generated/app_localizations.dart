@@ -4811,6 +4811,366 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'오디오를 재생하지 못했습니다. 파일과 출력 장치를 확인해주세요.'**
   String get ltVocalPreviewFailed;
+
+  /// No description provided for @topBarBackToSongs.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 목록으로'**
+  String get topBarBackToSongs;
+
+  /// No description provided for @topBarAutoSaved.
+  ///
+  /// In ko, this message translates to:
+  /// **'자동 저장됨 {time}'**
+  String topBarAutoSaved(String time);
+
+  /// No description provided for @topBarRangeLoop.
+  ///
+  /// In ko, this message translates to:
+  /// **'구간 반복 켜기/끄기'**
+  String get topBarRangeLoop;
+
+  /// No description provided for @topBarPosition.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 위치 (마디.박.16분)'**
+  String get topBarPosition;
+
+  /// No description provided for @topBarBpmTap.
+  ///
+  /// In ko, this message translates to:
+  /// **'눌러서 BPM 입력'**
+  String get topBarBpmTap;
+
+  /// No description provided for @topBarKeyTap.
+  ///
+  /// In ko, this message translates to:
+  /// **'키 바꾸기'**
+  String get topBarKeyTap;
+
+  /// No description provided for @topBarSongSettings.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 설정'**
+  String get topBarSongSettings;
+
+  /// No description provided for @topBarTempo.
+  ///
+  /// In ko, this message translates to:
+  /// **'템포'**
+  String get topBarTempo;
+
+  /// No description provided for @topBarSwingHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'그루브가 지정되지 않은 트랙에 적용'**
+  String get topBarSwingHint;
+
+  /// No description provided for @topBarSectionLength.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 길이 (마디)'**
+  String get topBarSectionLength;
+
+  /// No description provided for @topBarMore.
+  ///
+  /// In ko, this message translates to:
+  /// **'더 보기'**
+  String get topBarMore;
+
+  /// No description provided for @topBarShortcuts.
+  ///
+  /// In ko, this message translates to:
+  /// **'단축키 보기'**
+  String get topBarShortcuts;
+
+  /// No description provided for @topBarProBadge.
+  ///
+  /// In ko, this message translates to:
+  /// **'PRO'**
+  String get topBarProBadge;
+
+  /// No description provided for @shortcutPlay.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 / 일시정지'**
+  String get shortcutPlay;
+
+  /// No description provided for @shortcutRecord.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음'**
+  String get shortcutRecord;
+
+  /// No description provided for @shortcutSave.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장'**
+  String get shortcutSave;
+
+  /// No description provided for @shortcutUndo.
+  ///
+  /// In ko, this message translates to:
+  /// **'실행 취소'**
+  String get shortcutUndo;
+
+  /// No description provided for @shortcutRedo.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 실행'**
+  String get shortcutRedo;
+
+  /// No description provided for @shortcutGroove.
+  ///
+  /// In ko, this message translates to:
+  /// **'그루브'**
+  String get shortcutGroove;
+
+  /// No description provided for @shortcutDuplicateLinked.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 연결 복제'**
+  String get shortcutDuplicateLinked;
+
+  /// No description provided for @shortcutRangeLoop.
+  ///
+  /// In ko, this message translates to:
+  /// **'구간 반복 켜기/끄기'**
+  String get shortcutRangeLoop;
+
+  /// No description provided for @shortcutMixer.
+  ///
+  /// In ko, this message translates to:
+  /// **'믹서'**
+  String get shortcutMixer;
+
+  /// No description provided for @shortcutHelp.
+  ///
+  /// In ko, this message translates to:
+  /// **'단축키 보기'**
+  String get shortcutHelp;
+
+  /// No description provided for @shortcutHelpLegatoNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'피아노롤(선택 편집)에 포커스가 있고 고칠 노트가 있으면 Ctrl/⌘+L은 기존대로 레가토입니다(선택이 없으면 트랙 전체). 그 밖에는 구간 반복입니다.'**
+  String get shortcutHelpLegatoNote;
+
+  /// No description provided for @shortcutHelpTypingNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'글자를 입력하는 중에는 단축키가 동작하지 않습니다.'**
+  String get shortcutHelpTypingNote;
+
+  /// No description provided for @shortcutSectionWorkspace.
+  ///
+  /// In ko, this message translates to:
+  /// **'작업 공간'**
+  String get shortcutSectionWorkspace;
+
+  /// No description provided for @shortcutSectionPianoRoll.
+  ///
+  /// In ko, this message translates to:
+  /// **'피아노롤 (그리드 · 선택 편집)'**
+  String get shortcutSectionPianoRoll;
+
+  /// No description provided for @shortcutSectionGuitar.
+  ///
+  /// In ko, this message translates to:
+  /// **'기타 트랙 피아노롤'**
+  String get shortcutSectionGuitar;
+
+  /// No description provided for @shortcutSectionDrums.
+  ///
+  /// In ko, this message translates to:
+  /// **'드럼 그리드 (선택 모드)'**
+  String get shortcutSectionDrums;
+
+  /// No description provided for @shortcutEditDeselect.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택 해제'**
+  String get shortcutEditDeselect;
+
+  /// No description provided for @shortcutEditSelectAll.
+  ///
+  /// In ko, this message translates to:
+  /// **'전체 선택'**
+  String get shortcutEditSelectAll;
+
+  /// No description provided for @shortcutEditArpeggiate.
+  ///
+  /// In ko, this message translates to:
+  /// **'펼치기 (아르페지오)'**
+  String get shortcutEditArpeggiate;
+
+  /// No description provided for @shortcutEditCopy.
+  ///
+  /// In ko, this message translates to:
+  /// **'복사 (선택한 노트)'**
+  String get shortcutEditCopy;
+
+  /// No description provided for @shortcutEditPaste.
+  ///
+  /// In ko, this message translates to:
+  /// **'붙여넣기 (입력 모드에서도)'**
+  String get shortcutEditPaste;
+
+  /// No description provided for @shortcutEditDuplicate.
+  ///
+  /// In ko, this message translates to:
+  /// **'복제'**
+  String get shortcutEditDuplicate;
+
+  /// No description provided for @shortcutEditSplitPlayhead.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 위치에서 자르기'**
+  String get shortcutEditSplitPlayhead;
+
+  /// No description provided for @shortcutEditSplitSheet.
+  ///
+  /// In ko, this message translates to:
+  /// **'자르기 설정'**
+  String get shortcutEditSplitSheet;
+
+  /// No description provided for @shortcutEditGlue.
+  ///
+  /// In ko, this message translates to:
+  /// **'이어 붙이기'**
+  String get shortcutEditGlue;
+
+  /// No description provided for @shortcutEditLegato.
+  ///
+  /// In ko, this message translates to:
+  /// **'레가토 (선택한 노트, 선택이 없으면 트랙 전체)'**
+  String get shortcutEditLegato;
+
+  /// No description provided for @shortcutEditQuantize.
+  ///
+  /// In ko, this message translates to:
+  /// **'퀀타이즈 (선택, 없으면 트랙 전체)'**
+  String get shortcutEditQuantize;
+
+  /// No description provided for @shortcutEditQuantizeSettings.
+  ///
+  /// In ko, this message translates to:
+  /// **'퀀타이즈 설정'**
+  String get shortcutEditQuantizeSettings;
+
+  /// No description provided for @shortcutEditHumanize.
+  ///
+  /// In ko, this message translates to:
+  /// **'휴머나이즈 (선택, 없으면 트랙 전체)'**
+  String get shortcutEditHumanize;
+
+  /// No description provided for @shortcutEditFitScale.
+  ///
+  /// In ko, this message translates to:
+  /// **'스케일에 맞추기 (곡에 스케일이 있을 때)'**
+  String get shortcutEditFitScale;
+
+  /// No description provided for @shortcutEditChance.
+  ///
+  /// In ko, this message translates to:
+  /// **'확률 올리기/내리기 (확률 막대가 열려 있을 때)'**
+  String get shortcutEditChance;
+
+  /// No description provided for @shortcutEditChordStampMode.
+  ///
+  /// In ko, this message translates to:
+  /// **'코드 찍기 모드 켜기/끄기 (모든 도구)'**
+  String get shortcutEditChordStampMode;
+
+  /// No description provided for @shortcutEditDelete.
+  ///
+  /// In ko, this message translates to:
+  /// **'삭제'**
+  String get shortcutEditDelete;
+
+  /// No description provided for @shortcutEditMute.
+  ///
+  /// In ko, this message translates to:
+  /// **'소리 끄기/켜기'**
+  String get shortcutEditMute;
+
+  /// No description provided for @shortcutEditChordBelow.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택한 노트 아래에 코드 깔기'**
+  String get shortcutEditChordBelow;
+
+  /// No description provided for @shortcutEditChordType.
+  ///
+  /// In ko, this message translates to:
+  /// **'코드 종류 고르기'**
+  String get shortcutEditChordType;
+
+  /// No description provided for @shortcutEditMove.
+  ///
+  /// In ko, this message translates to:
+  /// **'앞뒤로 옮기기'**
+  String get shortcutEditMove;
+
+  /// No description provided for @shortcutEditLength.
+  ///
+  /// In ko, this message translates to:
+  /// **'길이 줄이기/늘리기'**
+  String get shortcutEditLength;
+
+  /// No description provided for @shortcutEditSemitone.
+  ///
+  /// In ko, this message translates to:
+  /// **'반음 올리기/내리기'**
+  String get shortcutEditSemitone;
+
+  /// No description provided for @shortcutEditOctave.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브 올리기/내리기'**
+  String get shortcutEditOctave;
+
+  /// No description provided for @shortcutGuitarStroke.
+  ///
+  /// In ko, this message translates to:
+  /// **'다운/업 스트로크'**
+  String get shortcutGuitarStroke;
+
+  /// No description provided for @shortcutGuitarStrings.
+  ///
+  /// In ko, this message translates to:
+  /// **'줄 배정'**
+  String get shortcutGuitarStrings;
+
+  /// No description provided for @shortcutGuitarRing.
+  ///
+  /// In ko, this message translates to:
+  /// **'울림 아르페지오'**
+  String get shortcutGuitarRing;
+
+  /// No description provided for @shortcutDrumToggleSelect.
+  ///
+  /// In ko, this message translates to:
+  /// **'그리기 ⇄ 선택 모드 (모든 모드)'**
+  String get shortcutDrumToggleSelect;
+
+  /// No description provided for @shortcutDrumMoveFine.
+  ///
+  /// In ko, this message translates to:
+  /// **'조금씩 옮기기'**
+  String get shortcutDrumMoveFine;
+
+  /// No description provided for @shortcutDrumVelocity.
+  ///
+  /// In ko, this message translates to:
+  /// **'세기 올리기/내리기'**
+  String get shortcutDrumVelocity;
+
+  /// No description provided for @shortcutDrumVelocityBig.
+  ///
+  /// In ko, this message translates to:
+  /// **'세기 크게 올리기/내리기'**
+  String get shortcutDrumVelocityBig;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {
