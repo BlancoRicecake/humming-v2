@@ -17,8 +17,8 @@ import 'package:humming/looptap/music/theory.dart';
 import 'package:humming/looptap/screens/edit_screen.dart';
 import 'package:humming/looptap/state/loop_storage.dart';
 import 'package:humming/looptap/state/loop_store.dart';
+import 'package:humming/looptap/widgets/desktop_section_band.dart';
 import 'package:humming/looptap/widgets/desktop_workspace.dart';
-import 'package:humming/looptap/widgets/section_bar.dart';
 import 'package:humming/looptap/widgets/sheets/midi_import_sheet.dart';
 import 'package:provider/provider.dart';
 
@@ -742,7 +742,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      SectionBar bar() => tester.widget<SectionBar>(find.byType(SectionBar));
+      // ui-001 stage 2: desktop sections live in the track header band
+      DesktopSectionBand bar() =>
+          tester.widget<DesktopSectionBand>(find.byType(DesktopSectionBand));
       DesktopCommands commands() =>
           tester.widget<DesktopCommands>(find.byType(DesktopCommands));
       List<String> sectionsJson() => [
@@ -760,7 +762,7 @@ void main() {
 
       // not a new song: no quota / Pro gate (works without Pro)
       expect(store.proActive, isFalse);
-      bar().onLongPress(0);
+      bar().onMenu(0);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('section-midi-import')));
       // MIDI parsing runs in an isolate (compute)

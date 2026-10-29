@@ -2902,4 +2902,66 @@ class L10nEn extends L10n {
 
   @override
   String get shortcutDrumVelocityBig => 'Velocity up/down (big steps)';
+
+  @override
+  String get bandSongPlay => 'Play song';
+
+  @override
+  String get bandAddSection => 'Add section';
+
+  @override
+  String get bandChipTooltip =>
+      'Click: select · Double-click: rename · Right-click: menu · Wheel: repeats';
+
+  @override
+  String bandLinkedNotice(int count) {
+    return 'Edits apply to $count linked sections';
+  }
+
+  @override
+  String get bandRenameTitle => 'Section name';
+
+  @override
+  String get bandRepeats => 'Repeats';
+
+  @override
+  String get bandDeleteSection => 'Delete section';
+
+  @override
+  String get rulerTooltip =>
+      'Drag to set the loop range · drag its ends to adjust · click to move the playhead';
+
+  @override
+  String get auditionRestart => 'Restart this phrase';
+
+  @override
+  String soloCompareFull(int count) {
+    return 'Solo $count · compare full mix';
+  }
+
+  @override
+  String get soloCompareBack => 'Full mix · compare Solo';
+
+  @override
+  String get soloClear => 'Clear';
+
+  @override
+  String get soloOpenVelocity => 'View velocity';
+
+  @override
+  String get soloIssueMuted => 'Mute is on';
+
+  @override
+  String get soloIssueZeroVolume => 'Track volume is zero';
+
+  @override
+  String get soloIssueNoNotes => 'No notes or audio in this range';
+
+  @override
+  String soloIssueVeryQuiet(int min, int max) {
+    return 'Velocity $min–$max/127 · may be very quiet';
+  }
+
+  @override
+  String get soloIssueOpenHint => 'Click to view velocity';
 }

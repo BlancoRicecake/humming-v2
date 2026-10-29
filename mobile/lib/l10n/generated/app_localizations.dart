@@ -5171,6 +5171,114 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'세기 크게 올리기/내리기'**
   String get shortcutDrumVelocityBig;
+
+  /// No description provided for @bandSongPlay.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 재생'**
+  String get bandSongPlay;
+
+  /// No description provided for @bandAddSection.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 추가'**
+  String get bandAddSection;
+
+  /// No description provided for @bandChipTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'클릭: 선택 · 두 번 클릭: 이름 · 우클릭: 메뉴 · 휠: 반복 수'**
+  String get bandChipTooltip;
+
+  /// No description provided for @bandLinkedNotice.
+  ///
+  /// In ko, this message translates to:
+  /// **'연결된 구간 {count}개에 함께 적용'**
+  String bandLinkedNotice(int count);
+
+  /// No description provided for @bandRenameTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 이름'**
+  String get bandRenameTitle;
+
+  /// No description provided for @bandRepeats.
+  ///
+  /// In ko, this message translates to:
+  /// **'반복'**
+  String get bandRepeats;
+
+  /// No description provided for @bandDeleteSection.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 삭제'**
+  String get bandDeleteSection;
+
+  /// No description provided for @rulerTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'끌어서 반복 구간 지정 · 양 끝을 끌어 조절 · 클릭해서 재생 위치 이동'**
+  String get rulerTooltip;
+
+  /// No description provided for @auditionRestart.
+  ///
+  /// In ko, this message translates to:
+  /// **'같은 구간 처음부터 듣기'**
+  String get auditionRestart;
+
+  /// No description provided for @soloCompareFull.
+  ///
+  /// In ko, this message translates to:
+  /// **'Solo {count} · 전체와 비교'**
+  String soloCompareFull(int count);
+
+  /// No description provided for @soloCompareBack.
+  ///
+  /// In ko, this message translates to:
+  /// **'전체 파트 · Solo로 비교'**
+  String get soloCompareBack;
+
+  /// No description provided for @soloClear.
+  ///
+  /// In ko, this message translates to:
+  /// **'해제'**
+  String get soloClear;
+
+  /// No description provided for @soloOpenVelocity.
+  ///
+  /// In ko, this message translates to:
+  /// **'강약 보기'**
+  String get soloOpenVelocity;
+
+  /// No description provided for @soloIssueMuted.
+  ///
+  /// In ko, this message translates to:
+  /// **'음소거가 켜져 있어요'**
+  String get soloIssueMuted;
+
+  /// No description provided for @soloIssueZeroVolume.
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙 음량이 0이에요'**
+  String get soloIssueZeroVolume;
+
+  /// No description provided for @soloIssueNoNotes.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 구간에 재생할 노트·오디오가 없어요'**
+  String get soloIssueNoNotes;
+
+  /// No description provided for @soloIssueVeryQuiet.
+  ///
+  /// In ko, this message translates to:
+  /// **'노트 세기 {min}–{max}/127 · 매우 작게 들릴 수 있어요'**
+  String soloIssueVeryQuiet(int min, int max);
+
+  /// No description provided for @soloIssueOpenHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'눌러서 강약 보기'**
+  String get soloIssueOpenHint;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

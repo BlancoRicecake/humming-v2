@@ -23,7 +23,6 @@ import 'package:humming/looptap/screens/edit_screen.dart';
 import 'package:humming/looptap/state/loop_storage.dart';
 import 'package:humming/looptap/state/loop_store.dart';
 import 'package:humming/looptap/widgets/arrangement.dart';
-import 'package:humming/looptap/widgets/audition_bar.dart';
 import 'package:humming/looptap/widgets/desktop_workspace.dart';
 import 'package:humming/looptap/widgets/surfaces/step_grid.dart';
 import 'package:provider/provider.dart';
@@ -386,7 +385,8 @@ void main() {
       n(52, 15, dur: 4, velocity: 100, art: palm), // gate ends at 17
       n(55, 13, dur: 6, velocity: 100, art: palm), // gate ended at 15
     ], bars: 2);
-    tester.widget<AuditionBar>(find.byType(AuditionBar)).onRange(
+    // ui-001 stage 2: the desktop range comes from the ruler (Arrangement)
+    tester.widget<Arrangement>(find.byType(Arrangement)).onLoopRange!(
       const PlaybackRange(16, 32),
     );
     await tester.pump();
@@ -441,7 +441,8 @@ void main() {
       n(52, 16, velocity: 100, art: palm),
       n(64, 16, velocity: 90),
     ], bars: 2);
-    tester.widget<AuditionBar>(find.byType(AuditionBar)).onRange(
+    // ui-001 stage 2: the desktop range comes from the ruler (Arrangement)
+    tester.widget<Arrangement>(find.byType(Arrangement)).onLoopRange!(
       const PlaybackRange(16, 32),
     );
     await tester.pump();
@@ -512,7 +513,8 @@ void main() {
     tester.widget<Arrangement>(find.byType(Arrangement)).onToggleSolo!('bass');
     await tester.pump();
     // a range loop silences every channel of the track at each wrap
-    tester.widget<AuditionBar>(find.byType(AuditionBar)).onRange(
+    // ui-001 stage 2: the desktop range comes from the ruler (Arrangement)
+    tester.widget<Arrangement>(find.byType(Arrangement)).onLoopRange!(
       const PlaybackRange(0, 16),
     );
     await tester.pump();

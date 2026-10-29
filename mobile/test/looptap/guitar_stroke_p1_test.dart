@@ -20,7 +20,6 @@ import 'package:humming/looptap/screens/edit_screen.dart';
 import 'package:humming/looptap/state/loop_storage.dart';
 import 'package:humming/looptap/state/loop_store.dart';
 import 'package:humming/looptap/widgets/arrangement.dart';
-import 'package:humming/looptap/widgets/audition_bar.dart';
 import 'package:humming/looptap/widgets/desktop_workspace.dart';
 import 'package:provider/provider.dart';
 
@@ -282,8 +281,10 @@ void main() {
           bars: 2,
           groove: grooved ? ctx : null,
         );
-        final bar = tester.widget<AuditionBar>(find.byType(AuditionBar));
-        bar.onRange(const PlaybackRange(16, 32));
+        // ui-001 stage 2: the desktop range comes from the ruler (Arrangement)
+        tester
+            .widget<Arrangement>(find.byType(Arrangement))
+            .onLoopRange!(const PlaybackRange(16, 32));
         await tester.pump();
         commands(tester).play();
         await tester.pump();

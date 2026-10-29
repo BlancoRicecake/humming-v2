@@ -10,12 +10,12 @@ import 'package:humming/looptap/screens/edit_screen.dart';
 import 'package:humming/looptap/screens/songs_screen.dart';
 import 'package:humming/looptap/state/loop_storage.dart';
 import 'package:humming/looptap/state/loop_store.dart';
+import 'package:humming/looptap/widgets/desktop_section_band.dart';
 import 'package:humming/looptap/widgets/desktop_top_bar.dart';
 import 'package:humming/looptap/widgets/first_song_card.dart';
 import 'package:humming/looptap/widgets/arrangement.dart';
 import 'package:humming/looptap/widgets/guided_hum_panel.dart';
 import 'package:humming/looptap/widgets/desktop_workspace.dart';
-import 'package:humming/looptap/widgets/audition_bar.dart';
 import 'package:humming/looptap/music/audition.dart';
 import 'package:humming/looptap/widgets/surfaces/step_grid.dart';
 import 'package:humming/services/product_analytics.dart';
@@ -387,7 +387,11 @@ void main() {
       await tester.pumpAndSettle();
       Arrangement arrangement() =>
           tester.widget<Arrangement>(find.byType(Arrangement));
-      AuditionBar bar() => tester.widget<AuditionBar>(find.byType(AuditionBar));
+      // ui-001 stage 2: on desktop the range is set on the ruler and the Solo
+      // controls sit in the track header (same handlers as AuditionBar)
+      DesktopSoloHeader solo() =>
+          tester.widget<DesktopSoloHeader>(find.byType(DesktopSoloHeader));
+      void range(PlaybackRange r) => arrangement().onLoopRange!(r);
       // ui-001 stage 1: on desktop the transport lives in the top bar
       DesktopTopBar transport() =>
           tester.widget<DesktopTopBar>(find.byType(DesktopTopBar));
@@ -408,7 +412,7 @@ void main() {
       await tester.pump();
       expect(arrangement().mutes['melody'] ?? false, isFalse);
       expect(arrangement().solos, {'melody', 'drums'});
-      bar().onRange(const PlaybackRange(32, 48));
+      range(const PlaybackRange(32, 48));
       await tester.pump();
       expect(arrangement().loopRange!.start, 32);
       expect(arrangement().playStep.value, 32);
@@ -419,20 +423,20 @@ void main() {
       // A frame spanning one complete pass must still land on the same phrase.
       await tester.pump(const Duration(seconds: 2));
       expect(arrangement().playStep.value, closeTo(36, .01));
-      bar().onCompare();
+      solo().onCompare();
       await tester.pump();
       expect(arrangement().bypassSolo, isTrue);
       expect(arrangement().solos, {'melody', 'drums'});
       expect(arrangement().mutes['bass'], isTrue);
       expect(arrangement().playStep.value, closeTo(32, .01));
-      bar().onCompare();
+      solo().onCompare();
       await tester.pump();
       expect(arrangement().bypassSolo, isFalse);
       // Scrubbing beyond a selected range cannot escape it.
       arrangement().onSeek!(0);
       await tester.pump();
       expect(arrangement().playStep.value, closeTo(32, .01));
-      bar().onRange(const PlaybackRange(16, 32));
+      range(const PlaybackRange(16, 32));
       await tester.pump();
       expect(arrangement().playStep.value, closeTo(16, .01));
       transport().onStop();
@@ -449,14 +453,14 @@ void main() {
       transport().onRec();
       await tester.pump();
       expect(transport().recording, isTrue);
-      expect(bar().looping, isFalse);
-      expect(bar().enabled, isFalse);
+      expect(arrangement().loopRange, isNull);
+      expect(solo().enabled, isFalse);
       transport().onBars(4);
       await tester.pump();
       expect(transport().bars, 1);
       transport().onStop();
       await tester.pump();
-      bar().onClearSolo();
+      solo().onClear();
       await tester.pump();
       expect(arrangement().solos, isEmpty);
       expect(arrangement().mutes['bass'], isTrue);
@@ -516,13 +520,22 @@ void main() {
       Arrangement arrangement() =>
           tester.widget<Arrangement>(find.byType(Arrangement));
       arrangement().onToggleSolo!('melodyDec');
-      tester
-          .widget<AuditionBar>(find.byType(AuditionBar))
-          .onRange(const PlaybackRange(64, 128));
+      arrangement().onLoopRange!(const PlaybackRange(64, 128));
       await tester.pump();
       expect(find.byKey(const ValueKey('solo-status-notice')), findsOneWidget);
-      expect(find.textContaining('Velocity 3–3/127'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('solo-open-velocity')));
+      // desktop: the reason is the warning icon's tooltip; the icon opens 강약 보기
+      expect(
+        tester
+            .widget<Tooltip>(
+              find.ancestor(
+                of: find.byKey(const ValueKey('solo-status-notice')),
+                matching: find.byType(Tooltip),
+              ),
+            )
+            .message,
+        contains('Velocity 3–3/127'),
+      );
+      await tester.tap(find.byKey(const ValueKey('solo-status-notice')));
       await tester.pumpAndSettle();
       StepGrid grid() => tester.widget<StepGrid>(find.byType(StepGrid));
       expect(grid().notes.single.velocity, 3);

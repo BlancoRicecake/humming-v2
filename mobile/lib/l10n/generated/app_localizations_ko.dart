@@ -2805,4 +2805,64 @@ class L10nKo extends L10n {
 
   @override
   String get shortcutDrumVelocityBig => '세기 크게 올리기/내리기';
+
+  @override
+  String get bandSongPlay => '곡 재생';
+
+  @override
+  String get bandAddSection => '섹션 추가';
+
+  @override
+  String get bandChipTooltip => '클릭: 선택 · 두 번 클릭: 이름 · 우클릭: 메뉴 · 휠: 반복 수';
+
+  @override
+  String bandLinkedNotice(int count) {
+    return '연결된 구간 $count개에 함께 적용';
+  }
+
+  @override
+  String get bandRenameTitle => '섹션 이름';
+
+  @override
+  String get bandRepeats => '반복';
+
+  @override
+  String get bandDeleteSection => '섹션 삭제';
+
+  @override
+  String get rulerTooltip => '끌어서 반복 구간 지정 · 양 끝을 끌어 조절 · 클릭해서 재생 위치 이동';
+
+  @override
+  String get auditionRestart => '같은 구간 처음부터 듣기';
+
+  @override
+  String soloCompareFull(int count) {
+    return 'Solo $count · 전체와 비교';
+  }
+
+  @override
+  String get soloCompareBack => '전체 파트 · Solo로 비교';
+
+  @override
+  String get soloClear => '해제';
+
+  @override
+  String get soloOpenVelocity => '강약 보기';
+
+  @override
+  String get soloIssueMuted => '음소거가 켜져 있어요';
+
+  @override
+  String get soloIssueZeroVolume => '트랙 음량이 0이에요';
+
+  @override
+  String get soloIssueNoNotes => '이 구간에 재생할 노트·오디오가 없어요';
+
+  @override
+  String soloIssueVeryQuiet(int min, int max) {
+    return '노트 세기 $min–$max/127 · 매우 작게 들릴 수 있어요';
+  }
+
+  @override
+  String get soloIssueOpenHint => '눌러서 강약 보기';
 }

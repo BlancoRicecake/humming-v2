@@ -1,5 +1,6 @@
 import '../widgets/desktop_workspace.dart';
 import '../widgets/desktop_top_bar.dart';
+import '../widgets/desktop_section_band.dart';
 import '../widgets/shortcut_help.dart';
 import '../widgets/desktop_instrument.dart';
 import '../music/beginner_backing.dart';
@@ -153,16 +154,36 @@ class _EditScreenState extends State<EditScreen>
               style: const TextStyle(color: LT.t2, fontSize: 12),
             ),
             const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _gridFocused
-                    ? (ko ? '편집 확대 중' : 'Editor enlarged')
-                    : '',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: LT.t3, fontSize: 11),
+            // ui-001 stage 2: on desktop the sections (and the Solo controls)
+            // live in the timeline header; keep them reachable while folded.
+            if (_desktop) ...[
+              if (_gridFocused)
+                Text(
+                  ko ? '편집 확대 중' : 'Editor enlarged',
+                  maxLines: 1,
+                  style: const TextStyle(color: LT.t3, fontSize: 11),
+                ),
+              if (_solos.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  child: _soloHeader(),
+                ),
+              ],
+              const SizedBox(width: 8),
+              Expanded(child: Center(child: _sectionBand())),
+              _restartButton(),
+            ] else
+              Expanded(
+                child: Text(
+                  _gridFocused
+                      ? (ko ? '편집 확대 중' : 'Editor enlarged')
+                      : '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: LT.t3, fontSize: 11),
+                ),
               ),
-            ),
             TextButton.icon(
               key: const ValueKey('timeline-expand'),
               onPressed:
@@ -2038,10 +2059,12 @@ class _EditScreenState extends State<EditScreen>
     final l = L10n.of(context);
     await showLtModal(
       context,
-      width: 300,
+      // desktop: the right-click menu is the main path and its English rows
+      // (e.g. 'MIDI passage as new section') need a little more room
+      width: _desktop ? 320 : 300,
       child: StatefulBuilder(
         builder:
-            (context, _) => Column(
+            (context, setMenu) => Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -2108,8 +2131,134 @@ class _EditScreenState extends State<EditScreen>
                       }
                       : null,
                 ),
+                // ui-001 stage 2: the desktop section band has no inline
+                // repeat stepper / delete ×, so they live here (and the wheel).
+                if (_desktop) ...[
+                  _menuRepeats(idx, setMenu),
+                  _menuRow(
+                    LtIcons.close,
+                    l.bandDeleteSection,
+                    _sections.length > 1
+                        ? () {
+                          Navigator.of(context).pop();
+                          _deleteSection(idx);
+                        }
+                        : null,
+                    key: const ValueKey('section-menu-delete'),
+                  ),
+                ],
               ],
             ),
+      ),
+    );
+  }
+
+  /// Section menu row (desktop): repeats − ×N + with the band's handler.
+  Widget _menuRepeats(int idx, StateSetter setMenu) {
+    final l = L10n.of(context);
+    Widget step(String key, String glyph, int delta) => GestureDetector(
+      key: ValueKey(key),
+      onTap: () {
+        _setRepeats(idx, _sections[idx].repeats + delta);
+        setMenu(() {});
+      },
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: Center(
+          child: Text(
+            glyph,
+            style: LTType.inter(size: 18, weight: FontWeight.w700),
+          ),
+        ),
+      ),
+    );
+    return Container(
+      height: 48,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: LT.surface2,
+        borderRadius: BorderRadius.circular(LTRadius.control),
+        border: Border.all(color: LT.border),
+      ),
+      child: Row(
+        children: [
+          const Ms(LtIcons.repeat, size: 18, color: LT.t2),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              l.bandRepeats,
+              style: LTType.inter(size: 14, weight: FontWeight.w600),
+            ),
+          ),
+          step('section-menu-repeats-minus', '−', -1),
+          SizedBox(
+            width: 32,
+            child: Text(
+              '×${_sections[idx].repeats}',
+              key: const ValueKey('section-menu-repeats'),
+              textAlign: TextAlign.center,
+              style: LTType.mono(size: 13, weight: FontWeight.w700, color: LT.t1),
+            ),
+          ),
+          step('section-menu-repeats-plus', '+', 1),
+        ],
+      ),
+    );
+  }
+
+  /// ui-001 stage 2: the desktop section band (track header, top 16 px).
+  Widget _sectionBand() => DesktopSectionBand(
+    sections: _sections,
+    activeIdx: _activeIdx,
+    songMode: _songSection != null,
+    onSwitch: _switchSection,
+    onAdd: _addSection,
+    onRename: _renameSection,
+    onRepeats: _setRepeats,
+    onMenu: _openSectionMenu,
+    onPlaySong: _playSong,
+  );
+
+  /// ui-001 stage 2: AuditionBar's Solo part + SoloStatusNotice on desktop.
+  Widget _soloHeader() => DesktopSoloHeader(
+    soloCount: _solos.length,
+    bypassSolo: _bypassSolo,
+    enabled: _songSection == null && !_recording && _countDown == 0,
+    issues: soloIssues(
+      tracks: _effectiveTracks,
+      metas: _metasFor(_songSection ?? _sec),
+      solos: _solos,
+      mutes: _mutes,
+      volumes: _vol,
+      range: _playRange,
+      steps: _steps,
+      bypass: _bypassSolo,
+    ),
+    onCompare: _compareSolo,
+    onClear: _clearSolo,
+    onOpenVelocity:
+        _songSection == null
+            ? (id) => setState(() {
+              _activeId = id;
+              _inputModes[id] = 'grid';
+            })
+            : null,
+  );
+
+  /// ui-001 stage 2: AuditionBar's "처음부터 듣기" on desktop.
+  Widget _restartButton() {
+    final enabled = _songSection == null && !_recording && _countDown == 0;
+    return Tooltip(
+      message: L10n.of(context).auditionRestart,
+      child: GestureDetector(
+        key: const ValueKey('audition-restart'),
+        onTap: enabled ? _restartPhrase : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Icon(Icons.first_page, size: 16, color: enabled ? LT.t2 : LT.t3),
+        ),
       ),
     );
   }
@@ -4478,6 +4627,9 @@ class _EditScreenState extends State<EditScreen>
                       // ui-001 stage 1: desktop = one 52 px top bar with the
                       // transport; phone/tablet keep _topBar + TransportBar.
                       if (_desktop) _desktopTopBar() else _topBar(),
+                      // ui-001 stage 2: on desktop the sections live in the
+                      // track header's section band (Arrangement.sectionBand).
+                      if (!_desktop)
                       SectionBar(
                         sections: _sections,
                         activeIdx: _activeIdx,
@@ -4557,6 +4709,24 @@ class _EditScreenState extends State<EditScreen>
                               ranges: _ranges,
                               // song-preview is read-only → no scrubbing there
                               onSeek: _songSection == null ? _seekTo : null,
+                              // ui-001 stage 2 (desktop): section band, Solo
+                              // controls and the ruler's loop-range drag.
+                              sectionBand: _desktop ? _sectionBand() : null,
+                              soloHeader:
+                                  _desktop && _solos.isNotEmpty
+                                      ? _soloHeader()
+                                      : null,
+                              headerActions:
+                                  _desktop ? [_restartButton()] : const [],
+                              onLoopRange:
+                                  _desktop
+                                      ? (r) => _changeLoop(range: r)
+                                      : null,
+                              // AuditionBar's enabled rule
+                              loopRangeEnabled:
+                                  _songSection == null &&
+                                  !_recording &&
+                                  _countDown == 0,
                             ),
                           ),
                         ),
@@ -4579,6 +4749,7 @@ class _EditScreenState extends State<EditScreen>
                               ),
                           onReset: () => setState(() => _timelineShare = .4),
                         ),
+                      if (!_desktop)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: AuditionBar(
@@ -4598,6 +4769,7 @@ class _EditScreenState extends State<EditScreen>
                           onRestart: _restartPhrase,
                         ),
                       ),
+                      if (!_desktop)
                       SoloStatusNotice(
                         issues: soloIssues(
                           tracks: _effectiveTracks,
@@ -5291,8 +5463,9 @@ class _EditScreenState extends State<EditScreen>
     return DesktopInstrument(
       // grid editors own their keyboard focus (selection shortcuts)
       capturePointerFocus: _inputMode != 'grid',
-      // 편집 확대: the roll takes the key-hint row's space (keys still play)
-      showKeyHints: !_gridFocused,
+      // 편집 확대 and (ui-001 stage 2) the grid mode give the roll the
+      // key-hint row's space; pad mode keeps it. Keys still play either way.
+      showKeyHints: !_gridFocused && _inputMode != 'grid',
       group: pitched ? 'piano' : 'drums',
       identity: identity,
       labels:

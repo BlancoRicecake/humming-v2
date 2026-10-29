@@ -15,11 +15,11 @@ import 'package:humming/looptap/screens/edit_screen.dart';
 import 'package:humming/looptap/state/loop_storage.dart';
 import 'package:humming/looptap/state/loop_prefs.dart';
 import 'package:humming/looptap/state/loop_store.dart';
+import 'package:humming/looptap/widgets/desktop_section_band.dart';
 import 'package:humming/looptap/widgets/desktop_top_bar.dart';
 import 'package:humming/looptap/widgets/arrangement.dart';
 import 'package:humming/looptap/widgets/desktop_instrument.dart';
 import 'package:humming/looptap/widgets/desktop_workspace.dart';
-import 'package:humming/looptap/widgets/section_bar.dart';
 import 'package:provider/provider.dart';
 
 import '../support/offline_fonts.dart';
@@ -251,7 +251,9 @@ void main() {
       await tester.pumpAndSettle();
       DesktopCommands commands() =>
           tester.widget<DesktopCommands>(find.byType(DesktopCommands));
-      SectionBar bar() => tester.widget<SectionBar>(find.byType(SectionBar));
+      // ui-001 stage 2: desktop sections live in the track header band
+      DesktopSectionBand bar() =>
+          tester.widget<DesktopSectionBand>(find.byType(DesktopSectionBand));
       Section active() =>
           tester.widget<Arrangement>(find.byType(Arrangement)).section;
 
@@ -309,20 +311,23 @@ void main() {
       expect(a2.tracks['melody']!.pitchNotes, hasLength(3));
 
       // plain Duplicate of a linked section stays independent
-      bar().onLongPress(0);
+      bar().onMenu(0);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Duplicate').last);
       await tester.pumpAndSettle();
       expect(bar().sections, hasLength(3));
       expect(bar().sections[1].linkId, isNull);
       expect(identical(bar().sections[1].tracks, a2.tracks), isFalse);
-      bar().onDelete(1);
+      // desktop delete = the section menu row (the band has no ×)
+      bar().onMenu(1);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('section-menu-delete')));
       await tester.pumpAndSettle();
       expect(bar().sections, hasLength(2));
       expect(identical(bar().sections[0].tracks, bar().sections[1].tracks), isTrue);
 
       // Make unique from the menu: B leaves the group with a copy
-      bar().onLongPress(1);
+      bar().onMenu(1);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('section-make-unique')));
       await tester.pumpAndSettle();

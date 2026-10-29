@@ -58,7 +58,24 @@ class Arrangement extends StatelessWidget {
     this.labelWidth = _defaultLabelW,
     this.onLabelWidthChanged,
     this.instrumentNames = const {},
+    this.sectionBand,
+    this.soloHeader,
+    this.headerActions = const [],
+    this.onLoopRange,
+    this.loopRangeEnabled = true,
   });
+
+  /// ui-001 stage 2 (desktop): the section band drawn in the top 16 px of a
+  /// 36 px header row, above a 16 px ruler that sets the loop range by drag
+  /// ([onLoopRange]). [soloHeader] (only while a Solo is active) and
+  /// [headerActions] sit in the label column. Null band = the phone 28 px row.
+  final Widget? sectionBand;
+  final Widget? soloHeader;
+  final List<Widget> headerActions;
+  final ValueChanged<PlaybackRange>? onLoopRange;
+
+  /// False while recording / counting in / previewing the song.
+  final bool loopRangeEnabled;
 
   final Section section;
   final TimelineView? view;
@@ -251,64 +268,103 @@ class Arrangement extends StatelessWidget {
       ),
     );
     final ko = Localizations.localeOf(context).languageCode == 'ko';
-    return Column(
+    final labelRow = Row(
       children: [
-        SizedBox(
-          height: 28,
-          child: Row(
-            children: [
-              SizedBox(
-                width: labelWidth,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        ko ? '트랙 · 악기' : 'Track · instrument',
-                        style: const TextStyle(fontSize: 11, color: LT.t2),
-                      ),
-                    ),
-                    if (onLabelWidthChanged != null)
-                      Tooltip(
-                        message:
-                            ko
-                                ? '좌우로 끌어 이름 영역 조절'
-                                : 'Drag to resize track labels',
-                        child: MouseRegion(
-                          cursor: SystemMouseCursors.resizeLeftRight,
-                          child: GestureDetector(
-                            key: const ValueKey('track-label-resize'),
-                            behavior: HitTestBehavior.opaque,
-                            onHorizontalDragUpdate:
-                                (d) => onLabelWidthChanged!(
-                                  labelWidth + d.delta.dx,
-                                ),
-                            child: const SizedBox(
-                              width: 16,
-                              height: 28,
-                              child: Icon(
-                                Icons.drag_indicator,
-                                size: 13,
-                                color: LT.t3,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: _gap),
-              Expanded(
-                child: TimelineRuler(
-                  view: visible,
-                  steps: steps,
-                  loopRange: loopRange,
-                  onSeek: onSeek,
-                ),
-              ),
-            ],
+        Expanded(
+          child: Text(
+            ko ? '트랙 · 악기' : 'Track · instrument',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, color: LT.t2),
           ),
         ),
+        ...headerActions,
+        if (onLabelWidthChanged != null)
+          Tooltip(
+            message:
+                ko
+                    ? '좌우로 끌어 이름 영역 조절'
+                    : 'Drag to resize track labels',
+            child: MouseRegion(
+              cursor: SystemMouseCursors.resizeLeftRight,
+              child: GestureDetector(
+                key: const ValueKey('track-label-resize'),
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragUpdate:
+                    (d) => onLabelWidthChanged!(
+                      labelWidth + d.delta.dx,
+                    ),
+                child: const SizedBox(
+                  width: 16,
+                  height: 28,
+                  child: Icon(
+                    Icons.drag_indicator,
+                    size: 13,
+                    color: LT.t3,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+    final ruler = TimelineRuler(
+      view: visible,
+      steps: steps,
+      loopRange: loopRange,
+      onSeek: onSeek,
+      onRange: sectionBand == null ? null : onLoopRange,
+      rangeEnabled: loopRangeEnabled,
+    );
+    final header =
+        sectionBand == null
+            ? SizedBox(
+              height: 28,
+              child: Row(
+                children: [
+                  SizedBox(width: labelWidth, child: labelRow),
+                  const SizedBox(width: _gap),
+                  Expanded(child: ruler),
+                ],
+              ),
+            )
+            : SizedBox(
+              key: const ValueKey('arrangement-header'),
+              height: 36,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: labelWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          height: 16,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: soloHeader ?? const SizedBox.shrink(),
+                          ),
+                        ),
+                        Expanded(child: ClipRect(child: OverflowBox(maxHeight: 28, child: labelRow))),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: _gap),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        sectionBand!,
+                        const SizedBox(height: 4),
+                        Expanded(child: ruler),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+    return Column(
+      children: [
+        header,
         Expanded(child: lanes),
       ],
     );
