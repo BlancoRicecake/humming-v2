@@ -22,6 +22,7 @@ import 'package:humming/looptap/widgets/desktop_instrument.dart';
 import 'package:humming/looptap/widgets/desktop_workspace.dart';
 import 'package:provider/provider.dart';
 
+import '../support/desktop_view.dart';
 import '../support/offline_fonts.dart';
 import '../support/step_grid_harness.dart';
 
@@ -249,6 +250,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      // ui-001 stage 3: the section band and track rows are the arrange view
+      await showArrange(tester);
       DesktopCommands commands() =>
           tester.widget<DesktopCommands>(find.byType(DesktopCommands));
       // ui-001 stage 2: desktop sections live in the track header band

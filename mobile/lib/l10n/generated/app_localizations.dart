@@ -5279,6 +5279,60 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'눌러서 강약 보기'**
   String get soloIssueOpenHint;
+
+  /// No description provided for @shortcutViewToggle.
+  ///
+  /// In ko, this message translates to:
+  /// **'편곡 ↔ 편집 보기'**
+  String get shortcutViewToggle;
+
+  /// No description provided for @shortcutOpenEditor.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택한 트랙 편집 (편곡 보기)'**
+  String get shortcutOpenEditor;
+
+  /// No description provided for @viewArrange.
+  ///
+  /// In ko, this message translates to:
+  /// **'편곡'**
+  String get viewArrange;
+
+  /// No description provided for @viewEdit.
+  ///
+  /// In ko, this message translates to:
+  /// **'편집'**
+  String get viewEdit;
+
+  /// No description provided for @viewLocked.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 중에는 보기를 바꿀 수 없어요'**
+  String get viewLocked;
+
+  /// No description provided for @minimapEditing.
+  ///
+  /// In ko, this message translates to:
+  /// **'{track} 편집 중'**
+  String minimapEditing(String track);
+
+  /// No description provided for @minimapToArrange.
+  ///
+  /// In ko, this message translates to:
+  /// **'편곡 보기로'**
+  String get minimapToArrange;
+
+  /// No description provided for @minimapOverviewTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 전체 · 클릭: 재생 위치 이동 · 사각형 끌기: 피아노롤 이동'**
+  String get minimapOverviewTooltip;
+
+  /// No description provided for @arrangeHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙 줄을 두 번 누르거나 Enter를 누르면 편집 보기로 넘어가요'**
+  String get arrangeHint;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

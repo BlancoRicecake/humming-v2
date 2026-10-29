@@ -3,8 +3,8 @@
 // and the bottom TransportBar on desktop only; every control calls the
 // editor's existing handler (play/stop/record, metronome, count-in, range
 // loop, BPM entry and stepper, key sheet, swing, section length, undo/redo,
-// mixer, guided start, clear track, export). The view switch (편곡 | 편집)
-// arrives in stage 3 and is not shown yet.
+// mixer, guided start, clear track, export). Stage 3 adds the view switch
+// (편곡 | 편집) after the title.
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -63,7 +63,14 @@ class DesktopTopBar extends StatefulWidget {
     required this.onShortcuts,
     required this.onExport,
     required this.pro,
+    this.view,
+    this.onView,
   });
+
+  /// ui-001 stage 3: the current desktop view ('arrange' / 'edit'; null = no
+  /// switch) and the switch (null = locked while recording / counting in).
+  final String? view;
+  final ValueChanged<String>? onView;
 
   final TextEditingController titleController;
   final ValueChanged<String> onTitleChanged;
@@ -128,7 +135,9 @@ class _DesktopTopBarState extends State<DesktopTopBar> {
           delegate: _TopBarLayout(),
           children: [
             LayoutId(id: _Slot.left, child: _left(l)),
-            LayoutId(id: _Slot.center, child: _center(l)),
+            // the song info gets compact texts below 1200 px (room for the
+            // view switch on the left)
+            LayoutId(id: _Slot.center, child: _center(l, compact: c.maxWidth < 1200)),
             LayoutId(id: _Slot.right, child: _right(l, compact: c.maxWidth < 1068)),
           ],
         ),
@@ -137,7 +146,17 @@ class _DesktopTopBarState extends State<DesktopTopBar> {
   }
 
   // ── left: back · title / save state ──
-  Widget _left(L10n l) {
+  // ui-001 stage 3: the view switch is always there; a narrow left slot
+  // shows it as two icons (names in the tooltips) and the title shrinks.
+  Widget _left(L10n l) => LayoutBuilder(
+    builder:
+        (context, c) => _leftRow(
+          l,
+          viewStyle: c.maxWidth >= 280 ? _ViewStyle.labels : _ViewStyle.icons,
+        ),
+  );
+
+  Widget _leftRow(L10n l, {required _ViewStyle viewStyle}) {
     final t = widget.savedAt;
     final time = t == null ? null : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
     final saved = !widget.dirty && time != null;
@@ -197,12 +216,73 @@ class _DesktopTopBarState extends State<DesktopTopBar> {
             ],
           ),
         ),
+        if (widget.view != null) ...[
+          const SizedBox(width: 10),
+          _viewSwitch(l, compact: viewStyle == _ViewStyle.icons),
+        ],
       ],
     );
   }
 
+  Widget _viewSwitch(L10n l, {bool compact = false}) {
+    final locked = widget.onView == null;
+    Widget item(String id, String label, IconData icon) {
+      final on = widget.view == id;
+      final color = on ? LT.bg : (locked ? LT.t3 : LT.t2);
+      Widget cell = GestureDetector(
+        key: ValueKey('view-$id'),
+        behavior: HitTestBehavior.opaque,
+        onTap: locked || on ? null : () => widget.onView!(id),
+        child: Container(
+          height: 30,
+          constraints: BoxConstraints(minWidth: compact ? 36 : 0),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: on ? LT.lime : null,
+            borderRadius: BorderRadius.circular(LTRadius.pill),
+          ),
+          child:
+              compact
+                  ? Ms(icon, size: 16, color: color)
+                  : Text(
+                    label,
+                    maxLines: 1,
+                    style: LTType.inter(size: 12, weight: FontWeight.w700, color: color),
+                  ),
+        ),
+      );
+      if (compact) cell = Tooltip(message: label, child: cell);
+      return cell;
+    }
+
+    return Tooltip(
+      message: locked ? l.viewLocked : withShortcut(context, l.shortcutViewToggle, DesktopShortcutId.viewToggle),
+      child: Container(
+        key: const ValueKey('top-view-switch'),
+        height: 36,
+        // 36 - 2 x (2 padding + 1 border) = 30 px buttons
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: LT.surface2,
+          borderRadius: BorderRadius.circular(LTRadius.pill),
+          border: Border.all(color: LT.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            item('arrange', l.viewArrange, Symbols.view_timeline),
+            item('edit', l.viewEdit, Symbols.edit_note),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── centre: metronome · count-in · loop · stop · play · record · song info ──
-  Widget _center(L10n l) {
+  /// [compact] (narrow window): the song info's texts get shorter so the
+  /// left slot keeps room for the view switch; every control stays.
+  Widget _center(L10n l, {bool compact = false}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -291,19 +371,19 @@ class _DesktopTopBarState extends State<DesktopTopBar> {
           ),
         ],
         const SizedBox(width: 12),
-        _songInfo(l),
+        _songInfo(l, compact: compact),
       ],
     );
   }
 
-  Widget _divider() => Container(
+  Widget _divider({bool compact = false}) => Container(
     width: 1,
     height: 18,
-    margin: const EdgeInsets.symmetric(horizontal: 10),
+    margin: EdgeInsets.symmetric(horizontal: compact ? 6 : 10),
     color: LT.borderStrong,
   );
 
-  Widget _songInfo(L10n l) {
+  Widget _songInfo(L10n l, {bool compact = false}) {
     return MenuAnchor(
       controller: _settings,
       alignmentOffset: const Offset(0, 6),
@@ -345,9 +425,10 @@ class _DesktopTopBarState extends State<DesktopTopBar> {
                   ),
                 ),
               ),
-              _divider(),
+              _divider(compact: compact),
               Tooltip(
-                message: l.topBarBpmTap,
+                // compact: the "BPM" suffix moves into the tooltip
+                message: compact ? '${widget.bpm} BPM · ${l.topBarBpmTap}' : l.topBarBpmTap,
                 child: GestureDetector(
                   key: const ValueKey('top-bpm'),
                   behavior: HitTestBehavior.opaque,
@@ -358,22 +439,30 @@ class _DesktopTopBarState extends State<DesktopTopBar> {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text('${widget.bpm}', style: LTType.mono(size: 13, weight: FontWeight.w700, color: LT.t1)),
-                      const SizedBox(width: 3),
-                      Text('BPM', style: LTType.inter(size: 9, color: LT.t3)),
+                      if (!compact) ...[
+                        const SizedBox(width: 3),
+                        Text('BPM', style: LTType.inter(size: 9, color: LT.t3)),
+                      ],
                     ],
                   ),
                 ),
               ),
-              _divider(),
+              _divider(compact: compact),
               Tooltip(
-                message: l.topBarKeyTap,
+                // compact: a long key name is cut (full name in the tooltip)
+                message: compact ? '${widget.keyLabel} · ${l.topBarKeyTap}' : l.topBarKeyTap,
                 child: GestureDetector(
                   key: const ValueKey('top-key'),
                   behavior: HitTestBehavior.opaque,
                   onTap: widget.onKey,
-                  child: Text(
-                    widget.keyLabel,
-                    style: LTType.inter(size: 12, weight: FontWeight.w700, color: LT.lime),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: compact ? 44 : double.infinity),
+                    child: Text(
+                      widget.keyLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LTType.inter(size: 12, weight: FontWeight.w700, color: LT.lime),
+                    ),
                   ),
                 ),
               ),
@@ -518,6 +607,8 @@ class _DesktopTopBarState extends State<DesktopTopBar> {
 }
 
 enum _Slot { left, center, right }
+
+enum _ViewStyle { labels, icons }
 
 /// Right group at its natural width; centre group centred unless that would
 /// hit the right group (then it sits just left of it); left group gets the

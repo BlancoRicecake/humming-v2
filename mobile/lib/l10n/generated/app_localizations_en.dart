@@ -2964,4 +2964,34 @@ class L10nEn extends L10n {
 
   @override
   String get soloIssueOpenHint => 'Click to view velocity';
+
+  @override
+  String get shortcutViewToggle => 'Arrange ↔ edit view';
+
+  @override
+  String get shortcutOpenEditor => 'Edit the selected track (arrange view)';
+
+  @override
+  String get viewArrange => 'Arrange';
+
+  @override
+  String get viewEdit => 'Edit';
+
+  @override
+  String get viewLocked => 'Views can\'t change while recording';
+
+  @override
+  String minimapEditing(String track) {
+    return 'Editing $track';
+  }
+
+  @override
+  String get minimapToArrange => 'Back to the arrange view';
+
+  @override
+  String get minimapOverviewTooltip =>
+      'Whole song · click: move the playhead · drag the box: scroll the piano roll';
+
+  @override
+  String get arrangeHint => 'Double-click a track or press Enter to edit it';
 }

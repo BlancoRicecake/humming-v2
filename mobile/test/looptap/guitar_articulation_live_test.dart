@@ -27,6 +27,7 @@ import 'package:humming/looptap/widgets/desktop_workspace.dart';
 import 'package:humming/looptap/widgets/surfaces/step_grid.dart';
 import 'package:provider/provider.dart';
 
+import '../support/desktop_view.dart';
 import '../support/midi_all_events.dart';
 import '../support/offline_fonts.dart';
 import '../support/step_grid_harness.dart';
@@ -147,8 +148,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    if (grid) {
-      tester.widget<Arrangement>(find.byType(Arrangement)).onSelect('melody');
+    if (!grid) {
+      // ui-001 stage 3: these tests drive the timeline (seek, loop range,
+      // mute / Solo), which the desktop arrange view shows
+      await showArrange(tester);
+    } else {
+      await editTrack(tester, 'melody');
       await tester.pumpAndSettle();
       tester
           .widget<GestureDetector>(

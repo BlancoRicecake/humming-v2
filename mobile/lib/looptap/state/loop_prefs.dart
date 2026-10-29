@@ -58,8 +58,20 @@ class LoopPrefs {
   /// Velocity / chance lane under the roll.
   final ValueNotifier<bool> gridVelocityLane = ValueNotifier<bool>(true);
 
-  /// Desktop timeline (arrangement) collapsed to one row.
+  /// Desktop timeline (arrangement) collapsed to one row. Phone/tablet only
+  /// since ui-001 stage 3: the desktop editor uses [desktopView] instead.
   final ValueNotifier<bool> timelineCollapsed = ValueNotifier<bool>(false);
+
+  /// ui-001 stage 3: the desktop editor's view, 'arrange' (the timeline takes
+  /// the window) or 'edit' (a 44 px minimap above the editing surface).
+  final ValueNotifier<String> desktopView = ValueNotifier<String>(kDesktopViewEdit);
+  static const kDesktopViewEdit = 'edit', kDesktopViewArrange = 'arrange';
+
+  Future<void> setDesktopView(String view) async {
+    if (view != kDesktopViewEdit && view != kDesktopViewArrange) return;
+    desktopView.value = view;
+    await _persist();
+  }
 
   /// Quantize: grid id (see `QuantizeGrid.name`), strength 0..100 and
   /// whether note ends are quantized too.
@@ -188,6 +200,7 @@ class LoopPrefs {
     gridToolsExpanded.value = false;
     gridVelocityLane.value = true;
     timelineCollapsed.value = false;
+    desktopView.value = kDesktopViewEdit;
   }
 
   Future<void> setQuantize({String? grid, double? strength, bool? ends}) async {
@@ -214,6 +227,10 @@ class LoopPrefs {
 
   bool _loaded = false;
 
+  /// Lets the next [bootstrap] read the file again (an app restart in tests).
+  @visibleForTesting
+  void debugAllowReload() => _loaded = false;
+
   static Future<File> _file() async {
     final dir = rootOverride ?? await getApplicationDocumentsDirectory();
     final folder = Directory('${dir.path}/looptap');
@@ -225,6 +242,7 @@ class LoopPrefs {
   Future<void> bootstrap() async {
     if (_loaded) return;
     _loaded = true;
+    var migrateView = false;
     try {
       final f = await _file();
       if (!await f.exists()) return;
@@ -251,6 +269,16 @@ class LoopPrefs {
       }
       if (m['timelineCollapsed'] is bool) {
         timelineCollapsed.value = m['timelineCollapsed'] as bool;
+      }
+      // ui-001 stage 3: a saved valid desktopView wins. Missing (older
+      // prefs: once, including users whose timeline was collapsed, who were
+      // already looking at the editor) or invalid = 'edit', saved right away.
+      final view = m['desktopView'];
+      if (view == kDesktopViewEdit || view == kDesktopViewArrange) {
+        desktopView.value = view as String;
+      } else {
+        desktopView.value = kDesktopViewEdit;
+        migrateView = true;
       }
       if (m['quantizeGrid'] is String) {
         quantizeGrid.value = m['quantizeGrid'] as String;
@@ -333,6 +361,7 @@ class LoopPrefs {
     } catch (e) {
       debugPrint('[looptap] prefs load failed: $e');
     }
+    if (migrateView) await _persist();
   }
 
   Future<void> _persist() async {
@@ -352,6 +381,7 @@ class LoopPrefs {
           'gridToolsExpanded': gridToolsExpanded.value,
           'gridVelocityLane': gridVelocityLane.value,
           'timelineCollapsed': timelineCollapsed.value,
+          'desktopView': desktopView.value,
           'quantizeGrid': quantizeGrid.value,
           'quantizeStrength': quantizeStrength.value,
           'quantizeEnds': quantizeEnds.value,

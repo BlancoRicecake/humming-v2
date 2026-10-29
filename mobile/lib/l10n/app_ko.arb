@@ -1204,5 +1204,15 @@
   "soloIssueNoNotes": "이 구간에 재생할 노트·오디오가 없어요",
   "soloIssueVeryQuiet": "노트 세기 {min}–{max}/127 · 매우 작게 들릴 수 있어요",
   "@soloIssueVeryQuiet": {"placeholders": {"min": {"type": "int"}, "max": {"type": "int"}}},
-  "soloIssueOpenHint": "눌러서 강약 보기"
+  "soloIssueOpenHint": "눌러서 강약 보기",
+  "shortcutViewToggle": "편곡 ↔ 편집 보기",
+  "shortcutOpenEditor": "선택한 트랙 편집 (편곡 보기)",
+  "viewArrange": "편곡",
+  "viewEdit": "편집",
+  "viewLocked": "녹음 중에는 보기를 바꿀 수 없어요",
+  "minimapEditing": "{track} 편집 중",
+  "@minimapEditing": {"placeholders": {"track": {"type": "String"}}},
+  "minimapToArrange": "편곡 보기로",
+  "minimapOverviewTooltip": "곡 전체 · 클릭: 재생 위치 이동 · 사각형 끌기: 피아노롤 이동",
+  "arrangeHint": "트랙 줄을 두 번 누르거나 Enter를 누르면 편집 보기로 넘어가요"
 }

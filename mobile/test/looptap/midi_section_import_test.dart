@@ -22,6 +22,7 @@ import 'package:humming/looptap/widgets/desktop_workspace.dart';
 import 'package:humming/looptap/widgets/sheets/midi_import_sheet.dart';
 import 'package:provider/provider.dart';
 
+import '../support/desktop_view.dart';
 import '../support/offline_fonts.dart';
 
 // ── SMF builder (ppq 480: a bar is 1920 ticks, a step 120) ──
@@ -742,6 +743,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      // ui-001 stage 3: the section band is in the arrange view
+      await showArrange(tester);
       // ui-001 stage 2: desktop sections live in the track header band
       DesktopSectionBand bar() =>
           tester.widget<DesktopSectionBand>(find.byType(DesktopSectionBand));

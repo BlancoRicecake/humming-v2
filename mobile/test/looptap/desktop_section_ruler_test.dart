@@ -24,8 +24,10 @@ import 'package:humming/looptap/widgets/desktop_top_bar.dart';
 import 'package:humming/looptap/widgets/section_bar.dart';
 import 'package:humming/looptap/widgets/solo_status_notice.dart';
 import 'package:humming/looptap/widgets/surfaces/step_grid.dart';
+import 'package:humming/looptap/widgets/timeline_minimap.dart';
 import 'package:provider/provider.dart';
 
+import '../support/desktop_view.dart';
 import '../support/offline_fonts.dart';
 
 class _Store extends LoopStore {
@@ -65,6 +67,7 @@ void main() {
     List<Section>? sections,
     List<PitchNote> melody = const [],
     GlobalKey<NavigatorState>? nav,
+    bool arrange = true,
   }) async {
     EditScreen.debugDesktopOverride = desktop;
     layoutErrors.clear();
@@ -96,6 +99,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // ui-001 stage 3: the band and the ruler are the arrange view's (the
+    // editor opens in the edit view)
+    if (desktop && nav == null && arrange) await showArrange(tester);
     return song;
   }
 
@@ -299,6 +305,7 @@ void main() {
       final editor = MaterialPageRoute<void>(builder: (_) => EditScreen(song: song));
       nav.currentState!.push(editor);
       await tester.pumpAndSettle();
+      await showArrange(tester);
       band(tester);
       await tester.tap(find.byKey(const ValueKey('A')));
       await tester.pump(const Duration(milliseconds: 50));
@@ -313,20 +320,23 @@ void main() {
       expect(find.text('songs'), findsOneWidget);
     });
 
-    testWidgets('folded timeline: the band, Solo controls and restart stay reachable', (tester) async {
-      await open(tester, sections: three());
-      await tester.tap(find.byKey(const ValueKey('timeline-collapse')));
-      await tester.pumpAndSettle();
+    // ui-001 stage 3: the edit view replaces the desktop timeline fold. Its
+    // minimap keeps every section reachable; the arrange view has the band
+    // (and restart) for the section actions.
+    testWidgets('edit view (replaces the fold): sections from the minimap; band and restart in the arrange view', (tester) async {
+      await open(tester, sections: three(), arrange: false);
+      expect(find.byKey(const ValueKey('timeline-collapse')), findsNothing);
+      expect(find.byKey(const ValueKey('timeline-expand')), findsNothing);
       expect(find.byType(Arrangement), findsNothing);
-      expect(find.byType(DesktopSectionBand), findsOneWidget);
-      expect(find.byKey(const ValueKey('audition-restart')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('C')));
-      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(DesktopSectionBand), findsNothing);
+      final map = tester.widget<TimelineMinimap>(find.byType(TimelineMinimap)).map;
+      final overview = tester.getRect(find.byKey(const ValueKey('minimap-overview')));
+      await tester.tapAt(Offset(overview.left + overview.width * (map.instanceStart(2, 0) + 4) / map.total, overview.center.dy));
       await tester.pumpAndSettle();
+      expect(tester.widget<TimelineMinimap>(find.byType(TimelineMinimap)).activeIdx, 2);
+      await showArrange(tester);
       expect(band(tester).activeIdx, 2);
-      await tester.tap(find.byKey(const ValueKey('timeline-expand')));
-      await tester.pumpAndSettle();
-      expect(find.byType(Arrangement), findsOneWidget);
+      expect(find.byKey(const ValueKey('audition-restart')), findsOneWidget);
     });
   });
 
@@ -351,19 +361,24 @@ void main() {
       expect(tip.message, contains('Velocity 3–3/127'));
       await tester.tap(find.byKey(const ValueKey('solo-status-notice')));
       await tester.pumpAndSettle();
-      expect(arrangement(tester).activeId, 'melody');
+      // ui-001 stage 3: 강약 보기 opens the edit view on that track's grid,
+      // where the Solo controls sit beside the minimap's track button
+      expect(find.byType(Arrangement), findsNothing);
       expect(find.byType(StepGrid), findsOneWidget);
+      expect(find.byType(DesktopSoloHeader), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('audition-clear-solo')));
       await tester.pumpAndSettle();
-      expect(arrangement(tester).solos, isEmpty);
       expect(find.byType(DesktopSoloHeader), findsNothing);
+      await showArrange(tester);
+      expect(arrangement(tester).activeId, 'melody');
+      expect(arrangement(tester).solos, isEmpty);
     });
   });
 
   group('key-hint row and phone', () {
     testWidgets('desktop: pad keeps the key-hint row, grid hides it', (tester) async {
-      await open(tester);
-      arrangement(tester).onSelect('melody');
+      await open(tester, arrange: false);
+      await editTrack(tester, 'melody');
       await tester.pumpAndSettle();
       expect(find.byTooltip('Instrument keys'), findsOneWidget, reason: 'pad mode');
       tester.widget<GestureDetector>(find.ancestor(of: find.text('Grid'), matching: find.byType(GestureDetector)).first).onTap!();
@@ -545,8 +560,9 @@ void main() {
   });
 
   testWidgets('1280x720 grid: measured stack (SectionBar / AuditionBar / key-hint rows gone)', (tester) async {
-    await open(tester, melody: [PitchNote(midi: 60, freq: 261.63, step: 0, dur: 4)]);
-    arrangement(tester).onSelect('melody');
+    await open(tester, melody: [PitchNote(midi: 60, freq: 261.63, step: 0, dur: 4)], arrange: false);
+    // ui-001 stage 3: the editing surface is the edit view's
+    await editTrack(tester, 'melody');
     await tester.pumpAndSettle();
     tester.widget<GestureDetector>(find.ancestor(of: find.text('Grid'), matching: find.byType(GestureDetector)).first).onTap!();
     await tester.pumpAndSettle();
@@ -554,9 +570,10 @@ void main() {
     expect(find.byType(AuditionBar), findsNothing);
     expect(find.byTooltip('Instrument keys'), findsNothing);
     final viewport = tester.getRect(find.byKey(const ValueKey('pitch-grid-viewport')));
+    await showArrange(tester);
     final header = tester.getRect(find.byKey(const ValueKey('arrangement-header')));
-    debugPrint('[stage2-measure] 1280x720 grid: pitch-grid-viewport height=${viewport.height.toStringAsFixed(1)} '
-        'top=${viewport.top.toStringAsFixed(1)} header=${header.height}');
+    debugPrint('[stage2-measure] 1280x720 grid (stage 3 edit view): pitch-grid-viewport height=${viewport.height.toStringAsFixed(1)} '
+        'top=${viewport.top.toStringAsFixed(1)} arrange header=${header.height}');
     expect(header.height, 36);
   });
 }

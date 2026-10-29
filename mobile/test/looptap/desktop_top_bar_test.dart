@@ -14,7 +14,6 @@ import 'package:humming/looptap/screens/edit_screen.dart';
 import 'package:humming/looptap/state/loop_prefs.dart';
 import 'package:humming/looptap/state/loop_storage.dart';
 import 'package:humming/looptap/state/loop_store.dart';
-import 'package:humming/looptap/widgets/arrangement.dart';
 import 'package:humming/looptap/widgets/desktop_top_bar.dart';
 import 'package:humming/looptap/widgets/desktop_workspace.dart';
 import 'package:humming/looptap/widgets/shortcut_help.dart';
@@ -23,6 +22,7 @@ import 'package:humming/looptap/widgets/transport_bar.dart';
 import 'package:provider/provider.dart';
 
 import '../support/drum_grid_harness.dart';
+import '../support/desktop_view.dart';
 import '../support/offline_fonts.dart';
 import '../support/step_grid_harness.dart';
 
@@ -36,6 +36,10 @@ class _Store extends LoopStore {
 
 const _buttons = [
   'top-back',
+  // ui-001 stage 3: the view switch, both halves, at every window size
+  'top-view-switch',
+  'view-arrange',
+  'view-edit',
   'top-metro',
   'top-count-in',
   'top-loop',
@@ -86,18 +90,30 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  /// Every test that opens the editor runs inside this: Ahem test glyphs
+  /// overflow unrelated fixed-width labels elsewhere in the editor, so overflow
+  /// reports are filtered (top-bar ones are collected in [topBarErrors]), and
+  /// the filter is restored in `finally` — a failing expect never leaves it
+  /// installed (that hid the real failure and hung the following tests).
+  void editorTest(String description, WidgetTesterCallback body) {
+    testWidgets(description, (tester) async {
+      topBarErrors.clear();
+      final onError = FlutterError.onError;
+      FlutterError.onError = (d) {
+        final text = d.toString();
+        if (text.contains('desktop_top_bar.dart')) topBarErrors.add(text);
+        if (!d.exceptionAsString().contains('overflowed')) onError?.call(d);
+      };
+      try {
+        await body(tester);
+      } finally {
+        FlutterError.onError = onError;
+      }
+    });
+  }
+
   Future<Song> open(WidgetTester tester, Size size, {String locale = 'en', bool desktop = true, List<PitchNote> notes = const []}) async {
     EditScreen.debugDesktopOverride = desktop;
-    topBarErrors.clear();
-    final onError = FlutterError.onError;
-    FlutterError.onError = (d) {
-      final text = d.toString();
-      // Ahem test glyphs overflow unrelated fixed-width labels elsewhere in the
-      // editor; only errors raised inside the top bar are this test's concern.
-      if (text.contains('desktop_top_bar.dart')) topBarErrors.add(text);
-      if (!d.exceptionAsString().contains('overflowed')) onError?.call(d);
-    };
-    addTearDown(() => FlutterError.onError = onError);
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final sec = Section(id: 'A', name: 'A', bars: 2)..tracks['melody'] = TrackData(notes: List.of(notes));
@@ -122,7 +138,7 @@ void main() {
   group('layout', () {
     for (final size in const [Size(960, 600), Size(1280, 720), Size(1920, 1080)]) {
       for (final locale in const ['ko', 'en']) {
-        testWidgets('${size.width.toInt()}x${size.height.toInt()} $locale: 52 px bar, no bottom transport, '
+        editorTest('${size.width.toInt()}x${size.height.toInt()} $locale: 52 px bar, no bottom transport, '
             'every button inside the window, no top-bar overflow', (tester) async {
           await open(tester, size, locale: locale);
           final bar = tester.getRect(find.byKey(const ValueKey('desktop-top-bar')));
@@ -147,27 +163,36 @@ void main() {
             expect(tips, greaterThan(0), reason: key);
           }
           expect(topBarErrors, isEmpty);
+          // the switch halves are at least 30 px tall and not overlapping
+          final arrange = tester.getRect(find.byKey(const ValueKey('view-arrange')));
+          final edit = tester.getRect(find.byKey(const ValueKey('view-edit')));
+          expect(arrange.height, greaterThanOrEqualTo(30));
+          expect(arrange.right, lessThanOrEqualTo(edit.left));
+          final labels = find.descendant(of: find.byKey(const ValueKey('top-view-switch')), matching: find.byType(Text)).evaluate().length;
+          debugPrint('[top-bar] ${size.width.toInt()} $locale view switch: ${labels == 2 ? 'labels' : 'icons'} '
+              'title=${tester.getSize(find.byKey(const ValueKey('top-title'))).width.toStringAsFixed(1)}');
           // the bar sits above the section bar; the old save / mixer icons are gone from it
           expect(find.descendant(of: find.byKey(const ValueKey('desktop-top-bar')), matching: find.byTooltip('Save')), findsNothing);
         });
       }
     }
 
-    testWidgets('phone 844x390 keeps the old top bar and TransportBar', (tester) async {
+    editorTest('phone 844x390 keeps the old top bar and TransportBar', (tester) async {
       await open(tester, const Size(844, 390), desktop: false);
       expect(find.byType(DesktopTopBar), findsNothing);
       expect(find.byType(TransportBar), findsOneWidget);
     });
 
-    testWidgets('the timeline header no longer repeats the shortcut hint', (tester) async {
+    editorTest('the timeline header no longer repeats the shortcut hint', (tester) async {
       await open(tester, const Size(1280, 720));
+      await showArrange(tester);
       expect(find.textContaining('Space ▶/Ⅱ'), findsNothing);
       expect(find.byType(DesktopTimeline), findsOneWidget);
     });
   });
 
   group('controls drive the existing editor state (1280x720)', () {
-    testWidgets('metronome, count-in, range loop, play/stop', (tester) async {
+    editorTest('metronome, count-in, range loop, play/stop', (tester) async {
       await open(tester, const Size(1280, 720));
       final countIn = top(tester).countIn;
       await tester.tap(find.byKey(const ValueKey('top-metro')));
@@ -180,7 +205,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('top-loop')));
       await tester.pumpAndSettle();
       expect(top(tester).rangeLoop, isTrue);
-      expect(tester.widget<Arrangement>(find.byType(Arrangement)).loopRange, isNotNull);
+      expect((await arrangeTimeline(tester)).loopRange, isNotNull);
       await tester.tap(find.byKey(const ValueKey('top-play')));
       await tester.pump();
       expect(top(tester).playing, isTrue);
@@ -192,7 +217,7 @@ void main() {
       LoopPrefs.instance.metro.value = false;
     });
 
-    testWidgets('BPM: type a value (40–220 kept), stepper, undo; key sheet', (tester) async {
+    editorTest('BPM: type a value (40–220 kept), stepper, undo; key sheet', (tester) async {
       await open(tester, const Size(1280, 720));
       await tester.tap(find.byKey(const ValueKey('top-bpm')));
       await tester.pumpAndSettle();
@@ -262,7 +287,7 @@ void main() {
       expect(find.text('songs'), findsOneWidget);
     });
 
-    testWidgets('song settings popover: swing 0–60 %, section length 1|2|4, right-click opens it', (tester) async {
+    editorTest('song settings popover: swing 0–60 %, section length 1|2|4, right-click opens it', (tester) async {
       final song = await open(tester, const Size(1280, 720));
       await tester.tapAt(tester.getCenter(find.byKey(const ValueKey('top-song-info'))), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
@@ -281,7 +306,7 @@ void main() {
       expect(song.id, store.lastSaved!.id);
     });
 
-    testWidgets('record from the top bar; while recording Ctrl+L / Ctrl+M / F1 do nothing', (tester) async {
+    editorTest('record from the top bar; while recording Ctrl+L / Ctrl+M / F1 do nothing', (tester) async {
       await open(tester, const Size(1280, 720));
       if (top(tester).countIn) {
         await tester.tap(find.byKey(const ValueKey('top-count-in')));
@@ -303,7 +328,7 @@ void main() {
       expect(top(tester).recording, isFalse);
     });
 
-    testWidgets('more menu (mixer, guided, clear), help button, F1 / Ctrl+/ / Ctrl+M / Ctrl+L', (tester) async {
+    editorTest('more menu (mixer, guided, clear), help button, F1 / Ctrl+/ / Ctrl+M / Ctrl+L', (tester) async {
       await open(tester, const Size(1280, 720));
       await tester.tap(find.byKey(const ValueKey('top-more')));
       await tester.pumpAndSettle();
@@ -342,7 +367,7 @@ void main() {
       expect(top(tester).rangeLoop, isFalse);
     });
 
-    testWidgets('typing in the title field: no shortcut fires', (tester) async {
+    editorTest('typing in the title field: no shortcut fires', (tester) async {
       await open(tester, const Size(1280, 720));
       await tester.tap(find.byKey(const ValueKey('top-title')));
       await tester.pumpAndSettle();
@@ -358,7 +383,7 @@ void main() {
     // when nothing is selected, so a focused piano roll in select/edit mode
     // with notes keeps Ctrl+L either way; elsewhere Ctrl+L is the range loop.
     for (final selectAll in [true, false]) {
-      testWidgets('Ctrl+L on a focused piano roll (select/edit, '
+      editorTest('Ctrl+L on a focused piano roll (select/edit, '
           '${selectAll ? 'all selected' : 'nothing selected'}) = legato, not the loop', (tester) async {
         await open(
           tester,
@@ -368,7 +393,7 @@ void main() {
             PitchNote(midi: 62, freq: 293.66, step: 8, dur: 2),
           ],
         );
-        tester.widget<Arrangement>(find.byType(Arrangement)).onSelect('melody');
+        await editTrack(tester, 'melody');
         await tester.pumpAndSettle();
         if (find.byType(StepGrid).evaluate().isEmpty) {
           tester
@@ -528,6 +553,8 @@ void main() {
           rangeLoop: () => fired.add(DesktopShortcutId.rangeLoop),
           mixer: () => fired.add(DesktopShortcutId.mixer),
           help: () => fired.add(DesktopShortcutId.help),
+          viewToggle: () => fired.add(DesktopShortcutId.viewToggle),
+          openEditor: () => fired.add(DesktopShortcutId.openEditor),
           child: const Scaffold(body: SizedBox.expand()),
         ),
       ));

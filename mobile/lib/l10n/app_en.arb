@@ -990,5 +990,15 @@
   "soloIssueZeroVolume": "Track volume is zero",
   "soloIssueNoNotes": "No notes or audio in this range",
   "soloIssueVeryQuiet": "Velocity {min}–{max}/127 · may be very quiet",
-  "soloIssueOpenHint": "Click to view velocity"
+  "soloIssueOpenHint": "Click to view velocity",
+  "shortcutViewToggle": "Arrange ↔ edit view",
+  "shortcutOpenEditor": "Edit the selected track (arrange view)",
+  "viewArrange": "Arrange",
+  "viewEdit": "Edit",
+  "viewLocked": "Views can't change while recording",
+  "minimapEditing": "Editing {track}",
+  "@minimapEditing": {"placeholders": {"track": {"type": "String"}}},
+  "minimapToArrange": "Back to the arrange view",
+  "minimapOverviewTooltip": "Whole song · click: move the playhead · drag the box: scroll the piano roll",
+  "arrangeHint": "Double-click a track or press Enter to edit it"
 }

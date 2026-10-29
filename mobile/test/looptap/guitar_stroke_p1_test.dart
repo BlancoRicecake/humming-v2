@@ -24,6 +24,7 @@ import 'package:humming/looptap/widgets/desktop_workspace.dart';
 import 'package:provider/provider.dart';
 
 import '../support/midi_events.dart';
+import '../support/desktop_view.dart';
 import '../support/offline_fonts.dart';
 
 const bpm = 120; // 1 step = 125 ms
@@ -161,6 +162,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      // ui-001 stage 3: these tests drive the timeline (seek, loop range),
+      // which the desktop arrange view shows
+      await showArrange(tester);
       final played = <(int, double)>[];
       var now = 0.0;
       LoopAudio.instance.debugOnPlayPitch =

@@ -25,6 +25,7 @@ import 'package:humming/looptap/widgets/surfaces/pitch_grid_surface.dart';
 import 'package:humming/looptap/widgets/surfaces/step_grid.dart';
 import 'package:provider/provider.dart';
 
+import '../support/desktop_view.dart';
 import '../support/offline_fonts.dart';
 
 const _screensOut = String.fromEnvironment('HUMTRACK_SCREENS_OUT');
@@ -623,7 +624,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      tester.widget<Arrangement>(find.byType(Arrangement)).onSelect('melody');
+      if (find.byType(Arrangement).evaluate().isNotEmpty) {
+        tester.widget<Arrangement>(find.byType(Arrangement)).onSelect('melody');
+      } else {
+        // ui-001 stage 3 (desktop edit view): arrange view, double-click the
+        // track = its editor
+        await editTrack(tester, 'melody');
+      }
       await tester.pumpAndSettle();
       if (find.byType(StepGrid).evaluate().isEmpty) {
         tester
@@ -643,56 +650,45 @@ void main() {
 
     double laneHeight(WidgetTester tester) => _viewport(tester).height;
 
-    testWidgets('note lane height: 1266x714 default and 편집 확대, timeline '
-        'fold/unfold, split handle kept', (tester) async {
+    // ui-001 stage 3: on desktop the edit view replaces 편집 확대, the
+    // timeline fold and the split handle (docs/specs/ui/ui-001 "3단계").
+    testWidgets('note lane height: 1266x714 edit view (no 편집 확대 / fold / '
+        'split on desktop), arrange view and back', (tester) async {
       await openGrid(tester, const Size(1266, 714), desktop: true);
-      final initial = laneHeight(tester);
-      expect(find.byType(DesktopSplitHandle), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('grid-focus')));
-      await tester.pumpAndSettle();
-      final focused = laneHeight(tester);
-      debugPrint('[grid-ux] 1266x714 lane default=$initial focus=$focused');
-      expect(focused, greaterThanOrEqualTo(200));
-      expect(LoopPrefs.instance.gridFocus.value, isTrue);
+      final edit = laneHeight(tester);
+      debugPrint('[grid-ux] 1266x714 lane edit-view=$edit');
+      expect(edit, greaterThanOrEqualTo(200));
+      expect(find.byKey(const ValueKey('timeline-minimap')), findsOneWidget);
       expect(find.byType(Arrangement), findsNothing);
+      for (final key in const ['grid-focus', 'timeline-expand', 'timeline-collapse']) {
+        expect(find.byKey(ValueKey(key)), findsNothing, reason: key);
+      }
       expect(find.byType(DesktopSplitHandle), findsNothing);
       // ruler stays directly above the notes
       expect(
         tester.getRect(find.byKey(const ValueKey('pitch-grid-ruler'))).bottom,
         closeTo(_viewport(tester).top, .01),
       );
-      await tester.tap(find.byKey(const ValueKey('timeline-expand')));
+      // the arrange view gives the timeline the window (no surface)
+      await tester.tap(find.byKey(const ValueKey('view-arrange')));
       await tester.pumpAndSettle();
-      expect(LoopPrefs.instance.gridFocus.value, isFalse);
       expect(find.byType(Arrangement), findsOneWidget);
-      expect(laneHeight(tester), closeTo(initial, .01));
-      // desktop timeline collapse (any mode) and the split handle reset
-      await tester.tap(find.byKey(const ValueKey('timeline-collapse')));
+      expect(find.byType(StepGrid), findsNothing);
+      expect(find.byType(DesktopSplitHandle), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('view-edit')));
       await tester.pumpAndSettle();
-      final collapsed = laneHeight(tester);
-      debugPrint('[grid-ux] 1266x714 lane timeline-collapsed=$collapsed');
-      expect(collapsed, greaterThanOrEqualTo(200));
-      expect(LoopPrefs.instance.timelineCollapsed.value, isTrue);
-      await tester.tap(find.byKey(const ValueKey('timeline-expand')));
-      await tester.pumpAndSettle();
-      final handle = find.byType(DesktopSplitHandle);
-      await tester.drag(handle, const Offset(0, -60));
-      await tester.pumpAndSettle();
-      expect(laneHeight(tester), greaterThan(initial));
-      tester.widget<DesktopSplitHandle>(handle).onReset();
-      await tester.pumpAndSettle();
-      expect(laneHeight(tester), closeTo(initial, .01));
+      expect(laneHeight(tester), closeTo(edit, .01));
     });
 
     testWidgets('note lane height: large desktop and phone layouts', (
       tester,
     ) async {
       await openGrid(tester, const Size(1920, 1040), desktop: true);
+      // ui-001 stage 3: the desktop edit view (편집 확대 is phone-only)
       final large = laneHeight(tester);
       expect(large, greaterThanOrEqualTo(200));
-      await tester.tap(find.byKey(const ValueKey('grid-focus')));
-      await tester.pumpAndSettle();
-      final largeFocus = laneHeight(tester);
+      expect(find.byKey(const ValueKey('grid-focus')), findsNothing);
+      final largeFocus = large;
       LoopPrefs.instance.resetGridLayout();
       await tester.pumpWidget(const SizedBox());
       await openGrid(tester, const Size(390, 844), desktop: false);
@@ -715,8 +711,8 @@ void main() {
       tester,
     ) async {
       await openGrid(tester, const Size(1266, 714), desktop: true);
-      await tester.tap(find.byKey(const ValueKey('grid-focus')));
-      await tester.pumpAndSettle();
+      // ui-001 stage 3: the desktop edit view is the enlarged editor
+      // (편집 확대 is phone-only now)
       final played = <int>[];
       LoopAudio.instance.debugOnPlayPitch = (ch, midi, vel, vol) {
         played.add(midi);
@@ -755,8 +751,8 @@ void main() {
         notes: [...notes, long, short],
         desktop: true,
       );
-      await tester.tap(find.byKey(const ValueKey('grid-focus')));
-      await tester.pumpAndSettle();
+      // ui-001 stage 3: the desktop edit view is the enlarged editor
+      // (편집 확대 is phone-only now)
       final before = [
         for (final x in tester.widget<StepGrid>(find.byType(StepGrid)).notes)
           x.toJson(),
@@ -1037,7 +1033,9 @@ void main() {
             n(62, 60, dur: 4),
           ],
         );
-        if (focus) {
+        // ui-001 stage 3: on desktop the edit view already is the enlarged
+        // editor (편집 확대 is phone-only)
+        if (focus && desktop != true) {
           await tester.tap(find.byKey(const ValueKey('grid-focus')));
           await tester.pumpAndSettle();
         }

@@ -21,6 +21,8 @@ enum DesktopShortcutId {
   rangeLoop,
   mixer,
   help,
+  viewToggle,
+  openEditor,
 }
 
 /// One registered key combination. [command] = Ctrl (Windows/Linux) or Cmd
@@ -50,6 +52,8 @@ class DesktopShortcut {
     if (k == LogicalKeyboardKey.space) return 'Space';
     if (k == LogicalKeyboardKey.slash) return '/';
     if (k == LogicalKeyboardKey.f1) return 'F1';
+    if (k == LogicalKeyboardKey.tab) return 'Tab';
+    if (k == LogicalKeyboardKey.enter) return 'Enter';
     return k.keyLabel.toUpperCase();
   }
 }
@@ -67,6 +71,10 @@ const List<DesktopShortcut> kDesktopShortcuts = [
   DesktopShortcut(DesktopShortcutId.duplicateLinked, LogicalKeyboardKey.keyD, command: true, shift: true),
   DesktopShortcut(DesktopShortcutId.help, LogicalKeyboardKey.f1),
   DesktopShortcut(DesktopShortcutId.help, LogicalKeyboardKey.slash, command: true),
+  // ui-001 stage 3: arrange <-> edit view; Enter (arrange view, nothing else
+  // focused) edits the selected track
+  DesktopShortcut(DesktopShortcutId.viewToggle, LogicalKeyboardKey.tab),
+  DesktopShortcut(DesktopShortcutId.openEditor, LogicalKeyboardKey.enter),
 ];
 
 /// Where an editing shortcut works.
@@ -176,6 +184,8 @@ String desktopShortcutLabel(L10n l, DesktopShortcutId id) => switch (id) {
   DesktopShortcutId.rangeLoop => l.shortcutRangeLoop,
   DesktopShortcutId.mixer => l.shortcutMixer,
   DesktopShortcutId.help => l.shortcutHelp,
+  DesktopShortcutId.viewToggle => l.shortcutViewToggle,
+  DesktopShortcutId.openEditor => l.shortcutOpenEditor,
 };
 
 bool _isMac(BuildContext context) => Theme.of(context).platform == TargetPlatform.macOS;

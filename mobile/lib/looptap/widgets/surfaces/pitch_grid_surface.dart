@@ -11,6 +11,7 @@
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart' show HapticFeedback, HardwareKeyboard;
 import 'package:flutter/gestures.dart'
     show PointerScrollEvent, PointerSignalEvent, kPrimaryButton;
@@ -103,6 +104,61 @@ class PitchGridView extends ChangeNotifier {
     _zoom = 1;
     _start = 0;
     notifyListeners();
+  }
+}
+
+/// ui-001 stage 3: lets the desktop minimap follow (and pan) the piano
+/// roll's [PitchGridView] without owning it. The [StepGrid] that creates a
+/// view owns and disposes it; it attaches the view after mounting and
+/// detaches it before disposing. Only the attached view can detach, so a new
+/// grid (track / section switch) that attached first is never cleared by the
+/// old grid's later dispose, and no disposed view is ever handed out.
+class PitchGridViewLink extends ChangeNotifier {
+  PitchGridView? _view;
+  bool _disposed = false, _pending = false;
+
+  /// The roll's live view (null: no piano roll on screen).
+  PitchGridView? get view => _view;
+
+  void attach(PitchGridView view) {
+    if (identical(_view, view)) return;
+    _view?.removeListener(_changed);
+    _view = view..addListener(_changed);
+    _changed();
+  }
+
+  void detach(PitchGridView view) {
+    if (!identical(_view, view)) return;
+    view.removeListener(_changed);
+    _view = null;
+    _changed();
+  }
+
+  // Attach / detach (and a steps change in didUpdateWidget) run while the
+  // tree builds or finalizes, where listeners must not rebuild: their
+  // notification waits for the end of that frame.
+  void _changed() {
+    if (_disposed) return;
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase != SchedulerPhase.persistentCallbacks &&
+        phase != SchedulerPhase.midFrameMicrotasks) {
+      notifyListeners();
+      return;
+    }
+    if (_pending) return;
+    _pending = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _pending = false;
+      if (!_disposed) notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _view?.removeListener(_changed);
+    _view = null;
+    super.dispose();
   }
 }
 

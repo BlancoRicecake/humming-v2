@@ -19,11 +19,11 @@ import 'package:humming/looptap/screens/edit_screen.dart';
 import 'package:humming/looptap/state/loop_prefs.dart';
 import 'package:humming/looptap/state/loop_storage.dart';
 import 'package:humming/looptap/state/loop_store.dart';
-import 'package:humming/looptap/widgets/arrangement.dart';
 import 'package:humming/looptap/widgets/desktop_workspace.dart';
 import 'package:humming/looptap/widgets/surfaces/step_grid.dart';
 import 'package:provider/provider.dart';
 
+import '../support/desktop_view.dart';
 import '../support/offline_fonts.dart';
 import '../support/step_grid_harness.dart';
 
@@ -201,7 +201,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      tester.widget<Arrangement>(find.byType(Arrangement)).onSelect('melody');
+      // ui-001 stage 3: arrange view, double-click the track = its editor
+      await editTrack(tester, 'melody');
       await tester.pumpAndSettle();
       tester
           .widget<GestureDetector>(

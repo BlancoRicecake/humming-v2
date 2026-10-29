@@ -1,6 +1,8 @@
 import '../widgets/desktop_workspace.dart';
 import '../widgets/desktop_top_bar.dart';
 import '../widgets/desktop_section_band.dart';
+import '../widgets/timeline_minimap.dart';
+import '../widgets/surfaces/pitch_grid_surface.dart' show PitchGridViewLink;
 import '../widgets/shortcut_help.dart';
 import '../widgets/desktop_instrument.dart';
 import '../music/beginner_backing.dart';
@@ -125,15 +127,26 @@ class _EditScreenState extends State<EditScreen>
       (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
   /// 편집 확대 applies to the pitched piano roll (docs/specs/grid-usability.md).
+  /// 편집 확대 (phone / tablet). ui-001 stage 3: the desktop edit view
+  /// replaces it, so desktop never folds the timeline this way.
   bool get _gridFocused =>
+      !_desktop &&
       LoopPrefs.instance.gridFocus.value &&
       _inputMode == 'grid' &&
       (_meta.kind == TrackKind.pitched || _meta.kind == TrackKind.bass);
 
-  /// The timeline folds to one row: desktop collapse, or 편집 확대.
-  bool get _timelineFolded =>
-      (_desktop && LoopPrefs.instance.timelineCollapsed.value) ||
-      _gridFocused;
+  /// The timeline folds to one row: 편집 확대 (phone / tablet).
+  bool get _timelineFolded => _gridFocused;
+
+  /// ui-001 stage 3 (desktop): 'arrange' = the timeline takes the window,
+  /// 'edit' = a 44 px minimap above the editing surface.
+  bool get _arrangeView =>
+      _desktop &&
+      LoopPrefs.instance.desktopView.value == LoopPrefs.kDesktopViewArrange;
+  bool get _editView => _desktop && !_arrangeView;
+
+  /// No view switch while recording / counting in.
+  bool get _viewLocked => _recording || _countDown > 0;
 
   void _layoutPrefsChanged() {
     if (mounted) setState(() {});
@@ -154,27 +167,7 @@ class _EditScreenState extends State<EditScreen>
               style: const TextStyle(color: LT.t2, fontSize: 12),
             ),
             const SizedBox(width: 8),
-            // ui-001 stage 2: on desktop the sections (and the Solo controls)
-            // live in the timeline header; keep them reachable while folded.
-            if (_desktop) ...[
-              if (_gridFocused)
-                Text(
-                  ko ? '편집 확대 중' : 'Editor enlarged',
-                  maxLines: 1,
-                  style: const TextStyle(color: LT.t3, fontSize: 11),
-                ),
-              if (_solos.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 220),
-                  child: _soloHeader(),
-                ),
-              ],
-              const SizedBox(width: 8),
-              Expanded(child: Center(child: _sectionBand())),
-              _restartButton(),
-            ] else
-              Expanded(
+            Expanded(
                 child: Text(
                   _gridFocused
                       ? (ko ? '편집 확대 중' : 'Editor enlarged')
@@ -202,15 +195,23 @@ class _EditScreenState extends State<EditScreen>
       ),
     );
   }
-  double _timelineShare = .4;
   double _trackLabelWidth = 220;
+
+  // ui-001 stage 3: the roll view the minimap follows (owned by the StepGrid),
+  // the arrange view's timeline zoom/scroll while the edit view is shown, the
+  // editor commands' focus (Tab / Enter after a view switch) and which
+  // instance of a repeated section the minimap marks.
+  final PitchGridViewLink _rollView = PitchGridViewLink();
+  final DesktopTimelineMemory _timelineMemory = DesktopTimelineMemory();
+  final FocusNode _commandsFocus = FocusNode(debugLabel: 'editor commands');
+  int _minimapRepeat = 0;
   Widget _timelineViewport(Widget Function(TimelineView view) builder) =>
       _desktop
           ? DesktopTimeline(
             steps: _steps,
             labelWidth: _trackLabelWidth,
-            onCollapse:
-                () => LoopPrefs.instance.setGridLayout(timelineCollapsed: true),
+            // ui-001 stage 3: no fold on desktop; the edit view replaces it
+            memory: _timelineMemory,
             loopRange: _rangeLoop && _songSection == null ? _playRange : null,
             builder: builder,
           )
@@ -990,6 +991,7 @@ class _EditScreenState extends State<EditScreen>
     WidgetsBinding.instance.addObserver(this);
     LoopPrefs.instance.gridFocus.addListener(_layoutPrefsChanged);
     LoopPrefs.instance.timelineCollapsed.addListener(_layoutPrefsChanged);
+    LoopPrefs.instance.desktopView.addListener(_layoutPrefsChanged);
     if (widget.guidedStart) {
       _trackGuidedStart(widget.guidedEntrySource);
     }
@@ -1023,6 +1025,9 @@ class _EditScreenState extends State<EditScreen>
     WidgetsBinding.instance.removeObserver(this);
     LoopPrefs.instance.gridFocus.removeListener(_layoutPrefsChanged);
     LoopPrefs.instance.timelineCollapsed.removeListener(_layoutPrefsChanged);
+    LoopPrefs.instance.desktopView.removeListener(_layoutPrefsChanged);
+    _rollView.dispose();
+    _commandsFocus.dispose();
     _titleCtl.dispose();
     _autosaveTimer?.cancel();
     _flashTimer?.cancel();
@@ -1864,10 +1869,125 @@ class _EditScreenState extends State<EditScreen>
     if (_playing || _songSection != null || _countDown > 0) _stopAll();
     setState(() {
       _activeIdx = idx;
+      _minimapRepeat = 0;
       _ensureActiveIdValid();
       _playStep.value = _playRange.start.toDouble();
     });
   }
+
+  // ── ui-001 stage 3: arrange / edit view (desktop) ──
+
+  void _setDesktopView(String view) {
+    if (!_desktop || _viewLocked || _guided) return;
+    if (LoopPrefs.instance.desktopView.value == view) return;
+    // The focused surface (piano roll, drum grid) is about to go: keep Tab /
+    // Enter / Space with the editor's commands, never a hidden widget.
+    _commandsFocus.requestFocus();
+    LoopPrefs.instance.setDesktopView(view);
+  }
+
+  void _toggleDesktopView() => _setDesktopView(
+    _arrangeView ? LoopPrefs.kDesktopViewEdit : LoopPrefs.kDesktopViewArrange,
+  );
+
+  /// Arrange view: double-click / Enter on a track = edit that track.
+  void _openTrackEditor(String id) {
+    if (!_desktop || _viewLocked || _guided) return;
+    setState(() => _activeId = id);
+    _setDesktopView(LoopPrefs.kDesktopViewEdit);
+  }
+
+  /// Minimap click: the clicked section instance (switching section first
+  /// when needed), then the step inside it.
+  void _minimapSeek(int section, int repeat, double local) {
+    if (section != _activeIdx) {
+      if (_viewLocked) return;
+      _switchSection(section);
+    }
+    setState(() => _minimapRepeat = repeat);
+    _seekTo(local);
+  }
+
+  /// Note / clip spans of track [m] in section [s] (section steps).
+  List<(double, double)> _minimapSpans(Section s, TrackMeta m) {
+    final data = s.tracks[m.id];
+    if (data == null) return const [];
+    final steps = stepsForBars(s.bars);
+    return switch (m.kind) {
+      TrackKind.drums => [
+        for (final n in data.drumNotes)
+          (
+            n.step + n.offsetSteps,
+            n.step + n.offsetSteps + (n.durationSteps ?? 1),
+          ),
+      ],
+      TrackKind.vocal => [
+        for (final c in data.effectiveClips)
+          (
+            c.startStep.toDouble(),
+            (c.durSteps > 0 ? c.startStep + c.durSteps : steps).toDouble(),
+          ),
+      ],
+      _ => [
+        for (final n in data.pitchNotes) (n.startSteps, n.endSteps),
+      ],
+    };
+  }
+
+  Widget _minimap() {
+    final l = L10n.of(context);
+    final tracks = _orderedMetas(_sec);
+    final name = _activeTrack.label ?? _meta.label;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: TimelineMinimap(
+        sections: [
+          for (final s in _sections)
+            MinimapSection(
+              name: s.name,
+              steps: stepsForBars(s.bars),
+              repeats: s.repeats,
+              rows: [for (final m in tracks) _minimapSpans(s, m)],
+            ),
+        ],
+        rowColors: [for (final m in tracks) m.color],
+        activeIdx: _activeIdx,
+        activeRepeat: _minimapRepeat.clamp(0, math.max(0, _sec.repeats - 1)),
+        songMode: _songSection != null,
+        playStep: _playStep,
+        link: _rollView,
+        label: l.minimapEditing(name),
+        tooltip:
+            _viewLocked
+                ? l.viewLocked
+                : withShortcut(context, l.minimapToArrange, DesktopShortcutId.viewToggle),
+        overviewTooltip: l.minimapOverviewTooltip,
+        icon: _meta.icon,
+        color: _meta.color,
+        onArrange:
+            _viewLocked
+                ? null
+                : () => _setDesktopView(LoopPrefs.kDesktopViewArrange),
+        onSeek: _songSection != null ? null : _minimapSeek,
+        canSwitch: !_viewLocked,
+        // ui-001 stage 2's Solo controls stay reachable in the edit view
+        soloHeader: _solos.isNotEmpty ? _soloHeader() : null,
+      ),
+    );
+  }
+
+  Widget _arrangeHint() => SizedBox(
+    key: const ValueKey('arrange-hint'),
+    height: 40,
+    child: Center(
+      child: Text(
+        L10n.of(context).arrangeHint,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: LTType.inter(size: 11, weight: FontWeight.w600, color: LT.t3),
+      ),
+    ),
+  );
 
   String _nextSectionName() => String.fromCharCode(65 + _sections.length % 26);
 
@@ -2240,10 +2360,15 @@ class _EditScreenState extends State<EditScreen>
     onClear: _clearSolo,
     onOpenVelocity:
         _songSection == null
-            ? (id) => setState(() {
-              _activeId = id;
-              _inputModes[id] = 'grid';
-            })
+            ? (id) {
+              setState(() {
+                _activeId = id;
+                _inputModes[id] = 'grid';
+              });
+              // ui-001 stage 3: the arrange view hides the surface; the
+              // velocity lane lives in the edit view
+              _setDesktopView(LoopPrefs.kDesktopViewEdit);
+            }
             : null,
   );
 
@@ -4494,6 +4619,9 @@ class _EditScreenState extends State<EditScreen>
     // arrow (C4) — the route never pops on its own.
     return DesktopCommands(
       enabled: _desktop,
+      focusNode: _commandsFocus,
+      viewToggle: _guided ? null : _toggleDesktopView,
+      openEditor: _arrangeView && !_guided ? () => _openTrackEditor(_activeId) : null,
       play: _togglePlay,
       record: () {
         if (!_guided && _meta.kind != TrackKind.vocal) _armRecord();
@@ -4644,11 +4772,16 @@ class _EditScreenState extends State<EditScreen>
                       ),
                       // arrangement : surface = 2 : 3 vertical split. lane 영역이
                       // 화면 커질 때 조금 더 자라도록 1:2 → 2:3 으로 조정 (40% / 60%).
-                      if (_timelineFolded)
+                      // ui-001 stage 3: the desktop edit view shows a minimap
+                      // instead of the timeline; the arrange view gives the
+                      // timeline the whole window.
+                      if (_editView)
+                        _minimap()
+                      else if (_timelineFolded)
                         _foldedTimeline()
                       else
                       Expanded(
-                        flex: _desktop ? (_timelineShare * 1000).round() : 2,
+                        flex: 2,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
                           // Arrangement owns a listenable playhead. Rebuilding
@@ -4690,7 +4823,14 @@ class _EditScreenState extends State<EditScreen>
                                   _rangeLoop && _songSection == null
                                       ? _playRange
                                       : null,
-                              onSelect: (id) => setState(() => _activeId = id),
+                              onSelect: (id) {
+                                setState(() => _activeId = id);
+                                // ui-001 stage 3: a track click hands the
+                                // keyboard back to the editor commands, so
+                                // Enter edits this track (not a button that
+                                // held the focus before)
+                                if (_arrangeView) _commandsFocus.requestFocus();
+                              },
                               onToggleMute: _toggleMute,
                               // editing only (song-preview is read-only)
                               onAddTrack:
@@ -4727,28 +4867,18 @@ class _EditScreenState extends State<EditScreen>
                                   _songSection == null &&
                                   !_recording &&
                                   _countDown == 0,
+                              // ui-001 stage 3 (arrange view): 64 px rows,
+                              // double-click edits the track
+                              rowHeight: _arrangeView ? 64 : 44,
+                              onOpenTrack:
+                                  _arrangeView ? _openTrackEditor : null,
                             ),
                           ),
                         ),
                       ),
-                      if (_desktop && !_timelineFolded)
-                        DesktopSplitHandle(
-                          onDelta:
-                              (delta) => setState(
-                                () =>
-                                    _timelineShare = (_timelineShare +
-                                            delta /
-                                                math.max(
-                                                  200,
-                                                  MediaQuery.sizeOf(
-                                                        context,
-                                                      ).height -
-                                                      200,
-                                                ))
-                                        .clamp(.25, .70),
-                              ),
-                          onReset: () => setState(() => _timelineShare = .4),
-                        ),
+                      // ui-001 stage 3: the view switch replaces the
+                      // timeline / surface split handle
+                      if (_arrangeView) _arrangeHint(),
                       if (!_desktop)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -4789,12 +4919,10 @@ class _EditScreenState extends State<EditScreen>
                                 })
                                 : null,
                       ),
-                      _surfaceHeader(pitched),
+                      if (!_arrangeView) _surfaceHeader(pitched),
+                      if (!_arrangeView)
                       Expanded(
-                        flex:
-                            _desktop
-                                ? ((1 - _timelineShare) * 1000).round()
-                                : 3,
+                        flex: 3,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
                           child: DecoratedBox(
@@ -4928,6 +5056,8 @@ class _EditScreenState extends State<EditScreen>
       onShortcuts: () => showShortcutHelp(context),
       onExport: _exportOrPaywall,
       pro: context.select<LoopStore, bool>((s) => s.proActive),
+      view: LoopPrefs.instance.desktopView.value,
+      onView: _viewLocked || _guided ? null : _setDesktopView,
     );
   }
 
@@ -5159,7 +5289,7 @@ class _EditScreenState extends State<EditScreen>
         // 편집 확대: the piano roll takes the timeline's / key hints' space
         // (a labelled pill when there is room; narrow screens get an icon
         // at the front of the grid's tool row instead)
-        if (focusable && wide) ...[
+        if (focusable && wide && !_desktop) ...[
           const SizedBox(width: 6),
           KeyedSubtree(
             key: const ValueKey('grid-focus'),
@@ -5596,7 +5726,12 @@ class _EditScreenState extends State<EditScreen>
                 initialEditMode: src.label != null,
                 // narrow screens: 편집 확대 lives in the tool row (the header
                 // has no room for it)
-                focusToggle: MediaQuery.sizeOf(context).width < 700,
+                focusToggle:
+                    !_desktop && MediaQuery.sizeOf(context).width < 700,
+                // ui-001 stage 3: the minimap follows this roll's view; the
+                // edit view keeps the velocity lane at its 38 px minimum
+                viewLink: _desktop ? _rollView : null,
+                compactVelocityLane: _editView,
                 enabled: _songSection == null,
                 playStep: ps,
                 accent: _meta.color,

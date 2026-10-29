@@ -21,6 +21,7 @@ import 'package:humming/looptap/widgets/surfaces/vocal_surface.dart';
 import 'package:provider/provider.dart';
 import 'package:humming/looptap/theme/atoms.dart';
 import 'package:humming/looptap/widgets/sheets/vocal_editor.dart';
+import '../support/desktop_view.dart';
 import '../support/offline_fonts.dart';
 
 Uint8List wav(double value, {int count = 8000, int rate = 8000}) =>
@@ -635,13 +636,21 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      tester.widget<Arrangement>(find.byType(Arrangement)).onSelect('vocal');
+      // ui-001 stage 3: the vocal surface is in the edit view (arrange view,
+      // double-click the track); the live section data is read from the
+      // arrange view's timeline, then back to the edit view
+      await editTrack(tester, 'vocal');
       await tester.pumpAndSettle();
-      TrackData track() =>
-          tester
-              .widget<Arrangement>(find.byType(Arrangement))
-              .section
-              .tracks['vocal']!;
+      Future<TrackData> liveTrack() async {
+        await showArrange(tester);
+        final t =
+            tester
+                .widget<Arrangement>(find.byType(Arrangement))
+                .section
+                .tracks['vocal']!;
+        await showEdit(tester);
+        return t;
+      }
       Future<void> settleIo() async {
         for (var i = 0; i < 30; i++) {
           await tester.pump();
@@ -652,11 +661,11 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      final before = jsonEncode(track().toJson());
+      final before = jsonEncode((await liveTrack()).toJson());
       tester.widget<VocalSurface>(find.byType(VocalSurface)).onRevert!();
       await settleIo();
       expect(
-        track().clips!
+        (await liveTrack()).clips!
             .skip(1)
             .every(
               (c) =>
@@ -668,21 +677,21 @@ void main() {
             ),
         isTrue,
       );
-      expect(track().clips![2].startStep, 18);
+      expect((await liveTrack()).clips![2].startStep, 18);
       tester.widget<DesktopCommands>(find.byType(DesktopCommands)).undo();
       await settleIo();
-      expect(jsonEncode(track().toJson()), before);
+      expect(jsonEncode((await liveTrack()).toJson()), before);
       tester.widget<DesktopCommands>(find.byType(DesktopCommands)).redo();
       await settleIo();
-      expect(track().clips!.first.fx, isEmpty);
+      expect((await liveTrack()).clips!.first.fx, isEmpty);
       tester.widget<DesktopCommands>(find.byType(DesktopCommands)).undo();
       await settleIo();
-      track().clips![2].origPath = 'missing.wav';
-      final broken = jsonEncode(track().toJson());
+      (await liveTrack()).clips![2].origPath = 'missing.wav';
+      final broken = jsonEncode((await liveTrack()).toJson());
       tester.widget<VocalSurface>(find.byType(VocalSurface)).onRevert!();
       await settleIo();
       expect(
-        jsonEncode(track().toJson()),
+        jsonEncode((await liveTrack()).toJson()),
         broken,
         reason: 'One missing original must not restore only half the lane',
       );

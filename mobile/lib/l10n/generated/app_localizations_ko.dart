@@ -2865,4 +2865,33 @@ class L10nKo extends L10n {
 
   @override
   String get soloIssueOpenHint => '눌러서 강약 보기';
+
+  @override
+  String get shortcutViewToggle => '편곡 ↔ 편집 보기';
+
+  @override
+  String get shortcutOpenEditor => '선택한 트랙 편집 (편곡 보기)';
+
+  @override
+  String get viewArrange => '편곡';
+
+  @override
+  String get viewEdit => '편집';
+
+  @override
+  String get viewLocked => '녹음 중에는 보기를 바꿀 수 없어요';
+
+  @override
+  String minimapEditing(String track) {
+    return '$track 편집 중';
+  }
+
+  @override
+  String get minimapToArrange => '편곡 보기로';
+
+  @override
+  String get minimapOverviewTooltip => '곡 전체 · 클릭: 재생 위치 이동 · 사각형 끌기: 피아노롤 이동';
+
+  @override
+  String get arrangeHint => '트랙 줄을 두 번 누르거나 Enter를 누르면 편집 보기로 넘어가요';
 }

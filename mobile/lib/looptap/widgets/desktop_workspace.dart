@@ -20,8 +20,21 @@ class DesktopCommands extends StatelessWidget {
     this.rangeLoop,
     this.mixer,
     this.help,
+    this.viewToggle,
+    this.openEditor,
+    this.focusNode,
   });
   final bool enabled;
+
+  /// ui-001 stage 3: Tab switches the arrange / edit view (before Flutter's
+  /// focus traversal; never while typing). Enter edits the selected track,
+  /// only when nothing more specific (a button, a field, the piano roll)
+  /// holds the keyboard focus.
+  final VoidCallback? viewToggle, openEditor;
+
+  /// The commands' own focus node (the editor moves the focus back here when
+  /// a view switch removes the focused surface).
+  final FocusNode? focusNode;
   final VoidCallback play, record, save, undo, redo;
 
   /// Ctrl/Cmd+G: the active track's groove sheet (groove-001).
@@ -47,6 +60,8 @@ class DesktopCommands extends StatelessWidget {
     DesktopShortcutId.rangeLoop => rangeLoop,
     DesktopShortcutId.mixer => mixer,
     DesktopShortcutId.help => help,
+    DesktopShortcutId.viewToggle => viewToggle,
+    DesktopShortcutId.openEditor => openEditor,
   };
 
   /// The registered shortcut [event] triggers, from [kDesktopShortcuts].
@@ -80,7 +95,8 @@ class DesktopCommands extends StatelessWidget {
     if (!enabled) return child;
     return Focus(
       autofocus: true,
-      onKeyEvent: (_, event) {
+      focusNode: focusNode,
+      onKeyEvent: (node, event) {
         if (ModalRoute.of(context)?.isCurrent == false) {
           return KeyEventResult.ignored;
         }
@@ -91,12 +107,25 @@ class DesktopCommands extends StatelessWidget {
         final id = match(event);
         final action = id == null ? null : _action(id);
         if (action == null) return KeyEventResult.ignored;
+        if (id == DesktopShortcutId.openEditor &&
+            FocusManager.instance.primaryFocus != node) {
+          return KeyEventResult.ignored;
+        }
         if (event is KeyDownEvent) action();
         return KeyEventResult.handled;
       },
       child: child,
     );
   }
+}
+
+/// ui-001 stage 3: the timeline's zoom / scroll kept by the editor while the
+/// edit view replaces the timeline, so the arrange view comes back as it was
+/// (same section length; a different length starts from the whole section).
+class DesktopTimelineMemory {
+  double zoom = 1, start = 0;
+  bool fitLoop = false;
+  int? steps;
 }
 
 /// The scrollbar controls a shared time projection. Track labels stay fixed
@@ -110,7 +139,9 @@ class DesktopTimeline extends StatefulWidget {
     this.loopRange,
     this.labelWidth = 220,
     this.onCollapse,
+    this.memory,
   }) : assert(child != null || builder != null);
+  final DesktopTimelineMemory? memory;
   final Widget? child;
   final Widget Function(TimelineView view)? builder;
   final int steps;
@@ -128,8 +159,38 @@ class _DesktopTimelineState extends State<DesktopTimeline> {
   double _zoom = 1, _laneWidth = 1;
   bool _fittingLoop = false;
   double get _maxZoom => (widget.steps / 16).clamp(4.0, 64.0);
+
+  @override
+  void initState() {
+    super.initState();
+    final m = widget.memory;
+    if (m != null && m.steps == widget.steps && (m.zoom != 1 || m.start != 0)) {
+      _zoom = m.zoom.clamp(1.0, _maxZoom);
+      _fittingLoop = m.fitLoop;
+      final start = m.start;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _show(_zoom, start, fitLoop: _fittingLoop);
+      });
+    }
+    _scroll.addListener(_remember);
+  }
+
+  void _remember() {
+    final m = widget.memory;
+    if (m == null) return;
+    m
+      ..zoom = _zoom
+      ..fitLoop = _fittingLoop
+      ..steps = widget.steps
+      ..start =
+          _scroll.hasClients && _laneWidth > 0
+              ? _scroll.offset / (_laneWidth * _zoom) * widget.steps
+              : 0;
+  }
+
   @override
   void dispose() {
+    _scroll.removeListener(_remember);
     _scroll.dispose();
     super.dispose();
   }
@@ -157,6 +218,7 @@ class _DesktopTimelineState extends State<DesktopTimeline> {
       _zoom = zoom.clamp(1.0, _maxZoom);
       _fittingLoop = fitLoop;
     });
+    _remember();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
       _scroll.jumpTo(

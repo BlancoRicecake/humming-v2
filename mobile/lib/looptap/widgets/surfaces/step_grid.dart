@@ -52,7 +52,18 @@ class StepGrid extends StatefulWidget {
     this.onPreviewNote,
     this.articulationChannel,
     this.articulationShort = const [],
+    this.viewLink,
+    this.compactVelocityLane = false,
   });
+
+  /// ui-001 stage 3: the desktop minimap's handle on this roll's view (the
+  /// grid keeps owning it; see [PitchGridViewLink]).
+  final PitchGridViewLink? viewLink;
+
+  /// ui-001 stage 3 (desktop edit view): the velocity lane at its smallest
+  /// allowed height (38 px) instead of 20% of the editor. Same lane, same
+  /// controls; the user's lane on/off setting is untouched.
+  final bool compactVelocityLane;
   final List<Rung> ladder;
   final List<PitchNote> notes;
   final void Function(Rung rung, int a, int b) onPlace;
@@ -173,6 +184,7 @@ class _StepGridState extends State<StepGrid> {
     super.initState();
     _known = List.of(widget.notes);
     _clipboard.addListener(_clipboardChanged);
+    widget.viewLink?.attach(_view);
   }
 
   void _clipboardChanged() {
@@ -183,6 +195,7 @@ class _StepGridState extends State<StepGrid> {
   void dispose() {
     _clipboard.removeListener(_clipboardChanged);
     _localClipboard.dispose();
+    widget.viewLink?.detach(_view);
     _view.dispose();
     _toolScroll.dispose();
     _inspectorScroll.dispose();
@@ -198,6 +211,10 @@ class _StepGridState extends State<StepGrid> {
         _clipboardChanged,
       );
       _clipboard.addListener(_clipboardChanged);
+    }
+    if (oldWidget.viewLink != widget.viewLink) {
+      oldWidget.viewLink?.detach(_view);
+      widget.viewLink?.attach(_view);
     }
     _view.steps = widget.steps;
     if (!listEquals(_known, widget.notes) ||
@@ -1839,7 +1856,10 @@ class _StepGridState extends State<StepGrid> {
           ]),
           builder: (context, _) => LayoutBuilder(
           builder: (context, constraints) {
-            final laneHeight = (constraints.maxHeight * .2).clamp(38.0, 64.0);
+            final laneHeight =
+                widget.compactVelocityLane
+                    ? 38.0
+                    : (constraints.maxHeight * .2).clamp(38.0, 64.0);
             // Secondary tools get their own row only when asked for and
             // there is room; otherwise one scrollable row (primary first).
             final twoRows =

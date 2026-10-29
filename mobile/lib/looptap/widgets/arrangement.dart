@@ -3,6 +3,7 @@
 // strip fills its space, or scrolls when there are more rows than fit. A white
 // playhead line sweeps across all lanes.
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/gestures.dart' show kDoubleTapSlop, kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show timeDilation;
 
@@ -63,7 +64,16 @@ class Arrangement extends StatelessWidget {
     this.headerActions = const [],
     this.onLoopRange,
     this.loopRangeEnabled = true,
+    this.rowHeight = _rowH,
+    this.onOpenTrack,
   });
+
+  /// ui-001 stage 3: track row height (the desktop arrange view uses 64).
+  final double rowHeight;
+
+  /// ui-001 stage 3 (desktop arrange view): double-click a track row = edit
+  /// that track. A single click still selects at once (no double-tap wait).
+  final ValueChanged<String>? onOpenTrack;
 
   /// ui-001 stage 2 (desktop): the section band drawn in the top 16 px of a
   /// 36 px header row, above a 16 px ruler that sets the loop range by drag
@@ -146,13 +156,14 @@ class Arrangement extends StatelessWidget {
       playStep: playStep,
       onMoveClip:
           onMoveClip == null ? null : (ci, st) => onMoveClip!(m.id, ci, st),
+      onOpen: onOpenTrack == null ? null : () => onOpenTrack!(m.id),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     // Playhead spans only the actual lanes (not the empty space / footer below).
-    final lanesHeight = tracks.length * (_rowH + _rowGap);
+    final lanesHeight = tracks.length * (rowHeight + _rowGap);
     final lanes = ClipRect(
       child: Stack(
         children: [
@@ -183,7 +194,7 @@ class Arrangement extends StatelessWidget {
                 (context, i) => Padding(
                   key: ValueKey(tracks[i].id),
                   padding: EdgeInsets.only(bottom: _rowGap),
-                  child: SizedBox(height: _rowH, child: _rowFor(i)),
+                  child: SizedBox(height: rowHeight, child: _rowFor(i)),
                 ),
           ),
           // playhead spanning the lane area — draggable to scrub when onSeek is set.
@@ -391,8 +402,11 @@ class _Row extends StatelessWidget {
     this.onToggleSolo,
     this.onMoveClip,
     this.onConvertClip,
+    this.onOpen,
   });
 
+  /// Double-click on the row (null = off).
+  final VoidCallback? onOpen;
   final TrackMeta meta;
   final double labelWidth;
   final TimelineView view;
@@ -514,9 +528,17 @@ class _Row extends StatelessWidget {
         child: chip,
       );
     }
-    final row = GestureDetector(
-      onTap: onSelect,
-      behavior: HitTestBehavior.opaque,
+    final open = onOpen;
+    Widget tapArea({required Widget child}) =>
+        open == null
+            ? GestureDetector(onTap: onSelect, behavior: HitTestBehavior.opaque, child: child)
+            : _RowClicks(
+              key: ValueKey('track-row-${meta.id}'),
+              onClick: onSelect,
+              onDouble: open,
+              child: child,
+            );
+    final row = tapArea(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -575,6 +597,65 @@ class _Row extends StatelessWidget {
           ),
     );
   }
+}
+
+/// The row's click (select) and double-click (edit). Only clicks the row's
+/// own tap recognizer wins count: a click on the Solo / mute buttons, a scrub
+/// or reorder drag, or a cancelled press is never a click. Two counted clicks
+/// in a row (no other press between them) within the double-tap time and
+/// distance = [onDouble]. The first click selects at once (no double-tap
+/// wait).
+class _RowClicks extends StatefulWidget {
+  const _RowClicks({
+    super.key,
+    required this.onClick,
+    required this.onDouble,
+    required this.child,
+  });
+  final VoidCallback onClick, onDouble;
+  final Widget child;
+  @override
+  State<_RowClicks> createState() => _RowClicksState();
+}
+
+class _RowClicksState extends State<_RowClicks> {
+  // the latest press, and the last press that ended as a row click
+  Duration? _downAt, _clickAt;
+  Offset? _downPos, _clickPos;
+  bool _pressOpen = false;
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: (e) {
+      // the previous press did not become a row click: no double-click
+      // across it
+      if (_pressOpen) _clickAt = _clickPos = null;
+      _pressOpen = true;
+      _downAt = e.timeStamp;
+      _downPos = e.position;
+    },
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        _pressOpen = false;
+        final at = _downAt, pos = _downPos, last = _clickAt, lastPos = _clickPos;
+        widget.onClick();
+        if (at != null &&
+            pos != null &&
+            last != null &&
+            lastPos != null &&
+            at - last <= kDoubleTapTimeout &&
+            (pos - lastPos).distance <= kDoubleTapSlop) {
+          _clickAt = _clickPos = null;
+          widget.onDouble();
+          return;
+        }
+        _clickAt = at;
+        _clickPos = pos;
+      },
+      child: widget.child,
+    ),
+  );
 }
 
 /// Footer "+ Track" row, aligned under the label-chip column. Opens the picker.

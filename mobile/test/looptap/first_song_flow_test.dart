@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/desktop_view.dart';
 import '../support/offline_fonts.dart';
 import 'package:humming/l10n/generated/app_localizations.dart';
 import 'package:humming/looptap/models/loop_models.dart';
@@ -268,7 +269,8 @@ void main() {
       tester.element(find.byType(SongsScreen)),
     ).push(MaterialPageRoute<void>(builder: (_) => EditScreen(song: song)));
     await tester.pumpAndSettle();
-    tester.widget<Arrangement>(find.byType(Arrangement)).onSelect('melody');
+    // ui-001 stage 3: arrange view, double-click the track = its editor
+    await editTrack(tester, 'melody');
     await tester.pumpAndSettle();
     if (find.byType(StepGrid).evaluate().isEmpty) {
       await tester.tap(find.text('Grid'));
@@ -385,6 +387,8 @@ void main() {
         tester.element(find.byType(SongsScreen)),
       ).push(MaterialPageRoute<void>(builder: (_) => EditScreen(song: song)));
       await tester.pumpAndSettle();
+      // ui-001 stage 3: the timeline (Solo, mute, ruler) is the arrange view
+      await showArrange(tester);
       Arrangement arrangement() =>
           tester.widget<Arrangement>(find.byType(Arrangement));
       // ui-001 stage 2: on desktop the range is set on the ruler and the Solo
@@ -517,6 +521,8 @@ void main() {
         tester.element(find.byType(SongsScreen)),
       ).push(MaterialPageRoute<void>(builder: (_) => EditScreen(song: song)));
       await tester.pumpAndSettle();
+      // ui-001 stage 3: Solo and the ruler are in the arrange view
+      await showArrange(tester);
       Arrangement arrangement() =>
           tester.widget<Arrangement>(find.byType(Arrangement));
       arrangement().onToggleSolo!('melodyDec');
@@ -537,6 +543,10 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('solo-status-notice')));
       await tester.pumpAndSettle();
+      // ui-001 stage 3: 강약 보기 from the arrange view opens the edit view
+      // (the velocity lane lives there) on that track's grid
+      expect(find.byType(Arrangement), findsNothing);
+      expect(find.byKey(const ValueKey('timeline-minimap')), findsOneWidget);
       StepGrid grid() => tester.widget<StepGrid>(find.byType(StepGrid));
       expect(grid().notes.single.velocity, 3);
       final lane = tester.getRect(find.byKey(const ValueKey('velocity-lane')));
@@ -548,10 +558,8 @@ void main() {
       );
       await gesture.moveBy(const Offset(0, -12));
       await tester.pump();
-      expect(
-        arrangement().section.tracks['melodyDec']!.pitchNotes.single.velocity,
-        3,
-      );
+      // the stored note (the grid's input) changes only on release
+      expect(grid().notes.single.velocity, 3);
       await gesture.up();
       await tester.pump();
       final edited = grid().notes.single;
