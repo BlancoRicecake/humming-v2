@@ -5333,6 +5333,162 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'트랙 줄을 두 번 누르거나 Enter를 누르면 편집 보기로 넘어가요'**
   String get arrangeHint;
+
+  /// No description provided for @shortcutInspector.
+  ///
+  /// In ko, this message translates to:
+  /// **'인스펙터 접기 / 펼치기'**
+  String get shortcutInspector;
+
+  /// No description provided for @inspectorTrack.
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙'**
+  String get inspectorTrack;
+
+  /// No description provided for @inspectorNotes.
+  ///
+  /// In ko, this message translates to:
+  /// **'노트 {count}'**
+  String inspectorNotes(int count);
+
+  /// No description provided for @inspectorCollapse.
+  ///
+  /// In ko, this message translates to:
+  /// **'인스펙터 접기'**
+  String get inspectorCollapse;
+
+  /// No description provided for @inspectorExpand.
+  ///
+  /// In ko, this message translates to:
+  /// **'인스펙터 펼치기'**
+  String get inspectorExpand;
+
+  /// No description provided for @inspectorSummary.
+  ///
+  /// In ko, this message translates to:
+  /// **'노트 {notes}개 · {bars}마디'**
+  String inspectorSummary(int notes, int bars);
+
+  /// No description provided for @inspectorInstrument.
+  ///
+  /// In ko, this message translates to:
+  /// **'악기'**
+  String get inspectorInstrument;
+
+  /// No description provided for @inspectorOctave.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브'**
+  String get inspectorOctave;
+
+  /// No description provided for @inspectorVolume.
+  ///
+  /// In ko, this message translates to:
+  /// **'볼륨'**
+  String get inspectorVolume;
+
+  /// No description provided for @inspectorPan.
+  ///
+  /// In ko, this message translates to:
+  /// **'Pan'**
+  String get inspectorPan;
+
+  /// No description provided for @inspectorPanHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'두 번 클릭 또는 Alt+클릭: 가운데로'**
+  String get inspectorPanHint;
+
+  /// No description provided for @inspectorMute.
+  ///
+  /// In ko, this message translates to:
+  /// **'음소거'**
+  String get inspectorMute;
+
+  /// No description provided for @inspectorGroove.
+  ///
+  /// In ko, this message translates to:
+  /// **'그루브'**
+  String get inspectorGroove;
+
+  /// No description provided for @inspectorGrooveNone.
+  ///
+  /// In ko, this message translates to:
+  /// **'없음'**
+  String get inspectorGrooveNone;
+
+  /// No description provided for @inspectorHum.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 노트 넣기'**
+  String get inspectorHum;
+
+  /// No description provided for @inspectorMidiImport.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI 구간 가져오기'**
+  String get inspectorMidiImport;
+
+  /// No description provided for @inspectorClear.
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙 비우기'**
+  String get inspectorClear;
+
+  /// No description provided for @inspectorNoNotes.
+  ///
+  /// In ko, this message translates to:
+  /// **'그리드에서 노트를 고르면 여기서 편집해요'**
+  String get inspectorNoNotes;
+
+  /// No description provided for @inspectorArrangeOnly.
+  ///
+  /// In ko, this message translates to:
+  /// **'편곡 보기에서는 트랙 탭만 보여요'**
+  String get inspectorArrangeOnly;
+
+  /// No description provided for @inspectorSelectedNotes.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택한 노트 {count}개'**
+  String inspectorSelectedNotes(int count);
+
+  /// No description provided for @inspectorPosition.
+  ///
+  /// In ko, this message translates to:
+  /// **'위치'**
+  String get inspectorPosition;
+
+  /// No description provided for @inspectorLength.
+  ///
+  /// In ko, this message translates to:
+  /// **'길이'**
+  String get inspectorLength;
+
+  /// No description provided for @inspectorMore.
+  ///
+  /// In ko, this message translates to:
+  /// **'더 보기'**
+  String get inspectorMore;
+
+  /// No description provided for @inspectorGuitar.
+  ///
+  /// In ko, this message translates to:
+  /// **'기타 스트로크·줄'**
+  String get inspectorGuitar;
+
+  /// No description provided for @inspectorSettings.
+  ///
+  /// In ko, this message translates to:
+  /// **'설정'**
+  String get inspectorSettings;
+
+  /// No description provided for @inspectorDrumSelectHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택 모드에서 노트를 고르세요'**
+  String get inspectorDrumSelectHint;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

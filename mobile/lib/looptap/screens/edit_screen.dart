@@ -3,6 +3,8 @@ import '../widgets/desktop_top_bar.dart';
 import '../widgets/desktop_section_band.dart';
 import '../widgets/timeline_minimap.dart';
 import '../widgets/surfaces/pitch_grid_surface.dart' show PitchGridViewLink;
+import '../widgets/surfaces/grid_chrome.dart';
+import '../widgets/desktop_inspector.dart';
 import '../widgets/shortcut_help.dart';
 import '../widgets/desktop_instrument.dart';
 import '../music/beginner_backing.dart';
@@ -23,7 +25,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart' show DioException, DioExceptionType;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show listEquals, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show listEquals, setEquals, visibleForTesting;
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 
@@ -205,6 +208,15 @@ class _EditScreenState extends State<EditScreen>
   final DesktopTimelineMemory _timelineMemory = DesktopTimelineMemory();
   final FocusNode _commandsFocus = FocusNode(debugLabel: 'editor commands');
   int _minimapRepeat = 0;
+
+  // ui-001 stage 4: the active grid's tools / Notes tab (owned by the grid),
+  // the inspector's tab (kept here so collapsing, docking or overlaying never
+  // resets it), the narrow-window overlay and the last selection seen (the
+  // auto tab switch compares the selected SET, not its size).
+  final GridChrome _gridChrome = GridChrome();
+  InspectorTab _inspectorTab = InspectorTab.track;
+  bool _inspectorOverlay = false;
+  Set<Object> _lastSelection = const {};
   Widget _timelineViewport(Widget Function(TimelineView view) builder) =>
       _desktop
           ? DesktopTimeline(
@@ -992,6 +1004,8 @@ class _EditScreenState extends State<EditScreen>
     LoopPrefs.instance.gridFocus.addListener(_layoutPrefsChanged);
     LoopPrefs.instance.timelineCollapsed.addListener(_layoutPrefsChanged);
     LoopPrefs.instance.desktopView.addListener(_layoutPrefsChanged);
+    LoopPrefs.instance.inspectorOpen.addListener(_layoutPrefsChanged);
+    _gridChrome.addListener(_gridChromeChanged);
     if (widget.guidedStart) {
       _trackGuidedStart(widget.guidedEntrySource);
     }
@@ -1026,6 +1040,9 @@ class _EditScreenState extends State<EditScreen>
     LoopPrefs.instance.gridFocus.removeListener(_layoutPrefsChanged);
     LoopPrefs.instance.timelineCollapsed.removeListener(_layoutPrefsChanged);
     LoopPrefs.instance.desktopView.removeListener(_layoutPrefsChanged);
+    LoopPrefs.instance.inspectorOpen.removeListener(_layoutPrefsChanged);
+    _gridChrome.removeListener(_gridChromeChanged);
+    _gridChrome.dispose();
     _rollView.dispose();
     _commandsFocus.dispose();
     _titleCtl.dispose();
@@ -1873,6 +1890,337 @@ class _EditScreenState extends State<EditScreen>
       _ensureActiveIdValid();
       _playStep.value = _playRange.start.toDouble();
     });
+  }
+
+  /// The timeline (DesktopTimeline + Arrangement; phone: Arrangement).
+  Widget _timelinePanel() => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
+      // Arrangement owns a listenable playhead. Rebuilding
+      // every lane for each clock tick wastes input frames.
+      child: _timelineViewport(
+        (view) => Arrangement(
+          view: view,
+          labelWidth: _desktop ? _trackLabelWidth : 140,
+          onLabelWidthChanged:
+              _desktop
+                  ? (width) => setState(() {
+                    _trackLabelWidth = width.clamp(
+                      180.0,
+                      360.0,
+                    );
+                  })
+                  : null,
+          instrumentNames: {
+            for (final m in _metasFor(_songSection ?? _sec))
+              m.id:
+                  m.kind == TrackKind.vocal
+                      ? 'Audio'
+                      : instrumentLabel(
+                        m.kind == TrackKind.drums
+                            ? 'drums'
+                            : 'melody',
+                        _instruments[m.id] ??
+                            m.defaultProgram,
+                      ),
+          },
+          section: _songSection ?? _sec,
+          tracks: _orderedMetas(_songSection ?? _sec),
+          activeId: _activeId,
+          mutes: _mutes,
+          solos: _solos,
+          bypassSolo: _bypassSolo,
+          onToggleSolo: _toggleSolo,
+          loopRange:
+              _rangeLoop && _songSection == null
+                  ? _playRange
+                  : null,
+          onSelect: (id) {
+            setState(() => _activeId = id);
+            // ui-001 stage 3: a track click hands the
+            // keyboard back to the editor commands, so
+            // Enter edits this track (not a button that
+            // held the focus before)
+            if (_arrangeView) _commandsFocus.requestFocus();
+          },
+          onToggleMute: _toggleMute,
+          // editing only (song-preview is read-only)
+          onAddTrack:
+              _songSection == null ? _openAddTrack : null,
+          onReorder:
+              _songSection == null ? _reorderTracks : null,
+          onMoveClip:
+              _songSection == null ? _moveVocalClip : null,
+          onConvertClip:
+              _desktop && _songSection == null
+                  ? _convertDroppedClip
+                  : null,
+          playing: _playing,
+          playStep: _playStep,
+          steps: _steps,
+          ranges: _ranges,
+          // song-preview is read-only → no scrubbing there
+          onSeek: _songSection == null ? _seekTo : null,
+          // ui-001 stage 2 (desktop): section band, Solo
+          // controls and the ruler's loop-range drag.
+          sectionBand: _desktop ? _sectionBand() : null,
+          soloHeader:
+              _desktop && _solos.isNotEmpty
+                  ? _soloHeader()
+                  : null,
+          headerActions:
+              _desktop ? [_restartButton()] : const [],
+          onLoopRange:
+              _desktop
+                  ? (r) => _changeLoop(range: r)
+                  : null,
+          // AuditionBar's enabled rule
+          loopRangeEnabled:
+              _songSection == null &&
+              !_recording &&
+              _countDown == 0,
+          // ui-001 stage 3 (arrange view): 64 px rows,
+          // double-click edits the track
+          rowHeight: _arrangeView ? 64 : 44,
+          onOpenTrack:
+              _arrangeView ? _openTrackEditor : null,
+        ),
+      ),
+    );
+
+  /// The editing surface (pads / grids / vocal) in its card.
+  Widget _surfacePanel() => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(
+            LTRadius.card,
+          ),
+          gradient: RadialGradient(
+            center: const Alignment(0, 1.3),
+            radius: 1.0,
+            colors: [
+              _meta.color.withValues(alpha: 0.08),
+              Colors.transparent,
+            ],
+            stops: const [0, 0.6],
+          ),
+        ),
+        child: _desktopSurface(),
+      ),
+    );
+
+  // ── ui-001 stage 4: inspector and tool row (desktop) ──
+
+  /// Selection changed (another set, not only another size): Notes tab for a
+  /// new selection, Track tab when it is gone. A tab the user picked stays
+  /// until the next such change; playback / rebuilds change nothing.
+  void _gridChromeChanged() {
+    final now = _gridChrome.selection;
+    if (setEquals(now, _lastSelection)) return;
+    _lastSelection = now;
+    final next = now.isEmpty ? InspectorTab.track : InspectorTab.notes;
+    if (mounted && next != _inspectorTab) setState(() => _inspectorTab = next);
+  }
+
+  bool get _wideInspector => MediaQuery.sizeOf(context).width >= 1100;
+
+  /// Ctrl/Cmd+I, the collapse button, the 40 px bar. Wide windows dock it
+  /// (saved in LoopPrefs); narrow ones open it over the editor for now.
+  void _toggleInspector({bool? open}) {
+    if (!_desktop) return;
+    if (_wideInspector) {
+      final v = open ?? !LoopPrefs.instance.inspectorOpen.value;
+      if (v != LoopPrefs.instance.inspectorOpen.value) {
+        LoopPrefs.instance.setInspectorOpen(v);
+      }
+    } else {
+      setState(() => _inspectorOverlay = open ?? !_inspectorOverlay);
+    }
+  }
+
+  /// Below the top bar (and minimap): the body and the inspector. The body
+  /// always stays the Stack > Row > Expanded child, so docking, collapsing or
+  /// overlaying the inspector never rebuilds the grid (selection, zoom, pan).
+  Widget _desktopWorkspace(bool pitched) {
+    final body =
+        _arrangeView
+            ? Column(
+              children: [
+                Expanded(child: _timelinePanel()),
+                _arrangeHint(),
+              ],
+            )
+            : Column(
+              children: [
+                _desktopToolRow(pitched),
+                Expanded(child: _surfacePanel()),
+              ],
+            );
+    final wide = _wideInspector;
+    final docked = wide && LoopPrefs.instance.inspectorOpen.value;
+    final overlay = !wide && _inspectorOverlay;
+    return Stack(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: body),
+            if (docked) _inspectorPanel(overlay: false) else _inspectorBar(),
+          ],
+        ),
+        if (overlay)
+          Positioned(
+            top: 0,
+            right: 0,
+            bottom: 0,
+            child: _inspectorPanel(overlay: true),
+          ),
+      ],
+    );
+  }
+
+  Widget _inspectorPanel({required bool overlay}) => DesktopInspector(
+    tab: _inspectorTab,
+    onTab: (t) => setState(() => _inspectorTab = t),
+    trackTab: _trackTab(),
+    chrome: _gridChrome,
+    notesAvailable: _editView,
+    onCollapse: () => _toggleInspector(open: false),
+    overlay: overlay,
+  );
+
+  Widget _inspectorBar() => ListenableBuilder(
+    listenable: _gridChrome,
+    builder:
+        (context, _) => InspectorBar(
+          notesAvailable: _editView,
+          notesCount: _gridChrome.selection.length,
+          onOpen: (t) {
+            setState(() => _inspectorTab = t);
+            _toggleInspector(open: true);
+          },
+        ),
+  );
+
+  /// Track tab: the same state and handlers as the mixer sheet (volume, Pan,
+  /// Solo, mute), the instrument / groove sheets, the hum modal, the section
+  /// MIDI import and Clear track; the octave stepper of the old header.
+  Widget _trackTab() {
+    final l = L10n.of(context);
+    final meta = _meta;
+    final id = _activeId;
+    final data = _activeTrack;
+    final count = switch (meta.kind) {
+      TrackKind.drums => data.drumNotes.length,
+      TrackKind.vocal => data.effectiveClips.length,
+      _ => data.pitchNotes.length,
+    };
+    final hasInstrument =
+        meta.kind == TrackKind.pitched ||
+        meta.kind == TrackKind.bass ||
+        meta.kind == TrackKind.drums;
+    final editing = _songSection == null;
+    final groove = _trackGrooves[id];
+    return InspectorTrackPanel(
+      key: ValueKey('inspector-track-$id'),
+      meta: meta,
+      name: data.label ?? meta.label,
+      summary: l.inspectorSummary(count, _bars),
+      instrument:
+          hasInstrument
+              ? instrumentLabel(
+                _activeType,
+                _instruments[_instrumentTargetId] ?? meta.defaultProgram,
+              )
+              : null,
+      onInstrument: hasInstrument ? _openInstrument : null,
+      octave: _isPitched ? _octaveStepper() : null,
+      volume: _vol[id] ?? 0.85,
+      onVolume: _setVol,
+      pan: _pan[id] ?? 0,
+      onPan: _setPan,
+      onPanReset: _resetPan,
+      solo: _solos.contains(id),
+      muted: _mutes[id] ?? false,
+      onSolo: () => _toggleSolo(id),
+      onMute: () => _toggleMute(id),
+      groove:
+          groove == null ? null : findGroove(groove.grooveId, _grooves)?.name,
+      onGroove:
+          editing && meta.kind != TrackKind.vocal
+              ? () => _openGrooveSheet()
+              : null,
+      onHum: meta.kind != TrackKind.vocal ? _openHum : null,
+      onMidiImport: editing ? () => _importMidiSection(_activeIdx) : null,
+      onClear: _clearTrack,
+    );
+  }
+
+  /// The desktop edit view's 40 px tool row: Pads | Grid, then the grid's own
+  /// tools (or the pad-mode chord / power toggles and note range), and Hum to
+  /// MIDI at the end. Instrument and octave moved to the Track tab.
+  Widget _desktopToolRow(bool pitched) {
+    final l = L10n.of(context);
+    return SizedBox(
+      key: const ValueKey('desktop-tool-row'),
+      height: 40,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            if (_hasInputToggle) ...[
+              _inputToggle(),
+              Container(
+                width: 1,
+                height: 20,
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                color: LT.border,
+              ),
+            ],
+            Expanded(
+              child: ListenableBuilder(
+                listenable: _gridChrome,
+                builder: (context, _) {
+                  final grid =
+                      _inputMode == 'grid' ? _gridChrome.content : null;
+                  final items = <Widget>[
+                    if (grid != null)
+                      ...grid.tools()
+                    else ...[
+                      if (_meta.group == 'melody' && _inputMode == 'pads') ...[
+                        _chordToggle(),
+                        const SizedBox(width: 6),
+                        _powerToggle(),
+                        const SizedBox(width: 6),
+                      ],
+                      if (pitched && _inputMode == 'pads') _rangeReadout(),
+                    ],
+                  ];
+                  // keys a focused grid tool leaves unused reach the grid
+                  return GridChromeKeys(
+                    content: grid,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: items),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (trackById(_activeType).kind != TrackKind.vocal) ...[
+              const SizedBox(width: 8),
+              Pill(
+                key: const ValueKey('desktop-hum'),
+                label: l.ltEditorHumToMidi,
+                icon: LtIcons.graphicEq,
+                height: 30,
+                onTap: _openHum,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   // ── ui-001 stage 3: arrange / edit view (desktop) ──
@@ -4622,6 +4970,7 @@ class _EditScreenState extends State<EditScreen>
       focusNode: _commandsFocus,
       viewToggle: _guided ? null : _toggleDesktopView,
       openEditor: _arrangeView && !_guided ? () => _openTrackEditor(_activeId) : null,
+      inspector: _guided ? null : () => _toggleInspector(),
       play: _togglePlay,
       record: () {
         if (!_guided && _meta.kind != TrackKind.vocal) _armRecord();
@@ -4774,111 +5123,16 @@ class _EditScreenState extends State<EditScreen>
                       // 화면 커질 때 조금 더 자라도록 1:2 → 2:3 으로 조정 (40% / 60%).
                       // ui-001 stage 3: the desktop edit view shows a minimap
                       // instead of the timeline; the arrange view gives the
-                      // timeline the whole window.
-                      if (_editView)
-                        _minimap()
-                      else if (_timelineFolded)
+                      // timeline the whole window. ui-001 stage 4: below the
+                      // minimap the desktop body sits beside the inspector.
+                      if (_desktop) ...[
+                        if (_editView) _minimap(),
+                        Expanded(child: _desktopWorkspace(pitched)),
+                      ] else ...[
+                      if (_timelineFolded)
                         _foldedTimeline()
                       else
-                      Expanded(
-                        flex: 2,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
-                          // Arrangement owns a listenable playhead. Rebuilding
-                          // every lane for each clock tick wastes input frames.
-                          child: _timelineViewport(
-                            (view) => Arrangement(
-                              view: view,
-                              labelWidth: _desktop ? _trackLabelWidth : 140,
-                              onLabelWidthChanged:
-                                  _desktop
-                                      ? (width) => setState(() {
-                                        _trackLabelWidth = width.clamp(
-                                          180.0,
-                                          360.0,
-                                        );
-                                      })
-                                      : null,
-                              instrumentNames: {
-                                for (final m in _metasFor(_songSection ?? _sec))
-                                  m.id:
-                                      m.kind == TrackKind.vocal
-                                          ? 'Audio'
-                                          : instrumentLabel(
-                                            m.kind == TrackKind.drums
-                                                ? 'drums'
-                                                : 'melody',
-                                            _instruments[m.id] ??
-                                                m.defaultProgram,
-                                          ),
-                              },
-                              section: _songSection ?? _sec,
-                              tracks: _orderedMetas(_songSection ?? _sec),
-                              activeId: _activeId,
-                              mutes: _mutes,
-                              solos: _solos,
-                              bypassSolo: _bypassSolo,
-                              onToggleSolo: _toggleSolo,
-                              loopRange:
-                                  _rangeLoop && _songSection == null
-                                      ? _playRange
-                                      : null,
-                              onSelect: (id) {
-                                setState(() => _activeId = id);
-                                // ui-001 stage 3: a track click hands the
-                                // keyboard back to the editor commands, so
-                                // Enter edits this track (not a button that
-                                // held the focus before)
-                                if (_arrangeView) _commandsFocus.requestFocus();
-                              },
-                              onToggleMute: _toggleMute,
-                              // editing only (song-preview is read-only)
-                              onAddTrack:
-                                  _songSection == null ? _openAddTrack : null,
-                              onReorder:
-                                  _songSection == null ? _reorderTracks : null,
-                              onMoveClip:
-                                  _songSection == null ? _moveVocalClip : null,
-                              onConvertClip:
-                                  _desktop && _songSection == null
-                                      ? _convertDroppedClip
-                                      : null,
-                              playing: _playing,
-                              playStep: _playStep,
-                              steps: _steps,
-                              ranges: _ranges,
-                              // song-preview is read-only → no scrubbing there
-                              onSeek: _songSection == null ? _seekTo : null,
-                              // ui-001 stage 2 (desktop): section band, Solo
-                              // controls and the ruler's loop-range drag.
-                              sectionBand: _desktop ? _sectionBand() : null,
-                              soloHeader:
-                                  _desktop && _solos.isNotEmpty
-                                      ? _soloHeader()
-                                      : null,
-                              headerActions:
-                                  _desktop ? [_restartButton()] : const [],
-                              onLoopRange:
-                                  _desktop
-                                      ? (r) => _changeLoop(range: r)
-                                      : null,
-                              // AuditionBar's enabled rule
-                              loopRangeEnabled:
-                                  _songSection == null &&
-                                  !_recording &&
-                                  _countDown == 0,
-                              // ui-001 stage 3 (arrange view): 64 px rows,
-                              // double-click edits the track
-                              rowHeight: _arrangeView ? 64 : 44,
-                              onOpenTrack:
-                                  _arrangeView ? _openTrackEditor : null,
-                            ),
-                          ),
-                        ),
-                      ),
-                      // ui-001 stage 3: the view switch replaces the
-                      // timeline / surface split handle
-                      if (_arrangeView) _arrangeHint(),
+                        Expanded(flex: 2, child: _timelinePanel()),
                       if (!_desktop)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -4919,31 +5173,9 @@ class _EditScreenState extends State<EditScreen>
                                 })
                                 : null,
                       ),
-                      if (!_arrangeView) _surfaceHeader(pitched),
-                      if (!_arrangeView)
-                      Expanded(
-                        flex: 3,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(
-                                LTRadius.card,
-                              ),
-                              gradient: RadialGradient(
-                                center: const Alignment(0, 1.3),
-                                radius: 1.0,
-                                colors: [
-                                  _meta.color.withValues(alpha: 0.08),
-                                  Colors.transparent,
-                                ],
-                                stops: const [0, 0.6],
-                              ),
-                            ),
-                            child: _desktopSurface(),
-                          ),
-                        ),
-                      ),
+                      _surfaceHeader(pitched),
+                      Expanded(flex: 3, child: _surfacePanel()),
+                      ],
                       if (!_desktop)
                       Container(
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -5431,8 +5663,9 @@ class _EditScreenState extends State<EditScreen>
   }
 
   Widget _inputToggle() {
+    // ui-001 stage 4: 30 px tall in the desktop tool row
     return Container(
-      padding: const EdgeInsets.all(3),
+      padding: EdgeInsets.all(_desktop ? 2 : 3),
       decoration: BoxDecoration(
         color: LT.surface2,
         borderRadius: BorderRadius.circular(LTRadius.pill),
@@ -5445,7 +5678,7 @@ class _EditScreenState extends State<EditScreen>
             GestureDetector(
               onTap: () => _setInputMode(v),
               child: Container(
-                height: 26,
+                height: _desktop ? 24 : 26,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
@@ -5504,7 +5737,7 @@ class _EditScreenState extends State<EditScreen>
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 32,
+        height: _desktop ? 30 : 32, // ui-001 stage 4: desktop tool row
         padding: const EdgeInsets.symmetric(horizontal: 12),
         alignment: Alignment.center,
         decoration: BoxDecoration(
@@ -5658,6 +5891,7 @@ class _EditScreenState extends State<EditScreen>
           builder:
               (_, ps, __) => DrumGrid(
                 key: ValueKey('drum-grid-$_activeId-$_activeIdx'),
+                chrome: _desktop ? _gridChrome : null,
                 notes: src.drumNotes,
                 onToggle: _toggleDrumCell,
                 onEdit: _drumEditNotes,
@@ -5732,6 +5966,9 @@ class _EditScreenState extends State<EditScreen>
                 // edit view keeps the velocity lane at its 38 px minimum
                 viewLink: _desktop ? _rollView : null,
                 compactVelocityLane: _editView,
+                // ui-001 stage 4: tools in the tool row, the selection
+                // inspector in the Notes tab
+                chrome: _desktop ? _gridChrome : null,
                 enabled: _songSection == null,
                 playStep: ps,
                 accent: _meta.color,

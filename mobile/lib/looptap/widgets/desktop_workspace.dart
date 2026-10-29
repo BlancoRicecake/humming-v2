@@ -22,8 +22,12 @@ class DesktopCommands extends StatelessWidget {
     this.help,
     this.viewToggle,
     this.openEditor,
+    this.inspector,
     this.focusNode,
   });
+
+  /// ui-001 stage 4: Ctrl/Cmd+I opens / closes the inspector.
+  final VoidCallback? inspector;
   final bool enabled;
 
   /// ui-001 stage 3: Tab switches the arrange / edit view (before Flutter's
@@ -62,6 +66,7 @@ class DesktopCommands extends StatelessWidget {
     DesktopShortcutId.help => help,
     DesktopShortcutId.viewToggle => viewToggle,
     DesktopShortcutId.openEditor => openEditor,
+    DesktopShortcutId.inspector => inspector,
   };
 
   /// The registered shortcut [event] triggers, from [kDesktopShortcuts].

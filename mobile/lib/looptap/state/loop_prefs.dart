@@ -67,6 +67,16 @@ class LoopPrefs {
   final ValueNotifier<String> desktopView = ValueNotifier<String>(kDesktopViewEdit);
   static const kDesktopViewEdit = 'edit', kDesktopViewArrange = 'arrange';
 
+  /// ui-001 stage 4: the desktop editor's right inspector open (docked on
+  /// windows 1100 px wide or more; narrower windows start with the 40 px bar
+  /// and open it over the editor without changing this).
+  final ValueNotifier<bool> inspectorOpen = ValueNotifier<bool>(true);
+
+  Future<void> setInspectorOpen(bool open) async {
+    inspectorOpen.value = open;
+    await _persist();
+  }
+
   Future<void> setDesktopView(String view) async {
     if (view != kDesktopViewEdit && view != kDesktopViewArrange) return;
     desktopView.value = view;
@@ -201,6 +211,7 @@ class LoopPrefs {
     gridVelocityLane.value = true;
     timelineCollapsed.value = false;
     desktopView.value = kDesktopViewEdit;
+    inspectorOpen.value = true;
   }
 
   Future<void> setQuantize({String? grid, double? strength, bool? ends}) async {
@@ -273,6 +284,9 @@ class LoopPrefs {
       // ui-001 stage 3: a saved valid desktopView wins. Missing (older
       // prefs: once, including users whose timeline was collapsed, who were
       // already looking at the editor) or invalid = 'edit', saved right away.
+      if (m['inspectorOpen'] is bool) {
+        inspectorOpen.value = m['inspectorOpen'] as bool;
+      }
       final view = m['desktopView'];
       if (view == kDesktopViewEdit || view == kDesktopViewArrange) {
         desktopView.value = view as String;
@@ -382,6 +396,7 @@ class LoopPrefs {
           'gridVelocityLane': gridVelocityLane.value,
           'timelineCollapsed': timelineCollapsed.value,
           'desktopView': desktopView.value,
+          'inspectorOpen': inspectorOpen.value,
           'quantizeGrid': quantizeGrid.value,
           'quantizeStrength': quantizeStrength.value,
           'quantizeEnds': quantizeEnds.value,

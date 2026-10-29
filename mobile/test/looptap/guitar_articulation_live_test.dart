@@ -615,8 +615,8 @@ void main() {
     expect(rig.art.where((v) => v.key == 52).single.ch, 14);
     commands(tester).play(); // stop before opening the panel
     await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(find.byKey(const ValueKey('note-guitar-tools')).first);
-    await tester.pumpAndSettle();
+    // ui-001 stage 4: the desktop tool row may scroll it out of view
+    await tapGridButton(tester, 'note-guitar-tools');
     expect(
       find.byKey(const ValueKey('articulation-short-badge')),
       findsOneWidget,

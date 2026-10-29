@@ -555,6 +555,7 @@ void main() {
           help: () => fired.add(DesktopShortcutId.help),
           viewToggle: () => fired.add(DesktopShortcutId.viewToggle),
           openEditor: () => fired.add(DesktopShortcutId.openEditor),
+          inspector: () => fired.add(DesktopShortcutId.inspector),
           child: const Scaffold(body: SizedBox.expand()),
         ),
       ));

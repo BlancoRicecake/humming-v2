@@ -2994,4 +2994,95 @@ class L10nEn extends L10n {
 
   @override
   String get arrangeHint => 'Double-click a track or press Enter to edit it';
+
+  @override
+  String get shortcutInspector => 'Show / hide the inspector';
+
+  @override
+  String get inspectorTrack => 'Track';
+
+  @override
+  String inspectorNotes(int count) {
+    return 'Notes $count';
+  }
+
+  @override
+  String get inspectorCollapse => 'Hide the inspector';
+
+  @override
+  String get inspectorExpand => 'Show the inspector';
+
+  @override
+  String inspectorSummary(int notes, int bars) {
+    return '$notes notes · $bars bars';
+  }
+
+  @override
+  String get inspectorInstrument => 'Instrument';
+
+  @override
+  String get inspectorOctave => 'Octave';
+
+  @override
+  String get inspectorVolume => 'Volume';
+
+  @override
+  String get inspectorPan => 'Pan';
+
+  @override
+  String get inspectorPanHint => 'Double-click or Alt+click: centre';
+
+  @override
+  String get inspectorMute => 'Mute';
+
+  @override
+  String get inspectorGroove => 'Groove';
+
+  @override
+  String get inspectorGrooveNone => 'None';
+
+  @override
+  String get inspectorHum => 'Add notes by humming';
+
+  @override
+  String get inspectorMidiImport => 'Import a MIDI passage';
+
+  @override
+  String get inspectorClear => 'Clear this track';
+
+  @override
+  String get inspectorNoNotes =>
+      'Switch to Grid and select notes to edit them here';
+
+  @override
+  String get inspectorArrangeOnly => 'The arrange view shows the Track tab';
+
+  @override
+  String inspectorSelectedNotes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count notes selected',
+      one: '1 note selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get inspectorPosition => 'Position';
+
+  @override
+  String get inspectorLength => 'Length';
+
+  @override
+  String get inspectorMore => 'More';
+
+  @override
+  String get inspectorGuitar => 'Guitar stroke · strings';
+
+  @override
+  String get inspectorSettings => 'Settings';
+
+  @override
+  String get inspectorDrumSelectHint => 'Pick hits in Select mode';
 }

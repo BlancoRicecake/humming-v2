@@ -23,6 +23,7 @@ enum DesktopShortcutId {
   help,
   viewToggle,
   openEditor,
+  inspector,
 }
 
 /// One registered key combination. [command] = Ctrl (Windows/Linux) or Cmd
@@ -75,6 +76,8 @@ const List<DesktopShortcut> kDesktopShortcuts = [
   // focused) edits the selected track
   DesktopShortcut(DesktopShortcutId.viewToggle, LogicalKeyboardKey.tab),
   DesktopShortcut(DesktopShortcutId.openEditor, LogicalKeyboardKey.enter),
+  // ui-001 stage 4 (Ctrl/Cmd+Shift+I stays the guitar grid's ring)
+  DesktopShortcut(DesktopShortcutId.inspector, LogicalKeyboardKey.keyI, command: true),
 ];
 
 /// Where an editing shortcut works.
@@ -186,6 +189,7 @@ String desktopShortcutLabel(L10n l, DesktopShortcutId id) => switch (id) {
   DesktopShortcutId.help => l.shortcutHelp,
   DesktopShortcutId.viewToggle => l.shortcutViewToggle,
   DesktopShortcutId.openEditor => l.shortcutOpenEditor,
+  DesktopShortcutId.inspector => l.shortcutInspector,
 };
 
 bool _isMac(BuildContext context) => Theme.of(context).platform == TargetPlatform.macOS;

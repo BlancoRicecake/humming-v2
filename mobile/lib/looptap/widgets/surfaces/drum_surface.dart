@@ -19,6 +19,7 @@ import '../../theme/tokens.dart';
 import '../sheets/note_tool_sheets.dart';
 import 'drum_velocity_lane.dart';
 import 'pad_fx.dart';
+import 'grid_chrome.dart';
 
 class DrumSpec {
   const DrumSpec(this.kind, this.short, this.color);
@@ -360,8 +361,13 @@ class DrumGrid extends StatefulWidget {
     this.onEdit,
     this.enabled = true,
     this.initialSelectMode = false,
+    this.chrome,
   });
 
+  /// ui-001 stage 4 (desktop edit view): Draw / Select go to the editor's
+  /// tool row and the selection inspector to the Notes tab (this grid's own
+  /// items); the grid then shows neither itself. Null = phone layout.
+  final GridChrome? chrome;
   final List<DrumNote> notes;
   final void Function(String kind, int step) onToggle;
 
@@ -410,10 +416,25 @@ class _DrumGridState extends State<DrumGrid> {
   void initState() {
     super.initState();
     _known = List.of(widget.notes);
+    widget.chrome?.attach(_chromeContent);
+  }
+
+  late final GridChromeContent _chromeContent = GridChromeContent(
+    tools: _desktopToolItems,
+    notes: _notesTab,
+    selection: () => _selected,
+    onKey: (event) => _key(_focus, event),
+  );
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    widget.chrome?.changed();
   }
 
   @override
   void dispose() {
+    widget.chrome?.detach(_chromeContent);
     _inspectorScroll.dispose();
     _focus.dispose();
     super.dispose();
@@ -429,6 +450,11 @@ class _DrumGridState extends State<DrumGrid> {
       _selected.removeWhere((n) => !widget.notes.contains(n));
     }
     _known = List.of(widget.notes);
+    if (oldWidget.chrome != widget.chrome) {
+      oldWidget.chrome?.detach(_chromeContent);
+      widget.chrome?.attach(_chromeContent);
+    }
+    widget.chrome?.changed(); // new hits / pruned selection outside too
   }
 
   void _resetGesture() {
@@ -742,19 +768,152 @@ class _DrumGridState extends State<DrumGrid> {
     VoidCallback? action, {
     bool active = false,
     VoidCallback? onLongPress,
-  }) => TextButton(
-    key: ValueKey(key),
-    onPressed: widget.enabled ? action : null,
-    onLongPress: widget.enabled ? onLongPress : null,
-    style: TextButton.styleFrom(
-      minimumSize: const Size(32, 32),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      foregroundColor: active ? LT.bg : LT.t2,
-      backgroundColor: active ? LT.lime : null,
-      textStyle: const TextStyle(fontSize: 11),
-    ),
-    child: Text(label),
+    Color? color,
+  }) {
+    final desktop = widget.chrome != null; // ui-001 stage 4: 30 px / 12 px
+    return TextButton(
+      key: ValueKey(key),
+      onPressed: widget.enabled ? action : null,
+      onLongPress: widget.enabled ? onLongPress : null,
+      style: TextButton.styleFrom(
+        minimumSize: desktop ? const Size(30, 30) : const Size(32, 32),
+        // desktop: really 30 px tall (no padded 48 px tap target)
+        maximumSize: desktop ? const Size(double.infinity, 30) : null,
+        tapTargetSize: desktop ? MaterialTapTargetSize.shrinkWrap : null,
+        // and no compact desktop density shrinking it below 30
+        visualDensity: desktop ? VisualDensity.standard : null,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        foregroundColor: active ? LT.bg : (color ?? LT.t2),
+        backgroundColor: active ? LT.lime : null,
+        textStyle: TextStyle(fontSize: desktop ? 12 : 11),
+      ),
+      child: Text(label),
+    );
+  }
+
+  Widget _drawButton() => _button(
+    'drum-draw-mode',
+    _ko ? '그리기' : 'Draw',
+    () => _setSelectMode(false),
+    active: !_select,
   );
+
+  Widget _selectButton() => _button(
+    'drum-select-mode',
+    _ko ? '선택' : 'Select',
+    () => _setSelectMode(true),
+    active: _select,
+  );
+
+  // ── ui-001 stage 4: the desktop tool row and Notes tab (same widgets) ──
+  List<Widget> _desktopToolItems() =>
+      widget.onEdit == null ? const [] : [_drawButton(), _selectButton()];
+
+  /// Notes tab (desktop inspector) for the select mode's hits: title + kinds
+  /// · position ← → · velocity / chance / variation · quantize and humanize
+  /// rows (chevron = the existing settings sheet) · a fixed footer (mute ·
+  /// delete). The widgets are [_inspectorItems]' own (same keys, callbacks).
+  Widget _notesTab() {
+    final l = L10n.of(context);
+    final items = _inspectorItems();
+    // a slider's key sits on the Slider inside its fixed-width SizedBox
+    bool has(Widget w, String key) =>
+        w.key == ValueKey(key) || (w is SizedBox && w.child?.key == ValueKey(key));
+    Widget k(String key) => items.firstWhere((w) => has(w, key));
+    Widget labelOf(String key) => items[items.indexWhere((w) => has(w, key)) - 1];
+    Widget slider(String key) => Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [labelOf(key), k(key)]),
+    );
+    Widget sheetRow(String key, String moreKey, VoidCallback onMore) => Container(
+      height: 34,
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.only(left: 2),
+      decoration: BoxDecoration(
+        color: LT.surface2,
+        borderRadius: BorderRadius.circular(LTRadius.chip),
+        border: Border.all(color: LT.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Align(alignment: Alignment.centerLeft, child: k(key))),
+          Tooltip(
+            message: l.inspectorSettings,
+            child: InkResponse(
+              key: ValueKey(moreKey),
+              radius: 16,
+              onTap: widget.enabled ? onMore : null,
+              child: const SizedBox(
+                width: 32,
+                height: 32,
+                child: Icon(Icons.chevron_right, size: 16, color: LT.t2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    final kinds = {for (final n in _picked) drumLabel(l, n.kind)};
+    return Column(
+      key: const ValueKey('drum-notes-tab'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  l.inspectorSelectedNotes(_selected.length),
+                  key: const ValueKey('drum-notes-title'),
+                  style: LTType.inter(size: 13, weight: FontWeight.w800, color: LT.t1),
+                ),
+                if (kinds.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(kinds.join(' · '), style: LTType.mono(size: 11, color: LT.t2)),
+                ],
+                if (!_select) ...[
+                  const SizedBox(height: 8),
+                  Text(l.inspectorDrumSelectHint, style: LTType.inter(size: 11, color: LT.t3)),
+                ],
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l.inspectorPosition, style: LTType.inter(size: 11, weight: FontWeight.w700, color: LT.t3)),
+                      Wrap(spacing: 4, children: [k('drum-time-left'), k('drum-time-right')]),
+                    ],
+                  ),
+                ),
+                slider('drum-velocity'),
+                slider('drum-chance'),
+                slider('drum-velocity-deviation'),
+                const SizedBox(height: 8),
+                sheetRow('drum-quantize', 'drum-quantize-settings', _quantizeSettings),
+                sheetRow('drum-humanize', 'drum-humanize-settings', _humanizeSettings),
+              ],
+            ),
+          ),
+        ),
+        Container(
+          key: const ValueKey('drum-notes-footer'),
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: LT.border)),
+          ),
+          child: Row(
+            children: [
+              for (final key in const ['drum-mute', 'drum-delete'])
+                Expanded(child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: k(key)))),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _slider(
     String key,
@@ -839,7 +998,13 @@ class _DrumGridState extends State<DrumGrid> {
           v.round(),
         );
       }),
-      _button('drum-delete', _ko ? '삭제' : 'Delete', _canEdit ? _delete : null),
+      _button(
+        'drum-delete',
+        _ko ? '삭제' : 'Delete',
+        _canEdit ? _delete : null,
+        // the desktop footer marks delete with the danger colour
+        color: widget.chrome != null ? LT.danger : null,
+      ),
       _button(
         'drum-mute',
         _allMuted ? (_ko ? '소리 켜기' : 'Unmute') : (_ko ? '소리 끄기' : 'Mute'),
@@ -891,19 +1056,11 @@ class _DrumGridState extends State<DrumGrid> {
                 children: [
                   LtLabel(L10n.of(context).ltDrumBeatGrid),
                   const Spacer(),
-                  if (editable) ...[
-                    _button(
-                      'drum-draw-mode',
-                      _ko ? '그리기' : 'Draw',
-                      () => _setSelectMode(false),
-                      active: !_select,
-                    ),
-                    _button(
-                      'drum-select-mode',
-                      _ko ? '선택' : 'Select',
-                      () => _setSelectMode(true),
-                      active: _select,
-                    ),
+                  // ui-001 stage 4: on desktop Draw / Select are in the
+                  // editor's tool row
+                  if (editable && widget.chrome == null) ...[
+                    _drawButton(),
+                    _selectButton(),
                     const SizedBox(width: 8),
                   ],
                   LtLabel(
@@ -942,7 +1099,7 @@ class _DrumGridState extends State<DrumGrid> {
                   onEnd: _finish,
                   onCancel: _cancel,
                 ),
-              if (editable && _select)
+              if (editable && _select && widget.chrome == null)
                 SizedBox(
                   height: 40,
                   child: Scrollbar(

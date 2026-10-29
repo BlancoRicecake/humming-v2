@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../l10n/generated/app_localizations.dart';
 import '../../models/loop_models.dart';
 import '../../music/arpeggiate.dart';
 import '../../music/guitar_articulation.dart';
@@ -20,6 +21,7 @@ import '../sheets/arp_sheet.dart';
 import '../sheets/chord_type_sheet.dart';
 import '../sheets/guitar_stroke_panel.dart';
 import '../sheets/note_tool_sheets.dart';
+import 'grid_chrome.dart';
 import 'pitch_grid_surface.dart';
 import 'velocity_lane.dart';
 
@@ -54,7 +56,13 @@ class StepGrid extends StatefulWidget {
     this.articulationShort = const [],
     this.viewLink,
     this.compactVelocityLane = false,
+    this.chrome,
   });
+
+  /// ui-001 stage 4 (desktop edit view): the editor draws this grid's tools
+  /// (tool row) and selection inspector (Notes tab) from the grid's own item
+  /// lists; the grid then shows neither row itself. Null = phone layout.
+  final GridChrome? chrome;
 
   /// ui-001 stage 3: the desktop minimap's handle on this roll's view (the
   /// grid keeps owning it; see [PitchGridViewLink]).
@@ -185,6 +193,23 @@ class _StepGridState extends State<StepGrid> {
     _known = List.of(widget.notes);
     _clipboard.addListener(_clipboardChanged);
     widget.viewLink?.attach(_view);
+    widget.chrome?.attach(_chromeContent);
+  }
+
+  // ui-001 stage 4: what the desktop tool row / Notes tab draw (this state's
+  // own item lists, keys and callbacks)
+  late final GridChromeContent _chromeContent = GridChromeContent(
+    tools: _desktopToolItems,
+    notes: _notesTab,
+    selection: () => _selected,
+    onKey: (event) => _key(_focus, event),
+  );
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    // the tool row and the inspector outside follow in the same frame
+    widget.chrome?.changed();
   }
 
   void _clipboardChanged() {
@@ -195,6 +220,7 @@ class _StepGridState extends State<StepGrid> {
   void dispose() {
     _clipboard.removeListener(_clipboardChanged);
     _localClipboard.dispose();
+    widget.chrome?.detach(_chromeContent);
     widget.viewLink?.detach(_view);
     _view.dispose();
     _toolScroll.dispose();
@@ -216,6 +242,10 @@ class _StepGridState extends State<StepGrid> {
       oldWidget.viewLink?.detach(_view);
       widget.viewLink?.attach(_view);
     }
+    if (oldWidget.chrome != widget.chrome) {
+      oldWidget.chrome?.detach(_chromeContent);
+      widget.chrome?.attach(_chromeContent);
+    }
     _view.steps = widget.steps;
     if (!listEquals(_known, widget.notes) ||
         oldWidget.steps != widget.steps ||
@@ -228,6 +258,7 @@ class _StepGridState extends State<StepGrid> {
       _selected.removeWhere((n) => !widget.notes.contains(n));
     }
     _known = List.of(widget.notes);
+    widget.chrome?.changed(); // new notes / pruned selection outside too
   }
 
   void _resetGesture() {
@@ -1339,23 +1370,34 @@ class _StepGridState extends State<StepGrid> {
     VoidCallback? action, {
     bool active = false,
     VoidCallback? onLongPress,
-  }) => TextButton(
-    key: ValueKey(key),
-    onPressed: widget.enabled ? action : null,
-    onLongPress: widget.enabled ? onLongPress : null,
-    style: TextButton.styleFrom(
-      minimumSize: const Size(32, 32),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      foregroundColor: active ? LT.bg : LT.t2,
-      backgroundColor: active ? widget.accent : null,
-      // the app font (styleFrom replaces, not merges, the label style)
-      textStyle: TextStyle(
-        fontSize: 11,
-        fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+    Color? color,
+  }) {
+    // ui-001 stage 4: the desktop tool row / inspector use 30 px buttons,
+    // 12 px text and lime for "on" (the phone keeps its rows as they were)
+    final desktop = widget.chrome != null;
+    return TextButton(
+      key: ValueKey(key),
+      onPressed: widget.enabled ? action : null,
+      onLongPress: widget.enabled ? onLongPress : null,
+      style: TextButton.styleFrom(
+        minimumSize: desktop ? const Size(30, 30) : const Size(32, 32),
+        // desktop: really 30 px tall (no padded 48 px tap target)
+        maximumSize: desktop ? const Size(double.infinity, 30) : null,
+        tapTargetSize: desktop ? MaterialTapTargetSize.shrinkWrap : null,
+        // and no compact desktop density shrinking it below 30
+        visualDensity: desktop ? VisualDensity.standard : null,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        foregroundColor: active ? LT.bg : (color ?? LT.t2),
+        backgroundColor: active ? (desktop ? LT.lime : widget.accent) : null,
+        // the app font (styleFrom replaces, not merges, the label style)
+        textStyle: TextStyle(
+          fontSize: desktop ? 12 : 11,
+          fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+        ),
       ),
-    ),
-    child: Text(label),
-  );
+      child: Text(label),
+    );
+  }
   Widget _scrollRow(ScrollController controller, List<Widget> children) =>
       SizedBox(
         height: 40,
@@ -1477,6 +1519,7 @@ class _StepGridState extends State<StepGrid> {
       ),
       const SizedBox(width: 8),
       Text(
+        key: const ValueKey('note-selection-status'),
         _selected.isEmpty
             ? (_ko
                 ? '노트 클릭 · 빈 곳을 끌어 범위 선택'
@@ -1775,7 +1818,13 @@ class _StepGridState extends State<StepGrid> {
         _ko ? '복제' : 'Duplicate',
         _canEdit ? _duplicate : null,
       ),
-      _button('note-delete', _ko ? '삭제' : 'Delete', _canEdit ? _delete : null),
+      _button(
+        'note-delete',
+        _ko ? '삭제' : 'Delete',
+        _canEdit ? _delete : null,
+        // the desktop footer marks delete with the danger colour
+        color: widget.chrome != null ? LT.danger : null,
+      ),
       _button(
         'note-mute',
         _allMuted ? (_ko ? '소리 켜기' : 'Unmute') : (_ko ? '소리 끄기' : 'Mute'),
@@ -1795,6 +1844,261 @@ class _StepGridState extends State<StepGrid> {
   }
 
   Widget _inspector() => _scrollRow(_inspectorScroll, _inspectorItems());
+
+  // ── ui-001 stage 4: the desktop tool row and Notes tab ──
+  // The same item widgets as the phone rows (keys, callbacks, selection);
+  // only where they are drawn changes.
+
+  /// Tool row: input (draw, chord stamp beside it) · select · area · eraser
+  /// · copy · paste · guitar · scale snap · velocity lane. Grid snap, multi
+  /// and select all move to the Notes tab; 편집 확대 and the two-row toggle
+  /// have no desktop use (the edit view and the inspector replace them).
+  List<Widget> _desktopToolItems() {
+    Widget byKey(List<Widget> items, String key) =>
+        items.firstWhere((w) => w.key == ValueKey(key));
+    final items = _toolItems();
+    return [
+      byKey(items, 'note-draw'),
+      byKey(items, 'grid-chord-stamp'),
+      byKey(items, 'note-select'),
+      byKey(items, 'note-area'),
+      byKey(items, 'note-erase'),
+      byKey(items, 'note-copy'),
+      byKey(items, 'note-paste'),
+      if (widget.guitar) byKey(items, 'note-guitar-tools'),
+      _divider(),
+      byKey(items, 'note-scale-snap'),
+      byKey(items, 'note-velocity-toggle'),
+      // select / edit mode: the phone row's status ("N selected" / hint)
+      if (_editing) ...[
+        const SizedBox(width: 8),
+        byKey(items, 'note-selection-status'),
+      ],
+    ];
+  }
+
+  static const _footerKeys = [
+    'note-duplicate',
+    'note-mute',
+    'note-lock',
+    'note-delete',
+  ];
+
+  /// Notes tab (desktop inspector), the design's layout over the grid's own
+  /// widgets: title + note names · position ← → ♭ ♯ · octave · length ·
+  /// velocity / chance / variation · snap / multi / select all · sheet rows
+  /// (quantize, chord below, arpeggiate, guitar, more: split / glue / legato /
+  /// humanize / fit to scale) · a fixed footer (duplicate · mute · lock ·
+  /// delete). Every button and slider is the one [_inspectorItems] /
+  /// [_toolItems] build for the phone rows: same key, same callback.
+  Widget _notesTab() {
+    final l = L10n.of(context);
+    final items = _inspectorItems();
+    final tools = _toolItems();
+    // a slider's key sits on the Slider inside its fixed-width SizedBox
+    bool has(Widget w, String key) =>
+        w.key == ValueKey(key) || (w is SizedBox && w.child?.key == ValueKey(key));
+    Widget k(String key) => items.firstWhere((w) => has(w, key));
+    // the value label the phone row shows just before a slider
+    Widget labelOf(String key) => items[items.indexWhere((w) => has(w, key)) - 1];
+    Widget section(String title, List<Widget> children) => Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: LTType.inter(size: 11, weight: FontWeight.w700, color: LT.t3)),
+          const SizedBox(height: 2),
+          Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: children),
+        ],
+      ),
+    );
+    Widget slider(String key) => Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [labelOf(key), k(key)],
+      ),
+    );
+    final picked = _selected.toList()..sort((a, b) => a.startSteps.compareTo(b.startSteps));
+    final names = [
+      for (final n in picked.take(12)) '${kNoteNames[n.midi % 12]}${n.midi ~/ 12 - 1}',
+    ];
+    final lengths = _editable.map((n) => n.soundingSteps).toSet();
+    final lengthValue =
+        lengths.length == 1
+            ? lengths.single.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')
+            : '—';
+    return Column(
+      key: const ValueKey('grid-notes-tab'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  l.inspectorSelectedNotes(_selected.length),
+                  key: const ValueKey('grid-notes-title'),
+                  style: LTType.inter(size: 13, weight: FontWeight.w800, color: LT.t1),
+                ),
+                if (names.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    names.join(' ') + (picked.length > names.length ? ' …' : ''),
+                    style: LTType.mono(size: 11, color: LT.t2),
+                  ),
+                ],
+                section(l.inspectorPosition, [
+                  k('note-time-left'),
+                  k('note-time-right'),
+                  k('note-pitch-down'),
+                  k('note-pitch-up'),
+                ]),
+                section(l.inspectorOctave, [k('note-octave-down'), k('note-octave-up')]),
+                section(l.inspectorLength, [
+                  k('note-length-down'),
+                  SizedBox(
+                    width: 44,
+                    child: Text(
+                      lengthValue,
+                      key: const ValueKey('note-length-value'),
+                      textAlign: TextAlign.center,
+                      style: LTType.mono(size: 11, color: LT.t2),
+                    ),
+                  ),
+                  k('note-length-up'),
+                ]),
+                slider('note-velocity'),
+                slider('note-chance'),
+                slider('note-velocity-deviation'),
+                // grid snap / multi / select all: the phone's own buttons,
+                // shown (as there) in select / edit mode
+                if (_editing)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (final key in const ['note-snap', 'note-multiple', 'note-select-all'])
+                          tools.firstWhere((w) => w.key == ValueKey(key)),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                _sheetRow(k('note-quantize'), 'note-quantize-settings', _quantizeSettings),
+                _sheetRow(k('note-chord-stamp'), 'note-chord-settings', _chordSheet),
+                _sheetRow(k('note-arpeggiate'), 'note-arpeggiate-settings', _arpSettings),
+                if (widget.guitar)
+                  _sheetRow(
+                    Text(l.inspectorGuitar, style: LTType.inter(size: 12, weight: FontWeight.w700, color: LT.t1)),
+                    'stroke-more',
+                    _strokePanel,
+                    below: [
+                      k('stroke-down'),
+                      k('stroke-up'),
+                      for (final p in kStrokePatterns.skip(1)) k('stroke-pattern-${p.id}'),
+                      if (_unassigned.isNotEmpty) k('guitar-unassigned-count'),
+                    ],
+                  ),
+                _sheetRow(
+                  Text(l.inspectorMore, style: LTType.inter(size: 12, weight: FontWeight.w700, color: LT.t1)),
+                  'note-more',
+                  () => setState(() => _moreTools = !_moreTools),
+                  open: _moreTools,
+                  below:
+                      _moreTools
+                          ? [
+                            k('note-split'),
+                            k('note-glue'),
+                            k('note-legato'),
+                            k('note-fit-scale'),
+                          ]
+                          : const [],
+                ),
+                if (_moreTools)
+                  _sheetRow(k('note-humanize'), 'note-humanize-settings', _humanizeSettings),
+              ],
+            ),
+          ),
+        ),
+        Container(
+          key: const ValueKey('grid-notes-footer'),
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: LT.border)),
+          ),
+          child: Row(
+            children: [
+              // one line per cell (a long label scales down, never wraps)
+              for (final key in _footerKeys)
+                Expanded(child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: k(key)))),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// "더 보기" open in the Notes tab (UI only).
+  bool _moreTools = false;
+
+  /// A 34 px Notes-tab row: [main] (the existing action button, or a title)
+  /// and a chevron that opens the existing settings sheet / panel ([onMore]);
+  /// [below] = buttons shown under the row.
+  Widget _sheetRow(
+    Widget main,
+    String moreKey,
+    VoidCallback onMore, {
+    List<Widget> below = const [],
+    bool open = false,
+  }) => Padding(
+    padding: const EdgeInsets.only(top: 6),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          height: 34,
+          padding: const EdgeInsets.only(left: 2),
+          decoration: BoxDecoration(
+            color: LT.surface2,
+            borderRadius: BorderRadius.circular(LTRadius.chip),
+            border: Border.all(color: LT.border),
+          ),
+          child: Row(
+            children: [
+              Expanded(child: Align(alignment: Alignment.centerLeft, child: main)),
+              Tooltip(
+                message: L10n.of(context).inspectorSettings,
+                child: InkResponse(
+                  key: ValueKey(moreKey),
+                  radius: 16,
+                  onTap: widget.enabled ? onMore : null,
+                  child: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Icon(
+                      open ? Icons.expand_more : Icons.chevron_right,
+                      size: 16,
+                      color: LT.t2,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (below.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(spacing: 4, runSpacing: 4, children: below),
+          ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1867,9 +2171,14 @@ class _StepGridState extends State<StepGrid> {
                 prefs.gridToolsExpanded.value &&
                 !prefs.gridFocus.value &&
                 constraints.maxHeight >= 200;
+            // ui-001 stage 4: the desktop editor draws the tools and the
+            // inspector outside (GridChrome)
+            final external = widget.chrome != null;
             return Column(
               children: [
-                if (_editing && !twoRows)
+                if (external)
+                  const SizedBox.shrink()
+                else if (_editing && !twoRows)
                   _scrollRow(_toolScroll, [
                     ..._toolItems(),
                     const SizedBox(width: 8),
@@ -1904,7 +2213,7 @@ class _StepGridState extends State<StepGrid> {
                     onCancel: _cancel,
                   ),
                   ),
-                if (twoRows) _inspector(),
+                if (twoRows && !external) _inspector(),
               ],
             );
           },

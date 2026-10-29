@@ -2894,4 +2894,88 @@ class L10nKo extends L10n {
 
   @override
   String get arrangeHint => '트랙 줄을 두 번 누르거나 Enter를 누르면 편집 보기로 넘어가요';
+
+  @override
+  String get shortcutInspector => '인스펙터 접기 / 펼치기';
+
+  @override
+  String get inspectorTrack => '트랙';
+
+  @override
+  String inspectorNotes(int count) {
+    return '노트 $count';
+  }
+
+  @override
+  String get inspectorCollapse => '인스펙터 접기';
+
+  @override
+  String get inspectorExpand => '인스펙터 펼치기';
+
+  @override
+  String inspectorSummary(int notes, int bars) {
+    return '노트 $notes개 · $bars마디';
+  }
+
+  @override
+  String get inspectorInstrument => '악기';
+
+  @override
+  String get inspectorOctave => '옥타브';
+
+  @override
+  String get inspectorVolume => '볼륨';
+
+  @override
+  String get inspectorPan => 'Pan';
+
+  @override
+  String get inspectorPanHint => '두 번 클릭 또는 Alt+클릭: 가운데로';
+
+  @override
+  String get inspectorMute => '음소거';
+
+  @override
+  String get inspectorGroove => '그루브';
+
+  @override
+  String get inspectorGrooveNone => '없음';
+
+  @override
+  String get inspectorHum => '허밍으로 노트 넣기';
+
+  @override
+  String get inspectorMidiImport => 'MIDI 구간 가져오기';
+
+  @override
+  String get inspectorClear => '트랙 비우기';
+
+  @override
+  String get inspectorNoNotes => '그리드에서 노트를 고르면 여기서 편집해요';
+
+  @override
+  String get inspectorArrangeOnly => '편곡 보기에서는 트랙 탭만 보여요';
+
+  @override
+  String inspectorSelectedNotes(int count) {
+    return '선택한 노트 $count개';
+  }
+
+  @override
+  String get inspectorPosition => '위치';
+
+  @override
+  String get inspectorLength => '길이';
+
+  @override
+  String get inspectorMore => '더 보기';
+
+  @override
+  String get inspectorGuitar => '기타 스트로크·줄';
+
+  @override
+  String get inspectorSettings => '설정';
+
+  @override
+  String get inspectorDrumSelectHint => '선택 모드에서 노트를 고르세요';
 }
