@@ -556,6 +556,7 @@ void main() {
           viewToggle: () => fired.add(DesktopShortcutId.viewToggle),
           openEditor: () => fired.add(DesktopShortcutId.openEditor),
           inspector: () => fired.add(DesktopShortcutId.inspector),
+          hum: () => fired.add(DesktopShortcutId.hum),
           child: const Scaffold(body: SizedBox.expand()),
         ),
       ));

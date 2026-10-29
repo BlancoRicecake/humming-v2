@@ -57,7 +57,24 @@ class StepGrid extends StatefulWidget {
     this.viewLink,
     this.compactVelocityLane = false,
     this.chrome,
+    this.keyHighlight,
+    this.inKeyDraw = false,
+    this.velocityLaneFold = false,
   });
+
+  /// ui-001 stage 5 (desktop): the song key on the lane (out-of-key rows
+  /// darker, root tinted, in-key names); null = the phone look.
+  final PitchKeyHighlight? keyHighlight;
+
+  /// ui-001 stage 5: "키 안의 음만" is on: a drawn note lands in the key (the
+  /// Scale snap rule) even with Scale snap itself off.
+  final bool inKeyDraw;
+
+  /// ui-001 stage 5 (desktop): the velocity lane sits under a 24 px
+  /// "강약 · 확률" row that folds / unfolds it. Until the user chooses
+  /// (LoopPrefs.gridVelocityLaneChosen) it starts folded; the phone keeps
+  /// the lane's own default.
+  final bool velocityLaneFold;
 
   /// ui-001 stage 4 (desktop edit view): the editor draws this grid's tools
   /// (tool row) and selection inspector (Notes tab) from the grid's own item
@@ -129,7 +146,13 @@ class _StepGridState extends State<StepGrid> {
   late bool _editing = widget.initialEditMode;
   bool _snap = true, _multiple = false, _resizing = false;
   bool _area = false, _erasing = false;
-  bool get _showVelocity => LoopPrefs.instance.gridVelocityLane.value;
+  bool get _showVelocity {
+    final prefs = LoopPrefs.instance;
+    if (widget.velocityLaneFold && !prefs.gridVelocityLaneChosen.value) {
+      return false; // the desktop's first default: folded
+    }
+    return prefs.gridVelocityLane.value;
+  }
 
   /// Horizontal zoom/pan shared by the roll, its ruler and the velocity lane.
   late final PitchGridView _view = PitchGridView(widget.steps);
@@ -600,7 +623,7 @@ class _StepGridState extends State<StepGrid> {
   /// Drawing with Scale snap on lands an out-of-scale row on the nearest
   /// scale pitch (ties go down).
   void _place(Rung rung, int a, int b) {
-    if (_scaleSnap &&
+    if ((_scaleSnap || (widget.inKeyDraw && _hasScale)) &&
         !inScale(rung.midi, widget.scaleRoot!, widget.scaleName!)) {
       final m = nearestInScale(
         rung.midi,
@@ -1868,7 +1891,7 @@ class _StepGridState extends State<StepGrid> {
       if (widget.guitar) byKey(items, 'note-guitar-tools'),
       _divider(),
       byKey(items, 'note-scale-snap'),
-      byKey(items, 'note-velocity-toggle'),
+      if (!widget.velocityLaneFold) byKey(items, 'note-velocity-toggle'),
       // select / edit mode: the phone row's status ("N selected" / hint)
       if (_editing) ...[
         const SizedBox(width: 8),
@@ -2043,6 +2066,43 @@ class _StepGridState extends State<StepGrid> {
     );
   }
 
+  /// ui-001 stage 5: the 24 px "강약 · 확률" row above the velocity lane (the
+  /// desktop's fold / unfold; the same LoopPrefs value as the phone toggle).
+  Widget _velocityFoldRow() {
+    final l = L10n.of(context);
+    final open = _showVelocity;
+    return Tooltip(
+      message: open ? l.velocityLaneFold : l.velocityLaneUnfold,
+      waitDuration: const Duration(milliseconds: 600),
+      child: GestureDetector(
+        key: const ValueKey('velocity-lane-fold'),
+        behavior: HitTestBehavior.opaque,
+        onTap:
+            () {
+              setState(_resetGesture);
+              LoopPrefs.instance.setGridLayout(velocityLane: !open);
+            },
+        child: Container(
+          height: 24,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: LT.border)),
+          ),
+          child: Row(
+            children: [
+              Icon(open ? Icons.expand_more : Icons.expand_less, size: 16, color: LT.t2),
+              const SizedBox(width: 6),
+              Text(
+                l.velocityLaneRow,
+                style: LTType.inter(size: 11, weight: FontWeight.w600, color: LT.t2),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// "더 보기" open in the Notes tab (UI only).
   bool _moreTools = false;
 
@@ -2141,6 +2201,7 @@ class _StepGridState extends State<StepGrid> {
         strokeMarks: widget.guitar,
         stringMarks: _showStrings,
         warnNotes: _unassigned,
+        keyHighlight: widget.keyHighlight,
       ),
     );
     if (widget.onEdit == null) return surface;
@@ -2157,6 +2218,7 @@ class _StepGridState extends State<StepGrid> {
             prefs.gridFocus,
             prefs.gridToolsExpanded,
             prefs.gridVelocityLane,
+            prefs.gridVelocityLaneChosen,
           ]),
           builder: (context, _) => LayoutBuilder(
           builder: (context, constraints) {
@@ -2187,6 +2249,7 @@ class _StepGridState extends State<StepGrid> {
                 else
                   _tools(),
                 Expanded(child: surface),
+                if (widget.velocityLaneFold) _velocityFoldRow(),
                 if (_showVelocity && constraints.maxHeight >= 96)
                   AnimatedBuilder(
                     animation: _view,

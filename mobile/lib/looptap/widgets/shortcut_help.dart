@@ -24,6 +24,7 @@ enum DesktopShortcutId {
   viewToggle,
   openEditor,
   inspector,
+  hum,
 }
 
 /// One registered key combination. [command] = Ctrl (Windows/Linux) or Cmd
@@ -78,6 +79,9 @@ const List<DesktopShortcut> kDesktopShortcuts = [
   DesktopShortcut(DesktopShortcutId.openEditor, LogicalKeyboardKey.enter),
   // ui-001 stage 4 (Ctrl/Cmd+Shift+I stays the guitar grid's ring)
   DesktopShortcut(DesktopShortcutId.inspector, LogicalKeyboardKey.keyI, command: true),
+  // ui-001 stage 5. A focused piano roll / drum grid with notes to edit keeps
+  // its Ctrl/Cmd+Shift+H (humanize): it handles the key first.
+  DesktopShortcut(DesktopShortcutId.hum, LogicalKeyboardKey.keyH, command: true, shift: true),
 ];
 
 /// Where an editing shortcut works.
@@ -190,6 +194,7 @@ String desktopShortcutLabel(L10n l, DesktopShortcutId id) => switch (id) {
   DesktopShortcutId.viewToggle => l.shortcutViewToggle,
   DesktopShortcutId.openEditor => l.shortcutOpenEditor,
   DesktopShortcutId.inspector => l.shortcutInspector,
+  DesktopShortcutId.hum => l.shortcutHum,
 };
 
 bool _isMac(BuildContext context) => Theme.of(context).platform == TargetPlatform.macOS;
@@ -256,6 +261,8 @@ Future<void> showShortcutHelp(BuildContext context) {
         ],
         const SizedBox(height: 12),
         Text(l.shortcutHelpLegatoNote, style: LTType.inter(size: 11, color: LT.t3)),
+        const SizedBox(height: 4),
+        Text(l.shortcutHelpHumNote, style: LTType.inter(size: 11, color: LT.t3)),
         const SizedBox(height: 4),
         Text(l.shortcutHelpTypingNote, style: LTType.inter(size: 11, color: LT.t3)),
       ],

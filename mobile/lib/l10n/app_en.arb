@@ -1029,5 +1029,15 @@
   "inspectorMore": "More",
   "inspectorGuitar": "Guitar stroke · strings",
   "inspectorSettings": "Settings",
-  "inspectorDrumSelectHint": "Pick hits in Select mode"
+  "inspectorDrumSelectHint": "Pick hits in Select mode",
+  "velocityLaneRow": "Velocity · chance",
+  "velocityLaneFold": "Fold the velocity lane",
+  "velocityLaneUnfold": "Show the velocity lane",
+  "gridInKeyOnly": "In-key notes only",
+  "gridInKeyOnlyTip": "Hides empty rows outside the key; new notes land in the key",
+  "gridOutOfKeyCount": "{count, plural, =1{1 note out of key} other{{count} notes out of key}}",
+  "@gridOutOfKeyCount": {"placeholders": {"count": {"type": "int"}}},
+  "humPrimary": "Add by humming",
+  "shortcutHum": "Add notes by humming",
+  "shortcutHelpHumNote": "With the piano roll or drum grid focused and notes to edit, Ctrl/⌘+Shift+H keeps doing humanize; elsewhere it opens humming for the active track."
 }

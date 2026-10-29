@@ -1243,5 +1243,15 @@
   "inspectorMore": "더 보기",
   "inspectorGuitar": "기타 스트로크·줄",
   "inspectorSettings": "설정",
-  "inspectorDrumSelectHint": "선택 모드에서 노트를 고르세요"
+  "inspectorDrumSelectHint": "선택 모드에서 노트를 고르세요",
+  "velocityLaneRow": "강약 · 확률",
+  "velocityLaneFold": "강약 막대 접기",
+  "velocityLaneUnfold": "강약 막대 펼치기",
+  "gridInKeyOnly": "키 안의 음만",
+  "gridInKeyOnlyTip": "키 밖의 빈 줄을 숨기고, 새 음은 키 안에 넣어요",
+  "gridOutOfKeyCount": "키 밖 음 {count}개",
+  "@gridOutOfKeyCount": {"placeholders": {"count": {"type": "int"}}},
+  "humPrimary": "허밍으로 넣기",
+  "shortcutHum": "허밍으로 넣기",
+  "shortcutHelpHumNote": "피아노롤·드럼 그리드에 포커스가 있고 고칠 노트가 있으면 Ctrl/⌘+Shift+H는 기존대로 휴머나이즈입니다. 그 밖에는 활성 트랙의 허밍 창을 엽니다."
 }

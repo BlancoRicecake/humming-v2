@@ -2,7 +2,8 @@ import '../widgets/desktop_workspace.dart';
 import '../widgets/desktop_top_bar.dart';
 import '../widgets/desktop_section_band.dart';
 import '../widgets/timeline_minimap.dart';
-import '../widgets/surfaces/pitch_grid_surface.dart' show PitchGridViewLink;
+import '../widgets/surfaces/pitch_grid_surface.dart'
+    show PitchGridViewLink, PitchKeyHighlight;
 import '../widgets/surfaces/grid_chrome.dart';
 import '../widgets/desktop_inspector.dart';
 import '../widgets/shortcut_help.dart';
@@ -1005,6 +1006,7 @@ class _EditScreenState extends State<EditScreen>
     LoopPrefs.instance.timelineCollapsed.addListener(_layoutPrefsChanged);
     LoopPrefs.instance.desktopView.addListener(_layoutPrefsChanged);
     LoopPrefs.instance.inspectorOpen.addListener(_layoutPrefsChanged);
+    LoopPrefs.instance.gridInKeyOnly.addListener(_layoutPrefsChanged);
     _gridChrome.addListener(_gridChromeChanged);
     if (widget.guidedStart) {
       _trackGuidedStart(widget.guidedEntrySource);
@@ -1041,6 +1043,7 @@ class _EditScreenState extends State<EditScreen>
     LoopPrefs.instance.timelineCollapsed.removeListener(_layoutPrefsChanged);
     LoopPrefs.instance.desktopView.removeListener(_layoutPrefsChanged);
     LoopPrefs.instance.inspectorOpen.removeListener(_layoutPrefsChanged);
+    LoopPrefs.instance.gridInKeyOnly.removeListener(_layoutPrefsChanged);
     _gridChrome.removeListener(_gridChromeChanged);
     _gridChrome.dispose();
     _rollView.dispose();
@@ -2009,6 +2012,121 @@ class _EditScreenState extends State<EditScreen>
       ),
     );
 
+  // ── ui-001 stage 5: the key in the piano roll (desktop) ──
+
+  /// The song key's pitch classes and root (null: chromatic / unknown).
+  PitchKeyHighlight? get _keyHighlight {
+    final steps = kScales[_scale]?.steps;
+    final root = kNoteNames.indexOf(_keyRoot);
+    if (steps == null || root < 0 || steps.toSet().length >= 12) return null;
+    return PitchKeyHighlight(
+      pitchClasses: {for (final s in steps) (root + s) % 12},
+      root: root,
+    );
+  }
+
+  /// "키 안의 음만" in effect (desktop, a real key).
+  bool get _inKeyOnly =>
+      _desktop && LoopPrefs.instance.gridInKeyOnly.value && _keyHighlight != null;
+
+  /// The piano-roll rows: every pitch, or (in-key only) the key's pitches
+  /// plus any pitch that already holds a note (never hidden, never changed).
+  List<Rung> _gridLadderFor(List<PitchNote> notes) {
+    final key = _keyHighlight;
+    if (!_inKeyOnly || key == null) return _gridLadder;
+    final used = {for (final n in notes) n.midi};
+    return [
+      for (final r in _gridLadder)
+        if (key.pitchClasses.contains(r.midi % 12) || used.contains(r.midi)) r,
+    ];
+  }
+
+  /// Notes of the active track outside the key.
+  int get _outOfKeyCount {
+    final key = _keyHighlight;
+    if (key == null) return 0;
+    return _trackIn((_songSection ?? _sec).tracks, _activeId)
+        .pitchNotes
+        .where((n) => !key.pitchClasses.contains(n.midi % 12))
+        .length;
+  }
+
+  /// The tool row's right end: "키 안의 음만" (+ "키 밖 음 N개") for a
+  /// pitched grid, then the primary "허밍으로 넣기".
+  List<Widget> _toolRowEnd() {
+    final l = L10n.of(context);
+    final pitchedGrid = _isPitched && _inputMode == 'grid' && _keyHighlight != null;
+    final on = LoopPrefs.instance.gridInKeyOnly.value;
+    final outside = pitchedGrid && on ? _outOfKeyCount : 0;
+    return [
+      if (pitchedGrid) ...[
+        const SizedBox(width: 8),
+        if (outside > 0) ...[
+          Text(
+            l.gridOutOfKeyCount(outside),
+            key: const ValueKey('grid-out-of-key-count'),
+            style: LTType.inter(size: 11, weight: FontWeight.w700, color: LT.amber),
+          ),
+          const SizedBox(width: 6),
+        ],
+        Tooltip(
+          message: l.gridInKeyOnlyTip,
+          child: GestureDetector(
+            key: const ValueKey('grid-in-key-only'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => LoopPrefs.instance.setGridInKeyOnly(!on),
+            child: Container(
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: on ? LT.lime : LT.surface2,
+                borderRadius: BorderRadius.circular(LTRadius.pill),
+                border: Border.all(color: on ? LT.lime : LT.border),
+              ),
+              child: Text(
+                l.gridInKeyOnly,
+                maxLines: 1,
+                style: LTType.inter(size: 12, weight: FontWeight.w700, color: on ? LT.bg : LT.t2),
+              ),
+            ),
+          ),
+        ),
+      ],
+      if (trackById(_activeType).kind != TrackKind.vocal) ...[
+        const SizedBox(width: 8),
+        Tooltip(
+          message: withShortcut(context, l.humPrimary, DesktopShortcutId.hum),
+          child: GestureDetector(
+            key: const ValueKey('desktop-hum'),
+            behavior: HitTestBehavior.opaque,
+            onTap: _openHum,
+            child: Container(
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: LT.lime,
+                borderRadius: BorderRadius.circular(LTRadius.pill),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Ms(LtIcons.mic, size: 16, color: LT.bg),
+                  const SizedBox(width: 6),
+                  Text(
+                    l.humPrimary,
+                    maxLines: 1,
+                    style: LTType.inter(size: 12, weight: FontWeight.w800, color: LT.bg),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    ];
+  }
+
   // ── ui-001 stage 4: inspector and tool row (desktop) ──
 
   /// Selection changed (another set, not only another size): Notes tab for a
@@ -2157,10 +2275,10 @@ class _EditScreenState extends State<EditScreen>
   }
 
   /// The desktop edit view's 40 px tool row: Pads | Grid, then the grid's own
-  /// tools (or the pad-mode chord / power toggles and note range), and Hum to
-  /// MIDI at the end. Instrument and octave moved to the Track tab.
+  /// tools (or the pad-mode chord / power toggles and note range), and (stage
+  /// 5) "키 안의 음만" and the primary "허밍으로 넣기" at the end. Instrument and
+  /// octave moved to the Track tab.
   Widget _desktopToolRow(bool pitched) {
-    final l = L10n.of(context);
     return SizedBox(
       key: const ValueKey('desktop-tool-row'),
       height: 40,
@@ -2207,16 +2325,8 @@ class _EditScreenState extends State<EditScreen>
                 },
               ),
             ),
-            if (trackById(_activeType).kind != TrackKind.vocal) ...[
-              const SizedBox(width: 8),
-              Pill(
-                key: const ValueKey('desktop-hum'),
-                label: l.ltEditorHumToMidi,
-                icon: LtIcons.graphicEq,
-                height: 30,
-                onTap: _openHum,
-              ),
-            ],
+            // ui-001 stage 5: in-key toggle and the primary hum button
+            ..._toolRowEnd(),
           ],
         ),
       ),
@@ -2716,6 +2826,10 @@ class _EditScreenState extends State<EditScreen>
               // ui-001 stage 3: the arrange view hides the surface; the
               // velocity lane lives in the edit view
               _setDesktopView(LoopPrefs.kDesktopViewEdit);
+              // ui-001 stage 5: and the (desktop-folded) lane really opens
+              if (_desktop) {
+                LoopPrefs.instance.setGridLayout(velocityLane: true);
+              }
             }
             : null,
   );
@@ -4299,12 +4413,25 @@ class _EditScreenState extends State<EditScreen>
   void _stopHumBacking() {
     _stopClock();
     _audio.stopAll();
+    // The hum modal calls this from its dispose: the editor may already be
+    // gone (its notifiers disposed), or the tree is being finalized (no
+    // setState now). ui-001 stage 5 makes humming the primary button.
+    if (!mounted) return;
     _playStep.value = 0;
-    if (mounted) {
+    void reset() {
+      if (!mounted) return;
       setState(() {
         _playing = false;
         _litMidis.value = const {};
       });
+    }
+
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks ||
+        phase == SchedulerPhase.midFrameMicrotasks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => reset());
+    } else {
+      reset();
     }
   }
 
@@ -4971,6 +5098,13 @@ class _EditScreenState extends State<EditScreen>
       viewToggle: _guided ? null : _toggleDesktopView,
       openEditor: _arrangeView && !_guided ? () => _openTrackEditor(_activeId) : null,
       inspector: _guided ? null : () => _toggleInspector(),
+      // ui-001 stage 5: never while recording / counting in, nor for a
+      // vocal track (no hum to MIDI there)
+      hum: () {
+        if (_guided || _recording || _countDown > 0) return;
+        if (trackById(_activeType).kind == TrackKind.vocal) return;
+        _openHum();
+      },
       play: _togglePlay,
       record: () {
         if (!_guided && _meta.kind != TrackKind.vocal) _armRecord();
@@ -5940,7 +6074,8 @@ class _EditScreenState extends State<EditScreen>
           builder:
               (_, ps, __) => StepGrid(
                 key: ValueKey('grid-$_activeId-$_activeIdx'),
-                ladder: _gridLadder,
+                // ui-001 stage 5: in-key rows only (+ rows holding notes)
+                ladder: _gridLadderFor(notes),
                 focusMidi: (_padWindow.first.midi + 5).clamp(0, 127),
                 clipboard: _noteClipboard,
                 onPreview: _previewGridNote,
@@ -5969,6 +6104,11 @@ class _EditScreenState extends State<EditScreen>
                 // ui-001 stage 4: tools in the tool row, the selection
                 // inspector in the Notes tab
                 chrome: _desktop ? _gridChrome : null,
+                // ui-001 stage 5 (desktop): the key on the lane, drawing in
+                // the key, the folded velocity lane row
+                keyHighlight: _desktop ? _keyHighlight : null,
+                inKeyDraw: _inKeyOnly,
+                velocityLaneFold: _desktop,
                 enabled: _songSection == null,
                 playStep: ps,
                 accent: _meta.color,

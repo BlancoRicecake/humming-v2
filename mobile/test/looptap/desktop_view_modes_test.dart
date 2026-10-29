@@ -593,7 +593,12 @@ void main() {
 
     for (final (size, min) in const [(Size(1280, 720), 480.0), (Size(960, 600), 330.0), (Size(1920, 1080), 840.0)]) {
       testWidgets('${size.width.toInt()}x${size.height.toInt()} edit view >= $min', (tester) async {
-        final vp = await measure(tester, size, desktop: true);
+        await measure(tester, size, desktop: true);
+        // ui-001 stage 5: the desktop lane starts folded; stage 3's numbers
+        // are with the lane open (its 24 px row unfolds it)
+        await tester.tap(find.byKey(const ValueKey('velocity-lane-fold')));
+        await tester.pumpAndSettle();
+        final vp = tester.getRect(find.byKey(const ValueKey('pitch-grid-viewport')));
         debugPrint('[stage3-measure] ${size.width.toInt()}x${size.height.toInt()} pitch-grid-viewport '
             'height=${vp.height.toStringAsFixed(1)} top=${vp.top.toStringAsFixed(1)}');
         expect(vp.height, greaterThanOrEqualTo(min));

@@ -58,6 +58,21 @@ class LoopPrefs {
   /// Velocity / chance lane under the roll.
   final ValueNotifier<bool> gridVelocityLane = ValueNotifier<bool>(true);
 
+  /// ui-001 stage 5: whether [gridVelocityLane] is a choice the user made
+  /// (toggled it, or an older prefs file already holds it). Without one the
+  /// desktop editor starts with the lane folded to its 24 px row; the phone
+  /// keeps the lane's own default (on).
+  final ValueNotifier<bool> gridVelocityLaneChosen = ValueNotifier<bool>(false);
+
+  /// ui-001 stage 5 (desktop piano roll): only the rows in the song's key
+  /// (plus rows that already hold notes); new notes land in the key.
+  final ValueNotifier<bool> gridInKeyOnly = ValueNotifier<bool>(true);
+
+  Future<void> setGridInKeyOnly(bool v) async {
+    gridInKeyOnly.value = v;
+    await _persist();
+  }
+
   /// Desktop timeline (arrangement) collapsed to one row. Phone/tablet only
   /// since ui-001 stage 3: the desktop editor uses [desktopView] instead.
   final ValueNotifier<bool> timelineCollapsed = ValueNotifier<bool>(false);
@@ -196,7 +211,10 @@ class LoopPrefs {
   }) async {
     if (focus != null) gridFocus.value = focus;
     if (toolsExpanded != null) gridToolsExpanded.value = toolsExpanded;
-    if (velocityLane != null) gridVelocityLane.value = velocityLane;
+    if (velocityLane != null) {
+      gridVelocityLane.value = velocityLane;
+      gridVelocityLaneChosen.value = true;
+    }
     if (timelineCollapsed != null) {
       this.timelineCollapsed.value = timelineCollapsed;
     }
@@ -209,6 +227,8 @@ class LoopPrefs {
     gridFocus.value = false;
     gridToolsExpanded.value = false;
     gridVelocityLane.value = true;
+    gridVelocityLaneChosen.value = false;
+    gridInKeyOnly.value = true;
     timelineCollapsed.value = false;
     desktopView.value = kDesktopViewEdit;
     inspectorOpen.value = true;
@@ -277,6 +297,7 @@ class LoopPrefs {
       }
       if (m['gridVelocityLane'] is bool) {
         gridVelocityLane.value = m['gridVelocityLane'] as bool;
+        gridVelocityLaneChosen.value = true; // a saved choice is kept
       }
       if (m['timelineCollapsed'] is bool) {
         timelineCollapsed.value = m['timelineCollapsed'] as bool;
@@ -284,6 +305,9 @@ class LoopPrefs {
       // ui-001 stage 3: a saved valid desktopView wins. Missing (older
       // prefs: once, including users whose timeline was collapsed, who were
       // already looking at the editor) or invalid = 'edit', saved right away.
+      if (m['gridInKeyOnly'] is bool) {
+        gridInKeyOnly.value = m['gridInKeyOnly'] as bool;
+      }
       if (m['inspectorOpen'] is bool) {
         inspectorOpen.value = m['inspectorOpen'] as bool;
       }
@@ -393,7 +417,10 @@ class LoopPrefs {
           'scaleSnap': scaleSnap.value,
           'gridFocus': gridFocus.value,
           'gridToolsExpanded': gridToolsExpanded.value,
-          'gridVelocityLane': gridVelocityLane.value,
+          // only a chosen value: an untouched desktop keeps the folded default
+          if (gridVelocityLaneChosen.value)
+            'gridVelocityLane': gridVelocityLane.value,
+          'gridInKeyOnly': gridInKeyOnly.value,
           'timelineCollapsed': timelineCollapsed.value,
           'desktopView': desktopView.value,
           'inspectorOpen': inspectorOpen.value,

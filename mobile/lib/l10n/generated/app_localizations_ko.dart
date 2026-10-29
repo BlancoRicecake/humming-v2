@@ -2978,4 +2978,34 @@ class L10nKo extends L10n {
 
   @override
   String get inspectorDrumSelectHint => '선택 모드에서 노트를 고르세요';
+
+  @override
+  String get velocityLaneRow => '강약 · 확률';
+
+  @override
+  String get velocityLaneFold => '강약 막대 접기';
+
+  @override
+  String get velocityLaneUnfold => '강약 막대 펼치기';
+
+  @override
+  String get gridInKeyOnly => '키 안의 음만';
+
+  @override
+  String get gridInKeyOnlyTip => '키 밖의 빈 줄을 숨기고, 새 음은 키 안에 넣어요';
+
+  @override
+  String gridOutOfKeyCount(int count) {
+    return '키 밖 음 $count개';
+  }
+
+  @override
+  String get humPrimary => '허밍으로 넣기';
+
+  @override
+  String get shortcutHum => '허밍으로 넣기';
+
+  @override
+  String get shortcutHelpHumNote =>
+      '피아노롤·드럼 그리드에 포커스가 있고 고칠 노트가 있으면 Ctrl/⌘+Shift+H는 기존대로 휴머나이즈입니다. 그 밖에는 활성 트랙의 허밍 창을 엽니다.';
 }

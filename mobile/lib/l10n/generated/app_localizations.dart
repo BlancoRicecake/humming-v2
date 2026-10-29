@@ -5489,6 +5489,60 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'선택 모드에서 노트를 고르세요'**
   String get inspectorDrumSelectHint;
+
+  /// No description provided for @velocityLaneRow.
+  ///
+  /// In ko, this message translates to:
+  /// **'강약 · 확률'**
+  String get velocityLaneRow;
+
+  /// No description provided for @velocityLaneFold.
+  ///
+  /// In ko, this message translates to:
+  /// **'강약 막대 접기'**
+  String get velocityLaneFold;
+
+  /// No description provided for @velocityLaneUnfold.
+  ///
+  /// In ko, this message translates to:
+  /// **'강약 막대 펼치기'**
+  String get velocityLaneUnfold;
+
+  /// No description provided for @gridInKeyOnly.
+  ///
+  /// In ko, this message translates to:
+  /// **'키 안의 음만'**
+  String get gridInKeyOnly;
+
+  /// No description provided for @gridInKeyOnlyTip.
+  ///
+  /// In ko, this message translates to:
+  /// **'키 밖의 빈 줄을 숨기고, 새 음은 키 안에 넣어요'**
+  String get gridInKeyOnlyTip;
+
+  /// No description provided for @gridOutOfKeyCount.
+  ///
+  /// In ko, this message translates to:
+  /// **'키 밖 음 {count}개'**
+  String gridOutOfKeyCount(int count);
+
+  /// No description provided for @humPrimary.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 넣기'**
+  String get humPrimary;
+
+  /// No description provided for @shortcutHum.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 넣기'**
+  String get shortcutHum;
+
+  /// No description provided for @shortcutHelpHumNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'피아노롤·드럼 그리드에 포커스가 있고 고칠 노트가 있으면 Ctrl/⌘+Shift+H는 기존대로 휴머나이즈입니다. 그 밖에는 활성 트랙의 허밍 창을 엽니다.'**
+  String get shortcutHelpHumNote;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

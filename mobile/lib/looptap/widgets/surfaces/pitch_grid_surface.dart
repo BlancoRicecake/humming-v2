@@ -162,6 +162,28 @@ class PitchGridViewLink extends ChangeNotifier {
   }
 }
 
+/// ui-001 stage 5 (desktop piano roll): the song's key on the lane. Rows
+/// outside it get [LT.laneOutOfKey], the root row a 6 % lime tint, and rows
+/// in the key their note name at the left edge. Null = the phone look.
+class PitchKeyHighlight {
+  const PitchKeyHighlight({required this.pitchClasses, required this.root});
+
+  /// Pitch classes (0 = C) in the key.
+  final Set<int> pitchClasses;
+
+  /// The key's root pitch class.
+  final int root;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PitchKeyHighlight &&
+      other.root == root &&
+      setEquals(other.pitchClasses, pitchClasses);
+
+  @override
+  int get hashCode => Object.hash(root, Object.hashAllUnordered(pitchClasses));
+}
+
 class _Draft {
   _Draft(this.row, this.rung, this.a, this.b);
   final int row;
@@ -221,6 +243,7 @@ class PitchGridSurface extends StatefulWidget {
     this.stringMarks = false,
     this.warnNotes = const {},
     this.view,
+    this.keyHighlight,
   });
 
   final List<Rung> ladder;
@@ -261,6 +284,9 @@ class PitchGridSurface extends StatefulWidget {
   /// uses). Null = the surface keeps its own.
   final PitchGridView? view;
 
+  /// ui-001 stage 5 (desktop): the key highlight on the lane (null = phone).
+  final PitchKeyHighlight? keyHighlight;
+
   @override
   State<PitchGridSurface> createState() => _PitchGridSurfaceState();
 }
@@ -277,6 +303,11 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
   int? _pointer;
 
   bool _needsFocus = true, _firstFocus = true;
+
+  /// ui-001 stage 5: the pitch at the viewport's centre when the rows change
+  /// (in-key-only toggle, key change), kept at the centre afterwards.
+  int? _keepMidi;
+
   @override
   void didUpdateWidget(PitchGridSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -290,7 +321,37 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
       _draft = null;
       _mode = null;
       _pulse.stop();
+      final old = oldWidget.ladder.reversed.toList();
+      if (_vertical.hasClients && old.isNotEmpty) {
+        final pos = _vertical.position;
+        final rowH = (pos.maxScrollExtent + pos.viewportDimension) / old.length;
+        if (rowH > 0) {
+          final row = ((pos.pixels + pos.viewportDimension / 2) / rowH)
+              .floor()
+              .clamp(0, old.length - 1);
+          _keepMidi = old[row].midi;
+        }
+      }
     }
+  }
+
+  void _scheduleKeep(double height) {
+    final keep = _keepMidi;
+    if (keep == null) return;
+    _keepMidi = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_vertical.hasClients || _rows.isEmpty) return;
+      var row = _rows.indexWhere((r) => r.midi <= keep);
+      if (row < 0) row = _rows.length - 1;
+      final rowH = height / _rows.length;
+      final pos = _vertical.position;
+      _vertical.jumpTo(
+        (row * rowH + rowH / 2 - pos.viewportDimension / 2).clamp(
+          0.0,
+          pos.maxScrollExtent,
+        ),
+      );
+    });
   }
 
   // piano-key vertical drag → pitch-window scroll accumulator.
@@ -489,6 +550,7 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
             // rows stay >= 24 px (usable touch/click targets)
             final height = math.max(viewport, widget.ladder.length * 24.0);
             _scheduleFocus(height);
+            _scheduleKeep(height);
             return Column(
               children: [
                 SizedBox(
@@ -753,6 +815,7 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
                       accent: widget.accent,
                       pulse: _draft != null ? _pulse.value : 0,
                       fontFamily: _fontFamily,
+                      keyHighlight: widget.keyHighlight,
                     ),
                   ),
             ),
@@ -1123,9 +1186,11 @@ class _GridPainter extends CustomPainter {
     this.stringMarks = false,
     this.warnNotes = const {},
     this.fontFamily,
+    this.keyHighlight,
   });
 
   final String? fontFamily;
+  final PitchKeyHighlight? keyHighlight;
   final List<Rung> rows;
   final List<PitchNote> notes;
   final _Draft? draft;
@@ -1181,15 +1246,37 @@ class _GridPainter extends CustomPainter {
     final blackRow = Paint()..color = LT.surface;
     final rowSep = Paint()..color = LT.bg;
     final octave = Paint()..color = LT.borderStrong;
+    // ui-001 stage 5 (desktop): rows by the song's key instead of the
+    // piano's black / white keys
+    final key = keyHighlight;
+    final outOfKey = Paint()..color = LT.laneOutOfKey;
+    final rootRow =
+        Paint()..color = Color.alphaBlend(LT.lime.withValues(alpha: .06), LT.surface2);
     for (var r = 0; r < rows.length; r++) {
       final top = axis.y(r);
+      final pc = rows[r].midi % 12;
       canvas.drawRect(
         Rect.fromLTWH(0, top, w, rowH),
-        _isBlack(rows[r].midi) ? blackRow : whiteRow,
+        key == null
+            ? (_isBlack(rows[r].midi) ? blackRow : whiteRow)
+            : pc == key.root
+            ? rootRow
+            : key.pitchClasses.contains(pc)
+            ? whiteRow
+            : outOfKey,
       );
       canvas.drawRect(Rect.fromLTWH(0, top + rowH - 1, w, 1), rowSep);
       if (rows[r].midi % 12 == 0) {
         canvas.drawRect(Rect.fromLTWH(0, top + rowH - 1, w, 1), octave);
+      }
+    }
+    // the note name at the left of every in-key row (root in lime)
+    if (key != null && rowH >= 10) {
+      for (var r = 0; r < rows.length; r++) {
+        final pc = rows[r].midi % 12;
+        if (!key.pitchClasses.contains(pc)) continue;
+        final tp = _rowName(rows[r].name, pc == key.root);
+        tp.paint(canvas, Offset(4, axis.y(r) + (rowH - tp.height) / 2));
       }
     }
     // alternate-bar tint, then sub / beat / bar lines (weak → strong)
@@ -1550,8 +1637,23 @@ class _GridPainter extends CustomPainter {
   void _dotted(Canvas canvas, Rect r, Color color) =>
       _dashedRect(canvas, r, color, 1.2, 2, 2);
 
+  // laid-out row names (the lane repaints with the playhead: no relayout)
+  static final Map<(String, bool), TextPainter> _names = {};
+  static TextPainter _rowName(String name, bool root) =>
+      _names[(name, root)] ??= TextPainter(
+        text: TextSpan(
+          text: name,
+          style: LTType.mono(
+            size: 9,
+            color: root ? LT.lime.withValues(alpha: .6) : LT.t2.withValues(alpha: .35),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
   @override
   bool shouldRepaint(covariant _GridPainter old) =>
+      old.keyHighlight != keyHighlight ||
       !listEquals(old.notes, notes) ||
       !setEquals(old.selected, selected) ||
       !listEquals(old.rows, rows) ||

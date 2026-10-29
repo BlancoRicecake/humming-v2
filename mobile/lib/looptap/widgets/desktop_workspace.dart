@@ -23,8 +23,13 @@ class DesktopCommands extends StatelessWidget {
     this.viewToggle,
     this.openEditor,
     this.inspector,
+    this.hum,
     this.focusNode,
   });
+
+  /// ui-001 stage 5: Ctrl/Cmd+Shift+H opens humming for the active track
+  /// (a focused grid with notes to edit keeps it for humanize).
+  final VoidCallback? hum;
 
   /// ui-001 stage 4: Ctrl/Cmd+I opens / closes the inspector.
   final VoidCallback? inspector;
@@ -67,6 +72,7 @@ class DesktopCommands extends StatelessWidget {
     DesktopShortcutId.viewToggle => viewToggle,
     DesktopShortcutId.openEditor => openEditor,
     DesktopShortcutId.inspector => inspector,
+    DesktopShortcutId.hum => hum,
   };
 
   /// The registered shortcut [event] triggers, from [kDesktopShortcuts].

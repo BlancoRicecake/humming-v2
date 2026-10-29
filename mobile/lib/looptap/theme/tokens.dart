@@ -10,6 +10,8 @@ class LT {
   static const surface = Color(0xFF161616); // cards / sheets
   static const surface2 = Color(0xFF1E1E1E); // raised controls, pads (idle)
   static const surface3 = Color(0xFF262626); // hover / nested
+  // ui-001 stage 5: a piano-roll row outside the song's key (desktop)
+  static const laneOutOfKey = Color(0xFF111111);
   static const lime = Color(0xFFA3E635); // primary accent, active, CTAs, playhead
   static const limeDim = Color(0xFF7FB52A); // pressed lime
   static const border = Color(0xFF2A2A2A); // hairline borders

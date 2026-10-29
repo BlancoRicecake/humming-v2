@@ -589,6 +589,10 @@ void main() {
       bool imported = true,
     }) async {
       EditScreen.debugDesktopOverride = desktop;
+      // These editor tests measure the chromatic 128-row roll (rows by MIDI
+      // number); ui-001 stage 5's "in-key notes only" view (the desktop
+      // default) is covered by desktop_beginner_polish_test.
+      LoopPrefs.instance.gridInKeyOnly.value = false;
       final onError = FlutterError.onError;
       FlutterError.onError = (d) {
         // Ahem glyphs overflow unrelated fixed-width labels

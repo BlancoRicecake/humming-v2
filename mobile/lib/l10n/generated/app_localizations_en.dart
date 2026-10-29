@@ -3085,4 +3085,41 @@ class L10nEn extends L10n {
 
   @override
   String get inspectorDrumSelectHint => 'Pick hits in Select mode';
+
+  @override
+  String get velocityLaneRow => 'Velocity · chance';
+
+  @override
+  String get velocityLaneFold => 'Fold the velocity lane';
+
+  @override
+  String get velocityLaneUnfold => 'Show the velocity lane';
+
+  @override
+  String get gridInKeyOnly => 'In-key notes only';
+
+  @override
+  String get gridInKeyOnlyTip =>
+      'Hides empty rows outside the key; new notes land in the key';
+
+  @override
+  String gridOutOfKeyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count notes out of key',
+      one: '1 note out of key',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get humPrimary => 'Add by humming';
+
+  @override
+  String get shortcutHum => 'Add notes by humming';
+
+  @override
+  String get shortcutHelpHumNote =>
+      'With the piano roll or drum grid focused and notes to edit, Ctrl/⌘+Shift+H keeps doing humanize; elsewhere it opens humming for the active track.';
 }
