@@ -148,3 +148,11 @@ Song buildGotyeFullSong([Map<String, dynamic>? transcription]) {
   song.vol.addAll({...base.vol, ...fullAddedVol});
   return song;
 }
+
+/// The full-song fixtures live in the git-ignored `artifacts/` folder, so a
+/// fresh checkout (or CI) lacks them: report a skip instead of a load failure.
+String? gotyeFixtureSkip(List<String> paths) {
+  final missing = paths.where((p) => !File(p).existsSync()).toList();
+  if (missing.isEmpty) return null;
+  return 'local fixture missing (artifacts/ is git-ignored): ${missing.join(', ')}';
+}

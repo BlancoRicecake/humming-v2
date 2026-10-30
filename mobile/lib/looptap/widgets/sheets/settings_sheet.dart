@@ -155,8 +155,8 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         ),
         _Row(
           icon: LtIcons.timer,
-          title: 'Vocal sync',
-          sub: 'Increase if the take lands late; decrease if early',
+          title: l.ltSettingsVocalSync,
+          sub: l.ltSettingsVocalSyncSub,
           right: _LatencyStepper(
             value: _vocalLatencyMs,
             onChanged: _setVocalLatencyMs,
@@ -281,7 +281,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   /// 해지하지 않으므로, 사용자가 직접 해지할 수 있게 링크를 연다.
   Future<void> _openManageSubscription(LoopStore store) async {
     final uri = manageSubscriptionUri(
-      isIOS: Platform.isIOS,
+      isIOS: Platform.isIOS || Platform.isMacOS,
       productId: store.proProductId,
     );
     try {
@@ -468,7 +468,7 @@ class _Row extends StatelessWidget {
           ),
           if (right != null) right!,
           if (onTap != null && right == null)
-            const Ms(LtIcons.arrowBack, size: 16, color: LT.t3),
+            const Ms(LtIcons.chevronRight, size: 16, color: LT.t3),
         ],
       ),
     );

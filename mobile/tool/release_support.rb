@@ -78,6 +78,64 @@ module HumTrackRelease
     [name, number.to_i]
   end
 
+  # Mac distribution channels. StoreKit only works in the Mac App Store build;
+  # the direct-download build is its own flavor (bundle id + OAuth scheme) so
+  # its PKCE callback never lands in the App Store app on the same Mac.
+  # Every value is set explicitly so neither build inherits the other's.
+  MAC_CHANNELS = {
+    "app-store" => {store_flag: "true", scheme: "humtrack", bundle_id: "com.humtrack.app", flavor: nil},
+    "direct" => {store_flag: "false", scheme: "humtrack-direct", bundle_id: "com.humtrack.app.direct", flavor: "direct"},
+  }.freeze
+  MAC_CHANNEL_MARKER = "humtrack-mac-channel:"
+
+  def self.mac_channel(channel)
+    MAC_CHANNELS.fetch(channel) do
+      raise ArgumentError, "Unknown Mac channel #{channel.inspect}; use #{MAC_CHANNELS.keys.join(' or ')}"
+    end
+  end
+
+  def self.mac_defines(channel, values)
+    c = mac_channel(channel)
+    values.merge("HUMTRACK_MAC_APP_STORE" => c[:store_flag], "HUMTRACK_AUTH_SCHEME" => c[:scheme])
+  end
+
+  # `flutter build macos` arguments selecting the channel's Xcode flavor.
+  def self.mac_flavor_args(channel)
+    flavor = mac_channel(channel)[:flavor]
+    flavor ? ["--flavor", flavor] : []
+  end
+
+  def self.mac_app_path(channel, build_root: File.join(MOBILE, "build/macos/Build/Products"))
+    flavor = mac_channel(channel)[:flavor]
+    File.join(build_root, flavor ? "Release-#{flavor}" : "Release", "HumTrack.app")
+  end
+
+  # The built app must match the channel everywhere: the compiled channel
+  # marker and OAuth callback URL in the Flutter App binary, and the bundle id
+  # and registered URL scheme in Info.plist.
+  def self.verify_mac_channel!(app_path, channel, plist_reader: method(:read_plist_json))
+    c = mac_channel(channel)
+    binary = File.join(app_path, "Contents/Frameworks/App.framework/Versions/A/App")
+    raise ArgumentError, "Flutter App binary missing: #{binary}" unless File.file?(binary)
+    data = File.binread(binary)
+    found = MAC_CHANNELS.keys.select { |k| data.include?("#{MAC_CHANNEL_MARKER}#{k}") }
+    raise ArgumentError, "Mac build channel is #{found.inspect}, expected #{channel.inspect}" unless found == [channel]
+    callbacks = MAC_CHANNELS.values.map { |v| "#{v[:scheme]}://auth/callback" }.select { |u| data.include?(u) }
+    expected = "#{c[:scheme]}://auth/callback"
+    raise ArgumentError, "OAuth callback in binary is #{callbacks.inspect}, expected #{expected.inspect}" unless callbacks == [expected]
+    info = plist_reader.call(File.join(app_path, "Contents/Info.plist"))
+    raise ArgumentError, "Bundle id is #{info["CFBundleIdentifier"].inspect}, expected #{c[:bundle_id]}" unless info["CFBundleIdentifier"] == c[:bundle_id]
+    schemes = Array(info["CFBundleURLTypes"]).flat_map { |t| Array(t["CFBundleURLSchemes"]) }
+    raise ArgumentError, "URL schemes are #{schemes.inspect}, expected [#{c[:scheme]}]" unless schemes == [c[:scheme]]
+  end
+
+  def self.read_plist_json(path)
+    raise ArgumentError, "Info.plist missing: #{path}" unless File.file?(path)
+    out = IO.popen(["plutil", "-convert", "json", "-o", "-", path], &:read)
+    raise ArgumentError, "Unreadable Info.plist: #{path}" unless $?.success?
+    JSON.parse(out)
+  end
+
   def self.with_defines(values)
     Tempfile.create(["humtrack-defines-", ".json"]) do |file|
       file.write(JSON.generate(values))

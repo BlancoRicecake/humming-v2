@@ -117,8 +117,13 @@ class IapService {
   }
 
   Future<void> init() async {
-    // Desktop purchases are not configured; server account entitlements remain authoritative.
-    if (defaultTargetPlatform != TargetPlatform.android && defaultTargetPlatform != TargetPlatform.iOS) return;
+    // Store channel: Android/iOS, and macOS only in the Mac App Store build
+    // (HUMTRACK_MAC_APP_STORE). Elsewhere server account entitlements decide Pro.
+    // The macOS log line also keeps the channel marker in the release binary.
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      debugPrint('[iap] $kMacStoreChannelMarker');
+    }
+    if (!hasStorePurchases(defaultTargetPlatform)) return;
     try {
       final available = await _iap.isAvailable();
       if (!available) {
@@ -551,10 +556,10 @@ class IapService {
       debugPrint('[iap] verify dio not configured — ${kReleaseMode ? 'REJECTING (release)' : 'accepting locally (debug)'}');
       return _VerifyOutcome(pro: !kReleaseMode, error: kReleaseMode ? IapError.verifyFailed : null);
     }
-    final isIos = defaultTargetPlatform == TargetPlatform.iOS;
-    final storeTag = isIos ? 'app_store' : 'play_store';
+    final appStore = usesAppStore(defaultTargetPlatform);
+    final storeTag = appStore ? 'app_store' : 'play_store';
     try {
-      final receipt = isIos
+      final receipt = appStore
           // App Store: StoreKit JWS / transactionId / legacy receipt — 그대로.
           ? p.verificationData.serverVerificationData
           // Play Store: backend 가 JSON {productId, purchaseToken} 으로 기대.
@@ -618,7 +623,7 @@ class IapService {
   }
 
   String get _storeName =>
-      defaultTargetPlatform == TargetPlatform.iOS ? 'app_store' : 'play_store';
+      usesAppStore(defaultTargetPlatform) ? 'app_store' : 'play_store';
 
   Future<void> dispose() async {
     await _sub?.cancel();

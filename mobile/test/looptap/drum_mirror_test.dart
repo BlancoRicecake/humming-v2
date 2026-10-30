@@ -3,16 +3,27 @@
 // would silently misbehave. Also checks the Fill launchpad palette/defaults are
 // fully backed.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:humming/l10n/generated/app_localizations_en.dart';
+import 'package:humming/l10n/generated/app_localizations_ko.dart';
 import 'package:humming/looptap/audio/loop_audio.dart' show kDrumNote;
 import 'package:humming/looptap/music/midi_export.dart' show midiDrumKinds;
 import 'package:humming/looptap/music/theory.dart'
     show kFillPalette, kFillKindsDefault;
 import 'package:humming/looptap/widgets/surfaces/drum_surface.dart'
-    show kDrumSpecs;
+    show drumLabel, kDrumSpecs;
 
 void main() {
   test('kDrumNote and midi _drumNote cover the same kinds', () {
     expect(kDrumNote.keys.toSet(), equals(midiDrumKinds));
+  });
+
+  test('every display spec has a named label, not a raw MIDI number', () {
+    for (final l in [L10nKo(), L10nEn()]) {
+      for (final k in kDrumSpecs.keys) {
+        expect(drumLabel(l, k), isNot(startsWith('MIDI ')), reason: k);
+      }
+    }
+    expect(drumLabel(L10nKo(), 'kick'), '킥');
   });
 
   test('every playable kind has a display spec', () {

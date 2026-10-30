@@ -1505,6 +1505,10 @@ class L10nKo extends L10n {
   String get payStoreUnavailableDevice => '이 기기에서는 스토어를 사용할 수 없어요.';
 
   @override
+  String get payAccountProOnly =>
+      '이 버전에서는 앱 안에서 구독할 수 없어요. App Store나 Google Play에서 구독한 계정으로 로그인하면 Pro가 자동으로 적용돼요.';
+
+  @override
   String get payPurchaseFailed => '구매를 완료하지 못했어요. 다시 시도해 주세요.';
 
   @override
@@ -1728,6 +1732,12 @@ class L10nKo extends L10n {
 
   @override
   String get ltSettingsAnalyticsSub => '제품 개선용 Clarity·Firebase 분석 허용';
+
+  @override
+  String get ltSettingsVocalSync => '보컬 싱크';
+
+  @override
+  String get ltSettingsVocalSyncSub => '녹음이 늦으면 늘리고, 빠르면 줄여요';
 
   @override
   String get ltSettingsAbout => '정보';

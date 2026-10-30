@@ -45,6 +45,11 @@ Map<String, dynamic> _semantic(Song s) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  final fixtureSkip = gotyeFixtureSkip([fullTranscriptionPath, v2AdditionsPath, v2DynamicsPath]);
+  if (fixtureSkip != null) {
+    test('gotye full-song fixtures', () {}, skip: fixtureSkip);
+    return;
+  }
 
   test('no vocal-guide lane anywhere', () {
     final s = buildGotyeFullSongV2Instrumental();

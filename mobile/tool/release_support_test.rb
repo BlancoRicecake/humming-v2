@@ -1,5 +1,6 @@
 require "minitest/autorun"
 require "tmpdir"
+require "fileutils"
 require_relative "release_support"
 
 class ReleaseSupportTest < Minitest::Test
@@ -217,6 +218,71 @@ class ReleaseSupportTest < Minitest::Test
       assert_raises(ArgumentError) do
         HumTrackRelease.require_google_plist!(path: File.join(dir, "missing.plist"))
       end
+    end
+  end
+
+  def test_mac_defines_set_every_channel_value_explicitly
+    store = HumTrackRelease.mac_defines("app-store", {"A" => "1"})
+    assert_equal "true", store["HUMTRACK_MAC_APP_STORE"]
+    assert_equal "humtrack", store["HUMTRACK_AUTH_SCHEME"]
+    direct = HumTrackRelease.mac_defines("direct", {"A" => "1"})
+    assert_equal "false", direct["HUMTRACK_MAC_APP_STORE"]
+    assert_equal "humtrack-direct", direct["HUMTRACK_AUTH_SCHEME"]
+    assert_equal "1", direct["A"]
+    assert_raises(ArgumentError) { HumTrackRelease.mac_defines("mas", {}) }
+    assert_raises(ArgumentError) { HumTrackRelease.mac_defines(nil, {}) }
+  end
+
+  def test_mac_flavor_and_app_path_follow_the_channel
+    assert_equal [], HumTrackRelease.mac_flavor_args("app-store")
+    assert_equal ["--flavor", "direct"], HumTrackRelease.mac_flavor_args("direct")
+    assert_equal "/b/Release/HumTrack.app", HumTrackRelease.mac_app_path("app-store", build_root: "/b")
+    assert_equal "/b/Release-direct/HumTrack.app", HumTrackRelease.mac_app_path("direct", build_root: "/b")
+  end
+
+  def test_defines_never_pass_mac_channel_values_through_env
+    %w[HUMTRACK_MAC_APP_STORE HUMTRACK_AUTH_SCHEME].each do |key|
+      refute_includes HumTrackRelease::DEFINE_KEYS, key
+    end
+  end
+
+  def write_mac_app(dir, contents)
+    bin = File.join(dir, "HumTrack.app/Contents/Frameworks/App.framework/Versions/A")
+    FileUtils.mkdir_p(bin)
+    File.binwrite(File.join(bin, "App"), contents)
+    File.join(dir, "HumTrack.app")
+  end
+
+  def plist(bundle_id, scheme)
+    ->(_path) { {"CFBundleIdentifier" => bundle_id, "CFBundleURLTypes" => [{"CFBundleURLSchemes" => [scheme]}]} }
+  end
+
+  STORE_BINARY = "\x00humtrack-mac-channel:app-store\x00humtrack://auth/callback\x00"
+  DIRECT_BINARY = "\x00humtrack-mac-channel:direct\x00humtrack-direct://auth/callback\x00"
+
+  def test_verify_mac_channel_accepts_matching_builds
+    Dir.mktmpdir do |dir|
+      store = write_mac_app(File.join(dir, "s"), STORE_BINARY)
+      HumTrackRelease.verify_mac_channel!(store, "app-store", plist_reader: plist("com.humtrack.app", "humtrack"))
+      direct = write_mac_app(File.join(dir, "d"), DIRECT_BINARY)
+      HumTrackRelease.verify_mac_channel!(direct, "direct", plist_reader: plist("com.humtrack.app.direct", "humtrack-direct"))
+    end
+  end
+
+  def test_verify_mac_channel_rejects_any_mismatch
+    Dir.mktmpdir do |dir|
+      store = write_mac_app(File.join(dir, "s"), STORE_BINARY)
+      ok = plist("com.humtrack.app", "humtrack")
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(store, "direct", plist_reader: ok) }
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(store, "app-store", plist_reader: plist("com.humtrack.app.direct", "humtrack")) }
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(store, "app-store", plist_reader: plist("com.humtrack.app", "humtrack-direct")) }
+      wrong_cb = write_mac_app(File.join(dir, "w"), "humtrack-mac-channel:app-store humtrack-direct://auth/callback")
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(wrong_cb, "app-store", plist_reader: ok) }
+      none = write_mac_app(File.join(dir, "n"), "no marker")
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(none, "app-store", plist_reader: ok) }
+      both = write_mac_app(File.join(dir, "b"), "humtrack-mac-channel:direct humtrack-mac-channel:app-store humtrack://auth/callback")
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(both, "app-store", plist_reader: ok) }
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(File.join(dir, "missing.app"), "app-store", plist_reader: ok) }
     end
   end
 end

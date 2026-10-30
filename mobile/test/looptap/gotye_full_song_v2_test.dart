@@ -53,6 +53,11 @@ Map<String, dynamic> _withoutAdded(Map<String, dynamic> sec) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  final fixtureSkip = gotyeFixtureSkip([fullTranscriptionPath, v2AdditionsPath, v2DynamicsPath]);
+  if (fixtureSkip != null) {
+    test('gotye full-song fixtures', () {}, skip: fixtureSkip);
+    return;
+  }
   final tr = loadFullTranscription();
   final add = jsonDecode(File(v2AdditionsPath).readAsStringSync()) as Map<String, dynamic>;
   final dyn = jsonDecode(File(v2DynamicsPath).readAsStringSync()) as Map<String, dynamic>;

@@ -128,3 +128,30 @@ platform :ios do
     sh("python3", File.join(HumTrackRelease::ROOT, "infra/scripts/play_create_iap.py"))
   end
 end
+
+# Mac: one build per distribution channel. The channel is required, never
+# defaulted, and checked in the built app (HumTrackRelease.verify_mac_channel!).
+#   app-store → com.humtrack.app, StoreKit on, OAuth scheme humtrack (Mac App Store)
+#   direct    → flavor `direct`: com.humtrack.app.direct, StoreKit off, scheme
+#               humtrack-direct (website download, account Pro only)
+# Signing/export (Apple Distribution or Developer ID) is a separate step.
+platform :mac do
+  desc "Build the release Mac app for channel:app-store|direct (unsigned) and verify its channel"
+  lane :build do |options|
+    channel = options[:channel].to_s
+    defines = HumTrackRelease.mac_defines(channel, HumTrackRelease.defines)
+    version, number = HumTrackRelease.version
+    UI.message("Building HumTrack for Mac #{version} (#{number}), channel #{channel}")
+    Dir.chdir(HumTrackRelease::MOBILE) do
+      sh("flutter", "precache", "--macos")
+      sh("flutter", "pub", "get")
+      HumTrackRelease.with_defines(defines) do |path|
+        sh("flutter", "build", "macos", "--release", "--no-pub", *HumTrackRelease.mac_flavor_args(channel),
+           "--build-name=#{version}", "--build-number=#{number}", "--dart-define-from-file=#{path}")
+      end
+    end
+    app = HumTrackRelease.mac_app_path(channel)
+    HumTrackRelease.verify_mac_channel!(app, channel)
+    UI.success("Verified Mac channel #{channel}: #{app}")
+  end
+end

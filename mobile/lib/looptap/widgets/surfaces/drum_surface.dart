@@ -36,6 +36,7 @@ class DrumSpec {
 String drumLabel(L10n l, String kind) => switch (kind) {
   'hihat' => l.ltDrumHihat,
   'snare' => l.ltDrumSnare,
+  'kick' => l.ltDrumKick,
   'shaker' => l.ltDrumShaker,
   'tambourine' => l.ltDrumTambourine,
   'clap' => l.ltDrumClap,

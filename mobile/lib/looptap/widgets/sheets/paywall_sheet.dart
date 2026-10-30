@@ -12,8 +12,8 @@
 //   - restore           → LoopStore.restorePurchases() 의 결과(enum)로 문구 결정.
 // 모든 사용자 문구는 L10n (pay*) — audit M12.
 import 'dart:async';
-import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -208,7 +208,7 @@ class _PaywallSheetState extends State<_PaywallSheet> {
       properties: {
         'feature': 'subscription',
         'entry_source': widget.trigger.name,
-        'store': Platform.isIOS ? 'app_store' : 'play_store',
+        'store': usesAppStore(defaultTargetPlatform) ? 'app_store' : 'play_store',
       },
     );
     // buy() 호출 직전에 listener 부착 — 해당 productId 의 결과만 받는다.
@@ -293,7 +293,7 @@ class _PaywallSheetState extends State<_PaywallSheet> {
           'feature': 'subscription',
           'entry_source': widget.trigger.name,
           'error_code': result.error?.name ?? 'unknown',
-          'store': Platform.isIOS ? 'app_store' : 'play_store',
+          'store': usesAppStore(defaultTargetPlatform) ? 'app_store' : 'play_store',
         },
       );
     }
@@ -445,145 +445,163 @@ class _PaywallSheetState extends State<_PaywallSheet> {
           style: LTType.inter(size: 12, color: LT.t2, height: 1.5),
         ),
         const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            key: const ValueKey('restore-purchases'),
-            onPressed: disabled || _busy ? null : () => _restore(store),
-            icon: const Icon(Icons.restore, size: 18),
-            label: Text(l.payRestore),
+        // No store channel in this build (direct-download Mac, other desktops):
+        // no prices or purchase/restore UI, only account Pro guidance.
+        if (!hasStorePurchases(defaultTargetPlatform)) ...[
+          Text(
+            key: const ValueKey('paywall-account-pro-only'),
+            l.payAccountProOnly,
+            style: LTType.inter(size: 13, color: LT.t1, height: 1.5),
           ),
-        ),
-        const SizedBox(height: 10),
-        _PlanCard(
-          productId: kProductYearly,
-          title: l.payPlanYearly,
-          price: IapPricing.yearlyLabel(),
-          per: l.payPerMonthEquiv(IapPricing.yearlyAsMonthlyLabel()),
-          selected: _selected == kProductYearly,
-          onTap:
-              _busy ? null : () => setState(() => _selected = kProductYearly),
-        ),
-        const SizedBox(height: 10),
-        _PlanCard(
-          productId: kProductMonthly,
-          title: l.payPlanMonthly,
-          price: IapPricing.monthlyLabel(),
-          per: l.payBilledMonthly,
-          selected: _selected == kProductMonthly,
-          onTap:
-              _busy ? null : () => setState(() => _selected = kProductMonthly),
-        ),
-        const SizedBox(height: 16),
-        // Billed amount is the most prominent pricing element (App Store
-        // Guideline 3.1.2(c)); free-trial wording is kept subordinate to it —
-        // smaller, dimmer, and below the total. Apple rejected the prior layout
-        // where the lime CTA promoted only "Start free trial" with no billed
-        // amount or auto-renewal disclosure.
-        () {
-          final isYearly = _selected == kProductYearly;
-          final billed =
-              isYearly ? IapPricing.yearlyLabel() : IapPricing.monthlyLabel();
-          final period = isYearly ? l.payPeriodYear : l.payPeriodMonth;
-          // Trial wording (M11): iOS cannot tell intro-offer eligibility
-          // client-side, so the line is explicitly "for new subscribers" and
-          // StoreKit decides at checkout. On Android, Google Play drops the
-          // trial offer once used, so a returning user sees plain billing
-          // terms instead — the purchase flow bills them immediately to match
-          // (see IapService._androidOfferToken).
-          final hasTrial = IapPricing.hasFreeTrial(_selected);
-          final disclosure =
-              hasTrial
-                  ? l.payDisclosureTrial(IapPricing.trialDays, billed, period)
-                  : l.payDisclosureNoTrial(billed, period);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: billed,
-                      style: LTType.inter(
-                        size: 22,
-                        weight: FontWeight.w800,
-                        color: LT.t1,
+          if (!store.isSignedIn) ...[
+            const SizedBox(height: 14),
+            FilledButton(
+              key: const ValueKey('paywall-sign-in'),
+              onPressed: () => showAccountSheet(context),
+              child: Text(l.accountSignIn),
+            ),
+          ],
+        ] else ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('restore-purchases'),
+              onPressed: disabled || _busy ? null : () => _restore(store),
+              icon: const Icon(Icons.restore, size: 18),
+              label: Text(l.payRestore),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _PlanCard(
+            productId: kProductYearly,
+            title: l.payPlanYearly,
+            price: IapPricing.yearlyLabel(),
+            per: l.payPerMonthEquiv(IapPricing.yearlyAsMonthlyLabel()),
+            selected: _selected == kProductYearly,
+            onTap:
+                _busy ? null : () => setState(() => _selected = kProductYearly),
+          ),
+          const SizedBox(height: 10),
+          _PlanCard(
+            productId: kProductMonthly,
+            title: l.payPlanMonthly,
+            price: IapPricing.monthlyLabel(),
+            per: l.payBilledMonthly,
+            selected: _selected == kProductMonthly,
+            onTap:
+                _busy ? null : () => setState(() => _selected = kProductMonthly),
+          ),
+          const SizedBox(height: 16),
+          // Billed amount is the most prominent pricing element (App Store
+          // Guideline 3.1.2(c)); free-trial wording is kept subordinate to it —
+          // smaller, dimmer, and below the total. Apple rejected the prior layout
+          // where the lime CTA promoted only "Start free trial" with no billed
+          // amount or auto-renewal disclosure.
+          () {
+            final isYearly = _selected == kProductYearly;
+            final billed =
+                isYearly ? IapPricing.yearlyLabel() : IapPricing.monthlyLabel();
+            final period = isYearly ? l.payPeriodYear : l.payPeriodMonth;
+            // Trial wording (M11): iOS cannot tell intro-offer eligibility
+            // client-side, so the line is explicitly "for new subscribers" and
+            // StoreKit decides at checkout. On Android, Google Play drops the
+            // trial offer once used, so a returning user sees plain billing
+            // terms instead — the purchase flow bills them immediately to match
+            // (see IapService._androidOfferToken).
+            final hasTrial = IapPricing.hasFreeTrial(_selected);
+            final disclosure =
+                hasTrial
+                    ? l.payDisclosureTrial(IapPricing.trialDays, billed, period)
+                    : l.payDisclosureNoTrial(billed, period);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: billed,
+                        style: LTType.inter(
+                          size: 22,
+                          weight: FontWeight.w800,
+                          color: LT.t1,
+                        ),
                       ),
-                    ),
-                    TextSpan(
-                      text: l.payPerPeriod(period),
-                      style: LTType.inter(
-                        size: 13,
-                        weight: FontWeight.w600,
-                        color: LT.t2,
+                      TextSpan(
+                        text: l.payPerPeriod(period),
+                        style: LTType.inter(
+                          size: 13,
+                          weight: FontWeight.w600,
+                          color: LT.t2,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                disclosure,
-                style: LTType.inter(size: 11, color: LT.t3, height: 1.45),
-              ),
-            ],
-          );
-        }(),
-        const SizedBox(height: 14),
-        GestureDetector(
-          onTap: disabled || _busy ? null : () => _buy(store, _selected),
-          child: Opacity(
-            opacity: disabled || _busy ? 0.55 : 1,
-            child: Container(
-              height: 50,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: LT.lime,
-                borderRadius: BorderRadius.circular(LTRadius.control),
-              ),
-              child:
-                  _busy
-                      ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: LT.bg,
-                            ),
-                          ),
-                          if (_pending) ...[
-                            const SizedBox(width: 10),
-                            Text(
-                              l.payPendingButton,
-                              style: LTType.inter(
-                                size: 14,
-                                weight: FontWeight.w800,
+                const SizedBox(height: 4),
+                Text(
+                  disclosure,
+                  style: LTType.inter(size: 11, color: LT.t3, height: 1.45),
+                ),
+              ],
+            );
+          }(),
+          const SizedBox(height: 14),
+          GestureDetector(
+            onTap: disabled || _busy ? null : () => _buy(store, _selected),
+            child: Opacity(
+              opacity: disabled || _busy ? 0.55 : 1,
+              child: Container(
+                height: 50,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: LT.lime,
+                  borderRadius: BorderRadius.circular(LTRadius.control),
+                ),
+                child:
+                    _busy
+                        ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
                                 color: LT.bg,
                               ),
                             ),
+                            if (_pending) ...[
+                              const SizedBox(width: 10),
+                              Text(
+                                l.payPendingButton,
+                                style: LTType.inter(
+                                  size: 14,
+                                  weight: FontWeight.w800,
+                                  color: LT.bg,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
-                      )
-                      : Text(
-                        l.paySubscribe,
-                        style: LTType.inter(
-                          size: 14,
-                          weight: FontWeight.w800,
-                          color: LT.bg,
+                        )
+                        : Text(
+                          l.paySubscribe,
+                          style: LTType.inter(
+                            size: 14,
+                            weight: FontWeight.w800,
+                            color: LT.bg,
+                          ),
                         ),
-                      ),
+              ),
             ),
           ),
-        ),
-        if (disabled) ...[
-          const SizedBox(height: 10),
-          Text(
-            l.payStoreUnavailable,
-            style: LTType.inter(size: 13, color: LT.t3),
-          ),
+          if (disabled) ...[
+            const SizedBox(height: 10),
+            Text(
+              l.payStoreUnavailable,
+              style: LTType.inter(size: 13, color: LT.t3),
+            ),
+          ],
         ],
       ],
     );

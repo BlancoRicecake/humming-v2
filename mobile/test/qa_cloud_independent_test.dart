@@ -9,7 +9,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory root;
   setUp(() async {
-    root = await Directory('C:/src/humming-v2/artifacts/cloud-backup-2026-10-30/codex').createTemp('app-safety-');
+    // Evidence folder on the Windows QA machine; a temp dir everywhere else.
+    final qa = Directory('C:/src/humming-v2/artifacts/cloud-backup-2026-10-30/codex');
+    root = await (qa.existsSync() ? qa : Directory.systemTemp).createTemp('app-safety-');
     LoopStorage.rootOverride = root;
     await LoopStorage.ensureDirs();
     await LoopStorage.load();

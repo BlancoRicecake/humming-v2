@@ -2754,6 +2754,12 @@ abstract class L10n {
   /// **'이 기기에서는 스토어를 사용할 수 없어요.'**
   String get payStoreUnavailableDevice;
 
+  /// No description provided for @payAccountProOnly.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 버전에서는 앱 안에서 구독할 수 없어요. App Store나 Google Play에서 구독한 계정으로 로그인하면 Pro가 자동으로 적용돼요.'**
+  String get payAccountProOnly;
+
   /// No description provided for @payPurchaseFailed.
   ///
   /// In ko, this message translates to:
@@ -3155,6 +3161,18 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'제품 개선용 Clarity·Firebase 분석 허용'**
   String get ltSettingsAnalyticsSub;
+
+  /// No description provided for @ltSettingsVocalSync.
+  ///
+  /// In ko, this message translates to:
+  /// **'보컬 싱크'**
+  String get ltSettingsVocalSync;
+
+  /// No description provided for @ltSettingsVocalSyncSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음이 늦으면 늘리고, 빠르면 줄여요'**
+  String get ltSettingsVocalSyncSub;
 
   /// No description provided for @ltSettingsAbout.
   ///

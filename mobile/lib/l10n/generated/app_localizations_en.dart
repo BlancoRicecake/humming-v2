@@ -1525,6 +1525,10 @@ class L10nEn extends L10n {
   String get payStoreUnavailableDevice => 'Store unavailable on this device.';
 
   @override
+  String get payAccountProOnly =>
+      'Subscriptions can\'t be bought in this version. Sign in with the account you subscribed with on the App Store or Google Play and Pro applies automatically.';
+
+  @override
   String get payPurchaseFailed =>
       'Could not complete purchase. Please try again.';
 
@@ -1768,6 +1772,13 @@ class L10nEn extends L10n {
   @override
   String get ltSettingsAnalyticsSub =>
       'Allow Clarity and Firebase analytics for product improvement';
+
+  @override
+  String get ltSettingsVocalSync => 'Vocal sync';
+
+  @override
+  String get ltSettingsVocalSyncSub =>
+      'Increase if the take lands late; decrease if early';
 
   @override
   String get ltSettingsAbout => 'About';

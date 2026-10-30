@@ -52,6 +52,11 @@ Map<String, dynamic> _withoutAdded(Map<String, dynamic> sec) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  final fixtureSkip = gotyeFixtureSkip([fullTranscriptionPath]);
+  if (fixtureSkip != null) {
+    test('gotye full-song fixtures', () {}, skip: fixtureSkip);
+    return;
+  }
   final tr = loadFullTranscription();
 
   test('130 bars in 17 sections, ≤ 8 bars each', () {
