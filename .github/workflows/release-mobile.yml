@@ -13,7 +13,7 @@ on:
         description: Build, internal testing, production review, or submit an existing iOS build
         type: choice
         default: build
-        options: [build, internal, production, submit_ios]
+        options: [build, internal, production, submit_ios, contact_audit, contact_apply]
       build_number:
         description: Optional build number override (otherwise pubspec.yaml)
         type: string
@@ -31,8 +31,9 @@ concurrency:
 
 jobs:
   ios:
-    if: inputs.platform == 'both' || inputs.platform == 'ios'
+    if: (!startsWith(inputs.destination, 'contact_')) && (inputs.platform == 'both' || inputs.platform == 'ios')
     runs-on: macos-26
+    environment: release
     timeout-minutes: 60
     env:
       BUNDLE_GEMFILE: ${{ github.workspace }}/mobile/ios/Gemfile
@@ -72,12 +73,12 @@ jobs:
           xcodebuild -version
           sdk="$(xcrun --sdk iphoneos --show-sdk-version)"
           test "${sdk%%.*}" -ge 26
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
           flutter-version: '3.47.1'
           cache: true
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@824c0e29fdfc7d689c191c27acc969d2d04b7dd8 # v1.331.0
         with:
           ruby-version: '3.3'
           bundler: '2.6.2'
@@ -153,8 +154,9 @@ jobs:
           rm -f "$RUNNER_TEMP/humtrack-dist.p12" "$ASC_KEY_FILEPATH" mobile/ios/Runner/GoogleService-Info.plist
 
   android:
-    if: inputs.platform == 'both' || inputs.platform == 'android'
+    if: (!startsWith(inputs.destination, 'contact_')) && (inputs.platform == 'both' || inputs.platform == 'android')
     runs-on: ubuntu-latest
+    environment: release
     timeout-minutes: 60
     env:
       BUNDLE_GEMFILE: ${{ github.workspace }}/mobile/ios/Gemfile
@@ -184,18 +186,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
           flutter-version: '3.47.1'
           cache: true
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@824c0e29fdfc7d689c191c27acc969d2d04b7dd8 # v1.331.0
         with:
           ruby-version: '3.3'
           bundler: '2.6.2'
           bundler-cache: true
           working-directory: mobile/ios
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
         with:
           gradle-version: '8.14.3'
       - name: Check release helpers and app tests
@@ -260,3 +262,35 @@ jobs:
       - name: Remove temporary signing material
         if: always()
         run: rm -f "$GOOGLE_PLAY_JSON_KEY_FILE" "$RUNNER_TEMP/humtrack-upload.jks" mobile/android/key.properties
+
+  app_store_contact:
+    if: startsWith(inputs.destination, 'contact_') && inputs.platform == 'ios'
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install API client dependencies
+        run: python -m pip install 'PyJWT[crypto]==2.10.1' 'requests==2.32.5'
+      - name: Audit or update public contact address only
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          DESTINATION: ${{ inputs.destination }}
+        run: |
+          if [ "$DESTINATION" = contact_apply ]; then
+            python infra/scripts/asc_update_contact.py --apply
+          else
+            python infra/scripts/asc_update_contact.py
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app-store-contact-report
+          path: artifacts/store-contact-20261030/asc-*.json
+          if-no-files-found: warn
+          retention-days: 7
