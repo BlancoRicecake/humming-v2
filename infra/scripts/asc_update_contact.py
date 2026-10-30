@@ -25,11 +25,20 @@ apps=get('/v1/apps',{'filter[bundleId]':'com.humtrack.app'})['data']
 assert len(apps)==1,'Expected the HumTrack app only'
 app=apps[0]
 versions=get(f'/v1/apps/{app["id"]}/appStoreVersions',{'limit':200})['data']
+live_states={'READY_FOR_SALE','READY_FOR_DISTRIBUTION'}
+latest_live={}
+for version in versions:
+    a=version['attributes']
+    if a['appStoreState'] in live_states:
+        platform=a['platform']
+        key=tuple(int(n) for n in a['versionString'].split('.'))
+        if platform not in latest_live or key>latest_live[platform][0]: latest_live[platform]=(key,version['id'])
 report={'app':app['id'],'mode':'apply' if APPLY else 'audit','versions':[],'changed':[],'blocked':[]}
 obsolete={'REPLACED_WITH_NEW_VERSION','REMOVED_FROM_SALE','DEVELOPER_REMOVED_FROM_SALE','DEVELOPER_REJECTED','REJECTED','INVALID_BINARY'}
 for version in versions:
     attrs=version['attributes']; state=attrs['appStoreState']
     if state in obsolete: continue
+    if state in live_states and version['id']!=latest_live[attrs['platform']][1]: continue
     row={'id':version['id'],'version':attrs['versionString'],'state':state,'localizations':[]}
     for loc in get(f'/v1/appStoreVersions/{version["id"]}/appStoreVersionLocalizations',{'limit':200})['data']:
         fields={k:v for k,v in loc['attributes'].items() if k in ['description','promotionalText','supportUrl','marketingUrl'] and isinstance(v,str)}
