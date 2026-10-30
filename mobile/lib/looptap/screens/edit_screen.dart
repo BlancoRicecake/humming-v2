@@ -3,7 +3,7 @@ import '../widgets/desktop_top_bar.dart';
 import '../widgets/desktop_section_band.dart';
 import '../widgets/timeline_minimap.dart';
 import '../widgets/surfaces/pitch_grid_surface.dart'
-    show PitchGridViewLink, PitchKeyHighlight;
+    show GridReveal, PitchGridViewLink, PitchKeyHighlight;
 import '../widgets/surfaces/grid_chrome.dart';
 import '../widgets/desktop_inspector.dart';
 import '../widgets/shortcut_help.dart';
@@ -29,6 +29,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show listEquals, setEquals, visibleForTesting;
 import 'package:flutter/scheduler.dart';
+import 'dart:ui' show AppExitResponse;
 import 'package:provider/provider.dart';
 
 import '../../api/engine_api.dart';
@@ -209,6 +210,12 @@ class _EditScreenState extends State<EditScreen>
   final DesktopTimelineMemory _timelineMemory = DesktopTimelineMemory();
   final FocusNode _commandsFocus = FocusNode(debugLabel: 'editor commands');
   int _minimapRepeat = 0;
+
+  // QA 2026-10-30: the last hum conversion's notes, for that track and
+  // section only — the piano roll shows them once if they landed off screen
+  // (desktop; the phone keeps its behaviour).
+  ({String track, int section, GridReveal reveal})? _humReveal;
+  int _humRevealSerial = 0;
 
   // ui-001 stage 4: the active grid's tools / Notes tab (owned by the grid),
   // the inspector's tab (kept here so collapsing, docking or overlaying never
@@ -932,7 +939,21 @@ class _EditScreenState extends State<EditScreen>
   // _dirty: 명시적 Save / autosave 이후 추가 입력 여부 — 모든 편집은 _pushUndo
   // 를 지나므로 거기서 true, 저장 시 false (C24).
   Timer? _autosaveTimer;
-  bool _dirty = false;
+  // Storage audit 2026-10-30: every edit bumps [_editRev]; a save clears the
+  // dirty flag only if nothing changed since its snapshot, so an older save
+  // finishing late can't mark newer edits as saved.
+  bool _dirtyFlag = false;
+  int _editRev = 0;
+  bool get _dirty => _dirtyFlag;
+  set _dirty(bool v) {
+    if (v) _editRev++;
+    _dirtyFlag = v;
+  }
+
+  /// Clear the dirty flag after a save that snapshotted at [rev].
+  void _markSavedAt(int rev) {
+    if (_editRev == rev) _dirtyFlag = false;
+  }
   DateTime? _savedAt;
   bool _savedFlash = false;
   bool _guidedSaveTracked = false;
@@ -1082,18 +1103,107 @@ class _EditScreenState extends State<EditScreen>
     if (_dirty) _autoSaveTick();
   }
 
+  // Storage audit 2026-10-30: closing the desktop window (title-bar X) asks
+  // the app first (System.requestAppExit). Without an answer here the edits
+  // since the last 12 s autosave were lost. The window closes only once they
+  // are saved — a leave already in flight is awaited, not raced — or when the
+  // user explicitly picks "quit without saving" after a failure. Repeated
+  // close requests share one answer; a retry never discards anything.
+  Future<AppExitResponse>? _exitRequest;
+  Future<bool>? _leaveDone;
+
+  @override
+  Future<AppExitResponse> didRequestAppExit() {
+    if (!mounted) return Future.value(AppExitResponse.exit);
+    return _exitRequest ??= _answerExit().whenComplete(
+      () => _exitRequest = null,
+    );
+  }
+
+  Future<AppExitResponse> _answerExit() async {
+    if (_playing || _songSection != null || _countDown > 0) _stopAll();
+    final store = context.read<LoopStore>();
+    final leaving = _leaveDone;
+    if (_leaving && leaving != null && await leaving) {
+      return AppExitResponse.exit; // the back-save landed
+    }
+    while (mounted && _dirty) {
+      if (_isPristineNew(store)) return AppExitResponse.exit;
+      final rev = _editRev;
+      try {
+        await store.upsert(_snapshot());
+        if (!mounted) return AppExitResponse.exit;
+        setState(() {
+          _markSavedAt(rev);
+          _savedAt = DateTime.now();
+        });
+        _saveErrorShown = false;
+        continue; // edits made while saving get their own pass
+      } catch (e) {
+        debugPrint('[edit] save on window close failed: ${e.runtimeType}');
+        if (!mounted) return AppExitResponse.cancel;
+        setState(() => _savedFlash = false);
+        switch (await _askExitAfterSaveFailure()) {
+          case _ExitChoice.retry:
+            continue;
+          case _ExitChoice.discard:
+            debugPrint('[edit] quitting without saving (user choice)');
+            return AppExitResponse.exit;
+          case _ExitChoice.keepEditing:
+            return AppExitResponse.cancel;
+        }
+      }
+    }
+    return AppExitResponse.exit;
+  }
+
+  /// Save failed on window close: keep editing is the default (Esc, tapping
+  /// outside, Enter); quitting without saving is a separate, explicit button.
+  Future<_ExitChoice> _askExitAfterSaveFailure() async {
+    final l = L10n.of(context);
+    final choice = await showDialog<_ExitChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const ValueKey('exit-save-failed'),
+        title: Text(l.ltExitSaveFailedTitle),
+        content: Text(l.ltExitSaveFailed),
+        actions: [
+          TextButton(
+            key: const ValueKey('exit-discard'),
+            style: TextButton.styleFrom(foregroundColor: LT.danger),
+            onPressed: () => Navigator.of(ctx).pop(_ExitChoice.discard),
+            child: Text(l.ltExitDiscardQuit),
+          ),
+          TextButton(
+            key: const ValueKey('exit-retry'),
+            onPressed: () => Navigator.of(ctx).pop(_ExitChoice.retry),
+            child: Text(l.ltExitRetrySave),
+          ),
+          FilledButton(
+            key: const ValueKey('exit-keep'),
+            autofocus: true,
+            onPressed: () => Navigator.of(ctx).pop(_ExitChoice.keepEditing),
+            child: Text(l.ltExitKeepEditing),
+          ),
+        ],
+      ),
+    );
+    return choice ?? _ExitChoice.keepEditing;
+  }
+
   Future<void> _autoSaveTick() async {
     if (!mounted || _leaving) return;
     try {
       final store = context.read<LoopStore>();
       // an untouched brand-new song doesn't earn a library slot yet (C15)
       if (_isPristineNew(store)) return;
+      final rev = _editRev;
       await store.upsert(_snapshot());
       _trackGuidedSave('autosave');
       if (!mounted) return;
       _saveErrorShown = false;
       setState(() {
-        _dirty = false;
+        _markSavedAt(rev);
         _savedAt = DateTime.now();
       });
     } catch (_) {
@@ -4588,7 +4698,16 @@ class _EditScreenState extends State<EditScreen>
         }
         if (out.isEmpty) throw StateError('no notes');
         _pushUndo();
-        setState(() => t.pitchNotes.addAll(out));
+        setState(() {
+          t.pitchNotes.addAll(out);
+          if (_desktop) {
+            _humReveal = (
+              track: activeId,
+              section: _activeIdx,
+              reveal: GridReveal(++_humRevealSerial, List.of(out)),
+            );
+          }
+        });
         count = out.length;
       }
       ok = true;
@@ -4927,6 +5046,7 @@ class _EditScreenState extends State<EditScreen>
   }
 
   Future<void> _saveNow() async {
+    final rev = _editRev;
     try {
       await context.read<LoopStore>().upsert(_snapshot());
       _trackGuidedSave('manual');
@@ -4944,7 +5064,7 @@ class _EditScreenState extends State<EditScreen>
     if (!mounted) return;
     _saveErrorShown = false;
     setState(() {
-      _dirty = false;
+      _markSavedAt(rev);
       _savedAt = DateTime.now();
       _savedFlash = true;
     });
@@ -4992,10 +5112,14 @@ class _EditScreenState extends State<EditScreen>
   Future<void> _backWithSave() async {
     if (_leaving) return;
     _leaving = true;
+    final done = Completer<bool>();
+    _leaveDone = done.future;
     final store = context.read<LoopStore>();
     try {
       if (!_isPristineNew(store)) {
+        final rev = _editRev;
         await store.upsert(_snapshot());
+        _markSavedAt(rev);
         _trackGuidedSave('back');
       }
       // editor session over → undo stack (the last holder of replaced takes) is
@@ -5004,9 +5128,11 @@ class _EditScreenState extends State<EditScreen>
     } catch (e) {
       debugPrint('[edit] save on leave failed: $e');
       _leaving = false;
+      done.complete(false);
       _handleSaveFailure();
       return; // Keep the editor and its undo history available for retry.
     }
+    done.complete(true);
     if (mounted) {
       _trackGuidedExit('back');
       Navigator.of(context).pop();
@@ -6109,6 +6235,13 @@ class _EditScreenState extends State<EditScreen>
                 keyHighlight: _desktop ? _keyHighlight : null,
                 inKeyDraw: _inKeyOnly,
                 velocityLaneFold: _desktop,
+                // a hum result off screen is shown once (this track only)
+                reveal:
+                    _humReveal != null &&
+                            _humReveal!.track == _activeId &&
+                            _humReveal!.section == _activeIdx
+                        ? _humReveal!.reveal
+                        : null,
                 enabled: _songSection == null,
                 playStep: ps,
                 accent: _meta.color,
@@ -6523,3 +6656,6 @@ class _HumTargetChanged implements Exception {
   @override
   String toString() => 'hum target changed during analysis';
 }
+
+/// What the user picked after a failed save on window close.
+enum _ExitChoice { keepEditing, retry, discard }

@@ -22,8 +22,12 @@ from app.main import app
 JWT = os.environ.get("TEST_USER_JWT")
 JWT2 = os.environ.get("TEST_USER_JWT_OTHER")  # 두번째 user — RLS 테스트용
 
-pytestmark = pytest.mark.skipif(
-    not JWT, reason="TEST_USER_JWT not set — skipping cloud-sync integration tests"
+# 2026-10-30: these live tests speak the pre-contract API (client-sent
+# size_bytes, free-form meta, client-chosen file names), which backup
+# contract 1 no longer accepts. Kept for history; the contract is covered by
+# tests/test_cloud_backup.py. Rewrite before running them against a server.
+pytestmark = pytest.mark.skip(
+    reason="pre-contract-1 live tests (superseded by test_cloud_backup.py)"
 )
 
 

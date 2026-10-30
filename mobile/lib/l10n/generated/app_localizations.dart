@@ -3714,6 +3714,12 @@ abstract class L10n {
   /// **'녹음을 시작할 수 없어요'**
   String get ltRecErrUnavailable;
 
+  /// 녹음 코덱 미지원 (Opus/WAV 모두 불가)
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기에서 쓸 수 있는 녹음 형식이 없어요'**
+  String get ltRecErrNoCodec;
+
   /// 전화 등 시스템 인터럽트로 녹음이 끊김
   ///
   /// In ko, this message translates to:
@@ -4073,6 +4079,468 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'변경 사항을 저장하지 못했어요. 기기의 저장 공간을 확인하고 다시 시도해 주세요.'**
   String get ltSongSaveFailed;
+
+  /// No description provided for @ltLibraryRecovered.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 목록 파일을 읽지 못해 마지막으로 저장된 백업에서 되살렸어요. 최근 몇 초의 변경은 빠졌을 수 있어요.'**
+  String get ltLibraryRecovered;
+
+  /// No description provided for @ltLibrarySkipped.
+  ///
+  /// In ko, this message translates to:
+  /// **'일부 곡을 읽지 못해 목록에서 뺐어요. 원본 파일은 지우지 않고 따로 보관했어요.'**
+  String get ltLibrarySkipped;
+
+  /// No description provided for @ltLibraryUnreadable.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 목록 파일을 읽지 못했어요. 파일은 그대로 두었고, 녹음 파일 정리도 멈췄어요.'**
+  String get ltLibraryUnreadable;
+
+  /// No description provided for @ltLibraryNewer.
+  ///
+  /// In ko, this message translates to:
+  /// **'더 새 버전의 HumTrack이 저장한 곡 목록이에요. 볼 수는 있지만 이 버전에서는 저장하지 않아요. 앱을 업데이트해 주세요.'**
+  String get ltLibraryNewer;
+
+  /// No description provided for @ltLibraryFolder.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장 위치: {path}'**
+  String ltLibraryFolder(String path);
+
+  /// No description provided for @ltCloudMenu.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 백업'**
+  String get ltCloudMenu;
+
+  /// No description provided for @ltCloudTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 백업'**
+  String get ltCloudTitle;
+
+  /// No description provided for @ltCloudSettingsSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡을 직접 올리고, 다른 기기에서 새 곡으로 받아요'**
+  String get ltCloudSettingsSub;
+
+  /// No description provided for @ltCloudBackupTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 백업'**
+  String get ltCloudBackupTitle;
+
+  /// No description provided for @ltCloudBackupBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 곡의 노트·악기·구성을 내 계정 클라우드에 올려요. 자동으로 올라가지 않고, 누를 때만 올라가요.'**
+  String get ltCloudBackupBody;
+
+  /// No description provided for @ltCloudIncludeAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 {count}개도 함께 올리기'**
+  String ltCloudIncludeAudio(int count);
+
+  /// No description provided for @ltCloudAudioOn.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 파일이 클라우드에 보관돼요. 클라우드 사본을 지우면 함께 지워져요.'**
+  String get ltCloudAudioOn;
+
+  /// No description provided for @ltCloudAudioOff.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음은 이 기기에만 남아요. 다른 기기에서 받으면 녹음 자리는 비어 있어요.'**
+  String get ltCloudAudioOff;
+
+  /// No description provided for @ltCloudAudioOptOut.
+  ///
+  /// In ko, this message translates to:
+  /// **'지금 클라우드 사본에는 녹음이 들어 있어요. 녹음 없이 올리면 그 사본이 녹음 없는 사본으로 바뀌고, 클라우드의 이전 녹음은 삭제돼요.'**
+  String get ltCloudAudioOptOut;
+
+  /// No description provided for @ltCloudBackupConfirm.
+  ///
+  /// In ko, this message translates to:
+  /// **'올리기'**
+  String get ltCloudBackupConfirm;
+
+  /// No description provided for @ltCloudBackedUp.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 올렸어요: {title}'**
+  String ltCloudBackedUp(String title);
+
+  /// No description provided for @ltCloudBackedUpNoAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 없이 클라우드에 올렸어요: {title}'**
+  String ltCloudBackedUpNoAudio(String title);
+
+  /// No description provided for @ltCloudConflictTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 더 최근 사본이 있어요'**
+  String get ltCloudConflictTitle;
+
+  /// No description provided for @ltCloudConflictBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'다른 기기에서 이 곡을 그사이에 올렸어요. 어떻게 할까요? 고르기 전에는 아무것도 바뀌지 않아요.'**
+  String get ltCloudConflictBody;
+
+  /// No description provided for @ltCloudConflictGone.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 곡의 클라우드 사본이 다른 기기에서 지워졌거나 다시 만들어졌어요. 어떻게 할까요?'**
+  String get ltCloudConflictGone;
+
+  /// No description provided for @ltCloudKeepDevice.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기 것으로 바꾸기'**
+  String get ltCloudKeepDevice;
+
+  /// No description provided for @ltCloudTakeCloud.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 것 받기(새 곡)'**
+  String get ltCloudTakeCloud;
+
+  /// No description provided for @ltCloudKeepBoth.
+  ///
+  /// In ko, this message translates to:
+  /// **'둘 다 보관'**
+  String get ltCloudKeepBoth;
+
+  /// No description provided for @ltCloudRestore.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기로 받기'**
+  String get ltCloudRestore;
+
+  /// No description provided for @ltCloudRestored.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 곡으로 받았어요: {title}'**
+  String ltCloudRestored(String title);
+
+  /// No description provided for @ltCloudRestoredNoAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 없이 올린 사본이라 녹음 자리는 비어 있어요.'**
+  String get ltCloudRestoredNoAudio;
+
+  /// No description provided for @ltCloudDelete.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에서 삭제'**
+  String get ltCloudDelete;
+
+  /// No description provided for @ltCloudDeleteTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에서 ‘{title}’ 삭제'**
+  String ltCloudDeleteTitle(String title);
+
+  /// No description provided for @ltCloudDeleteBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 사본(올린 녹음 포함)만 지워요. 이 기기와 다른 기기에 저장된 곡은 그대로예요. 되돌릴 수 없어요.'**
+  String get ltCloudDeleteBody;
+
+  /// No description provided for @ltCloudDeleteYes.
+  ///
+  /// In ko, this message translates to:
+  /// **'삭제'**
+  String get ltCloudDeleteYes;
+
+  /// No description provided for @ltCloudDeleted.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 사본을 지웠어요.'**
+  String get ltCloudDeleted;
+
+  /// No description provided for @ltCloudUsage.
+  ///
+  /// In ko, this message translates to:
+  /// **'사용량 {used} / {quota}'**
+  String ltCloudUsage(String used, String quota);
+
+  /// No description provided for @ltCloudEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 올린 곡이 없어요. 곡 메뉴의 ‘클라우드에 백업’으로 올려 보세요.'**
+  String get ltCloudEmpty;
+
+  /// No description provided for @ltCloudWithAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 포함'**
+  String get ltCloudWithAudio;
+
+  /// No description provided for @ltCloudNoAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 제외'**
+  String get ltCloudNoAudio;
+
+  /// No description provided for @ltCloudPrivacyNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 사본은 직접 지울 때까지 보관돼요. 구독이 끝나도 받기·삭제는 할 수 있어요.'**
+  String get ltCloudPrivacyNote;
+
+  /// No description provided for @ltCloudUnavailable.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 백업을 아직 쓸 수 없어요. 아무것도 올리지 않았어요.'**
+  String get ltCloudUnavailable;
+
+  /// No description provided for @ltCloudSignIn.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 백업은 로그인한 뒤 쓸 수 있어요.'**
+  String get ltCloudSignIn;
+
+  /// No description provided for @ltCloudProRequired.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 올리기는 Pro에서 쓸 수 있어요. 받기와 삭제는 계속 할 수 있어요.'**
+  String get ltCloudProRequired;
+
+  /// No description provided for @ltCloudQuotaExceeded.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 용량이 부족해 올리지 않았어요. 기존 사본은 그대로예요.'**
+  String get ltCloudQuotaExceeded;
+
+  /// No description provided for @ltCloudDamaged.
+  ///
+  /// In ko, this message translates to:
+  /// **'받은 파일이 올린 것과 달라 가져오지 않았어요. 아무것도 바뀌지 않았어요.'**
+  String get ltCloudDamaged;
+
+  /// No description provided for @ltCloudAccountChanged.
+  ///
+  /// In ko, this message translates to:
+  /// **'작업 중에 로그인한 계정이 바뀌어 멈췄어요. 다른 계정에는 아무것도 올리거나 가져오지 않았어요.'**
+  String get ltCloudAccountChanged;
+
+  /// No description provided for @ltCloudFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'연결 문제로 끝내지 못했어요. 기존 곡과 클라우드 사본은 그대로예요. 다시 시도해 주세요.'**
+  String get ltCloudFailed;
+
+  /// No description provided for @annTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'공지사항'**
+  String get annTitle;
+
+  /// No description provided for @annSettingsSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'개발 소식과 장애·긴급 안내'**
+  String get annSettingsSub;
+
+  /// No description provided for @annKindInfo.
+  ///
+  /// In ko, this message translates to:
+  /// **'소식'**
+  String get annKindInfo;
+
+  /// No description provided for @annKindImportant.
+  ///
+  /// In ko, this message translates to:
+  /// **'중요'**
+  String get annKindImportant;
+
+  /// No description provided for @annKindCritical.
+  ///
+  /// In ko, this message translates to:
+  /// **'긴급'**
+  String get annKindCritical;
+
+  /// No description provided for @annAll.
+  ///
+  /// In ko, this message translates to:
+  /// **'모두 보기'**
+  String get annAll;
+
+  /// No description provided for @annAllWithCount.
+  ///
+  /// In ko, this message translates to:
+  /// **'모두 보기 ({count})'**
+  String annAllWithCount(int count);
+
+  /// No description provided for @annHomeLink.
+  ///
+  /// In ko, this message translates to:
+  /// **'공지사항 {count}'**
+  String annHomeLink(int count);
+
+  /// No description provided for @annUnread.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 공지'**
+  String get annUnread;
+
+  /// No description provided for @annEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'지금 표시할 공지가 없어요.'**
+  String get annEmpty;
+
+  /// No description provided for @annStale.
+  ///
+  /// In ko, this message translates to:
+  /// **'인터넷에 연결되지 않아 {date}에 받은 공지를 보여 드려요. 내용이 바뀌었을 수 있어요.'**
+  String annStale(String date);
+
+  /// No description provided for @annConfirm.
+  ///
+  /// In ko, this message translates to:
+  /// **'확인'**
+  String get annConfirm;
+
+  /// No description provided for @annLater.
+  ///
+  /// In ko, this message translates to:
+  /// **'나중에'**
+  String get annLater;
+
+  /// No description provided for @ltBackupMake.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일 만들기'**
+  String get ltBackupMake;
+
+  /// No description provided for @ltBackupOpen.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 열기'**
+  String get ltBackupOpen;
+
+  /// No description provided for @ltBackupOpenSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'다른 기기에서 만든 .humtrack 파일을 새 곡으로 가져와요'**
+  String get ltBackupOpenSub;
+
+  /// No description provided for @ltBackupMade.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일을 만들었어요: {name}\n‘내보낸 파일’에서 원하는 폴더에 저장하거나 공유하세요.'**
+  String ltBackupMade(String name);
+
+  /// No description provided for @ltBackupMissingTakes.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 파일 {count}개는 이미 없어서 빠졌어요.'**
+  String ltBackupMissingTakes(int count);
+
+  /// No description provided for @ltBackupShowFiles.
+  ///
+  /// In ko, this message translates to:
+  /// **'파일 보기'**
+  String get ltBackupShowFiles;
+
+  /// No description provided for @ltBackupFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일을 만들지 못했어요. 저장 공간을 확인해 주세요. 곡은 그대로예요.'**
+  String get ltBackupFailed;
+
+  /// No description provided for @ltBackupImported.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업을 새 곡으로 가져왔어요: {title}'**
+  String ltBackupImported(String title);
+
+  /// No description provided for @ltBackupImportedMissing.
+  ///
+  /// In ko, this message translates to:
+  /// **'원래 기기에서도 없던 녹음 {count}개는 빈 자리로 남겼어요(소리 없음).'**
+  String ltBackupImportedMissing(int count);
+
+  /// No description provided for @ltBackupNotBackup.
+  ///
+  /// In ko, this message translates to:
+  /// **'HumTrack 백업 파일(.humtrack)이 아니에요. 아무것도 바꾸지 않았어요.'**
+  String get ltBackupNotBackup;
+
+  /// No description provided for @ltBackupNewer.
+  ///
+  /// In ko, this message translates to:
+  /// **'더 새 버전의 HumTrack에서 만든 백업이에요. 앱을 업데이트한 뒤 열어 주세요.'**
+  String get ltBackupNewer;
+
+  /// No description provided for @ltBackupUnsafe.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 안에 허용되지 않은 파일이 있어 열지 않았어요. 아무것도 바꾸지 않았어요.'**
+  String get ltBackupUnsafe;
+
+  /// No description provided for @ltBackupTooLarge.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일이 너무 커서 열 수 없어요.'**
+  String get ltBackupTooLarge;
+
+  /// No description provided for @ltBackupMissingAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡에 필요한 녹음 파일이 백업에 없어 가져오지 않았어요.'**
+  String get ltBackupMissingAudio;
+
+  /// No description provided for @ltBackupDamaged.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일이 손상되어 가져오지 않았어요. 아무것도 바꾸지 않았어요.'**
+  String get ltBackupDamaged;
+
+  /// No description provided for @ltBackupImportFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업을 가져오지 못했어요. 저장 공간을 확인해 주세요. 기존 곡은 그대로예요.'**
+  String get ltBackupImportFailed;
+
+  /// No description provided for @ltExitSaveFailedTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장하지 못했어요'**
+  String get ltExitSaveFailedTitle;
+
+  /// No description provided for @ltExitSaveFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'마지막 변경 사항을 저장하지 못해 창을 그대로 두었어요. 저장 공간을 확인한 뒤 다시 저장해 주세요. 편집 내용은 그대로 있어요.'**
+  String get ltExitSaveFailed;
+
+  /// No description provided for @ltExitKeepEditing.
+  ///
+  /// In ko, this message translates to:
+  /// **'계속 편집'**
+  String get ltExitKeepEditing;
+
+  /// No description provided for @ltExitRetrySave.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 저장'**
+  String get ltExitRetrySave;
+
+  /// No description provided for @ltExitDiscardQuit.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장하지 않고 종료'**
+  String get ltExitDiscardQuit;
 
   /// No description provided for @policyNoticeTitle.
   ///

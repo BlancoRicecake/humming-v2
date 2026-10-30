@@ -256,16 +256,33 @@ void main() {
       expect(panned.single['pan'], 0.3);
     });
 
-    test('song-take stem is stereo with the balance law', () {
-      final pcm = Float32List.fromList([0.5, -0.5, 0.25]);
-      final stem = _stereo(songVocalStemWav(encodeWavMono16(pcm, 32000), 1));
-      expect(stem.left.every((v) => v == 0), isTrue);
-      expect(stem.right[0], closeTo(0.5, 1e-4));
-      expect(
-        ByteData.sublistView(songVocalStemWav(encodeWavMono16(pcm, 32000), 0))
-            .getUint32(24, Endian.little),
-        32000,
-      );
+    // storage audit 2026-10-30: vocal stems render through the mix's own
+    // schedule (renderWavForExport vocalOnly) — pan, gain, song length.
+    test('vocal stem is stereo with the balance law and the lane gain', () {
+      final dir = Directory.systemTemp.createTempSync('humtrack_pan_stem_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final take = File('${dir.path}/v.wav')
+        ..writeAsBytesSync(
+          encodeWavMono16(Float32List.fromList([0.5, -0.5, 0.25]), 44100),
+        );
+      Uint8List stem(double pan, double gain) => renderWavForExport({
+        'sf2s': const <String>[],
+        'jobs': const <Map<String, Object>>[],
+        'vocals': [
+          {'name': 'v.wav', 'start': 0, 'len': 10, 'gain': gain, 'pan': pan},
+        ],
+        'vocalPaths': {'v.wav': take.path},
+        'mix': true,
+        'vocalOnly': true,
+        'minFrames': 8,
+        'sampleRate': 44100,
+        'tail': 0.0,
+      }).single;
+      final right = _stereo(stem(1, 1));
+      expect(right.left.every((v) => v == 0), isTrue);
+      expect(right.right[0], closeTo(0.5, 1e-4));
+      expect(right.right.length, 8, reason: 'padded to the song length');
+      expect(_stereo(stem(1, .25)).right[0], closeTo(0.125, 1e-4));
     });
   });
 

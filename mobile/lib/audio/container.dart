@@ -20,6 +20,8 @@
 // 컨테이너를 판단하는 시점이 있음).
 import 'dart:io';
 
+import 'package:record/record.dart' show AudioEncoder;
+
 /// Opus 컨테이너 확장자 — iOS=.caf, Android=.ogg.
 String opusContainerExt() => Platform.isIOS ? '.caf' : '.ogg';
 
@@ -33,3 +35,75 @@ bool opusSupported(int? androidSdkInt) =>
 /// 의 .m4a. 백엔드는 magic bytes 로 컨테이너를 판별하므로 어느 쪽이든 분석 가능.
 String takeContainerExt({required bool opus}) =>
     opus ? opusContainerExt() : '.m4a';
+
+// ── 허밍 녹음 코덱 선택 (QA 2026-10-30 P1-01) ──
+//
+// 코덱과 컨테이너(확장자)는 함께 고른다. Windows 의 record_windows 1.0.7 은
+// isEncoderSupported(opus) 를 Media Foundation 조회로 답하지만, 녹음 출력
+// 프로파일(record_mediatype.cpp CreateAudioProfileOut)에 Opus 분기가 없어
+// start() 가 E_NOTIMPL 로 실패한다 → Windows 는 WAV(PCM, 지원 확인됨).
+// iOS / Android 는 위의 이유로 Opus(Android API 29 미만은 AAC-LC)를 유지한다.
+// macOS / Linux 는 실기 확인 전이라 기존 선택(Opus)을 그대로 둔다.
+
+enum RecordingPlatform {
+  android,
+  ios,
+  windows,
+  macos,
+  linux,
+  other;
+
+  static RecordingPlatform current() =>
+      Platform.isAndroid
+          ? android
+          : Platform.isIOS
+          ? ios
+          : Platform.isWindows
+          ? windows
+          : Platform.isMacOS
+          ? macos
+          : Platform.isLinux
+          ? linux
+          : other;
+}
+
+enum RecordingCodec { opus, aacLc, wav }
+
+/// A recording codec and the file extension of its container.
+class RecordingChoice {
+  const RecordingChoice(this.codec, this.extension);
+  final RecordingCodec codec;
+  final String extension;
+
+  AudioEncoder get encoder => switch (codec) {
+    RecordingCodec.opus => AudioEncoder.opus,
+    RecordingCodec.aacLc => AudioEncoder.aacLc,
+    RecordingCodec.wav => AudioEncoder.wav,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is RecordingChoice && other.codec == codec && other.extension == extension;
+
+  @override
+  int get hashCode => Object.hash(codec, extension);
+
+  @override
+  String toString() => '${codec.name}$extension';
+}
+
+/// The hum take's codec + container for [platform] ([androidSdkInt]: the
+/// Android API level, null when unknown / not Android).
+RecordingChoice selectHumRecording({
+  required RecordingPlatform platform,
+  int? androidSdkInt,
+}) => switch (platform) {
+  RecordingPlatform.windows => const RecordingChoice(RecordingCodec.wav, '.wav'),
+  RecordingPlatform.ios => const RecordingChoice(RecordingCodec.opus, '.caf'),
+  RecordingPlatform.android =>
+    opusSupported(androidSdkInt)
+        ? const RecordingChoice(RecordingCodec.opus, '.ogg')
+        : const RecordingChoice(RecordingCodec.aacLc, '.m4a'),
+  // unchanged (not verified on a Mac / Linux machine yet)
+  _ => const RecordingChoice(RecordingCodec.opus, '.ogg'),
+};

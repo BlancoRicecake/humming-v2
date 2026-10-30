@@ -587,7 +587,7 @@ Future<File> exportMidiSong(
     exportFileName(title, fallback: fallbackName),
     'mid',
   );
-  await file.writeAsBytes(bytes);
+  await writeExportFile(file, bytes);
   if (kDebugMode) {
     final hdrOk =
         bytes.length > 14 &&

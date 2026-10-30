@@ -10,6 +10,11 @@ import '../state/loop_store.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
 import '../widgets/save_error.dart';
+import '../state/cloud_backup.dart' show kCloudBackupEnabled;
+import '../widgets/cloud_backup_actions.dart';
+import '../announcements/announcement_widgets.dart';
+import '../widgets/library_notice.dart';
+import '../widgets/project_backup_actions.dart';
 import '../widgets/policy_notice.dart';
 import '../widgets/sheets/account_sheet.dart';
 import '../widgets/sheets/key_sheet.dart' show ltScaleLabel;
@@ -111,8 +116,12 @@ class SongsScreen extends StatelessWidget {
               _Header(
                 onNew: () => _new(context),
                 onImportMidi: () => _importMidi(context),
+                onImportBackup: () => openBackupAsNewSong(context),
               ),
+              if (store.loaded) const LibraryNoticeBanner(),
               if (store.loaded) const PolicyNoticeBanner(),
+              // remote announcements (one banner; critical popup gate)
+              if (store.loaded) const AnnouncementHomeBanner(),
               const SizedBox(height: 18),
               Expanded(
                 child:
@@ -135,12 +144,21 @@ class SongsScreen extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onNew, required this.onImportMidi});
+  const _Header({
+    required this.onNew,
+    required this.onImportMidi,
+    required this.onImportBackup,
+  });
   final VoidCallback onNew;
   final VoidCallback onImportMidi;
+  final VoidCallback onImportBackup;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, c) => _row(context, wide: c.maxWidth >= 700),
+  );
+
+  Widget _row(BuildContext context, {required bool wide}) {
     final l = L10n.of(context);
     return Row(
       children: [
@@ -182,6 +200,18 @@ class _Header extends StatelessWidget {
         ),
         const Spacer(),
         TextButton(onPressed: onImportMidi, child: const Text('MIDI +')),
+        // wide screens only (the row must still fit a phone in landscape);
+        // Settings always has "Open backup" too
+        if (wide) ...[
+          IconBtn(
+            key: const ValueKey('songs-open-backup'),
+            icon: LtIcons.openBackup,
+            size: 40,
+            tooltip: l.ltBackupOpen,
+            onTap: onImportBackup,
+          ),
+          const SizedBox(width: 10),
+        ],
         if (context.watch<LoopStore>().proActive) ...[
           _ProBadge(onTap: () => showAccountSheet(context)),
           const SizedBox(width: 10),
@@ -313,6 +343,8 @@ class _Grid extends StatelessWidget {
           onTap: () => onOpen(song),
           onRename: () => _renameSong(context, song),
           onDuplicate: () => _duplicateSong(context, song),
+          onBackup: () => backupSong(context, song),
+          onCloud: () => backupSongToCloud(context, song),
           onDelete: () => _deleteSong(context, song),
         );
       },
@@ -415,12 +447,16 @@ class _SongCard extends StatelessWidget {
     required this.onTap,
     required this.onRename,
     required this.onDuplicate,
+    required this.onBackup,
+    required this.onCloud,
     required this.onDelete,
   });
   final Song song;
   final VoidCallback onTap;
   final VoidCallback onRename;
   final VoidCallback onDuplicate;
+  final VoidCallback onBackup;
+  final VoidCallback onCloud;
   final VoidCallback onDelete;
 
   @override
@@ -500,6 +536,8 @@ class _SongCard extends StatelessWidget {
           child: _CardMenu(
             onRename: onRename,
             onDuplicate: onDuplicate,
+            onBackup: onBackup,
+            onCloud: onCloud,
             onDelete: onDelete,
           ),
         ),
@@ -512,10 +550,14 @@ class _CardMenu extends StatelessWidget {
   const _CardMenu({
     required this.onRename,
     required this.onDuplicate,
+    required this.onBackup,
+    required this.onCloud,
     required this.onDelete,
   });
   final VoidCallback onRename;
   final VoidCallback onDuplicate;
+  final VoidCallback onBackup;
+  final VoidCallback onCloud;
   final VoidCallback onDelete;
 
   @override
@@ -546,6 +588,12 @@ class _CardMenu extends StatelessWidget {
             break;
           case 'duplicate':
             onDuplicate();
+            break;
+          case 'backup':
+            onBackup();
+            break;
+          case 'cloud':
+            onCloud();
             break;
           case 'delete':
             onDelete();
@@ -588,6 +636,42 @@ class _CardMenu extends StatelessWidget {
                 ],
               ),
             ),
+            PopupMenuItem(
+              value: 'backup',
+              child: Row(
+                children: [
+                  const Icon(Icons.archive_outlined, size: 16, color: LT.t1),
+                  const SizedBox(width: 10),
+                  Text(
+                    l.ltBackupMake,
+                    style: LTType.inter(
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: LT.t1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // cloud backup: built only with HUMTRACK_CLOUD_BACKUP (default off)
+            if (kCloudBackupEnabled)
+              PopupMenuItem(
+                value: 'cloud',
+                child: Row(
+                  children: [
+                    const Icon(Icons.cloud_upload_outlined, size: 16, color: LT.t1),
+                    const SizedBox(width: 10),
+                    Text(
+                      l.ltCloudMenu,
+                      style: LTType.inter(
+                        size: 13,
+                        weight: FontWeight.w600,
+                        color: LT.t1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             PopupMenuItem(
               value: 'delete',
               child: Row(

@@ -203,6 +203,7 @@ class LtIcons {
   static const cloudDone = Symbols.cloud_done;
   static const workspacePremium = Symbols.workspace_premium;
   static const restore = Symbols.restore;
+  static const openBackup = Symbols.unarchive; // .humtrack project backup
   static const vibration = Symbols.vibration;
   static const translate = Symbols.translate;
   static const palette = Symbols.palette;

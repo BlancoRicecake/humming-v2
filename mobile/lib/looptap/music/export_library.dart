@@ -7,8 +7,13 @@ class ExportedFile {
   final DateTime modified;
   final int size;
   String get name => file.uri.pathSegments.last;
-  String get mimeType =>
-      name.toLowerCase().endsWith('.mid') ? 'audio/midi' : 'audio/wav';
+  String get mimeType {
+    final n = name.toLowerCase();
+    if (n.endsWith('.mid')) return 'audio/midi';
+    // a .humtrack project backup (a ZIP); octet-stream keeps the extension
+    if (n.endsWith('.humtrack')) return 'application/octet-stream';
+    return 'audio/wav';
+  }
 }
 
 /// Read the existing export directory rather than keeping a second index.
@@ -20,7 +25,11 @@ Future<List<ExportedFile>> listExportedFiles({Directory? directory}) async {
   await for (final entity in folder.list(followLinks: false)) {
     if (entity is! File) continue;
     final name = entity.path.toLowerCase();
-    if (!name.endsWith('.mid') && !name.endsWith('.wav')) continue;
+    if (!name.endsWith('.mid') &&
+        !name.endsWith('.wav') &&
+        !name.endsWith('.humtrack')) {
+      continue;
+    }
     try {
       final stat = await entity.stat();
       if (stat.type == FileSystemEntityType.file && stat.size > 0) {

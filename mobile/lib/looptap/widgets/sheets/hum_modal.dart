@@ -7,6 +7,8 @@
 import 'dart:async';
 import 'dart:io' show File;
 
+import 'package:flutter/services.dart' show PlatformException;
+
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -215,25 +217,44 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   }
 
   Future<void> _beginCapture() async {
+    final platform = RecordingPlatform.current();
+    RecordingChoice? choice;
     try {
       final dir = await getTemporaryDirectory();
       // Opus + 플랫폼별 컨테이너(.caf/.ogg) — AAC .m4a 는 stop() 직후 moov atom
       // finalize 가 안 끝나 partial file 로 업로드되던 회귀 fix. Android API 29
-      // 미만은 Opus 인코더가 없어 AAC-LC(.m4a) 로 폴백 (audit A3).
-      final opus = opusSupported(await androidSdkInt());
+      // 미만은 Opus 인코더가 없어 AAC-LC(.m4a) 로 폴백 (audit A3). Windows 는
+      // record_windows 에 Opus 출력이 없어 WAV (QA 2026-10-30 P1-01).
+      choice = selectHumRecording(
+        platform: platform,
+        androidSdkInt: await androidSdkInt(),
+      );
+      // The plugin's own answer, once: an encoder it rejects falls back to WAV
+      // (container + extension together), never a codec start() would refuse.
+      if (!await _rec.isEncoderSupported(choice.encoder)) {
+        const wav = RecordingChoice(RecordingCodec.wav, '.wav');
+        if (choice != wav && await _rec.isEncoderSupported(wav.encoder)) {
+          debugPrint('[hum] ${platform.name}: ${choice.codec.name} unsupported -> wav');
+          choice = wav;
+        } else {
+          debugPrint('[hum] ${platform.name}: no supported recording codec');
+          if (!_closed && _phase == 'countin') _fail('codec');
+          return;
+        }
+      }
       if (_closed || _finishing || _phase != 'countin' || !mounted) return;
       final path =
-          '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${takeContainerExt(opus: opus)}';
+          '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${choice.extension}';
       // Record at the device's CURRENT output rate (iOS), not a fixed 16k. On
       // iOS record_ios pins the shared session to config.sampleRate and never
       // restores it; a lower rate (16k) drags the hardware down and the synth
       // output keeps crackling AFTER recording. Matching the live rate = no drag,
       // so output stays clean once recording stops. Fallback 16000 off iOS.
       final deviceRate = await outputSampleRate() ?? 16000;
-      debugPrint('[hum] >>> rec start, recordRate=$deviceRate');
+      debugPrint('[hum] >>> rec start, recordRate=$deviceRate codec=$choice');
       await _rec.start(
         RecordConfig(
-          encoder: opus ? AudioEncoder.opus : AudioEncoder.aacLc,
+          encoder: choice.encoder,
           sampleRate: deviceRate,
           numChannels: 1,
           // see vocal_record_modal: keep the recorder off Bluetooth SCO so it
@@ -309,6 +330,12 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
       // Capture exactly one loop pass, then convert automatically.
       _autoStop = Timer(Duration(milliseconds: _loopMs), _finish);
     } catch (e) {
+      // Minimal diagnostics: platform, codec, error type / code. No paths, no
+      // audio, no user data.
+      debugPrint(
+        '[hum] rec start failed: platform=${platform.name} codec=$choice '
+        'error=${e.runtimeType}${e is PlatformException ? ' code=${e.code}' : ''}',
+      );
       if (!_closed && _phase == 'countin') _fail('unavailable');
     }
   }
@@ -332,6 +359,7 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   String _errorText(L10n l) => switch (_errorCode) {
     'permission' => l.editMicPermNeededTitle,
     'unavailable' => l.ltRecErrUnavailable,
+    'codec' => l.ltRecErrNoCodec,
     'interrupted' => l.ltRecErrInterrupted,
     _ => l.ltRecErrNoAudio,
   };

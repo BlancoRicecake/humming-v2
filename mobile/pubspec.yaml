@@ -82,12 +82,20 @@ dependencies:
   # 6.1.6 은 CocoaPods 호환 + 동일 Dart API. 향후 Xcode 업데이트로 SPM 수정되면 복귀.
   google_sign_in: 6.1.6
   crypto: ^3.0.3
+  # .humtrack project backups (ZIP) - storage audit 2026-10-30; already
+  # in the lock as a transitive dependency.
+  archive: ^4.0.9
   # 로그인 시트 → 약관/개인정보 처리방침 풀모달 렌더링.
   flutter_markdown: ^0.7.4
   url_launcher: ^6.3.2
   dart_melty_soundfont: ^2.0.0
 
 dependency_overrides:
+  # Windows close crash fix (QA 2026-10-30 P1-02): 4.3.0 double-deletes its
+  # global event handler when the window is closed. Same version + a one-place
+  # ownership fix; see third_party/audioplayers_windows/HUMTRACK_PATCH.md.
+  audioplayers_windows:
+    path: third_party/audioplayers_windows
   # iOS drum-kit fix. Upstream flutter_midi_pro's selectInstrument loads the
   # percussion kit (bank MSB 120) but then sends a program change hardcoded to
   # the melodic bank (MSB 121, LSB=128) — clobbering the kit, so drum kits play

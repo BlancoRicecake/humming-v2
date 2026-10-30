@@ -184,6 +184,17 @@ class PitchKeyHighlight {
   int get hashCode => Object.hash(root, Object.hashAllUnordered(pitchClasses));
 }
 
+/// A one-shot request to show [notes] (QA 2026-10-30: a hum conversion that
+/// landed outside the viewport looked like an empty grid). Handled once per
+/// [serial]: if none of the notes is on screen the roll scrolls to their
+/// rows (and pans to them, keeping the zoom); notes already visible leave the
+/// view alone.
+class GridReveal {
+  const GridReveal(this.serial, this.notes);
+  final int serial;
+  final List<PitchNote> notes;
+}
+
 class _Draft {
   _Draft(this.row, this.rung, this.a, this.b);
   final int row;
@@ -244,6 +255,7 @@ class PitchGridSurface extends StatefulWidget {
     this.warnNotes = const {},
     this.view,
     this.keyHighlight,
+    this.reveal,
   });
 
   final List<Rung> ladder;
@@ -287,6 +299,9 @@ class PitchGridSurface extends StatefulWidget {
   /// ui-001 stage 5 (desktop): the key highlight on the lane (null = phone).
   final PitchKeyHighlight? keyHighlight;
 
+  /// Show these notes once if they are off screen (see [GridReveal]).
+  final GridReveal? reveal;
+
   @override
   State<PitchGridSurface> createState() => _PitchGridSurfaceState();
 }
@@ -308,11 +323,19 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
   /// (in-key-only toggle, key change), kept at the centre afterwards.
   int? _keepMidi;
 
+  /// A [GridReveal] received and not yet applied (applied after the layout,
+  /// and after [_keepMidi], so it wins over the centre keeping).
+  GridReveal? _pendingReveal;
+
   @override
   void didUpdateWidget(PitchGridSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     _ownView?.steps = widget.steps;
     if (oldWidget.focusMidi != widget.focusMidi) _needsFocus = true;
+    final reveal = widget.reveal;
+    if (reveal != null && reveal.serial != oldWidget.reveal?.serial) {
+      _pendingReveal = reveal;
+    }
     if (!listEquals(
       oldWidget.ladder.map((r) => r.midi).toList(),
       widget.ladder.map((r) => r.midi).toList(),
@@ -333,6 +356,41 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
         }
       }
     }
+  }
+
+  void _scheduleReveal(double height) {
+    final reveal = _pendingReveal;
+    if (reveal == null) return;
+    _pendingReveal = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_vertical.hasClients || _rows.isEmpty) return;
+      final rows = _rows;
+      final rowH = height / rows.length;
+      final pos = _vertical.position;
+      final top = pos.pixels, bottom = top + pos.viewportDimension;
+      final v = _view.view;
+      final shown = [
+        for (final n in reveal.notes)
+          if (rows.indexWhere((r) => r.midi == n.midi) case final i when i >= 0) (n, i),
+      ];
+      if (shown.isEmpty) return;
+      bool inRows(int i) => (i + 1) * rowH > top && i * rowH < bottom;
+      bool inTime(PitchNote n) => n.endSteps > v.start && n.startSteps < v.end;
+      if (shown.any((e) => inRows(e.$2) && inTime(e.$1))) return; // visible
+      if (!shown.any((e) => inRows(e.$2))) {
+        final lo = shown.map((e) => e.$2).reduce(math.min);
+        final hi = shown.map((e) => e.$2).reduce(math.max);
+        final centre = (lo + hi + 1) / 2 * rowH;
+        _vertical.jumpTo(
+          (centre - pos.viewportDimension / 2).clamp(0.0, pos.maxScrollExtent),
+        );
+      }
+      if (!shown.any((e) => inTime(e.$1))) {
+        // pan (same zoom) so the first note starts near the left edge
+        final first = shown.map((e) => e.$1.startSteps).reduce(math.min);
+        _view.panTo(first - v.length * .05);
+      }
+    });
   }
 
   void _scheduleKeep(double height) {
@@ -551,6 +609,7 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
             final height = math.max(viewport, widget.ladder.length * 24.0);
             _scheduleFocus(height);
             _scheduleKeep(height);
+            _scheduleReveal(height);
             return Column(
               children: [
                 SizedBox(

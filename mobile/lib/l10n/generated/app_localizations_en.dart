@@ -2096,6 +2096,10 @@ class L10nEn extends L10n {
   String get ltRecErrUnavailable => 'Recording unavailable';
 
   @override
+  String get ltRecErrNoCodec =>
+      'This device has no recording format the app can use';
+
+  @override
   String get ltRecErrInterrupted => 'Recording was interrupted — try again';
 
   @override
@@ -2309,6 +2313,295 @@ class L10nEn extends L10n {
   @override
   String get ltSongSaveFailed =>
       'Couldn\'t save your changes. Check your device\'s available storage and try again.';
+
+  @override
+  String get ltLibraryRecovered =>
+      'Your song list couldn\'t be read, so it was restored from the last saved backup. The most recent few seconds of changes may be missing.';
+
+  @override
+  String get ltLibrarySkipped =>
+      'Some songs couldn\'t be read and were left out. The original file was kept, not deleted.';
+
+  @override
+  String get ltLibraryUnreadable =>
+      'Your song list couldn\'t be read. The file was left as is, and recording cleanup is paused.';
+
+  @override
+  String get ltLibraryNewer =>
+      'This song list was saved by a newer HumTrack. You can view it, but this version won\'t save over it. Please update the app.';
+
+  @override
+  String ltLibraryFolder(String path) {
+    return 'Saved in: $path';
+  }
+
+  @override
+  String get ltCloudMenu => 'Back up to cloud';
+
+  @override
+  String get ltCloudTitle => 'Cloud backup';
+
+  @override
+  String get ltCloudSettingsSub =>
+      'Upload songs yourself; get them as new songs on another device';
+
+  @override
+  String get ltCloudBackupTitle => 'Back up to cloud';
+
+  @override
+  String get ltCloudBackupBody =>
+      'Uploads this song\'s notes, instruments and structure to your account\'s cloud. Nothing uploads on its own, only when you tap.';
+
+  @override
+  String ltCloudIncludeAudio(int count) {
+    return 'Also upload $count recording(s)';
+  }
+
+  @override
+  String get ltCloudAudioOn =>
+      'The recordings are kept in the cloud. Deleting the cloud copy deletes them too.';
+
+  @override
+  String get ltCloudAudioOff =>
+      'Recordings stay on this device only. On another device their places will be empty.';
+
+  @override
+  String get ltCloudAudioOptOut =>
+      'The cloud copy now includes recordings. Uploading without them replaces it with a copy without recordings, and the earlier recordings in the cloud are deleted.';
+
+  @override
+  String get ltCloudBackupConfirm => 'Upload';
+
+  @override
+  String ltCloudBackedUp(String title) {
+    return 'Uploaded to the cloud: $title';
+  }
+
+  @override
+  String ltCloudBackedUpNoAudio(String title) {
+    return 'Uploaded without recordings: $title';
+  }
+
+  @override
+  String get ltCloudConflictTitle => 'The cloud has a newer copy';
+
+  @override
+  String get ltCloudConflictBody =>
+      'Another device uploaded this song in the meantime. What would you like to do? Nothing changes until you choose.';
+
+  @override
+  String get ltCloudConflictGone =>
+      'This song\'s cloud copy was deleted or recreated on another device. What would you like to do?';
+
+  @override
+  String get ltCloudKeepDevice => 'Use this device\'s';
+
+  @override
+  String get ltCloudTakeCloud => 'Get the cloud\'s (new song)';
+
+  @override
+  String get ltCloudKeepBoth => 'Keep both';
+
+  @override
+  String get ltCloudRestore => 'Get on this device';
+
+  @override
+  String ltCloudRestored(String title) {
+    return 'Added as a new song: $title';
+  }
+
+  @override
+  String get ltCloudRestoredNoAudio =>
+      'This copy was uploaded without recordings, so their places are empty.';
+
+  @override
+  String get ltCloudDelete => 'Delete from cloud';
+
+  @override
+  String ltCloudDeleteTitle(String title) {
+    return 'Delete \'$title\' from the cloud';
+  }
+
+  @override
+  String get ltCloudDeleteBody =>
+      'Deletes the cloud copy (with any uploaded recordings) only. Songs saved on this and other devices stay. This can\'t be undone.';
+
+  @override
+  String get ltCloudDeleteYes => 'Delete';
+
+  @override
+  String get ltCloudDeleted => 'Cloud copy deleted.';
+
+  @override
+  String ltCloudUsage(String used, String quota) {
+    return 'Used $used of $quota';
+  }
+
+  @override
+  String get ltCloudEmpty =>
+      'No songs in the cloud yet. Use \'Back up to cloud\' in a song\'s menu.';
+
+  @override
+  String get ltCloudWithAudio => 'with recordings';
+
+  @override
+  String get ltCloudNoAudio => 'without recordings';
+
+  @override
+  String get ltCloudPrivacyNote =>
+      'Cloud copies are kept until you delete them. After a subscription ends you can still get and delete them.';
+
+  @override
+  String get ltCloudUnavailable =>
+      'Cloud backup isn\'t available yet. Nothing was uploaded.';
+
+  @override
+  String get ltCloudSignIn => 'Sign in to use cloud backup.';
+
+  @override
+  String get ltCloudProRequired =>
+      'Uploading to the cloud needs Pro. You can still get and delete your copies.';
+
+  @override
+  String get ltCloudQuotaExceeded =>
+      'Not enough cloud space, so nothing was uploaded. Your existing copy is unchanged.';
+
+  @override
+  String get ltCloudDamaged =>
+      'The downloaded file doesn\'t match what was uploaded, so it wasn\'t imported. Nothing changed.';
+
+  @override
+  String get ltCloudAccountChanged =>
+      'The signed-in account changed during this, so it stopped. Nothing was uploaded to or added for the other account.';
+
+  @override
+  String get ltCloudFailed =>
+      'Couldn\'t finish because of a connection problem. Your songs and cloud copies are unchanged. Please try again.';
+
+  @override
+  String get annTitle => 'Announcements';
+
+  @override
+  String get annSettingsSub => 'News, outages and urgent notices';
+
+  @override
+  String get annKindInfo => 'News';
+
+  @override
+  String get annKindImportant => 'Important';
+
+  @override
+  String get annKindCritical => 'Urgent';
+
+  @override
+  String get annAll => 'See all';
+
+  @override
+  String annAllWithCount(int count) {
+    return 'See all ($count)';
+  }
+
+  @override
+  String annHomeLink(int count) {
+    return 'Announcements $count';
+  }
+
+  @override
+  String get annUnread => 'New';
+
+  @override
+  String get annEmpty => 'No announcements right now.';
+
+  @override
+  String annStale(String date) {
+    return 'You\'re offline, so these are the announcements received on $date. They may have changed.';
+  }
+
+  @override
+  String get annConfirm => 'Got it';
+
+  @override
+  String get annLater => 'Later';
+
+  @override
+  String get ltBackupMake => 'Make backup file';
+
+  @override
+  String get ltBackupOpen => 'Open backup';
+
+  @override
+  String get ltBackupOpenSub =>
+      'Add a .humtrack file from another device as a new song';
+
+  @override
+  String ltBackupMade(String name) {
+    return 'Backup file made: $name\nSave it to a folder you choose, or share it, from Exported files.';
+  }
+
+  @override
+  String ltBackupMissingTakes(int count) {
+    return '$count recording(s) were already missing and aren\'t included.';
+  }
+
+  @override
+  String get ltBackupShowFiles => 'Show files';
+
+  @override
+  String get ltBackupFailed =>
+      'Couldn\'t make the backup file. Check your storage. The song is unchanged.';
+
+  @override
+  String ltBackupImported(String title) {
+    return 'Backup added as a new song: $title';
+  }
+
+  @override
+  String ltBackupImportedMissing(int count) {
+    return '$count recording(s) were already missing on the original device and stay empty (silent).';
+  }
+
+  @override
+  String get ltBackupNotBackup =>
+      'This isn\'t a HumTrack backup (.humtrack). Nothing was changed.';
+
+  @override
+  String get ltBackupNewer =>
+      'This backup was made by a newer HumTrack. Update the app, then open it.';
+
+  @override
+  String get ltBackupUnsafe =>
+      'The backup contains files that aren\'t allowed, so it wasn\'t opened. Nothing was changed.';
+
+  @override
+  String get ltBackupTooLarge => 'This backup is too large to open.';
+
+  @override
+  String get ltBackupMissingAudio =>
+      'A recording the song needs is missing from the backup, so it wasn\'t imported.';
+
+  @override
+  String get ltBackupDamaged =>
+      'The backup file is damaged, so it wasn\'t imported. Nothing was changed.';
+
+  @override
+  String get ltBackupImportFailed =>
+      'Couldn\'t import the backup. Check your storage. Your songs are unchanged.';
+
+  @override
+  String get ltExitSaveFailedTitle => 'Couldn\'t save';
+
+  @override
+  String get ltExitSaveFailed =>
+      'Your latest changes couldn\'t be saved, so the window stayed open. Check your storage, then save again. Your edits are still here.';
+
+  @override
+  String get ltExitKeepEditing => 'Keep editing';
+
+  @override
+  String get ltExitRetrySave => 'Save again';
+
+  @override
+  String get ltExitDiscardQuit => 'Quit without saving';
 
   @override
   String get policyNoticeTitle => 'Updated policies';

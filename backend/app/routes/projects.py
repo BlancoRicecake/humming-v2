@@ -1,26 +1,73 @@
-"""/projects — Cloud Sync (2026-06-04).
+"""/projects — Cloud backup (2026-06-04; contract 1 + gate 2026-10-30).
 
-HumTrack 모바일 클라이언트가 보컬 + 메타데이터를 클라우드에 백업/복원하는
-경로. 보컬 오디오 파일 자체는 R2 에 직접 PUT (presigned URL 로) 하고,
-프로젝트 트랙/청크/노트 트리는 본 엔드포인트에서 JSONB(meta) 로 통째 저장.
+One cloud copy per song (``project_id``): the app uploads its validated
+``.humtrack`` project backup to R2 with a presigned PUT (/storage/presign),
+then commits it here. The ``cloud_projects`` row's ``meta`` is a small
+descriptor of that object (``key``, ``size``, ``sha256``, whether recordings
+are included…), not the song itself.
 
-스키마: `backend/sql/2026-06-04_cloud_sync_schema.sql` 참고.
+Commit rules (failure keeps the previous good copy):
+- Pro only (B7, same verdict as /iap/status; integrated from e328408).
+- The object must be this user's, under this project's prefix, exist in R2
+  and have the declared size; the server measures usage from R2 and refuses
+  (and removes the new object) when over quota.
+- The row is switched by the ``commit_cloud_project`` RPC (migration 004):
+  row lock + compare ``expected_updated_at`` (or ``expect_absent`` for a first
+  upload) + update in ONE transaction. A stale client gets 409 with the cloud
+  version and nothing changes.
+- Only after the switch is the replaced object deleted; abandoned uploads are
+  removed once they are older than ``ORPHAN_AGE`` (never a young one, which
+  may be another device's upload in progress).
+
+Reads and deleting one's own copy stay open after a subscription ends.
+Schema: ``backend/sql/2026-06-04_cloud_sync_schema.sql`` + migrations 003/004.
 """
 from __future__ import annotations
 
 import logging
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query, Response
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..auth import extract_user_id
+from ..cloud_quota import (
+    expected_user_guard,
+    MAX_BACKUP_BYTES,
+    check_project_id,
+    is_backup_key,
+    is_upload_key,
+    measure_bytes,
+    new_backup_key,
+    project_prefix,
+    quota_bytes,
+    quota_exceeded,
+    record_used_bytes,
+    require_cloud_pro,
+    user_prefix,
+)
 from ..deps import require_supabase
-from ..storage_r2 import delete_prefix, sanitise_key_part
+from ..storage_r2 import (
+    copy_object,
+    delete_objects,
+    delete_objects_strict,
+    list_objects,
+    object_size,
+)
 
 logger = logging.getLogger("humming.cloud_projects")
-router = APIRouter(prefix="/projects", tags=["cloud-projects"])
+router = APIRouter(prefix="/projects", tags=["cloud-projects"], dependencies=[Depends(expected_user_guard)])
+
+# An upload nobody committed is removed after this long.
+ORPHAN_AGE = timedelta(hours=24)
+
+# A committed-name (bk-) object younger than this may belong to a commit that
+# is still running (copy done, RPC not yet): deletion sweeps leave it.
+COMMIT_WINDOW = timedelta(minutes=10)
+
+# Strict delete used by every cleanup (a seam for failure tests).
+_delete_keys = delete_objects_strict
 
 
 # ── Models ──────────────────────────────────────────────────────────────────
@@ -38,59 +85,46 @@ class CloudProjectDetail(CloudProjectSummary):
 
 class CloudProjectListItem(CloudProjectSummary):
     """List row. ``meta`` is populated only for ``?include=meta`` and omitted
-    from the JSON otherwise (``response_model_exclude_none``), so the default
-    list shape is unchanged."""
+    from the JSON otherwise (``response_model_exclude_none``)."""
     meta: Optional[Dict[str, Any]] = None
+
+
+class HumtrackMeta(BaseModel):
+    """The descriptor stored as ``meta`` (backup contract 1)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    format: Literal["humtrack"]
+    formatVersion: int = Field(..., ge=1, le=1)
+    key: str = Field(..., min_length=1, max_length=512)
+    size: int = Field(..., ge=1, le=MAX_BACKUP_BYTES)
+    sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    audioIncluded: bool
+    takes: int = Field(..., ge=0, le=100000)
+    missingTakes: int = Field(..., ge=0, le=100000)
+    songSchema: int = Field(..., ge=1, le=1000)
 
 
 class CloudProjectUpsertIn(BaseModel):
     project_id: str = Field(..., min_length=1, max_length=128)
     title: str = Field(..., min_length=1, max_length=200)
     meta: Dict[str, Any]
-    size_bytes: int = Field(..., ge=0)
+    # Ignored: the server measures the object (B7). Accepted for old clients.
+    size_bytes: Optional[int] = Field(default=None, ge=0)
+    # Exactly one of these: the cloud version this device last saw, or
+    # "there is no cloud copy yet" for a first upload.
     expected_updated_at: Optional[datetime] = None
+    expect_absent: bool = False
 
 
 class CloudProjectUpsertOut(BaseModel):
     project_id: str
+    updated_at: datetime
     used_bytes: int
     quota_bytes: int
 
 
-class ConflictOut(BaseModel):
-    detail: str = "conflict"
-    cloud_version: Dict[str, Any]
-
-
 # ── Helpers ─────────────────────────────────────────────────────────────────
-def _quota_bytes() -> int:
-    import os
-
-    raw = os.environ.get("CLOUD_QUOTA_PRO_BYTES")
-    if raw:
-        try:
-            return int(raw)
-        except ValueError:
-            logger.warning("CLOUD_QUOTA_PRO_BYTES invalid: %r", raw)
-    return 5 * 1024 * 1024 * 1024  # 5 GB default (Pro)
-
-
-def _used_bytes(sb, user_id: str) -> int:
-    try:
-        res = (
-            sb.table("cloud_quota")
-            .select("used_bytes")
-            .eq("user_id", user_id)
-            .maybe_single()
-            .execute()
-        )
-    except Exception:
-        logger.exception("quota lookup failed")
-        raise HTTPException(500, "quota lookup failed")
-    row = getattr(res, "data", None) or {}
-    return int(row.get("used_bytes") or 0)
-
-
 def _to_dt(v: Any) -> Optional[datetime]:
     if v is None:
         return None
@@ -100,6 +134,70 @@ def _to_dt(v: Any) -> Optional[datetime]:
         return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
     except Exception:
         return None
+
+
+def _current_row(sb, user_id: str, project_id: str) -> Optional[dict]:
+    """The project's row now (title, size, updated_at, meta) or None."""
+    res = (
+        sb.table("cloud_projects")
+        .select("title,size_bytes,updated_at,meta")
+        .eq("user_id", user_id)
+        .eq("project_id", project_id)
+        .maybe_single()
+        .execute()
+    )
+    return getattr(res, "data", None) or None
+
+
+def _row_key(row: Optional[dict]) -> Optional[str]:
+    return ((row or {}).get("meta") or {}).get("key")
+
+
+def _stale_objects(
+    sb, user_id: str, project_id: str, *, up_age: timedelta, bk_age: timedelta
+) -> List[str]:
+    """This project's objects old enough to remove, listed FIRST and then
+    checked against the row read AFTER the listing: the current copy is never
+    included, and neither is anything created after the listing (a new
+    device's upload/commit) — the set is fixed before anything is deleted."""
+    objs = list_objects(project_prefix(user_id, project_id)) or []
+    current = _row_key(_current_row(sb, user_id, project_id))
+    now = datetime.now(timezone.utc)
+    out = []
+    for key, _, modified in objs:
+        if key == current:
+            continue
+        age = now - modified if modified is not None else timedelta(0)
+        limit = bk_age if is_backup_key(key, user_id, project_id) else up_age
+        if age >= limit:
+            out.append(key)
+    return out
+
+
+def _cleanup_after_commit(
+    sb,
+    user_id: str,
+    project_id: str,
+    keep_key: str,
+    upload_key: str,
+    previous_key: Optional[str],
+) -> None:
+    """Remove the committed upload, the replaced copy and old abandoned
+    objects of this project (best effort). Never the current copy, never a
+    young upload (another device may be mid-upload)."""
+    doomed: List[str] = [upload_key]
+    if previous_key and previous_key != keep_key and is_backup_key(previous_key, user_id, project_id):
+        doomed.append(previous_key)
+    try:
+        doomed += [
+            k
+            for k in _stale_objects(sb, user_id, project_id, up_age=ORPHAN_AGE, bk_age=ORPHAN_AGE)
+            if k != keep_key
+        ]
+    except Exception:
+        logger.exception("orphan listing failed")
+    if _delete_keys(doomed):
+        logger.warning("post-commit cleanup left objects (retried by later sweeps)")
 
 
 # ── GET /projects ───────────────────────────────────────────────────────────
@@ -155,89 +253,123 @@ def get_cloud_project(
     return row
 
 
-# ── POST /projects (upsert) ─────────────────────────────────────────────────
+# ── POST /projects (commit an uploaded backup) ──────────────────────────────
 @router.post("", response_model=CloudProjectUpsertOut)
-def upsert_cloud_project(
+def commit_cloud_project(
     payload: CloudProjectUpsertIn,
     authorization: Optional[str] = Header(default=None),
 ):
     user_id = extract_user_id(authorization, tag="/projects")
-    sb = require_supabase()
-    quota = _quota_bytes()
-
-    # 충돌 감지: expected_updated_at 이 주어졌고 DB row 의 updated_at 과 다르면 409.
+    require_cloud_pro(user_id, tag="POST /projects")
+    check_project_id(payload.project_id)
+    if (payload.expected_updated_at is None) == (not payload.expect_absent):
+        raise HTTPException(422, "send exactly one of expected_updated_at / expect_absent")
     try:
-        existing_res = (
-            sb.table("cloud_projects")
-            .select("title,size_bytes,updated_at")
-            .eq("user_id", user_id)
-            .eq("project_id", payload.project_id)
-            .maybe_single()
-            .execute()
-        )
-    except Exception:
-        logger.exception("conflict pre-read failed")
-        raise HTTPException(500, "conflict pre-read failed")
-    existing = getattr(existing_res, "data", None)
+        meta = HumtrackMeta.model_validate(payload.meta)
+    except ValidationError:
+        raise HTTPException(422, "meta is not a backup descriptor (contract 1)")
+    # Only an upload this server issued for this user's song can be committed.
+    if not is_upload_key(meta.key, user_id, payload.project_id):
+        raise HTTPException(403, "key is not an upload of this project")
+    upload_key = meta.key
 
-    if (
-        existing
-        and payload.expected_updated_at is not None
-        and _to_dt(existing.get("updated_at"))
-        and _to_dt(existing["updated_at"]) != payload.expected_updated_at
-    ):
+    try:
+        size = object_size(meta.key)
+    except FileNotFoundError:
+        raise HTTPException(404, "backup object not found")
+    except Exception:
+        logger.exception("HEAD failed")
+        raise HTTPException(500, "object lookup failed")
+    if size is None:
+        raise HTTPException(503, "R2 not configured")
+    if size != meta.size:
+        raise HTTPException(422, "uploaded size does not match")
+
+    sb = require_supabase()
+    quota = quota_bytes()
+    used = measure_bytes(user_prefix(user_id)) or 0
+    if used > quota:
+        # the new object can't stay; the previous copy is untouched
+        delete_objects([upload_key])
+        record_used_bytes(sb, user_id, used - size)
+        raise quota_exceeded(used, quota)
+
+    # The committed copy lives under a NEW server-made name that no upload URL
+    # was issued for: re-using this upload's URL later can't touch it.
+    final_key = new_backup_key(user_id, payload.project_id)
+    try:
+        copy_object(upload_key, final_key)
+        if object_size(final_key) != size:
+            raise RuntimeError("copy size mismatch")
+    except Exception:
+        logger.exception("copy to the committed name failed")
+        delete_objects([final_key])
+        raise HTTPException(500, "commit copy failed")
+    meta = meta.model_copy(update={"key": final_key})
+
+    try:
+        res = sb.rpc(
+            "commit_cloud_project",
+            {
+                "p_user_id": user_id,
+                "p_project_id": payload.project_id,
+                "p_title": payload.title,
+                "p_meta": meta.model_dump(),
+                "p_size_bytes": size,
+                "p_expected_updated_at": (
+                    payload.expected_updated_at.isoformat()
+                    if payload.expected_updated_at
+                    else None
+                ),
+                "p_expect_absent": payload.expect_absent,
+            },
+        ).execute()
+        result = getattr(res, "data", None) or {}
+    except Exception:
+        # The outcome is UNKNOWN: the transaction may have committed and only
+        # the answer was lost (Codex C1). Never delete the new copy on that
+        # guess — read the row: if it points at our copy, the commit happened.
+        logger.exception("commit RPC failed; checking the row")
+        try:
+            row = _current_row(sb, user_id, payload.project_id)
+        except Exception:
+            row = None
+            logger.exception("row re-read failed")
+        if _row_key(row) != final_key:
+            # Not visibly committed (or the RPC is still running): keep both
+            # objects; an unreferenced copy is swept after ORPHAN_AGE.
+            raise HTTPException(
+                status_code=503,
+                detail={"error": "commit_unknown", "project_id": payload.project_id},
+            )
+        result = {"status": "ok", "updated_at": row.get("updated_at"), "previous_meta": None}
+    if result.get("status") != "ok":
+        current = result.get("current") or None
+        # Not committed: drop the copy. The upload stays for a retry ("keep
+        # this device's") and is swept after ORPHAN_AGE if nobody commits it.
+        delete_objects([final_key])
         raise HTTPException(
             status_code=409,
             detail={
                 "error": "conflict",
                 "project_id": payload.project_id,
-                "cloud_version": {
-                    "title": existing.get("title"),
-                    "size_bytes": existing.get("size_bytes"),
-                    "updated_at": (
-                        existing["updated_at"].isoformat()
-                        if isinstance(existing.get("updated_at"), datetime)
-                        else existing.get("updated_at")
-                    ),
-                },
+                "cloud_version": current,
             },
         )
 
-    # Quota 사전 검증 (delta 가 양수일 때만 의미 있음 — 음수면 항상 통과).
-    old_size = int((existing or {}).get("size_bytes") or 0)
-    delta = payload.size_bytes - old_size
-    if delta > 0:
-        current_used = _used_bytes(sb, user_id)
-        if current_used + delta > quota:
-            raise HTTPException(
-                status_code=412,
-                detail={
-                    "error": "quota_exceeded",
-                    "used": current_used,
-                    "quota": quota,
-                    "deficit": (current_used + delta) - quota,
-                },
-            )
-
-    # RPC 원자 호출 — upsert + quota 갱신을 한 트랜잭션으로.
+    previous = (result.get("previous_meta") or {}).get("key")
+    _cleanup_after_commit(sb, user_id, payload.project_id, final_key, upload_key, previous)
     try:
-        rpc_res = sb.rpc(
-            "upsert_cloud_project",
-            {
-                "p_user_id": user_id,
-                "p_project_id": payload.project_id,
-                "p_title": payload.title,
-                "p_meta": payload.meta,
-                "p_size_bytes": payload.size_bytes,
-            },
-        ).execute()
-    except Exception:
-        logger.exception("upsert RPC failed")
-        raise HTTPException(500, "upsert failed")
-
-    used = int(getattr(rpc_res, "data", 0) or 0)
+        used = measure_bytes(user_prefix(user_id)) or used
+    except HTTPException:
+        pass  # logged; the commit itself succeeded
+    record_used_bytes(sb, user_id, used)
+    updated = _to_dt(result.get("updated_at")) or datetime.now(timezone.utc)
     return CloudProjectUpsertOut(
-        project_id=payload.project_id, used_bytes=used, quota_bytes=quota
+        project_id=payload.project_id,
+        updated_at=updated,
+        used_bytes=used,
+        quota_bytes=quota,
     )
 
 
@@ -247,31 +379,60 @@ def delete_cloud_project(
     project_id: str,
     authorization: Optional[str] = Header(default=None),
 ):
+    """Delete this cloud copy. Open after a subscription ends — removing
+    one's own data never needs Pro.
+
+    Objects first, row last (Codex C2/C3):
+    1. The set to delete is fixed up front: the copy the row points at plus
+       this song's leftover uploads/copies (never a young ``bk-`` that may be
+       another device's commit in progress, never anything created later).
+    2. Every one must be confirmed deleted; otherwise 503 and the row stays,
+       so the copy is still listed and the delete can be retried.
+    3. The row is removed only if it still points at the copy from step 1;
+       if another device committed a new copy meanwhile, 409 and the new copy
+       stays.
+    """
     user_id = extract_user_id(authorization, tag="/projects")
+    check_project_id(project_id)  # never a prefix shared with another song
     sb = require_supabase()
 
     try:
-        rpc_res = sb.rpc(
-            "delete_cloud_project",
-            {"p_user_id": user_id, "p_project_id": project_id},
-        ).execute()
+        row = _current_row(sb, user_id, project_id)
+        doomed = _stale_objects(sb, user_id, project_id, up_age=timedelta(0), bk_age=COMMIT_WINDOW)
     except Exception:
-        logger.exception("delete RPC failed")
-        raise HTTPException(500, "delete failed")
+        logger.exception("delete: listing failed")
+        raise HTTPException(503, detail={"error": "storage_unavailable"})
+    key = _row_key(row)
+    if key and key not in doomed:
+        doomed.insert(0, key)
 
-    result = getattr(rpc_res, "data", None)
-    if result is None:
-        # 존재하지 않음 — idempotent: 그래도 204 로 응답.
-        logger.info("delete: project not found user=%s pid=%s", user_id, project_id)
+    failed = _delete_keys(doomed)
+    if failed:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "storage_delete_failed", "remaining": len(failed)},
+        )
 
-    # R2 객체 삭제 (best-effort). Same key normalisation as /storage/presign so
-    # the prefix matches what was actually uploaded (B22).
-    prefix = f"vocals/{user_id}/{sanitise_key_part(project_id)}/"
+    if row is not None:
+        try:
+            res = sb.rpc(
+                "delete_cloud_backup",
+                {"p_user_id": user_id, "p_project_id": project_id, "p_expected_key": key},
+            ).execute()
+            status = getattr(res, "data", None)
+        except Exception:
+            logger.exception("delete RPC failed")
+            # objects are gone; the row (if still there) points at nothing
+            # and a retry removes it
+            raise HTTPException(503, detail={"error": "delete_unknown"})
+        if status == "changed":
+            raise HTTPException(409, detail={"error": "changed", "project_id": project_id})
+
     try:
-        deleted = delete_prefix(prefix)
-        if deleted:
-            logger.info("R2 cleaned: prefix=%s deleted=%d", prefix, deleted)
-    except Exception:
-        logger.exception("R2 prefix cleanup failed: %s", prefix)
+        used = measure_bytes(user_prefix(user_id))
+    except HTTPException:
+        used = None  # already logged; the project itself is deleted
+    if used is not None:
+        record_used_bytes(sb, user_id, used)
 
     return Response(status_code=204)

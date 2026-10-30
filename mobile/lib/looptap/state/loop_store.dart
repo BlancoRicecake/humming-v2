@@ -70,6 +70,16 @@ class LoopStore extends ChangeNotifier {
 
   List<Song> get songs => List.unmodifiable(_songs);
   bool get loaded => _loaded;
+
+  /// What loading the library had to do (storage audit 2026-10-30), shown on
+  /// the song list until dismissed.
+  LoadIssue _loadIssue = LoadIssue.none;
+  LoadIssue get loadIssue => _loadIssue;
+  void dismissLoadIssue() {
+    if (_loadIssue == LoadIssue.none) return;
+    _loadIssue = LoadIssue.none;
+    notifyListeners();
+  }
   Map<String, String>? get user => _user;
   bool get isSignedIn => _user != null;
   // Debug-only Pro override so paywall-gated features (export) can be exercised
@@ -118,6 +128,7 @@ class LoopStore extends ChangeNotifier {
     await SoundfontCatalog.instance.warm();
     unawaited(SoundfontCatalog.instance.refresh());
     final loaded = await LoopStorage.load();
+    _loadIssue = LoopStorage.lastIssue;
     // Seed the demos exactly once per install (C30): an empty library after
     // the user deleted everything stays empty. NEVER seed + persist over an
     // unreadable songs.json (C1) — that would overwrite the user's data with
@@ -564,6 +575,31 @@ class LoopStore extends ChangeNotifier {
   /// ends (its undo stack — the last holder of stale paths — is gone).
   Future<void> sweepVocals() =>
       _changeSongs(() => LoopStorage.sweepVocals(_songs));
+
+  /// Add [song] (a new id) together with the audio files [write] puts in
+  /// place, as one library change: no vocal sweep can run between the files
+  /// landing and the library referencing them. If writing or saving fails,
+  /// [undo] removes what was written and the error is rethrown (storage
+  /// audit 2026-10-30: project backup import).
+  Future<void> addWithFiles(
+    Song song, {
+    required Future<void> Function() write,
+    required Future<void> Function() undo,
+  }) {
+    final snapshot = Song.fromJson(song.toJson())..updatedAt = DateTime.now();
+    return _changeSongs(() async {
+      if (_songs.any((s) => s.id == snapshot.id)) {
+        throw StateError('song ${snapshot.id} already exists');
+      }
+      try {
+        await write();
+        await _commitSongs([snapshot, ..._songs]);
+      } catch (_) {
+        await undo();
+        rethrow;
+      }
+    });
+  }
 
   /// 새 ID 로 deep-copy + " (copy)" suffix. 새 노래는 grid 맨 앞으로.
   /// JSON 왕복으로 복제 — 필드를 하나씩 옮기면 generationLocks 처럼 새로

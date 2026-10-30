@@ -324,13 +324,23 @@ List<DrumNote> genDrums(int steps) {
 // back to [fallback] (the song id) when nothing is left.
 final RegExp _kIllegalFileChars = RegExp(r'[\\/:*?"<>|\x00-\x1F\x7F]');
 
-String exportFileName(String title, {String fallback = 'loop'}) {
-  var s = title.replaceAll(_kIllegalFileChars, '').trim();
+// Windows device names (storage audit 2026-10-30 S6): `CON.wav`, `nul.mid`,
+// `COM1.tar.wav`… open the device, not a file — with or without extensions.
+final RegExp _kWindowsReserved = RegExp(
+  r'^(con|prn|aux|nul|com[0-9\u00b9\u00b2\u00b3]|lpt[0-9\u00b9\u00b2\u00b3])(\..*)?$',
+  caseSensitive: false,
+);
+
+String _safeFileName(String s) {
+  s = s.replaceAll(_kIllegalFileChars, '').trim();
   // Windows also rejects trailing dots/spaces in a name.
   s = s.replaceAll(RegExp(r'[. ]+$'), '');
-  if (s.isEmpty) {
-    s = fallback.replaceAll(_kIllegalFileChars, '').trim();
-  }
+  return _kWindowsReserved.hasMatch(s) ? '_$s' : s;
+}
+
+String exportFileName(String title, {String fallback = 'loop'}) {
+  var s = _safeFileName(title);
+  if (s.isEmpty) s = _safeFileName(fallback);
   return s.isEmpty ? 'loop' : s;
 }
 
@@ -349,13 +359,55 @@ Future<Directory> exportsFolder() async {
 }
 
 /// `<folder>/<base>.<ext>`, or `<base> (2).<ext>`, `(3)`… when the name is
-/// taken — an export never silently overwrites an earlier one.
+/// taken — an export never silently overwrites an earlier one. The name is
+/// reserved with an exclusive create (an empty placeholder the export library
+/// hides), so two exports of the same title at once can't pick the same file;
+/// fill it with [writeExportFile].
 Future<File> uniqueExportFile(Directory folder, String base, String ext) async {
-  var f = File('${folder.path}/$base.$ext');
-  var n = 2;
-  while (await f.exists()) {
-    f = File('${folder.path}/$base ($n).$ext');
+  var n = 1;
+  while (true) {
+    final f = File(
+      n == 1 ? '${folder.path}/$base.$ext' : '${folder.path}/$base ($n).$ext',
+    );
     n++;
+    if (await f.exists()) continue;
+    try {
+      await f.create(exclusive: true);
+      return f;
+    } on FileSystemException {
+      if (await f.exists()) continue; // taken in between: next number
+      rethrow;
+    }
   }
-  return f;
+}
+
+/// Write a finished export: the bytes go to `<file>.part` and are renamed
+/// over the reserved name only when complete, so a failed or interrupted
+/// write never leaves a half file that looks finished. On failure the
+/// reservation is released too, and the error is rethrown.
+Future<void> writeExportFile(File file, List<int> bytes) async {
+  final part = File('${file.path}.part');
+  try {
+    await part.writeAsBytes(bytes, flush: true);
+    // Windows may refuse the replace for a moment while something (an
+    // indexer, antivirus) still has the fresh placeholder open: retry briefly.
+    for (var attempt = 0; ; attempt++) {
+      try {
+        await part.rename(file.path);
+        break;
+      } on FileSystemException {
+        if (attempt >= 8) rethrow;
+        await Future<void>.delayed(Duration(milliseconds: 40 * (attempt + 1)));
+      }
+    }
+  } catch (_) {
+    for (final f in [part, file]) {
+      try {
+        if (await f.exists() && (f == part || await f.length() == 0)) {
+          await f.delete();
+        }
+      } catch (_) {}
+    }
+    rethrow;
+  }
 }

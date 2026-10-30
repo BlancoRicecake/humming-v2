@@ -278,6 +278,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
       _status = null;
     });
     try {
+      var skippedVocals = 0;
       final files = await exportStems(
         _scopeSections,
         widget.bpm,
@@ -296,6 +297,7 @@ class _ExportDrawerState extends State<_ExportDrawer> {
         groove: widget.groove,
         pan: widget.pan,
         articulations: widget.articulations,
+        onVocalsSkipped: (n) => skippedVocals = n,
       );
       if (files.isEmpty) {
         if (mounted) _note(L10n.of(context).ltExportFailed, ok: false);
@@ -308,9 +310,15 @@ class _ExportDrawerState extends State<_ExportDrawer> {
             'scope': _selectedSection == null ? 'song' : 'section',
           },
         );
-        await _share([
-          for (final f in files) XFile(f.path),
-        ], '${widget.title} stems');
+        if (!mounted) return;
+        await _share(
+          [for (final f in files) XFile(f.path, mimeType: 'audio/wav')],
+          '${widget.title} stems',
+          warning:
+              skippedVocals > 0
+                  ? L10n.of(context).ltExportVocalSkipped(skippedVocals)
+                  : null,
+        );
       }
     } catch (e, st) {
       debugPrint('[export] stems failed: $e\n$st');

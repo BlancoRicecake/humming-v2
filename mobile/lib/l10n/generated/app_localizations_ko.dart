@@ -2033,6 +2033,9 @@ class L10nKo extends L10n {
   String get ltRecErrUnavailable => '녹음을 시작할 수 없어요';
 
   @override
+  String get ltRecErrNoCodec => '이 기기에서 쓸 수 있는 녹음 형식이 없어요';
+
+  @override
   String get ltRecErrInterrupted => '녹음이 중단됐어요 — 다시 시도해주세요';
 
   @override
@@ -2233,6 +2236,281 @@ class L10nKo extends L10n {
   @override
   String get ltSongSaveFailed =>
       '변경 사항을 저장하지 못했어요. 기기의 저장 공간을 확인하고 다시 시도해 주세요.';
+
+  @override
+  String get ltLibraryRecovered =>
+      '곡 목록 파일을 읽지 못해 마지막으로 저장된 백업에서 되살렸어요. 최근 몇 초의 변경은 빠졌을 수 있어요.';
+
+  @override
+  String get ltLibrarySkipped =>
+      '일부 곡을 읽지 못해 목록에서 뺐어요. 원본 파일은 지우지 않고 따로 보관했어요.';
+
+  @override
+  String get ltLibraryUnreadable =>
+      '곡 목록 파일을 읽지 못했어요. 파일은 그대로 두었고, 녹음 파일 정리도 멈췄어요.';
+
+  @override
+  String get ltLibraryNewer =>
+      '더 새 버전의 HumTrack이 저장한 곡 목록이에요. 볼 수는 있지만 이 버전에서는 저장하지 않아요. 앱을 업데이트해 주세요.';
+
+  @override
+  String ltLibraryFolder(String path) {
+    return '저장 위치: $path';
+  }
+
+  @override
+  String get ltCloudMenu => '클라우드에 백업';
+
+  @override
+  String get ltCloudTitle => '클라우드 백업';
+
+  @override
+  String get ltCloudSettingsSub => '곡을 직접 올리고, 다른 기기에서 새 곡으로 받아요';
+
+  @override
+  String get ltCloudBackupTitle => '클라우드에 백업';
+
+  @override
+  String get ltCloudBackupBody =>
+      '이 곡의 노트·악기·구성을 내 계정 클라우드에 올려요. 자동으로 올라가지 않고, 누를 때만 올라가요.';
+
+  @override
+  String ltCloudIncludeAudio(int count) {
+    return '녹음 $count개도 함께 올리기';
+  }
+
+  @override
+  String get ltCloudAudioOn => '녹음 파일이 클라우드에 보관돼요. 클라우드 사본을 지우면 함께 지워져요.';
+
+  @override
+  String get ltCloudAudioOff => '녹음은 이 기기에만 남아요. 다른 기기에서 받으면 녹음 자리는 비어 있어요.';
+
+  @override
+  String get ltCloudAudioOptOut =>
+      '지금 클라우드 사본에는 녹음이 들어 있어요. 녹음 없이 올리면 그 사본이 녹음 없는 사본으로 바뀌고, 클라우드의 이전 녹음은 삭제돼요.';
+
+  @override
+  String get ltCloudBackupConfirm => '올리기';
+
+  @override
+  String ltCloudBackedUp(String title) {
+    return '클라우드에 올렸어요: $title';
+  }
+
+  @override
+  String ltCloudBackedUpNoAudio(String title) {
+    return '녹음 없이 클라우드에 올렸어요: $title';
+  }
+
+  @override
+  String get ltCloudConflictTitle => '클라우드에 더 최근 사본이 있어요';
+
+  @override
+  String get ltCloudConflictBody =>
+      '다른 기기에서 이 곡을 그사이에 올렸어요. 어떻게 할까요? 고르기 전에는 아무것도 바뀌지 않아요.';
+
+  @override
+  String get ltCloudConflictGone =>
+      '이 곡의 클라우드 사본이 다른 기기에서 지워졌거나 다시 만들어졌어요. 어떻게 할까요?';
+
+  @override
+  String get ltCloudKeepDevice => '이 기기 것으로 바꾸기';
+
+  @override
+  String get ltCloudTakeCloud => '클라우드 것 받기(새 곡)';
+
+  @override
+  String get ltCloudKeepBoth => '둘 다 보관';
+
+  @override
+  String get ltCloudRestore => '이 기기로 받기';
+
+  @override
+  String ltCloudRestored(String title) {
+    return '새 곡으로 받았어요: $title';
+  }
+
+  @override
+  String get ltCloudRestoredNoAudio => '녹음 없이 올린 사본이라 녹음 자리는 비어 있어요.';
+
+  @override
+  String get ltCloudDelete => '클라우드에서 삭제';
+
+  @override
+  String ltCloudDeleteTitle(String title) {
+    return '클라우드에서 ‘$title’ 삭제';
+  }
+
+  @override
+  String get ltCloudDeleteBody =>
+      '클라우드 사본(올린 녹음 포함)만 지워요. 이 기기와 다른 기기에 저장된 곡은 그대로예요. 되돌릴 수 없어요.';
+
+  @override
+  String get ltCloudDeleteYes => '삭제';
+
+  @override
+  String get ltCloudDeleted => '클라우드 사본을 지웠어요.';
+
+  @override
+  String ltCloudUsage(String used, String quota) {
+    return '사용량 $used / $quota';
+  }
+
+  @override
+  String get ltCloudEmpty => '클라우드에 올린 곡이 없어요. 곡 메뉴의 ‘클라우드에 백업’으로 올려 보세요.';
+
+  @override
+  String get ltCloudWithAudio => '녹음 포함';
+
+  @override
+  String get ltCloudNoAudio => '녹음 제외';
+
+  @override
+  String get ltCloudPrivacyNote =>
+      '클라우드 사본은 직접 지울 때까지 보관돼요. 구독이 끝나도 받기·삭제는 할 수 있어요.';
+
+  @override
+  String get ltCloudUnavailable => '클라우드 백업을 아직 쓸 수 없어요. 아무것도 올리지 않았어요.';
+
+  @override
+  String get ltCloudSignIn => '클라우드 백업은 로그인한 뒤 쓸 수 있어요.';
+
+  @override
+  String get ltCloudProRequired =>
+      '클라우드에 올리기는 Pro에서 쓸 수 있어요. 받기와 삭제는 계속 할 수 있어요.';
+
+  @override
+  String get ltCloudQuotaExceeded => '클라우드 용량이 부족해 올리지 않았어요. 기존 사본은 그대로예요.';
+
+  @override
+  String get ltCloudDamaged => '받은 파일이 올린 것과 달라 가져오지 않았어요. 아무것도 바뀌지 않았어요.';
+
+  @override
+  String get ltCloudAccountChanged =>
+      '작업 중에 로그인한 계정이 바뀌어 멈췄어요. 다른 계정에는 아무것도 올리거나 가져오지 않았어요.';
+
+  @override
+  String get ltCloudFailed =>
+      '연결 문제로 끝내지 못했어요. 기존 곡과 클라우드 사본은 그대로예요. 다시 시도해 주세요.';
+
+  @override
+  String get annTitle => '공지사항';
+
+  @override
+  String get annSettingsSub => '개발 소식과 장애·긴급 안내';
+
+  @override
+  String get annKindInfo => '소식';
+
+  @override
+  String get annKindImportant => '중요';
+
+  @override
+  String get annKindCritical => '긴급';
+
+  @override
+  String get annAll => '모두 보기';
+
+  @override
+  String annAllWithCount(int count) {
+    return '모두 보기 ($count)';
+  }
+
+  @override
+  String annHomeLink(int count) {
+    return '공지사항 $count';
+  }
+
+  @override
+  String get annUnread => '새 공지';
+
+  @override
+  String get annEmpty => '지금 표시할 공지가 없어요.';
+
+  @override
+  String annStale(String date) {
+    return '인터넷에 연결되지 않아 $date에 받은 공지를 보여 드려요. 내용이 바뀌었을 수 있어요.';
+  }
+
+  @override
+  String get annConfirm => '확인';
+
+  @override
+  String get annLater => '나중에';
+
+  @override
+  String get ltBackupMake => '백업 파일 만들기';
+
+  @override
+  String get ltBackupOpen => '백업 열기';
+
+  @override
+  String get ltBackupOpenSub => '다른 기기에서 만든 .humtrack 파일을 새 곡으로 가져와요';
+
+  @override
+  String ltBackupMade(String name) {
+    return '백업 파일을 만들었어요: $name\n‘내보낸 파일’에서 원하는 폴더에 저장하거나 공유하세요.';
+  }
+
+  @override
+  String ltBackupMissingTakes(int count) {
+    return '녹음 파일 $count개는 이미 없어서 빠졌어요.';
+  }
+
+  @override
+  String get ltBackupShowFiles => '파일 보기';
+
+  @override
+  String get ltBackupFailed => '백업 파일을 만들지 못했어요. 저장 공간을 확인해 주세요. 곡은 그대로예요.';
+
+  @override
+  String ltBackupImported(String title) {
+    return '백업을 새 곡으로 가져왔어요: $title';
+  }
+
+  @override
+  String ltBackupImportedMissing(int count) {
+    return '원래 기기에서도 없던 녹음 $count개는 빈 자리로 남겼어요(소리 없음).';
+  }
+
+  @override
+  String get ltBackupNotBackup =>
+      'HumTrack 백업 파일(.humtrack)이 아니에요. 아무것도 바꾸지 않았어요.';
+
+  @override
+  String get ltBackupNewer => '더 새 버전의 HumTrack에서 만든 백업이에요. 앱을 업데이트한 뒤 열어 주세요.';
+
+  @override
+  String get ltBackupUnsafe => '백업 안에 허용되지 않은 파일이 있어 열지 않았어요. 아무것도 바꾸지 않았어요.';
+
+  @override
+  String get ltBackupTooLarge => '백업 파일이 너무 커서 열 수 없어요.';
+
+  @override
+  String get ltBackupMissingAudio => '곡에 필요한 녹음 파일이 백업에 없어 가져오지 않았어요.';
+
+  @override
+  String get ltBackupDamaged => '백업 파일이 손상되어 가져오지 않았어요. 아무것도 바꾸지 않았어요.';
+
+  @override
+  String get ltBackupImportFailed =>
+      '백업을 가져오지 못했어요. 저장 공간을 확인해 주세요. 기존 곡은 그대로예요.';
+
+  @override
+  String get ltExitSaveFailedTitle => '저장하지 못했어요';
+
+  @override
+  String get ltExitSaveFailed =>
+      '마지막 변경 사항을 저장하지 못해 창을 그대로 두었어요. 저장 공간을 확인한 뒤 다시 저장해 주세요. 편집 내용은 그대로 있어요.';
+
+  @override
+  String get ltExitKeepEditing => '계속 편집';
+
+  @override
+  String get ltExitRetrySave => '다시 저장';
+
+  @override
+  String get ltExitDiscardQuit => '저장하지 않고 종료';
 
   @override
   String get policyNoticeTitle => '약관 개정 안내';

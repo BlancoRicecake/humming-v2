@@ -239,13 +239,19 @@ def fetch_subscription(sb, user_id: str) -> Optional[dict]:
     return rows[0] if rows else None
 
 
-def require_pro(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+def user_is_pro(user_id: str) -> bool:
+    """Same verdict as GET /iap/status ``pro`` for ``user_id`` (also used by
+    the cloud backup gate, ``cloud_quota.require_cloud_pro``)."""
     sb = require_supabase()
     try:
-        row = fetch_subscription(sb, user.id)
+        row = fetch_subscription(sb, user_id)
     except Exception:
         logger.exception("subscription lookup failed")
         raise HTTPException(500, "subscription lookup failed")
-    if not subscription_is_pro(row):
+    return subscription_is_pro(row)
+
+
+def require_pro(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    if not user_is_pro(user.id):
         raise HTTPException(402, "Pro subscription required")
     return user

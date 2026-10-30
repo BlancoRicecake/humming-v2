@@ -60,7 +60,12 @@ class StepGrid extends StatefulWidget {
     this.keyHighlight,
     this.inKeyDraw = false,
     this.velocityLaneFold = false,
+    this.reveal,
   });
+
+  /// Show these notes once if they are off screen (a hum conversion result;
+  /// see [GridReveal]).
+  final GridReveal? reveal;
 
   /// ui-001 stage 5 (desktop): the song key on the lane (out-of-key rows
   /// darker, root tinted, in-key names); null = the phone look.
@@ -2202,6 +2207,7 @@ class _StepGridState extends State<StepGrid> {
         stringMarks: _showStrings,
         warnNotes: _unassigned,
         keyHighlight: widget.keyHighlight,
+        reveal: widget.reveal,
       ),
     );
     if (widget.onEdit == null) return surface;
