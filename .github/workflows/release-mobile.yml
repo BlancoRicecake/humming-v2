@@ -13,7 +13,7 @@ on:
         description: Build, internal testing, production review, or submit an existing iOS build
         type: choice
         default: build
-        options: [build, internal, production, submit_ios, contact_audit, contact_apply]
+        options: [build, internal, production, submit_ios, contact_audit, contact_apply, contact_notice]
       build_number:
         description: Optional build number override (otherwise pubspec.yaml)
         type: string
@@ -282,7 +282,9 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           DESTINATION: ${{ inputs.destination }}
         run: |
-          if [ "$DESTINATION" = contact_apply ]; then
+          if [ "$DESTINATION" = contact_notice ]; then
+            python infra/scripts/asc_update_contact.py --notice
+          elif [ "$DESTINATION" = contact_apply ]; then
             python infra/scripts/asc_update_contact.py --apply
           else
             python infra/scripts/asc_update_contact.py
