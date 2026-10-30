@@ -19,8 +19,8 @@ When publishing a desktop build in future, verify its public download URL and di
 ## Contacts and verification (2026-10-30)
 
 - Contact: mailto:humtrack@gmail.com on both languages and existing policy pages.
-- X: https://x.com/Humtrack on both languages and the vision page.
-- Ko-fi: https://ko-fi.com/humtrack, English only, preserving existing behavior. Its profile, amount entry and Tip button loaded in a browser. No payment was submitted; settlement is unverified.
+- X: https://x.com/Humtrack in the homepage header on both languages, with an X icon and outlined button; also linked from the vision page.
+- Ko-fi: https://ko-fi.com/humtrack in the homepage header as a lime-tinted coffee button, English only. On narrow screens the social buttons form a second header row. Its profile, amount entry and Tip button loaded in a browser. No payment was submitted; settlement is unverified.
 - Store URLs loaded. Public store descriptions still show heobusy@gmail.com; changing store listings is separate from the homepage update. A mailto link does not verify mailbox delivery.
 - Prices and trial availability are confirmed in the app purchase screen instead of hardcoded. Free saves four songs; Pro adds unlimited saves and WAV/MIDI/stem exports.
 - FAQ uses native details/summary for keyboard access. Reduced motion and visible focus styles are supported.

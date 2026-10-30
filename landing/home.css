@@ -4,5 +4,31 @@
 @media(max-width:900px){.wrap{width:calc(100% - 48px)}.nav-inner{gap:20px}.nav-links{gap:17px}.nav-actions{gap:10px}.hero-heading{gap:30px;grid-template-columns:1.25fr 1fr}h1{letter-spacing:-2.7px}.hero-art{padding:28px;min-height:270px}.section-head{gap:30px}.faq{gap:35px}.download-inner{align-items:flex-start;flex-direction:column}}
 @media(max-width:640px){.wrap{width:calc(100% - 40px)}.nav-inner{height:68px;gap:12px;justify-content:space-between}.brand{font-size:20px}.brand img{width:27px;height:27px}.nav-links{display:none}.nav-actions{gap:9px}.languages button{padding:7px 5px}.button.small{padding:8px 10px;font-size:11px}.hero{padding-top:40px}.hero-top .edition{display:none}.eyebrow{font-size:9px;letter-spacing:1.6px}.hero-heading{display:block;margin:27px 0 30px}h1{font-size:52px;letter-spacing:-2.7px;line-height:1.17}.hero-copy{margin-top:25px}.hero-copy p{font-size:14px;max-width:360px}.hero-copy .actions{margin-top:20px}.hero-art{padding:22px 18px 18px;min-height:230px;border-radius:8px}.art-head,.art-foot{font-size:8px;letter-spacing:.5px}.melody{height:135px}.note{height:16px}.note:nth-child(1){top:100px}.note:nth-child(2){top:75px}.note:nth-child(3){top:50px}.note:nth-child(4){top:75px}.hero-caption{font-size:9px;gap:20px}.section{padding:62px 0}.workflow{margin-top:15px}.section-head{display:block;margin-bottom:30px}h2{font-size:34px;letter-spacing:-1.6px}.section-head>p{margin-top:18px;font-size:14px}.steps{grid-template-columns:1fr;gap:25px}.step{padding-top:15px;display:grid;grid-template-columns:36px 1fr;column-gap:10px}.step .number{grid-row:1/4;padding-top:5px}.step h3{margin:0 0 8px;font-size:22px}.step .tag{margin-top:13px}.updates{grid-template-columns:1fr;gap:24px;padding:27px 0}.updates .num{margin-bottom:5px}.updates h3{margin-bottom:7px}.shot-bar{padding:12px;font-size:10px}.preview-tag{font-size:8px}.studio-shot figcaption{padding:10px 12px;font-size:10px}.platforms{display:grid;gap:10px}.plans{grid-template-columns:1fr;gap:14px}.plan{padding:25px}.faq{display:block;padding-top:45px;margin-top:45px}.faq-intro{margin-bottom:26px}.faq summary{font-size:13px}.download{padding:45px 0}.download h2{font-size:32px}.download-inner{gap:25px}.store{min-width:140px;padding:12px 16px}.footer-top{grid-template-columns:1fr;gap:27px}.footer-links{justify-content:flex-start}.footer-bottom{flex-direction:column;gap:5px}.contact-line{font-size:12px;gap:16px}}
 .section-head h2{white-space:pre-line}
+.nav-inner{gap:22px}
+.nav-links{gap:22px}
+.nav-social{display:flex;align-items:center;gap:8px}
+.social-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:42px;padding:0 13px;border:1px solid #404638;border-radius:7px;background:#1c1f18;color:var(--text);font-size:12px;font-weight:550;white-space:nowrap;transition:background .18s,border-color .18s,transform .18s}
+.social-button svg{width:17px;height:17px;flex-shrink:0}
+.social-label-short{display:none}
+.social-arrow{color:#aab29e;font-size:13px;margin-left:3px}
+.social-button:hover{background:#292e22;border-color:#73845a;transform:translateY(-1px)}
+.social-kofi{background:#b1ee4310;border-color:#b1ee4350;color:#d0f69a}
+.social-kofi .social-arrow{color:#b1ee43}
+.social-kofi:hover{background:#b1ee4320;border-color:var(--lime)}
+@media(max-width:1100px){.nav-links{display:none}.nav-social{margin-left:auto}.nav-inner{gap:18px}.nav-actions{gap:10px}}
+@media(max-width:760px){
+  html{scroll-padding-top:150px}
+  .nav-inner{display:grid;grid-template-columns:1fr auto;height:auto;min-height:68px;gap:0 10px;padding-top:14px;padding-bottom:12px}
+  .nav-inner>.brand{grid-column:1;grid-row:1}
+  .nav-actions{grid-column:2;grid-row:1}
+  .nav-social{grid-column:1/-1;grid-row:2;margin:12px 0 0;width:100%}
+  .social-button{flex:1;min-height:40px;font-size:11px;padding:0 12px}
+  .social-kofi{flex:1.25}
+  .social-arrow{margin-left:auto}
+  .social-label-long{display:none}
+  .social-label-short{display:inline}
+  .nav-actions>.button{white-space:nowrap}
+}
+@media(max-width:380px){.nav-inner>.brand{font-size:18px;gap:6px}.nav-inner>.brand img{width:24px;height:24px}.nav-actions{gap:6px}.nav-actions .languages button{font-size:10px;padding:6px 3px}.nav-actions>.button{font-size:10px;padding:8px}}
 @media(max-width:640px){h1{font-size:clamp(36px,10vw,44px);letter-spacing:-2px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
