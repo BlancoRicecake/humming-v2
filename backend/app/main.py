@@ -34,6 +34,7 @@ from .assistant import run_key_and_assistant
 from .midi_build import notes_to_midi_bytes, tracks_to_midi_bytes
 from . import render as render_mod
 from .schemas import AnalyzeOptions, AnalyzeResponse, DetectedKey, Note
+from .priority import PriorityGate, resolve_tier
 from .settings import get_settings
 from .routes import projects as projects_routes
 from .routes import storage as storage_routes
@@ -404,12 +405,22 @@ async def _read_upload_capped(upload: UploadFile, max_bytes: int) -> bytes:
 # Cap concurrent CPU-bound DSP jobs (/analyze, /process_vocal, /process_fx,
 # /autotune). Each runs off the event loop via anyio.to_thread so /health (Fly
 # check, 3 s timeout) stays responsive during multi-second analysis (B8); the
-# semaphore bounds peak RAM on the 1 GB VM (WORLD jobs peak ~200 MB float64).
-_dsp_sem = asyncio.Semaphore(2)
-_autotune_sem = _dsp_sem  # legacy name
+# slot cap bounds peak RAM on the 1 GB VM (WORLD jobs peak ~200 MB float64).
+# Pro requests go first when the gate is busy (priority analysis).
+_dsp_gate = PriorityGate(
+    "dsp",
+    slots=_settings.priority_dsp_slots,
+    pro_reserved=_settings.priority_dsp_pro_reserved,
+    free_max_wait=_settings.priority_free_max_wait_sec,
+)
 # FluidSynth renders load a whole SF2 into the throwaway synth (GeneralUser GS
 # ~30 MB; catalog fonts up to hundreds of MB) — never run two at once.
-_render_sem = asyncio.Semaphore(1)
+_render_gate = PriorityGate(
+    "render",
+    slots=_settings.priority_render_slots,
+    pro_reserved=_settings.priority_render_pro_reserved,
+    free_max_wait=_settings.priority_free_max_wait_sec,
+)
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 @_apply(_analyze_decorators)
@@ -438,7 +449,7 @@ async def analyze(
     except Exception as e:
         raise HTTPException(400, f"invalid options json: {e}")
     try:
-        async with _dsp_sem:
+        async with _dsp_gate.slot(await resolve_tier(request)):
             return await anyio.to_thread.run_sync(functools.partial(analyze_audio, raw, opts))
     except HTTPException:  # undecodable input etc. are already 4xx — don't mask as 500
         raise
@@ -460,7 +471,7 @@ async def process_vocal_ep(
     if not raw:
         raise HTTPException(400, "empty audio upload")
     try:
-        async with _dsp_sem:
+        async with _dsp_gate.slot(await resolve_tier(request)):
             wav, peaks, dur, sr = await anyio.to_thread.run_sync(
                 functools.partial(process_vocal, raw, denoise=(denoise != "0")))
     except HTTPException:  # undecodable input is already 4xx — don't mask as 500
@@ -500,7 +511,7 @@ async def process_fx_ep(
     except (ValueError, json.JSONDecodeError) as e:
         raise HTTPException(400, f"invalid params: {e}")
     try:
-        async with _dsp_sem:
+        async with _dsp_gate.slot(await resolve_tier(request)):
             wav, peaks, dur, sr = await anyio.to_thread.run_sync(
                 functools.partial(apply_fx, raw, fx_type, p))
     except HTTPException:  # decode failures are already 4xx — don't mask as 500
@@ -545,7 +556,7 @@ async def autotune_ep(
     if not math.isfinite(s) or not math.isfinite(r):  # NaN survives min/max clamping
         raise HTTPException(400, "invalid strength/retune_ms")
     try:
-        async with _dsp_sem:
+        async with _dsp_gate.slot(await resolve_tier(request)):
             wav, peaks, dur, sr = await anyio.to_thread.run_sync(functools.partial(
                 autotune_vocal, raw, key, scale,
                 strength=s, retune_ms=r, denoise=(denoise != "0")))
@@ -625,9 +636,9 @@ def _require_render_engine() -> None:
         raise HTTPException(503, render_mod.get_state().error or "SoundFont engine unavailable")
 
 
-async def _run_render(fn, *args, **kwargs) -> bytes:
-    """Run a FluidSynth render off the event loop, one at a time (see _render_sem)."""
-    async with _render_sem:
+async def _run_render(request: Request, fn, *args, **kwargs) -> bytes:
+    """Run a FluidSynth render off the event loop through _render_gate."""
+    async with _render_gate.slot(await resolve_tier(request)):
         return await anyio.to_thread.run_sync(functools.partial(fn, *args, **kwargs))
 
 
@@ -661,7 +672,7 @@ async def render_demo(request: Request, payload: dict):
     program = int(payload.get("program") or 0)
     _require_render_available()
     try:
-        wav = await _run_render(render_mod.render_demo_to_wav, bank, program, sample_rate=sample_rate)
+        wav = await _run_render(request, render_mod.render_demo_to_wav, bank, program, sample_rate=sample_rate)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception:
@@ -738,6 +749,7 @@ async def audition_render(request: Request, payload: dict):
         raise HTTPException(503, "global SoundFont unavailable")
     try:
         wav = await _run_render(
+            request,
             render_mod.render_demo_through_sf2,
             sf2_path, sf_bank, sf_program, track_type=track_type,
             sample_rate=sample_rate, piece=piece)
@@ -801,6 +813,7 @@ async def guitar_lab_render(request: Request, payload: dict):
         raise HTTPException(503, "global SoundFont unavailable")
     try:
         wav = await _run_render(
+            request,
             guitar_lab_mod.render_guitar_strum,
             sf2_path, sf_bank, sf_program,
             sample_rate=sample_rate,
@@ -844,6 +857,7 @@ async def render_audio(request: Request, payload: dict):
     _require_render_available()
     try:
         wav = await _run_render(
+            request,
             render_mod.render_notes_to_wav, notes, program=program, sample_rate=sample_rate, bank=bank)
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -881,7 +895,7 @@ async def render_mix(request: Request, payload: dict):
     _check_render_notes([n for tr in tracks for n in tr["notes"]])
     _require_render_available()
     try:
-        wav = await _run_render(render_mod.render_tracks_to_wav, tracks, sample_rate=sample_rate)
+        wav = await _run_render(request, render_mod.render_tracks_to_wav, tracks, sample_rate=sample_rate)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception:
