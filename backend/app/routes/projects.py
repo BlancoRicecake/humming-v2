@@ -5,6 +5,10 @@ HumTrack 모바일 클라이언트가 보컬 + 메타데이터를 클라우드�
 프로젝트 트랙/청크/노트 트리는 본 엔드포인트에서 JSONB(meta) 로 통째 저장.
 
 스키마: `backend/sql/2026-06-04_cloud_sync_schema.sql` 참고.
+
+쓰기(POST·DELETE)는 Pro 만 (B7, /iap/status 와 같은 기준). 목록·조회는 구독이
+끝난 사용자도 자기 데이터를 받을 수 있게 열어 둔다. 곡 크기와 사용량은 앱이 보낸
+size_bytes 대신 서버가 R2 를 직접 재서 기록한다.
 """
 from __future__ import annotations
 
@@ -16,8 +20,17 @@ from fastapi import APIRouter, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from ..auth import extract_user_id
+from ..cloud_quota import (
+    measure_bytes,
+    project_prefix,
+    quota_bytes,
+    quota_exceeded,
+    record_used_bytes,
+    require_cloud_pro,
+    user_prefix,
+)
 from ..deps import require_supabase
-from ..storage_r2 import delete_prefix, sanitise_key_part
+from ..storage_r2 import delete_prefix
 
 logger = logging.getLogger("humming.cloud_projects")
 router = APIRouter(prefix="/projects", tags=["cloud-projects"])
@@ -47,7 +60,9 @@ class CloudProjectUpsertIn(BaseModel):
     project_id: str = Field(..., min_length=1, max_length=128)
     title: str = Field(..., min_length=1, max_length=200)
     meta: Dict[str, Any]
-    size_bytes: int = Field(..., ge=0)
+    # Ignored: the server measures the project's R2 objects (B7). Still accepted
+    # so older clients that send it keep working.
+    size_bytes: Optional[int] = Field(default=None, ge=0)
     expected_updated_at: Optional[datetime] = None
 
 
@@ -63,34 +78,6 @@ class ConflictOut(BaseModel):
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
-def _quota_bytes() -> int:
-    import os
-
-    raw = os.environ.get("CLOUD_QUOTA_PRO_BYTES")
-    if raw:
-        try:
-            return int(raw)
-        except ValueError:
-            logger.warning("CLOUD_QUOTA_PRO_BYTES invalid: %r", raw)
-    return 5 * 1024 * 1024 * 1024  # 5 GB default (Pro)
-
-
-def _used_bytes(sb, user_id: str) -> int:
-    try:
-        res = (
-            sb.table("cloud_quota")
-            .select("used_bytes")
-            .eq("user_id", user_id)
-            .maybe_single()
-            .execute()
-        )
-    except Exception:
-        logger.exception("quota lookup failed")
-        raise HTTPException(500, "quota lookup failed")
-    row = getattr(res, "data", None) or {}
-    return int(row.get("used_bytes") or 0)
-
-
 def _to_dt(v: Any) -> Optional[datetime]:
     if v is None:
         return None
@@ -162,8 +149,8 @@ def upsert_cloud_project(
     authorization: Optional[str] = Header(default=None),
 ):
     user_id = extract_user_id(authorization, tag="/projects")
+    require_cloud_pro(user_id, tag="POST /projects")
     sb = require_supabase()
-    quota = _quota_bytes()
 
     # 충돌 감지: expected_updated_at 이 주어졌고 DB row 의 updated_at 과 다르면 409.
     try:
@@ -203,39 +190,32 @@ def upsert_cloud_project(
             },
         )
 
-    # Quota 사전 검증 (delta 가 양수일 때만 의미 있음 — 음수면 항상 통과).
-    old_size = int((existing or {}).get("size_bytes") or 0)
-    delta = payload.size_bytes - old_size
-    if delta > 0:
-        current_used = _used_bytes(sb, user_id)
-        if current_used + delta > quota:
-            raise HTTPException(
-                status_code=412,
-                detail={
-                    "error": "quota_exceeded",
-                    "used": current_used,
-                    "quota": quota,
-                    "deficit": (current_used + delta) - quota,
-                },
-            )
+    # 용량은 서버가 잰다: 이 곡의 R2 객체 합계와 사용자 전체 합계.
+    quota = quota_bytes()
+    size_bytes = measure_bytes(project_prefix(user_id, payload.project_id)) or 0
+    used = measure_bytes(user_prefix(user_id)) or 0
+    if used > quota:
+        raise quota_exceeded(used, quota)
 
     # RPC 원자 호출 — upsert + quota 갱신을 한 트랜잭션으로.
     try:
-        rpc_res = sb.rpc(
+        sb.rpc(
             "upsert_cloud_project",
             {
                 "p_user_id": user_id,
                 "p_project_id": payload.project_id,
                 "p_title": payload.title,
                 "p_meta": payload.meta,
-                "p_size_bytes": payload.size_bytes,
+                "p_size_bytes": size_bytes,
             },
         ).execute()
     except Exception:
         logger.exception("upsert RPC failed")
         raise HTTPException(500, "upsert failed")
 
-    used = int(getattr(rpc_res, "data", 0) or 0)
+    # The RPC adjusted cloud_quota by the size delta; overwrite it with the
+    # measured total so it also covers uploads not yet attached to a project.
+    record_used_bytes(sb, user_id, used)
     return CloudProjectUpsertOut(
         project_id=payload.project_id, used_bytes=used, quota_bytes=quota
     )
@@ -248,6 +228,7 @@ def delete_cloud_project(
     authorization: Optional[str] = Header(default=None),
 ):
     user_id = extract_user_id(authorization, tag="/projects")
+    require_cloud_pro(user_id, tag="DELETE /projects")
     sb = require_supabase()
 
     try:
@@ -266,12 +247,19 @@ def delete_cloud_project(
 
     # R2 객체 삭제 (best-effort). Same key normalisation as /storage/presign so
     # the prefix matches what was actually uploaded (B22).
-    prefix = f"vocals/{user_id}/{sanitise_key_part(project_id)}/"
+    prefix = project_prefix(user_id, project_id)
     try:
         deleted = delete_prefix(prefix)
         if deleted:
             logger.info("R2 cleaned: prefix=%s deleted=%d", prefix, deleted)
     except Exception:
         logger.exception("R2 prefix cleanup failed: %s", prefix)
+
+    try:
+        used = measure_bytes(user_prefix(user_id))
+    except HTTPException:
+        used = None  # already logged; the project itself is deleted
+    if used is not None:
+        record_used_bytes(sb, user_id, used)
 
     return Response(status_code=204)
