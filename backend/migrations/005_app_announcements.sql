@@ -1,6 +1,7 @@
 -- 005 — in-app announcements feed (2026-10-30)
 --
--- Applied to isolated Supabase staging on 2026-11-01; not to production.
+-- Applied to isolated Supabase staging on 2026-11-01 and to production on
+-- 2026-11-02 (see migrations/README.md). Do not re-run.
 -- Operators manage rows in the Supabase
 -- dashboard (Table editor / SQL editor run as the owner); the apps read the
 -- published, currently active rows anonymously over PostgREST:

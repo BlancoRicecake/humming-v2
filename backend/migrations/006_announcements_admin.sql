@@ -1,6 +1,8 @@
 -- 006 — announcements managed from the web (2026-11-02)
 --
--- NOT APPLIED anywhere yet. Needs 005_app_announcements.sql first.
+-- Applied to production on 2026-11-02 (after 005_app_announcements.sql);
+-- not applied to staging. A different file, 006_cloud_lifecycle.sql, shares
+-- the number — see migrations/README.md. Do not rename or re-run this file.
 --
 -- The web admin page (hum-track.com/admin/notices) signs in with Supabase
 -- Auth (Google) and writes app_announcements with the user's own token.
