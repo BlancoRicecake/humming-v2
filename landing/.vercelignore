@@ -1,0 +1,13 @@
+.vercel/
+.git/
+node_modules/
+README.md
+**/.env*
+**/*.log
+**/*.sql
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.zip
+**/*.exe

@@ -204,6 +204,7 @@ footer { border-top: 1px solid var(--border); padding: 60px 24px 40px; }
       <h5 data-ko="회사" data-en="Company">회사</h5>
       <a href="vision.html" data-ko="소개" data-en="About">소개</a>
       <a href="mailto:humtrack@gmail.com">humtrack@gmail.com</a>
+      <a href="https://x.com/Humtrack" target="_blank" rel="noopener noreferrer">X · @Humtrack ↗</a>
     </div>
     <div class="foot-col">
       <h5 data-ko="정책" data-en="Legal">정책</h5>
@@ -238,7 +239,9 @@ function setLang(lang) {
   var saved = null;
   try { saved = localStorage.getItem('ht_lang'); } catch (e) {}
   var nav = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
-  setLang(saved || (nav.indexOf('ko') === 0 ? 'ko' : 'en'));
+  var requested = new URLSearchParams(location.search).get('lang');
+  var selected = requested === 'ko' || requested === 'en' ? requested : saved;
+  setLang(selected === 'ko' || selected === 'en' ? selected : (nav.indexOf('ko') === 0 ? 'ko' : 'en'));
 })();
 // scroll reveal
 (function () {
