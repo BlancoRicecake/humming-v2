@@ -42,6 +42,7 @@ def db_uri():
 def env(monkeypatch, db_uri):
     monkeypatch.setenv("SUPABASE_JWT_SECRET", SECRET)
     monkeypatch.setenv("CLOUD_SYNC_ENABLED", "1")
+    monkeypatch.setenv("CLOUD_CLEANUP_ENABLED", "1")
     monkeypatch.setenv("CLOUD_QUOTA_PRO_BYTES", str(10_000))
     get_settings.cache_clear()
     sb = PgSupabase(db_uri)
@@ -131,6 +132,24 @@ def cloud(client, env):
 
 
 # ── flag, contract, gate ────────────────────────────────────────────────────
+def test_read_only_mode_blocks_uploads_and_commits_but_keeps_restore_and_delete(cloud, monkeypatch):
+    u = cloud.user()
+    data = b"a saved backup"
+    _, committed = cloud.backup(u, "lt1", data, absent=True)
+    assert committed.status_code == 200
+    row = cloud.current(u, "lt1")
+    pending = cloud.upload(u, "lt2", b"pending")
+    monkeypatch.setenv("CLOUD_BACKUP_WRITES_ENABLED", "false")
+    get_settings.cache_clear()
+    assert cloud.presign(u, "lt3", 5).status_code == 503
+    assert cloud.commit(u, "lt2", pending["key"], b"pending", absent=True).status_code == 503
+    assert cloud.c.get("/projects", headers=cloud.h(u)).status_code == 200
+    assert cloud.c.get("/storage/usage", headers=cloud.h(u)).status_code == 200
+    download = cloud.c.post("/storage/presign_get", json={"key": row["meta"]["key"]}, headers=cloud.h(u))
+    assert download.status_code == 200
+    assert cloud.c.delete("/projects/lt1", headers=cloud.h(u)).status_code == 204
+
+
 def test_flag_off_hides_everything(client, env, monkeypatch, cloud):
     monkeypatch.setenv("CLOUD_SYNC_ENABLED", "0")
     get_settings.cache_clear()
@@ -200,11 +219,13 @@ def test_rls_blocks_direct_client_writes(db_uri):
     a, b = str(uuid.uuid4()), str(uuid.uuid4())
     sb.add_user(a)
     sb.add_user(b)
-    with sb.connect() as c:
-        c.execute(
-            "select public.commit_cloud_project(%s::uuid, 'lt1', 't', '{}'::jsonb, 1, null, true)",
-            [a],
-        )
+    from app.cloud_lifecycle import register_upload, begin_commit
+    from app.cloud_quota import new_upload_key, new_backup_key
+    source, key = new_upload_key(a, 'lt1'), new_backup_key(a, 'lt1')
+    register_upload(sb, a, 'lt1', source, 300)
+    begin_commit(sb, a, 'lt1', source, key)
+    sb.rpc('commit_cloud_project', {'p_user_id': a, 'p_project_id': 'lt1', 'p_title': 't',
+        'p_meta': {'key': key}, 'p_size_bytes': 1, 'p_expected_updated_at': None, 'p_expect_absent': True}).execute()
     with sb.connect() as c:
         c.execute("set role authenticated")
         c.execute("select set_config('request.jwt.claim.sub', %s, false)", [a])
@@ -413,12 +434,20 @@ def test_rpc_serialises_on_the_row_lock(db_uri):
     sb = PgSupabase(db_uri)
     u = str(uuid.uuid4())
     sb.add_user(u)
+    from app.cloud_lifecycle import register_upload, begin_commit
+    from app.cloud_quota import new_upload_key, new_backup_key
+    def prepared_key():
+        source, key = new_upload_key(u, 'p'), new_backup_key(u, 'p')
+        register_upload(sb, u, 'p', source, 300)
+        begin_commit(sb, u, 'p', source, key)
+        return key
+    keys = [prepared_key() for _ in range(9)]
     first = sb.rpc("commit_cloud_project", {
-        "p_user_id": u, "p_project_id": "p", "p_title": "t", "p_meta": {"key": "k0"},
+        "p_user_id": u, "p_project_id": "p", "p_title": "t", "p_meta": {"key": keys[0]},
         "p_size_bytes": 1, "p_expected_updated_at": None, "p_expect_absent": True,
     }).execute().data
     res = _race(8, lambda i: sb.rpc("commit_cloud_project", {
-        "p_user_id": u, "p_project_id": "p", "p_title": "t", "p_meta": {"key": f"k{i + 1}"},
+        "p_user_id": u, "p_project_id": "p", "p_title": "t", "p_meta": {"key": keys[i + 1]},
         "p_size_bytes": 1, "p_expected_updated_at": first["updated_at"], "p_expect_absent": False,
     }).execute().data["status"])
     assert sorted(res) == ["conflict"] * 7 + ["ok"]

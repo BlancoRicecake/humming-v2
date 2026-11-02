@@ -30,6 +30,9 @@ _TYPES = {
     "p_size_bytes": "bigint",
     "p_expected_updated_at": "timestamptz",
     "p_expect_absent": "boolean",
+    "p_payload": "jsonb",
+    "p_worker_id": "uuid",
+    "p_counts": "jsonb",
 }
 
 _BOOTSTRAP = """
@@ -44,11 +47,14 @@ create or replace function auth.uid() returns uuid language sql stable as
   $f$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $f$;
 grant usage on schema auth to anon, authenticated, service_role;
 create table if not exists public.iap_notifications (id int);
+-- Match hosted Supabase's explicit API-role function defaults. PUBLIC-only
+-- revocations must not accidentally pass local security tests.
+alter default privileges in schema public grant execute on functions to anon, authenticated;
 """
 
 _GRANTS = """
 grant usage on schema public to anon, authenticated, service_role;
-grant all on all tables in schema public to anon, authenticated, service_role;
+grant all on public.cloud_projects, public.cloud_quota to anon, authenticated, service_role;
 """
 
 
@@ -66,6 +72,9 @@ def create_database() -> str:
             ROOT / "sql" / "2026-06-04_cloud_sync_schema.sql",
             ROOT / "migrations" / "003_lock_down_iap_and_cloud_tables.sql",
             ROOT / "migrations" / "004_cloud_backup_commit.sql",
+            ROOT / "migrations" / "006_cloud_lifecycle.sql",
+            ROOT / "migrations" / "007_lock_legacy_cloud_rpcs.sql",
+            ROOT / "migrations" / "008_cloud_cleanup_observability.sql",
         ]:
             c.execute(f.read_text(encoding="utf-8"))
         c.execute(_GRANTS)
@@ -74,6 +83,8 @@ def create_database() -> str:
 
 def _jsonable(v: Any) -> Any:
     """What PostgREST would send: timestamps as ISO strings."""
+    if isinstance(v, uuid.UUID):
+        return str(v)
     if isinstance(v, datetime):
         return v.isoformat()
     if isinstance(v, dict):
@@ -268,9 +279,16 @@ class FakeR2:
 
         return _P()
 
+    def list_objects_v2(self, Bucket, Prefix, MaxKeys=200, ContinuationToken=None):
+        keys = sorted(k for k in self.objects if k.startswith(Prefix) and (not ContinuationToken or k > ContinuationToken))
+        batch = keys[:MaxKeys]
+        return {'Contents': [{'Key': k, 'Size': len(self.objects[k][0]), 'LastModified': self.objects[k][1]} for k in batch],
+                'IsTruncated': len(keys) > MaxKeys,
+                'NextContinuationToken': batch[-1] if len(keys) > MaxKeys else None}
+
     def delete_objects(self, Bucket, Delete):
         gone = []
         for o in Delete["Objects"]:
-            if self.objects.pop(o["Key"], None) is not None:
-                gone.append({"Key": o["Key"]})
+            self.objects.pop(o["Key"], None)
+            gone.append({"Key": o["Key"]})  # S3 also acknowledges absent keys
         return {"Deleted": gone}

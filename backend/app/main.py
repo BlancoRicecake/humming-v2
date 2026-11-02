@@ -176,7 +176,17 @@ async def _lifespan(_app: FastAPI):
             logger.exception("soundfont warm-up failed")
 
     threading.Thread(target=_warm, name="sf2-warm", daemon=True).start()
-    yield
+    cleanup_task = None
+    if get_settings().cloud_cleanup_enabled:
+        from .cloud_monitor import scheduled_loop
+        cleanup_task = asyncio.create_task(scheduled_loop())
+    try:
+        yield
+    finally:
+        if cleanup_task is not None:
+            cleanup_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await cleanup_task
 
 
 app = FastAPI(title="Humming V2 backend", version="0.3.0", lifespan=_lifespan)

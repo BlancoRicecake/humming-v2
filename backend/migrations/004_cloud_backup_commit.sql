@@ -1,6 +1,7 @@
 -- 004 — cloud backup commit: switch a song's cloud copy atomically (2026-10-30)
 --
--- NOT APPLIED to any environment. Apply only together with the backend that
+-- Applied to isolated Supabase staging on 2026-11-01; not to production.
+-- Apply only together with the backend that
 -- calls it (backup contract 1), before CLOUD_SYNC_ENABLED is turned on.
 -- Requires backend/sql/2026-06-04_cloud_sync_schema.sql and migration 003.
 --

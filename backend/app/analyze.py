@@ -123,7 +123,8 @@ def _ffprobe_info(blob: bytes) -> Dict[str, Optional[object]]:
         proc = subprocess.run(
             [
                 "ffprobe", "-v", "error",
-                "-protocol_whitelist", "pipe,file",  # no network/concat inputs
+                "-protocol_whitelist", "pipe",
+                "-format_whitelist", "wav,ogg,mov,mp3,aac,flac,caf,aiff,au,amr,matroska,webm",
                 "-show_streams", "-show_format", "-of", "json",
                 "pipe:0",
             ],
@@ -183,7 +184,8 @@ def _ffmpeg_decode_to_pcm(
                 tmp_path = tmp.name
             cmd = [
                 "ffmpeg", "-loglevel", "error",
-                "-protocol_whitelist", "pipe,file",  # no network/concat inputs
+                "-protocol_whitelist", "pipe,file",  # only the seekable upload temp file
+                "-format_whitelist", "wav,ogg,mov,mp3,aac,flac,caf,aiff,au,amr,matroska,webm",
                 "-i", tmp_path,
                 "-t", str(MAX_AUDIO_SEC + 1),
                 "-f", "s16le", "-ac", str(ac), "-ar", str(target_sr),
@@ -193,7 +195,8 @@ def _ffmpeg_decode_to_pcm(
         else:
             cmd = [
                 "ffmpeg", "-loglevel", "error",
-                "-protocol_whitelist", "pipe,file",
+                "-protocol_whitelist", "pipe",
+                "-format_whitelist", "wav,ogg,mov,mp3,aac,flac,caf,aiff,au,amr,matroska,webm",
                 "-i", "pipe:0",
                 "-t", str(MAX_AUDIO_SEC + 1),
                 "-f", "s16le", "-ac", str(ac), "-ar", str(target_sr),
@@ -216,14 +219,10 @@ def _ffmpeg_decode_to_pcm(
                 pass
 
     if proc.returncode != 0 or not proc.stdout:
-        err = proc.stderr.decode("utf-8", errors="ignore")[:200] if proc.stderr else "unknown"
-        head_hex = blob[:16].hex() if blob else "(empty)"
-        head_ascii = "".join(chr(b) if 32 <= b < 127 else "." for b in blob[:16])
-        log.warning(
-            "ffmpeg decode failed: size=%d head_hex=%s head_ascii=%r err=%s",
-            len(blob), head_hex, head_ascii, err[:120],
-        )
-        raise HTTPException(status_code=400, detail=f"audio decode failed (ffmpeg): {err}")
+        # FFmpeg stderr can contain uploaded text, local paths and referenced URLs.
+        # Keep media and parser diagnostics out of logs/client error messages.
+        log.warning("ffmpeg decode failed: size=%d status=%d", len(blob), proc.returncode)
+        raise HTTPException(status_code=400, detail="audio decode failed (ffmpeg)")
 
     pcm = np.frombuffer(proc.stdout, dtype=np.int16).astype(np.float32) / 32768.0
     _check_audio_length(len(pcm) // ac, target_sr)

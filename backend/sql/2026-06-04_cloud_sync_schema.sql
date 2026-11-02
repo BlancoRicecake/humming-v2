@@ -118,8 +118,10 @@ BEGIN
   RETURN v_new_used;
 END $$;
 
--- ── 6) 권한 — anon 은 직접 호출 차단, authenticated 만 RPC 가능 ─────────────
-REVOKE ALL ON FUNCTION public.upsert_cloud_project(uuid, text, text, jsonb, bigint) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.delete_cloud_project(uuid, text) FROM PUBLIC;
+-- ── 6) 권한 — 서버 service_role 만 RPC 가능 ─────────────────────────────────
+-- Supabase can explicitly grant API roles via default privileges. Revoking
+-- PUBLIC alone does not remove those direct anon/authenticated grants.
+REVOKE ALL ON FUNCTION public.upsert_cloud_project(uuid, text, text, jsonb, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.delete_cloud_project(uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.upsert_cloud_project(uuid, text, text, jsonb, bigint) TO service_role;
 GRANT EXECUTE ON FUNCTION public.delete_cloud_project(uuid, text) TO service_role;

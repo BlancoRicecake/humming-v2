@@ -477,11 +477,14 @@ def test_ffmpeg_and_ffprobe_restrict_protocols(monkeypatch):
         except Exception:
             pass  # the fake ffmpeg fails; only the argv matters here
     assert len(cmds) == 3
-    for cmd in cmds:
+    for position, cmd in enumerate(cmds):
         i = cmd.index("-protocol_whitelist")
-        assert cmd[i + 1] == "pipe,file"
+        assert cmd[i + 1] == ("pipe,file" if position == 2 else "pipe")
         inp = cmd.index("-i") if "-i" in cmd else cmd.index("pipe:0")
         assert i < inp
+        formats = cmd[cmd.index('-format_whitelist') + 1].split(',')
+        assert 'caf' in formats and 'mov' in formats and 'ogg' in formats
+        assert not {'hls','concat','dash','image2'}.intersection(formats)
 
 
 def test_delete_account_without_auth_is_401(client):

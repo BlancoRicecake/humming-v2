@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..auth import extract_user_id
+from .. import cloud_lifecycle as lifecycle
 from ..cloud_quota import (
     expected_user_guard,
     MAX_BACKUP_BYTES,
@@ -196,8 +197,14 @@ def _cleanup_after_commit(
         ]
     except Exception:
         logger.exception("orphan listing failed")
-    if _delete_keys(doomed):
-        logger.warning("post-commit cleanup left objects (retried by later sweeps)")
+    try:
+        queued = lifecycle.enqueue(sb, user_id, doomed, reason='post_commit')
+        if lifecycle.execute_deletes(sb, user_id, queued, delete=_delete_keys):
+            logger.warning('post-commit cleanup retained retry jobs')
+    except Exception:
+        # The committed copy is safe. The account's periodic scanner also
+        # discovers abandoned objects if queuing was temporarily unavailable.
+        logger.error('post-commit cleanup deferred')
 
 
 # ── GET /projects ───────────────────────────────────────────────────────────
@@ -208,6 +215,7 @@ def list_cloud_projects(
 ):
     user_id = extract_user_id(authorization, tag="/projects")
     sb = require_supabase()
+    lifecycle.ensure_account(sb, user_id)
     cols = "project_id,title,size_bytes,uploaded_at,updated_at"
     if include == "meta":
         cols += ",meta"
@@ -235,6 +243,7 @@ def get_cloud_project(
 ):
     user_id = extract_user_id(authorization, tag="/projects")
     sb = require_supabase()
+    lifecycle.ensure_account(sb, user_id)
     try:
         res = (
             sb.table("cloud_projects")
@@ -286,24 +295,29 @@ def commit_cloud_project(
         raise HTTPException(422, "uploaded size does not match")
 
     sb = require_supabase()
+    lifecycle.ensure_account(sb, user_id)
     quota = quota_bytes()
     used = measure_bytes(user_prefix(user_id)) or 0
     if used > quota:
         # the new object can't stay; the previous copy is untouched
-        delete_objects([upload_key])
+        queued = lifecycle.enqueue(sb, user_id, [upload_key], reason='failed_commit')
+        lifecycle.execute_deletes(sb, user_id, queued, delete=_delete_keys)
         record_used_bytes(sb, user_id, used - size)
         raise quota_exceeded(used, quota)
 
     # The committed copy lives under a NEW server-made name that no upload URL
     # was issued for: re-using this upload's URL later can't touch it.
     final_key = new_backup_key(user_id, payload.project_id)
+    lifecycle.begin_commit(sb, user_id, payload.project_id, upload_key, final_key)
     try:
         copy_object(upload_key, final_key)
         if object_size(final_key) != size:
             raise RuntimeError("copy size mismatch")
     except Exception:
         logger.exception("copy to the committed name failed")
-        delete_objects([final_key])
+        lifecycle.call(sb, 'cancel_copy', user_id, key=final_key)
+        queued = lifecycle.enqueue(sb, user_id, [final_key], reason='failed_commit')
+        lifecycle.execute_deletes(sb, user_id, queued, delete=_delete_keys)
         raise HTTPException(500, "commit copy failed")
     meta = meta.model_copy(update={"key": final_key})
 
@@ -347,7 +361,10 @@ def commit_cloud_project(
         current = result.get("current") or None
         # Not committed: drop the copy. The upload stays for a retry ("keep
         # this device's") and is swept after ORPHAN_AGE if nobody commits it.
-        delete_objects([final_key])
+        queued = lifecycle.enqueue(sb, user_id, [final_key], reason='failed_commit')
+        lifecycle.execute_deletes(sb, user_id, queued, delete=_delete_keys)
+        if result.get('status') in {'account_deleting', 'upload_expired'}:
+            lifecycle.require_ok(result)
         raise HTTPException(
             status_code=409,
             detail={
@@ -396,6 +413,8 @@ def delete_cloud_project(
     check_project_id(project_id)  # never a prefix shared with another song
     sb = require_supabase()
 
+    lifecycle.ensure_account(sb, user_id)
+
     try:
         row = _current_row(sb, user_id, project_id)
         doomed = _stale_objects(sb, user_id, project_id, up_age=timedelta(0), bk_age=COMMIT_WINDOW)
@@ -406,7 +425,8 @@ def delete_cloud_project(
     if key and key not in doomed:
         doomed.insert(0, key)
 
-    failed = _delete_keys(doomed)
+    queued = lifecycle.enqueue(sb, user_id, doomed, reason='project_delete', project_id=project_id, expected_key=key)
+    failed = lifecycle.execute_deletes(sb, user_id, queued, delete=_delete_keys, force_retry=True)
     if failed:
         raise HTTPException(
             status_code=503,

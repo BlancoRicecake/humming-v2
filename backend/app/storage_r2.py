@@ -152,6 +152,23 @@ def prefix_bytes(prefix: str) -> Optional[int]:
     return sum(size for _, size, _ in objs)
 
 
+def list_objects_page(prefix: str, *, limit: int = 200, cursor: Optional[str] = None):
+    """Bounded worker listing. No configuration is an error, never empty proof."""
+    r2 = get_r2_client()
+    if r2 is None:
+        raise RuntimeError('storage unavailable')
+    params = dict(Bucket=get_settings().r2_bucket, Prefix=prefix, MaxKeys=max(1, min(500, limit)))
+    if cursor:
+        params['ContinuationToken'] = cursor
+    response = r2.list_objects_v2(**params)
+    objects = [(o['Key'], int(o.get('Size') or 0), o.get('LastModified'))
+               for o in response.get('Contents', []) if o.get('Key')]
+    following = response.get('NextContinuationToken') if response.get('IsTruncated') else None
+    if response.get('IsTruncated') and not following:
+        raise RuntimeError('incomplete storage listing')
+    return objects, following
+
+
 def delete_objects(keys: Iterable[str]) -> int:
     """Delete listed object keys. Returns count of deleted keys (best-effort)."""
     keys = list(keys)
@@ -200,7 +217,15 @@ def delete_objects_strict(keys: Iterable[str]) -> List[str]:
             failed.extend(batch)
             continue
         errors = {e.get("Key") for e in (res.get("Errors") or [])}
-        failed.extend(k for k in batch if k in errors)
+        confirmed = {e.get('Key') for e in (res.get('Deleted') or [])}
+        for key in batch:
+            if key in errors:
+                failed.append(key)
+            elif key not in confirmed:
+                # Missing per-key acknowledgements stay pending. S3 confirms
+                # deletion of nonexistent keys too, so an idempotent retry can
+                # finish without hundreds of extra HEAD requests.
+                failed.append(key)
     if failed:
         logger.warning("delete_objects: %d key(s) not deleted", len(failed))
     return failed

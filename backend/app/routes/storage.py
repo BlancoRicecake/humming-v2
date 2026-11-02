@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import extract_user_id
+from .. import cloud_lifecycle as lifecycle
 from ..cloud_quota import (
     expected_user_guard,
     BACKUP_CONTRACT,
@@ -133,6 +134,9 @@ def presign(
     check_project_id(payload.project_id)
     s = get_settings()
 
+    sb = require_supabase()
+    lifecycle.ensure_account(sb, user_id)
+
     quota = quota_bytes()
     used = _measured_used_bytes(user_id)
     needed = used + payload.size_bytes
@@ -144,10 +148,13 @@ def presign(
     key = new_upload_key(user_id, payload.project_id)
     content_type = "application/octet-stream"
 
+    ttl = max(1, min(3600, s.presign_ttl_sec))
+    lifecycle.register_upload(sb, user_id, payload.project_id, key, ttl)
+
     url = presign_put(
         key,
         content_type=content_type,
-        expires_in=s.presign_ttl_sec,
+        expires_in=ttl,
         content_length=payload.size_bytes,
         if_none_match=True,
     )
@@ -156,7 +163,7 @@ def presign(
 
     public_base = (s.r2_public_base_url or "").rstrip("/")
     public_url = f"{public_base}/{key}" if public_base else None
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=s.presign_ttl_sec)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
 
     # every signed header the PUT must carry
     headers = {
@@ -188,6 +195,7 @@ def presign_download(
     """
     user_id = extract_user_id(authorization, tag="/storage/presign_get")
     s = get_settings()
+    lifecycle.ensure_account(require_supabase(), user_id)
 
     expected_prefix = f"vocals/{user_id}/"
     if not payload.key.startswith(expected_prefix):
@@ -213,6 +221,7 @@ def usage(authorization: Optional[str] = Header(default=None)):
     """What R2 holds for the caller now (falls back to the last recorded
     total when R2 is not configured)."""
     user_id = extract_user_id(authorization, tag="/storage/usage")
+    lifecycle.ensure_account(require_supabase(), user_id)
     used = measure_bytes(user_prefix(user_id))
     if used is None:
         used = _recorded_used_bytes(user_id)
@@ -227,6 +236,7 @@ def quota_check(
 ):
     user_id = extract_user_id(authorization, tag="/storage/quota_check")
     require_cloud_pro(user_id, tag="/storage/quota_check")
+    lifecycle.ensure_account(require_supabase(), user_id)
     used = _measured_used_bytes(user_id)
     quota = quota_bytes()
     needed = used + payload.size

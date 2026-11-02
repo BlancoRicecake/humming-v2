@@ -29,6 +29,7 @@ from typing import Optional
 from fastapi import Header, HTTPException
 
 from .deps import user_is_pro
+from .settings import get_settings
 from .storage_r2 import prefix_bytes, sanitise_key_part
 
 logger = logging.getLogger("humming.cloud_quota")
@@ -53,6 +54,11 @@ _PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
 
 def require_cloud_pro(user_id: str, *, tag: str) -> None:
     """403 unless the caller is Pro."""
+    settings = get_settings()
+    if settings.cloud_sync_enabled and not settings.cloud_cleanup_enabled:
+        raise HTTPException(503, detail={"error": "cloud_cleanup_not_enabled"})
+    if not settings.cloud_backup_writes_enabled:
+        raise HTTPException(503, detail={"error": "cloud_writes_paused"})
     if not user_is_pro(user_id):
         logger.info("%s: Pro required", tag)
         raise HTTPException(403, "Pro subscription required")

@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     r2_public_base_url: Optional[str] = None  # https://cdn.example.com
     # /storage + /projects (cloud backup) answer 404 until the feature ships.
     cloud_sync_enabled: bool = False
+    # Emergency read-only mode: stop issuing uploads/commits while list,
+    # restore/download and user-requested deletion remain available.
+    cloud_backup_writes_enabled: bool = True
+    # Enable only after migration 006 and a dry-run of the bounded worker.
+    cloud_cleanup_enabled: bool = False
 
     # Apple App Store Server API
     # NOTE: App Store Server API JWTs use the App Store Connect issuer UUID
