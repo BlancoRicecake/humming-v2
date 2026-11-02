@@ -3,16 +3,18 @@ name: CI Mobile
 # 검증 전용 워크플로 — 테스트 + Android 디버그 컴파일, 업로드/배포 없음.
 # (flutter 가 워크스페이스의 pubspec.lock / analysis_options.yaml 을 건드려도
 #  일회성 러너 안에서 끝나고 push 하지 않는다.)
-# mobile/ 이 바뀐 main 푸시와 PR 에서만 돈다.
+# mobile/ changes on main/develop and PRs. No publishing.
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - 'mobile/**'
+      - 'infra/scripts/check_android_native_alignment.py'
       - '.github/workflows/ci-mobile.yml'
   pull_request:
     paths:
       - 'mobile/**'
+      - 'infra/scripts/check_android_native_alignment.py'
       - '.github/workflows/ci-mobile.yml'
 
 # 같은 ref 에 새 커밋이 오면 진행 중이던 런은 취소.
@@ -97,3 +99,6 @@ jobs:
 
       - name: Android debug build
         run: flutter build apk --debug --no-pub --target-platform android-arm64
+
+      - name: Native 16KB ELF and APK alignment
+        run: python3 ../infra/scripts/check_android_native_alignment.py build/app/outputs/flutter-apk/app-debug.apk --output build/android-16kb-ci.json
