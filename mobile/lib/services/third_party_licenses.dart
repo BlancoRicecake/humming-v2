@@ -126,29 +126,32 @@ const _aviciiPluckNotice =
 /// FluidSynth와 그 LGPL/Apache/BSD/MIT 의존 라이브러리, CC-BY 사운드폰트 고지를 등록한다. 앱 시작 시 한 번 호출.
 void registerThirdPartyLicenses() {
   LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(
+      const ['GeneralUser GS (SoundFont)'],
+      'GeneralUser GS 2.0.3 BETA by S. Christian Collins. Bundled instrument bank.\n'
+      'Source: https://github.com/mrbumpy409/GeneralUser-GS\n\n'
+      '${await rootBundle.loadString('assets/legal/GeneralUser-GS-LICENSE.txt')}',
+    );
     yield const LicenseEntryWithLineBreaks(['FluidSynth'], _fluidSynthNotice);
     for (final (package, notice) in _lgplDependencyNotices) {
       yield LicenseEntryWithLineBreaks([package], notice);
     }
-    yield LicenseEntryWithLineBreaks(
-      ['FluidSynth', for (final (package, _) in _lgplDependencyNotices) package],
-      await rootBundle.loadString('assets/legal/LGPL-2.1.txt'),
-    );
+    yield LicenseEntryWithLineBreaks([
+      'FluidSynth',
+      for (final (package, _) in _lgplDependencyNotices) package,
+    ], await rootBundle.loadString('assets/legal/LGPL-2.1.txt'));
     yield const LicenseEntryWithLineBreaks(['Oboe'], _oboeNotice);
-    yield LicenseEntryWithLineBreaks(
-      const ['Oboe'],
-      await rootBundle.loadString('assets/legal/Apache-2.0.txt'),
-    );
+    yield LicenseEntryWithLineBreaks(const [
+      'Oboe',
+    ], await rootBundle.loadString('assets/legal/Apache-2.0.txt'));
     for (final (package, notice, asset) in _permissiveDependencyNotices) {
       yield LicenseEntryWithLineBreaks([package], notice);
-      yield LicenseEntryWithLineBreaks(
-        [package],
-        await rootBundle.loadString(asset),
-      );
+      yield LicenseEntryWithLineBreaks([
+        package,
+      ], await rootBundle.loadString(asset));
     }
-    yield const LicenseEntryWithLineBreaks(
-      ['Avicii Pluck (SoundFont)'],
-      _aviciiPluckNotice,
-    );
+    yield const LicenseEntryWithLineBreaks([
+      'Avicii Pluck (SoundFont)',
+    ], _aviciiPluckNotice);
   });
 }

@@ -271,7 +271,7 @@ class SoundfontCatalog {
 
   /// Ensure the slot's SF2 is downloaded + verified; returns its local path or
   /// null (offline / unknown slot / verification failed). Idempotent: a present
-  /// correctly-sized file short-circuits.
+  /// correctly-sized file is reused after its manifest hash is checked.
   Future<String?> ensureDownloaded(int slot) {
     return _inFlight.putIfAbsent(
       slot,
@@ -288,12 +288,20 @@ class SoundfontCatalog {
     if (e == null) return null;
     await _folder();
     final f = _fileFor(e);
-    if (await f.exists() && await f.length() == e.bytes) return f.path;
     // Stream to a .part file so an interrupted download is never mistaken for a
     // complete one; only rename in once the size is verified.
     final part = File('${f.path}.part');
     _setProgress(slot, 0);
     try {
+      if (await f.exists() && await f.length() == e.bytes) {
+        if (e.sha256.isEmpty || await fileSha256(f) == e.sha256.toLowerCase()) {
+          return f.path;
+        }
+        // A same-sized corrupt cache must not bypass integrity checks after
+        // restart. Remove it before attempting repair; offline callers then
+        // fall back rather than loading the damaged instrument.
+        await f.delete();
+      }
       if (e.assetPath != null) {
         final data = await rootBundle.load(e.assetPath!);
         await part.writeAsBytes(

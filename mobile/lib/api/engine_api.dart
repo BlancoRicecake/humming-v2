@@ -111,9 +111,13 @@ class EngineApi {
     if (await target.exists()) {
       start = await target.length();
       // 이미 완전한 파일 — 서버를 부르지 않는다.
-      if (expectedBytes > 0 && start >= expectedBytes) {
+      if (expectedBytes > 0 && start == expectedBytes) {
         onProgress?.call(start, expectedBytes);
         return;
+      }
+      if (expectedBytes > 0 && start > expectedBytes) {
+        await target.delete();
+        start = 0;
       }
     }
 
@@ -129,6 +133,9 @@ class EngineApi {
     );
 
     if (r.statusCode == 416) {
+      if (start == 0) {
+        throw StateError('Soundfont server rejected a fresh download');
+      }
       if (await target.exists()) await target.delete();
       return downloadSoundfontToFile(
         id,

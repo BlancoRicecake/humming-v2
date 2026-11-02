@@ -16,22 +16,32 @@ import 'package:humming/api/engine_api.dart';
 /// Serves [body] with Range support, and can cut the connection after N bytes
 /// to simulate a dropped download.
 class _RangeAdapter implements HttpClientAdapter {
-  _RangeAdapter(this.body, {this.failAfter, this.ignoreRange = false});
+  _RangeAdapter(
+    this.body, {
+    this.failAfter,
+    this.ignoreRange = false,
+    this.always416 = false,
+  });
 
   final Uint8List body;
 
   /// Model a server (or proxy) that drops the Range header: 200 + full body.
   final bool ignoreRange;
+  final bool always416;
 
   /// Bytes to emit before throwing (null = serve the whole thing).
   int? failAfter;
   final List<String?> seenRanges = [];
 
   @override
-  Future<ResponseBody> fetch(RequestOptions options,
-      Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
     final range = options.headers['range'] as String?;
     seenRanges.add(range);
+    if (always416) return ResponseBody.fromBytes(<int>[], 416);
     var start = 0;
     if (range != null && !ignoreRange) {
       final m = RegExp(r'bytes=(\d+)-').firstMatch(range);
@@ -44,7 +54,8 @@ class _RangeAdapter implements HttpClientAdapter {
     final limit = failAfter;
     final headers = <String, List<String>>{
       'content-length': ['${slice.length}'],
-      if (start > 0) 'content-range': ['bytes $start-${body.length - 1}/${body.length}'],
+      if (start > 0)
+        'content-range': ['bytes $start-${body.length - 1}/${body.length}'],
     };
     final ctl = StreamController<Uint8List>();
     scheduleMicrotask(() async {
@@ -55,8 +66,13 @@ class _RangeAdapter implements HttpClientAdapter {
           await ctl.close();
           return;
         }
-        ctl.add(Uint8List.sublistView(
-            slice, i, i + chunk > slice.length ? slice.length : i + chunk));
+        ctl.add(
+          Uint8List.sublistView(
+            slice,
+            i,
+            i + chunk > slice.length ? slice.length : i + chunk,
+          ),
+        );
       }
       await ctl.close();
     });
@@ -97,55 +113,72 @@ void main() {
     expect(a.seenRanges, [null]);
   });
 
-  test('an interrupted download resumes from what is already on disk', () async {
-    final body = _payload(1000);
-    // First attempt dies partway through and leaves the bytes behind.
-    final first = _RangeAdapter(body, failAfter: 256);
-    await expectLater(
-      apiWith(first).downloadSoundfontToFile('x', path, expectedBytes: 1000),
-      throwsA(anything),
-    );
-    final partial = await File(path).length();
-    expect(partial, greaterThan(0));
-    expect(partial, lessThan(1000));
+  test(
+    'an interrupted download resumes from what is already on disk',
+    () async {
+      final body = _payload(1000);
+      // First attempt dies partway through and leaves the bytes behind.
+      final first = _RangeAdapter(body, failAfter: 256);
+      await expectLater(
+        apiWith(first).downloadSoundfontToFile('x', path, expectedBytes: 1000),
+        throwsA(anything),
+      );
+      final partial = await File(path).length();
+      expect(partial, greaterThan(0));
+      expect(partial, lessThan(1000));
 
-    // Second attempt asks for the rest and appends it.
-    final second = _RangeAdapter(body);
-    await apiWith(second).downloadSoundfontToFile('x', path, expectedBytes: 1000);
+      // Second attempt asks for the rest and appends it.
+      final second = _RangeAdapter(body);
+      await apiWith(
+        second,
+      ).downloadSoundfontToFile('x', path, expectedBytes: 1000);
 
-    expect(second.seenRanges, ['bytes=$partial-']);
-    expect(await File(path).readAsBytes(), body,
-        reason: 'resumed file must be byte-identical, not double-written');
-  });
+      expect(second.seenRanges, ['bytes=$partial-']);
+      expect(
+        await File(path).readAsBytes(),
+        body,
+        reason: 'resumed file must be byte-identical, not double-written',
+      );
+    },
+  );
 
-  test('progress reports absolute bytes and the full total while resuming',
-      () async {
-    final body = _payload(1000);
-    await File(path).writeAsBytes(body.sublist(0, 400));
-    final seen = <List<int>>[];
-    await apiWith(_RangeAdapter(body)).downloadSoundfontToFile(
-      'x', path,
-      expectedBytes: 1000,
-      onProgress: (r, t) => seen.add([r, t]),
-    );
-    expect(seen.first[0], greaterThan(400), reason: 'counts the bytes already held');
-    expect(seen.last, [1000, 1000]);
-  });
+  test(
+    'progress reports absolute bytes and the full total while resuming',
+    () async {
+      final body = _payload(1000);
+      await File(path).writeAsBytes(body.sublist(0, 400));
+      final seen = <List<int>>[];
+      await apiWith(_RangeAdapter(body)).downloadSoundfontToFile(
+        'x',
+        path,
+        expectedBytes: 1000,
+        onProgress: (r, t) => seen.add([r, t]),
+      );
+      expect(
+        seen.first[0],
+        greaterThan(400),
+        reason: 'counts the bytes already held',
+      );
+      expect(seen.last, [1000, 1000]);
+    },
+  );
 
-  test('a server that ignores Range restarts cleanly instead of appending',
-      () async {
-    final body = _payload(1000);
-    await File(path).writeAsBytes(body.sublist(0, 400));
-    // 200 + the whole body even though a Range was sent — e.g. a proxy that
-    // strips the header. The client must truncate, not append.
-    final a = _RangeAdapter(body, ignoreRange: true);
-    await apiWith(a).downloadSoundfontToFile('x', path, expectedBytes: 1000);
+  test(
+    'a server that ignores Range restarts cleanly instead of appending',
+    () async {
+      final body = _payload(1000);
+      await File(path).writeAsBytes(body.sublist(0, 400));
+      // 200 + the whole body even though a Range was sent — e.g. a proxy that
+      // strips the header. The client must truncate, not append.
+      final a = _RangeAdapter(body, ignoreRange: true);
+      await apiWith(a).downloadSoundfontToFile('x', path, expectedBytes: 1000);
 
-    expect(a.seenRanges, ['bytes=400-']);
+      expect(a.seenRanges, ['bytes=400-']);
 
-    expect(await File(path).length(), 1000);
-    expect(await File(path).readAsBytes(), body);
-  });
+      expect(await File(path).length(), 1000);
+      expect(await File(path).readAsBytes(), body);
+    },
+  );
 
   test('a complete file is not re-fetched', () async {
     final body = _payload(1000);
@@ -165,4 +198,26 @@ void main() {
     expect(await File(path).readAsBytes(), body);
     expect(a.seenRanges.length, 2); // ranged attempt, then a fresh one
   });
+
+  test('an oversized part with a known length restarts immediately', () async {
+    final body = _payload(1000);
+    await File(path).writeAsBytes(_payload(1500));
+    final a = _RangeAdapter(body);
+    await apiWith(a).downloadSoundfontToFile('x', path, expectedBytes: 1000);
+    expect(a.seenRanges, [null]);
+    expect(await File(path).readAsBytes(), body);
+  });
+
+  test(
+    'persistent 416 fails after one fresh attempt instead of retrying forever',
+    () async {
+      await File(path).writeAsBytes(_payload(100));
+      final a = _RangeAdapter(_payload(1000), always416: true);
+      await expectLater(
+        apiWith(a).downloadSoundfontToFile('x', path),
+        throwsStateError,
+      );
+      expect(a.seenRanges, ['bytes=100-', null]);
+    },
+  );
 }

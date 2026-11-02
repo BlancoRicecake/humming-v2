@@ -16,7 +16,12 @@ void main() {
   const runWire = bool.fromEnvironment('QA_CLOUD_WIRE');
   if (runWire) HttpOverrides.global = null; // Allow only the explicit loopback HTTP harness below.
   test('real HTTP app-server roundtrip preserves notes, recordings and original local songs', () async {
-    final qa = Directory('C:/src/humming-v2/artifacts/cloud-backup-2026-10-30/codex');
+    final qa = Directory(const String.fromEnvironment('QA_CLOUD_WIRE_ROOT',
+        defaultValue: 'C:/src/humming-v2/artifacts/cloud-backup-2026-10-30/codex'));
+    final canonical = (await qa.resolveSymbolicLinks()).replaceAll('\\', '/').toLowerCase();
+    if (!canonical.startsWith('c:/src/humming-v2/artifacts/')) {
+      throw StateError('wire evidence must stay in workspace artifacts');
+    }
     final config = jsonDecode(await File('${qa.path}/http-config.json').readAsString()) as Map;
     final url = config['url'] as String;
     expect(Uri.parse(url).host,'127.0.0.1');
