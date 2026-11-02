@@ -347,6 +347,22 @@ class _PaywallSheetState extends State<_PaywallSheet> {
     }
   }
 
+  Future<void> _refreshDesktopPro(LoopStore store) async {
+    if (_busy) return;
+    final l = L10n.of(context);
+    setState(() => _busy = true);
+    try {
+      if (!store.isSignedIn) await showAccountSheet(context);
+      if (!mounted || !store.isSignedIn) return;
+      final ok = await store.refreshSubscription();
+      if (!mounted) return;
+      _toast(!ok ? l.payRestoreError : store.proActive ? l.payRestoreAlready : l.payRestoreEmpty);
+      if (ok && store.proActive) Navigator.of(context).maybePop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = context.watch<LoopStore>();
@@ -446,7 +462,8 @@ class _PaywallSheetState extends State<_PaywallSheet> {
         ),
         const SizedBox(height: 8),
         // No store channel in this build (direct-download Mac, other desktops):
-        // no prices or purchase/restore UI, only account Pro guidance.
+        // no prices or purchase/restore UI, only account Pro guidance — and,
+        // once signed in, a server check of the account's Pro (2026-11-03).
         if (!hasStorePurchases(defaultTargetPlatform)) ...[
           Text(
             key: const ValueKey('paywall-account-pro-only'),
@@ -459,6 +476,17 @@ class _PaywallSheetState extends State<_PaywallSheet> {
               key: const ValueKey('paywall-sign-in'),
               onPressed: () => showAccountSheet(context),
               child: Text(l.accountSignIn),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const ValueKey('desktop-refresh-pro'),
+                onPressed: _busy ? null : () => _refreshDesktopPro(store),
+                icon: const Icon(Icons.sync, size: 18),
+                label: Text(l.payDesktopRefresh),
+              ),
             ),
           ],
         ] else ...[

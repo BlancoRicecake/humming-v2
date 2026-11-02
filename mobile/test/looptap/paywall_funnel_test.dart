@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../support/offline_fonts.dart';
@@ -28,6 +29,16 @@ class _Sink implements ProductAnalyticsSink {
 class _Store extends LoopStore {
   bool signedIn = true;
   int restoreCalls = 0;
+  int refreshCalls = 0;
+  bool serverPro = false;
+  bool refreshOk = true;
+  @override
+  bool get proActive => serverPro;
+  @override
+  Future<bool> refreshSubscription() async {
+    refreshCalls++;
+    return refreshOk;
+  }
   final result = Completer<RestoreOutcome>();
   @override
   bool get iapEnabled => true;
@@ -49,7 +60,7 @@ void main() {
   setUpAll(() {
     ProductAnalytics.instance.installSinks([sink]);
   });
-  Future<void> open(WidgetTester tester, _Store store) async {
+  Future<void> open(WidgetTester tester, _Store store, {TargetPlatform platform = TargetPlatform.android}) async {
     useOfflineTestFonts();
     sink.events.clear();
     await tester.binding.setSurfaceSize(const Size(900, 800));
@@ -59,6 +70,7 @@ void main() {
       ChangeNotifierProvider<LoopStore>.value(
         value: store,
         child: MaterialApp(
+          theme: ThemeData(platform: platform),
           locale: const Locale('en'),
           localizationsDelegates: L10n.localizationsDelegates,
           supportedLocales: L10n.supportedLocales,
@@ -81,6 +93,44 @@ void main() {
     await tester.tap(find.text('Export'));
     await tester.pumpAndSettle();
   }
+
+  // 2026-11-03 integration: the channel comes from defaultTargetPlatform
+  // (develop's hasStorePurchases); Windows has no store, so account-Pro text
+  // and, signed in, the server check — never the mobile plans.
+  testWidgets('Windows explains account Pro and never shows mobile purchase plans', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      final store = _Store();
+      await open(tester, store, platform: TargetPlatform.windows);
+      expect(find.byKey(const ValueKey('desktop-refresh-pro')), findsOneWidget);
+      expect(find.byKey(const ValueKey('restore-purchases')), findsNothing);
+      expect(find.byKey(const ValueKey('paywall-account-pro-only')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('desktop-refresh-pro')));
+      await tester.pumpAndSettle();
+      expect(store.refreshCalls, 1);
+      expect(store.restoreCalls, 0);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Windows Pro refresh trusts the server and closes only when active', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      final store = _Store()..serverPro = true;
+      await open(tester, store, platform: TargetPlatform.windows);
+      await tester.tap(find.byKey(const ValueKey('desktop-refresh-pro')));
+      await tester.pumpAndSettle();
+      expect(store.refreshCalls, 1);
+      expect(store.restoreCalls, 0);
+      expect(find.byKey(const ValueKey('desktop-refresh-pro')), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 
   testWidgets('closing without purchase records export origin once', (
     tester,

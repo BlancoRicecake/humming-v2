@@ -72,7 +72,7 @@ void main() {
     }
   });
 
-  testWidgets('direct Mac build, signed in: guidance only', (tester) async {
+  testWidgets('direct Mac build, signed in: guidance + server Pro check', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     try {
       await _open(tester, _Store(signedIn: true));
