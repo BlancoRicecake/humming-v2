@@ -1496,6 +1496,13 @@ class L10nKo extends L10n {
   String get payPendingButton => '승인 대기 중…';
 
   @override
+  String get payDesktopInfo =>
+      '휴대폰 HumTrack 앱에서 Pro를 구독한 뒤 같은 계정으로 로그인해 주세요. 이 프로그램에서는 결제하지 않으며, 서버에서 계정의 구독 상태를 확인합니다.';
+
+  @override
+  String get payDesktopRefresh => '계정 Pro 상태 확인';
+
+  @override
   String get payRestore => '구매 복원';
 
   @override
@@ -1639,6 +1646,10 @@ class L10nKo extends L10n {
   String ltSettingsDeleteAccountFailed(String err) {
     return '탈퇴 실패: $err';
   }
+
+  @override
+  String get ltSettingsDeleteAccountPending =>
+      '탈퇴 요청을 접수했어요. 로그아웃되며 서버 데이터 삭제는 계속 진행됩니다. 이 기기에 저장한 곡은 그대로 남아요.';
 
   @override
   String get ltSettingsDeleteAccountDone => '회원 탈퇴가 완료됐어요.';
@@ -1942,13 +1953,16 @@ class L10nKo extends L10n {
   String get ltEditorOctaveUp => '옥타브 올리기';
 
   @override
-  String get ltEditorHumToMidi => '허밍 → MIDI';
+  String get ltEditorHumToMidi => '허밍 to MIDI';
 
   @override
   String get ltEditorHintGridDrums => '셀을 탭해서 켜고 끄기';
 
   @override
   String get ltEditorHintGridPitched => '입력 · 영역 선택 · 복사/붙여넣기';
+
+  @override
+  String get ltEditorHintGridPhone => '탭: 노트 추가 · 노트 탭: 선택 · 빈 곳 끌기: 여러 개 선택';
 
   @override
   String get ltEditorHintPads => '녹음을 켠 상태에서 연주';
@@ -2021,7 +2035,7 @@ class L10nKo extends L10n {
 
   @override
   String ltHumModalTitle(String track) {
-    return '허밍 → MIDI · $track';
+    return '허밍 to MIDI · $track';
   }
 
   @override
@@ -2407,6 +2421,9 @@ class L10nKo extends L10n {
   String get annTitle => '공지사항';
 
   @override
+  String get annOpenWeb => '웹에서 보기';
+
+  @override
   String get annSettingsSub => '개발 소식과 장애·긴급 안내';
 
   @override
@@ -2469,6 +2486,42 @@ class L10nKo extends L10n {
 
   @override
   String get ltBackupShowFiles => '파일 보기';
+
+  @override
+  String get ltSongsImportMidi => 'MIDI 가져오기';
+
+  @override
+  String get ltSongsSelect => '작업물 선택';
+
+  @override
+  String ltSongsSelected(int count) {
+    return '$count개 선택';
+  }
+
+  @override
+  String get ltSongsSelectAll => '전체 선택';
+
+  @override
+  String get ltSongsSelectCancel => '선택 끝내기';
+
+  @override
+  String get ltSongsExportPicked => '백업으로 내보내기';
+
+  @override
+  String get ltSongsDeletePicked => '삭제';
+
+  @override
+  String ltSongsDeletePickedTitle(int count) {
+    return '작업물 $count개를 삭제할까요?';
+  }
+
+  @override
+  String ltSongsExportedPicked(int count) {
+    return '백업 파일 $count개를 만들었어요. ‘내보낸 파일’에서 저장하거나 공유하세요.';
+  }
+
+  @override
+  String get ltCardExport => '내보내기';
 
   @override
   String get ltBackupFailed => '백업 파일을 만들지 못했어요. 저장 공간을 확인해 주세요. 곡은 그대로예요.';
@@ -2590,10 +2643,95 @@ class L10nKo extends L10n {
 
   @override
   String get ltGuidedPrepare =>
-      '조용한 곳에서 네 박자 준비 신호 뒤에 짧은 멜로디를 흥얼거려 보세요. 변환에는 인터넷 연결이 필요해요.';
+      '조용한 곳에서 네 박자 준비 신호 뒤에 멜로디를 흥얼거리고, 다 부르면 \'변환\'을 눌러 멈추세요(최대 20초). 변환에는 인터넷 연결이 필요해요.';
 
   @override
-  String get ltGuidedSteps => '1 멜로디·샘플  →  2 반주  →  3 저장';
+  String get ltGuidedMelodyReady => '멜로디가 만들어졌어요';
+
+  @override
+  String get ltGuidedCompareHint =>
+      '내 허밍과 변환된 멜로디를 비교해 들어 보세요. 악기나 키를 바꿔 볼 수도 있어요.';
+
+  @override
+  String get ltGuidedMelodyHint => '변환된 멜로디를 들어 보세요. 악기나 키를 바꿔 볼 수도 있어요.';
+
+  @override
+  String get ltGuidedPlayTake => '내 허밍';
+
+  @override
+  String get ltHumAddTitle => '허밍으로 새 트랙 추가';
+
+  @override
+  String get ltHumAddSteps => '1 악기 → 2 허밍 → 3 추가';
+
+  @override
+  String get ltHumAddPrepare =>
+      '악기를 고르고 멜로디를 흥얼거려 보세요. 녹음하는 동안 지금 곡이 함께 재생돼요(이어폰을 쓰면 더 깨끗해요). 다 부르면 \'변환\'을 누르세요. 변환된 멜로디는 새 트랙으로 추가돼요.';
+
+  @override
+  String get ltHumAddInstrument => '새 트랙의 악기';
+
+  @override
+  String get ltHumAddRecord => '허밍 녹음하기';
+
+  @override
+  String get ltHumAddRecordDesc => '곡에 맞춰 부른 멜로디가 새 트랙이 돼요';
+
+  @override
+  String get ltHumAddReady => '새 트랙이 준비됐어요';
+
+  @override
+  String get ltHumAddHint => '내 허밍과 비교하거나 곡과 함께 들어 보세요. 마음에 들면 추가하세요.';
+
+  @override
+  String get ltHumAddPlaySong => '곡과 함께 듣기';
+
+  @override
+  String get ltHumAddRetake => '다시 허밍';
+
+  @override
+  String get ltHumAddConfirm => '이 트랙 추가';
+
+  @override
+  String get ltGuidedPlayNewKey => '바뀐 키로 듣기';
+
+  @override
+  String get ltGuidedPlayMelody => '변환된 멜로디';
+
+  @override
+  String get ltGuidedKey => '키 변경';
+
+  @override
+  String get ltGuidedMakeSong => '이 멜로디로 곡 만들기';
+
+  @override
+  String get ltGuidedVoiceReady => '녹음했어요';
+
+  @override
+  String get ltGuidedPlayVoice => '들어보기';
+
+  @override
+  String get ltGuidedMakeSongVoice => '이 녹음으로 곡 만들기';
+
+  @override
+  String get ltGuidedSteps => '1 녹음 → 2 저장';
+
+  @override
+  String get ltGuidedHumTitle => '허밍으로 멜로디 만들기';
+
+  @override
+  String get ltGuidedHumDesc =>
+      '흥얼거린 멜로디를 음표로 바꿔요. 악기 소리로 듣고 음을 고칠 수 있어요. 인터넷 연결이 필요해요.';
+
+  @override
+  String get ltGuidedVoiceTitle => '목소리 그대로 녹음하기';
+
+  @override
+  String get ltGuidedVoiceDesc =>
+      '노래나 소리를 녹음 그대로 보컬 트랙에 넣어요. 음표로 바뀌지 않아요(나중에 변환할 수 있어요).';
+
+  @override
+  String get ltGuidedVoiceImport => '녹음 파일 불러오기';
 
   @override
   String get ltSampleTitle => '내 소리 샘플';
@@ -2742,7 +2880,7 @@ class L10nKo extends L10n {
   String get ltFirstSongTitle => '첫 곡을 만들어 보세요';
 
   @override
-  String get ltFirstSongHint => '허밍 → 반주 → 저장\n로그인 없이 무료로 시작해요.';
+  String get ltFirstSongHint => '녹음 → 저장\n로그인 없이 무료로 시작해요.';
 
   @override
   String get ltFilesTitle => '내보낸 파일';

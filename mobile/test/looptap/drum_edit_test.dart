@@ -401,4 +401,25 @@ void main() {
       expect(instrument, [0]);
     });
   });
+
+  testWidgets('the phone (showChance: false) has no play chance (2026-11-02)', (tester) async {
+    await mountDrums(tester, [hit('kick', 3)], showChance: false);
+    expect(find.byKey(const ValueKey('drum-velocity-lane')), findsOneWidget);
+    expect(find.byKey(const ValueKey('drum-lane-chance')), findsNothing);
+    expect(find.text('Velocity'), findsOneWidget, reason: 'the lane says what its bars are');
+    await tester.tapAt(drumPoint(tester, 3.5, 2));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('drum-velocity')), findsOneWidget);
+    expect(find.byKey(const ValueKey('drum-chance')), findsNothing);
+    expect(find.textContaining('Chance'), findsNothing);
+  });
+
+  testWidgets('the phone (no Draw / Select buttons): a tap toggles the hit there', (tester) async {
+    final key = await mountDrums(tester, [], selectMode: false, showModeButtons: false);
+    expect(find.byKey(const ValueKey('drum-draw')), findsNothing);
+    expect(find.byKey(const ValueKey('drum-select')), findsNothing);
+    await tester.tapAt(drumPoint(tester, 3.5, 2));
+    await tester.pump();
+    expect(key.currentState!.toggled, [('kick', 3)]);
+  });
 }

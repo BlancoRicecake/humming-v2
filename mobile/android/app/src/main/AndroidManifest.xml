@@ -16,7 +16,7 @@
          manifests (LAN ENGINE_URL during development). Release builds keep
          the platform default (cleartext refused). -->
     <application
-        android:label="HumTrack"
+        android:label="${appLabel}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"

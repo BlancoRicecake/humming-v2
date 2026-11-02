@@ -15,6 +15,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import '../theme/tokens.dart';
+import '../widgets/policy_notice.dart';
 import 'announcement.dart';
 import 'announcement_service.dart';
 
@@ -39,6 +40,17 @@ String _kindLabel(L10n l, AnnouncementKind k) => switch (k) {
   AnnouncementKind.info => l.annKindInfo,
 };
 
+/// Our web notices page (2026-11-02): the same feed, managed on the web.
+final Uri kWebNoticesUri = Uri.parse('https://hum-track.com/notices');
+
+/// The web notices page, at [id] when given.
+Future<void> openWebNotices([String? id]) async {
+  final uri = id == null ? kWebNoticesUri : kWebNoticesUri.replace(fragment: id);
+  try {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } catch (_) {}
+}
+
 /// Open a vetted action (https on our domain / stores, mail to support).
 Future<void> openAnnouncementAction(Announcement a) async {
   final uri = a.action;
@@ -49,8 +61,12 @@ Future<void> openAnnouncementAction(Announcement a) async {
 }
 
 class AnnouncementHomeBanner extends StatefulWidget {
-  const AnnouncementHomeBanner({super.key, this.service});
+  const AnnouncementHomeBanner({super.key, this.service, this.showBanner = true});
   final AnnouncementService? service;
+
+  /// false (the library, 2026-11-02): no banner / link — only the critical
+  /// popup; the header's megaphone opens the list.
+  final bool showBanner;
   @override
   State<AnnouncementHomeBanner> createState() => _AnnouncementHomeBannerState();
 }
@@ -114,6 +130,7 @@ class _AnnouncementHomeBannerState extends State<AnnouncementHomeBanner>
     // again (ModalRoute.of depends on it)
     ModalRoute.of(context);
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowCritical());
+    if (!widget.showBanner) return const SizedBox.shrink();
     final l = L10n.of(context);
     final lang = _lang(context);
     final home = _s.forHome;
@@ -253,7 +270,17 @@ class _AnnouncementCenterScreenState extends State<AnnouncementCenterScreen> {
     final fmt = DateFormat.yMd(lang);
     return Scaffold(
       backgroundColor: LT.bg,
-      appBar: AppBar(title: Text(l.annTitle)),
+      appBar: AppBar(
+        title: Text(l.annTitle),
+        actions: [
+          IconButton(
+            key: const ValueKey('ann-open-web'),
+            tooltip: l.annOpenWeb,
+            onPressed: () => openWebNotices(),
+            icon: const Icon(Icons.open_in_new),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: () => _s.refresh(force: true),
         child: ListView(
@@ -268,7 +295,9 @@ class _AnnouncementCenterScreenState extends State<AnnouncementCenterScreen> {
                   style: const TextStyle(color: LT.t3, fontSize: 12),
                 ),
               ),
-            if (items.isEmpty) Text(l.annEmpty, key: const ValueKey('ann-empty')),
+            const PolicyNoticeTile(),
+            if (items.isEmpty && !policyNoticePending)
+              Text(l.annEmpty, key: const ValueKey('ann-empty')),
             for (final a in items)
               Card(
                 key: ValueKey('ann-item-${a.id}'),
@@ -341,7 +370,17 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
     final needsConfirm = a.kind == AnnouncementKind.critical && !_s.isAcknowledged(a);
     return Scaffold(
       backgroundColor: LT.bg,
-      appBar: AppBar(title: Text(_kindLabel(l, a.kind))),
+      appBar: AppBar(
+        title: Text(_kindLabel(l, a.kind)),
+        actions: [
+          IconButton(
+            key: const ValueKey('ann-detail-web'),
+            tooltip: l.annOpenWeb,
+            onPressed: () => openWebNotices(a.id),
+            icon: const Icon(Icons.open_in_new),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: ListView(
           key: const ValueKey('ann-detail'),

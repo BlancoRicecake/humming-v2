@@ -33,6 +33,8 @@ Future<void> showHumModal(
   void Function(bool accent)? onClick,
   VoidCallback? startBacking,
   VoidCallback? stopBacking,
+  int? maxMs,
+  ValueChanged<int>? onRecordedMs,
 }) {
   return showLtModal(
     context,
@@ -48,6 +50,8 @@ Future<void> showHumModal(
       onClick: onClick,
       startBacking: startBacking,
       stopBacking: stopBacking,
+      maxMs: maxMs,
+      onRecordedMs: onRecordedMs,
     ),
   );
 }
@@ -63,6 +67,8 @@ class _HumModal extends StatefulWidget {
     this.onClick,
     this.startBacking,
     this.stopBacking,
+    this.maxMs,
+    this.onRecordedMs,
   });
   final String trackLabel;
   final Color accent;
@@ -73,6 +79,13 @@ class _HumModal extends StatefulWidget {
   final void Function(bool accent)? onClick;
   final VoidCallback? startBacking;
   final VoidCallback? stopBacking;
+
+  /// Longest take before an automatic stop (default: one loop pass). The
+  /// guided start lets the user stop it (up to 20 s, 2026-11-02).
+  final int? maxMs;
+
+  /// How long the take was (ms), told just before conversion.
+  final ValueChanged<int>? onRecordedMs;
 
   @override
   State<_HumModal> createState() => _HumModalState();
@@ -327,8 +340,9 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
               );
             }
           });
-      // Capture exactly one loop pass, then convert automatically.
-      _autoStop = Timer(Duration(milliseconds: _loopMs), _finish);
+      // One loop pass (or the caller's maximum), then convert automatically;
+      // the Convert button stops earlier.
+      _autoStop = Timer(Duration(milliseconds: widget.maxMs ?? _loopMs), _finish);
     } catch (e) {
       // Minimal diagnostics: platform, codec, error type / code. No paths, no
       // audio, no user data.
@@ -422,6 +436,7 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
       return;
     }
     if (mounted) setState(() => _phase = 'converting');
+    widget.onRecordedMs?.call(_ms);
     try {
       await widget.onConvert(path);
     } catch (_) {

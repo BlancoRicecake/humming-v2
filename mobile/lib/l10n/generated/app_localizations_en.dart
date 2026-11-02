@@ -1516,6 +1516,13 @@ class L10nEn extends L10n {
   String get payPendingButton => 'Waiting for approval…';
 
   @override
+  String get payDesktopInfo =>
+      'Subscribe to Pro in the HumTrack phone app, then sign in here with the same account. This desktop app does not process purchases. Your subscription is checked with the server.';
+
+  @override
+  String get payDesktopRefresh => 'Check account Pro status';
+
+  @override
   String get payRestore => 'Restore purchases';
 
   @override
@@ -1665,6 +1672,10 @@ class L10nEn extends L10n {
   String ltSettingsDeleteAccountFailed(String err) {
     return 'Delete failed: $err';
   }
+
+  @override
+  String get ltSettingsDeleteAccountPending =>
+      'Your deletion request was accepted. You are signed out; server data deletion will continue in the background. Music saved on this device is kept.';
 
   @override
   String get ltSettingsDeleteAccountDone => 'Account deleted.';
@@ -2001,6 +2012,10 @@ class L10nEn extends L10n {
 
   @override
   String get ltEditorHintGridPitched => 'Draw · select area · copy/paste';
+
+  @override
+  String get ltEditorHintGridPhone =>
+      'Tap: add · tap a note: select · drag empty space: select several';
 
   @override
   String get ltEditorHintPads => 'Play while recording is on';
@@ -2493,6 +2508,9 @@ class L10nEn extends L10n {
   String get annTitle => 'Announcements';
 
   @override
+  String get annOpenWeb => 'Open on the web';
+
+  @override
   String get annSettingsSub => 'News, outages and urgent notices';
 
   @override
@@ -2556,6 +2574,42 @@ class L10nEn extends L10n {
 
   @override
   String get ltBackupShowFiles => 'Show files';
+
+  @override
+  String get ltSongsImportMidi => 'Import MIDI';
+
+  @override
+  String get ltSongsSelect => 'Select songs';
+
+  @override
+  String ltSongsSelected(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get ltSongsSelectAll => 'Select all';
+
+  @override
+  String get ltSongsSelectCancel => 'Done selecting';
+
+  @override
+  String get ltSongsExportPicked => 'Export as backups';
+
+  @override
+  String get ltSongsDeletePicked => 'Delete';
+
+  @override
+  String ltSongsDeletePickedTitle(int count) {
+    return 'Delete $count songs?';
+  }
+
+  @override
+  String ltSongsExportedPicked(int count) {
+    return 'Made $count backup files. Save or share them from Exported files.';
+  }
+
+  @override
+  String get ltCardExport => 'Export';
 
   @override
   String get ltBackupFailed =>
@@ -2687,10 +2741,98 @@ class L10nEn extends L10n {
 
   @override
   String get ltGuidedPrepare =>
-      'In a quiet place, hum a short melody after the four count-in beats. Conversion needs an internet connection.';
+      'In a quiet place, hum after the four count-in beats, then tap Convert to stop (20 s at most). Conversion needs an internet connection.';
 
   @override
-  String get ltGuidedSteps => '1 Melody or sample  →  2 Backing  →  3 Save';
+  String get ltGuidedMelodyReady => 'Your melody is ready';
+
+  @override
+  String get ltGuidedCompareHint =>
+      'Compare your hum with the converted melody. You can also try another instrument or key.';
+
+  @override
+  String get ltGuidedMelodyHint =>
+      'Listen to the converted melody. You can also try another instrument or key.';
+
+  @override
+  String get ltGuidedPlayTake => 'My hum';
+
+  @override
+  String get ltHumAddTitle => 'Add a track by humming';
+
+  @override
+  String get ltHumAddSteps => '1 Instrument → 2 Hum → 3 Add';
+
+  @override
+  String get ltHumAddPrepare =>
+      'Pick an instrument and hum a melody. The song plays while you record (earphones keep it clean). Tap Convert when you\'re done — the melody becomes a new track.';
+
+  @override
+  String get ltHumAddInstrument => 'New track\'s instrument';
+
+  @override
+  String get ltHumAddRecord => 'Record a hum';
+
+  @override
+  String get ltHumAddRecordDesc =>
+      'The melody you hum to the song becomes a new track';
+
+  @override
+  String get ltHumAddReady => 'Your new track is ready';
+
+  @override
+  String get ltHumAddHint =>
+      'Compare it with your hum or hear it with the song. Add it if you like it.';
+
+  @override
+  String get ltHumAddPlaySong => 'Hear it with the song';
+
+  @override
+  String get ltHumAddRetake => 'Hum again';
+
+  @override
+  String get ltHumAddConfirm => 'Add this track';
+
+  @override
+  String get ltGuidedPlayNewKey => 'Hear the new key';
+
+  @override
+  String get ltGuidedPlayMelody => 'Converted melody';
+
+  @override
+  String get ltGuidedKey => 'Change key';
+
+  @override
+  String get ltGuidedMakeSong => 'Make a song with this melody';
+
+  @override
+  String get ltGuidedVoiceReady => 'Recorded';
+
+  @override
+  String get ltGuidedPlayVoice => 'Listen';
+
+  @override
+  String get ltGuidedMakeSongVoice => 'Make a song with this recording';
+
+  @override
+  String get ltGuidedSteps => '1 Record → 2 Save';
+
+  @override
+  String get ltGuidedHumTitle => 'Make a melody from a hum';
+
+  @override
+  String get ltGuidedHumDesc =>
+      'Your hummed melody becomes notes you can play with any instrument and fix note by note. Needs an internet connection.';
+
+  @override
+  String get ltGuidedVoiceTitle => 'Record your voice as it is';
+
+  @override
+  String get ltGuidedVoiceDesc =>
+      'Your singing or sound goes onto the vocal track as a recording, not notes (you can convert it later).';
+
+  @override
+  String get ltGuidedVoiceImport => 'Import a recording';
 
   @override
   String get ltSampleTitle => 'My sound samples';
@@ -2844,8 +2986,7 @@ class L10nEn extends L10n {
   String get ltFirstSongTitle => 'Make your first song';
 
   @override
-  String get ltFirstSongHint =>
-      'Hum → add backing → save\nStart free, no sign-in needed.';
+  String get ltFirstSongHint => 'Record → save\nStart free, no sign-in needed.';
 
   @override
   String get ltFilesTitle => 'Exported files';

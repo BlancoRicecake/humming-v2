@@ -89,6 +89,25 @@ class LoopStorage {
       File('${(await _folder()).path}/songs.json');
   static Future<File> _tmpFile() async =>
       File('${(await _folder()).path}/songs.json.tmp');
+  /// The `v` of a songs.json-shaped file, reading only its head when it
+  /// starts the way [Song.encodeList] writes it (`{"v":N,...`); otherwise the
+  /// whole file (other shapes / hand edits). Saves used to decode both the
+  /// library and its backup in full just for this check (2026-11-02).
+  static Future<int?> _schemaOfFile(File f) async {
+    RandomAccessFile? raf;
+    try {
+      raf = await f.open();
+      final head = String.fromCharCodes(await raf.read(64));
+      final m = RegExp(r'^\s*\{\s*"v"\s*:\s*(\d+)\s*[,}]').firstMatch(head);
+      if (m != null) return int.parse(m.group(1)!);
+    } catch (_) {
+      // fall through to the full read
+    } finally {
+      await raf?.close();
+    }
+    return Song.schemaVersionOf(await f.readAsString());
+  }
+
   static Future<File> _bakFile() async =>
       File('${(await _folder()).path}/songs.json.bak');
   static Future<File> _metaFile() async =>
@@ -252,7 +271,7 @@ class LoopStorage {
       // a newer-schema .bak is the library and a save would rotate it away.
       for (final existing in [f, bak]) {
         if (!await existing.exists()) continue;
-        final onDisk = Song.schemaVersionOf(await existing.readAsString());
+        final onDisk = await _schemaOfFile(existing);
         if (onDisk != null && onDisk > Song.kSchemaVersion) {
           throw NewerSongsSchemaException(onDisk);
         }

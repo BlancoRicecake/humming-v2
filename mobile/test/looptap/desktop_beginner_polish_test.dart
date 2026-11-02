@@ -236,7 +236,7 @@ void main() {
       expect(find.byKey(const ValueKey('grid-in-key-only')), findsNothing);
     });
 
-    editorTest('phone: no key colours, no filter, the old toggle row', (tester) async {
+    editorTest('phone: no key colours, no filter, the simple roll', (tester) async {
       await open(tester, size: const Size(390, 844), desktop: false);
       tester.widget<Arrangement>(find.byType(Arrangement)).onSelect('melody');
       await tester.pumpAndSettle();
@@ -245,7 +245,10 @@ void main() {
       expect(rows(tester), hasLength(128));
       expect(grid(tester).velocityLaneFold, isFalse);
       expect(find.byKey(const ValueKey('velocity-lane-fold')), findsNothing);
-      expect(find.byKey(const ValueKey('velocity-lane')), findsOneWidget, reason: 'phone default: lane on');
+      // 2026-11-02: the phone roll has no tool row; the velocity lane shows
+      // only with a selection, and ⋯ holds the tools
+      expect(find.byKey(const ValueKey('velocity-lane')), findsNothing, reason: 'phone: lane only with a selection');
+      expect(find.byKey(const ValueKey('phone-more-idle')), findsOneWidget);
     });
   });
 

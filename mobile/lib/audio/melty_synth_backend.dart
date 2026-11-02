@@ -95,6 +95,30 @@ class MeltyEngine with WidgetsBindingObserver {
       4096; // signal refill with ~93ms still buffered
   static const int _recTarget =
       8192; // ~186ms cushion against main-thread stalls
+  // Transport playing (2026-11-02, iOS stutter): the editor rebuilds and
+  // repaints while a song plays, so a refill signal with only ~23 ms left
+  // (the idle threshold) starved on a single slow frame. While playing, ask
+  // for a refill with ~46 ms left and keep ~70 ms queued — +23 ms latency,
+  // twice the stall tolerance, far less than the recording cushion (which
+  // would put the synth ~140 ms behind the vocal takes).
+  static const int _playThreshold = 2048;
+  static const int _playTarget = 3072;
+  bool _transportPlaying = false;
+
+  int get _depthTarget =>
+      _forRecording ? _recTarget : (_transportPlaying ? _playTarget : _idleTarget);
+  int get _depthThreshold => _forRecording
+      ? _recThreshold
+      : (_transportPlaying ? _playThreshold : _idleThreshold);
+
+  /// The editor's transport started / stopped (see [_playThreshold]).
+  void setTransportPlaying(bool playing) {
+    if (_transportPlaying == playing) return;
+    _transportPlaying = playing;
+    _targetFrames = _depthTarget;
+    PcmOutput.setFeedThreshold(_depthThreshold);
+  }
+
   int _targetFrames = _idleTarget;
 
   // Master makeup gain applied before the soft limiter. MeltySynth renders well
@@ -335,10 +359,8 @@ class MeltyEngine with WidgetsBindingObserver {
                 ? IosAudioCategory.playAndRecord
                 : IosAudioCategory.playback,
       );
-      _targetFrames = _forRecording ? _recTarget : _idleTarget;
-      PcmOutput.setFeedThreshold(
-        _forRecording ? _recThreshold : _idleThreshold,
-      );
+      _targetFrames = _depthTarget;
+      PcmOutput.setFeedThreshold(_depthThreshold);
       PcmOutput.setFeedCallback(_onFeed);
       _needsRebuild = false;
       _recoverFailures = 0;
@@ -403,9 +425,9 @@ class MeltyEngine with WidgetsBindingObserver {
     );
     // Deep buffer while recording (survives main-thread stalls = no crackle),
     // shallow again after (responsive pad taps).
-    _targetFrames = forRecording ? _recTarget : _idleTarget;
     _forRecording = forRecording;
-    PcmOutput.setFeedThreshold(forRecording ? _recThreshold : _idleThreshold);
+    _targetFrames = _depthTarget;
+    PcmOutput.setFeedThreshold(_depthThreshold);
     PcmOutput.setFeedCallback(_onFeed);
     // A fresh unit supersedes any pending recovery.
     _recoverRetry?.cancel();

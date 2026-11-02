@@ -230,7 +230,9 @@ void main() {
     });
   }
 
-  testWidgets('the real song list shows the banner and keeps its other notices', (tester) async {
+  // 2026-11-02: no banner over the songs — the header's megaphone gets a
+  // dot and opens the list (the policy notice is listed there too)
+  testWidgets('the real song list: no banner; the megaphone dot opens the list', (tester) async {
     feed.rows = [annRow('news', kind: 'important', titleEn: 'New version notes')];
     AnnouncementService.instance = service;
     addTearDown(() => AnnouncementService.instance = AnnouncementService(fetch: () async => null));
@@ -248,8 +250,14 @@ void main() {
         ),
       ),
     );
-    await settle(tester, () => find.byKey(const ValueKey('ann-home-banner')).evaluate().isNotEmpty);
+    await settle(tester, () => find.byKey(const ValueKey('songs-announcements-dot')).evaluate().isNotEmpty);
+    expect(find.byKey(const ValueKey('ann-home-banner')), findsNothing);
+    expect(find.byKey(const ValueKey('policy-notice-tile')), findsNothing, reason: 'not on the songs');
+    expect(find.textContaining('New version notes'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('songs-announcements')));
+    await settle(tester, () => find.textContaining('New version notes').evaluate().isNotEmpty);
     expect(find.textContaining('New version notes'), findsOneWidget);
+    expect(find.byKey(const ValueKey('policy-notice-tile')), findsOneWidget, reason: 'the terms update is listed');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

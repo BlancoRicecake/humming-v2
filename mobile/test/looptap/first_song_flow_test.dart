@@ -605,7 +605,7 @@ void main() {
   });
 
   testWidgets(
-    'autosave and explicit save count one completion per guided visit',
+    'autosave counts one completion per guided visit; going to the editor adds none',
     (tester) async {
       store.memoryOnly = true;
       final song = store.createNew();
@@ -613,6 +613,8 @@ void main() {
         PitchNote(midi: 60, freq: 261.63, step: 0, dur: 4),
       );
       await showHome(tester, 'en');
+      // the editor opens at the end: use the desktop minimum window (960)
+      await tester.binding.setSurfaceSize(const Size(960, 600));
       final context = tester.element(find.byType(SongsScreen));
       Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -626,7 +628,9 @@ void main() {
         await store.operation;
       });
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Save my song'));
+      // 2026-11-02: no save button in the guided panel; "make a song" goes
+      // to the editor (and must not count a second completion)
+      await tester.tap(find.byKey(const ValueKey('guided-make-song')));
       await tester.runAsync(() async {
         await store.operation;
       });

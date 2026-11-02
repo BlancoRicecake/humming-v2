@@ -3,6 +3,7 @@
 // 노출하는 thin facade. 키 미설정 / 스토어 미가용 시 services 가 자체적으로
 // 비활성(enabled=false) 되므로 여기서는 그대로 흘려보낸다.
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -26,6 +27,17 @@ enum RestoreOutcome { restored, alreadyActive, nothingFound, error }
 
 /// [LoopStore.deleteAccount] 실패 사유 — UI 가 l10n 으로 해석 (audit M9/M12).
 enum DeleteAccountFailure { notSignedIn, rejected, network }
+
+/// A queued deletion must never be described as an already completed purge.
+enum AccountDeletionReceipt {
+  complete, pending, rejected;
+
+  static AccountDeletionReceipt fromResponse(int status, Object? body) {
+    if (status == 200 || status == 204) return complete;
+    if (status == 202 && body is Map && body['status'] == 'deletion_pending') return pending;
+    return rejected;
+  }
+}
 
 class DeleteAccountError {
   const DeleteAccountError(this.kind, {this.code});
@@ -289,7 +301,11 @@ class LoopStore extends ChangeNotifier {
 
   /// 회원 탈퇴 — backend DELETE /account → Supabase user + 관련 row 삭제 → 로컬
   /// signOut. 실패 시 사유 반환 (문구는 UI 가 l10n 으로).
+  bool _accountDeletionPending = false;
+  bool get accountDeletionPending => _accountDeletionPending;
+
   Future<DeleteAccountError?> deleteAccount() async {
+    _accountDeletionPending = false;
     if (!AuthService.instance.enabled || _user == null) {
       return const DeleteAccountError(DeleteAccountFailure.notSignedIn);
     }
@@ -298,10 +314,12 @@ class LoopStore extends ChangeNotifier {
       final dio = engineApi.dio;
       final res = await dio.delete<dynamic>(
         '/account',
-        options: Options(validateStatus: (_) => true),
+        options: Options(validateStatus: (_) => true,
+          headers: {'X-Account-Deletion-Receipt': 'pending-v1'}),
       );
       final code = res.statusCode ?? 0;
-      if (code != 200 && code != 204) {
+      final receipt = AccountDeletionReceipt.fromResponse(code, res.data);
+      if (receipt == AccountDeletionReceipt.rejected) {
         ObservabilityService.instance.captureException(
           StateError('account delete rejected ($code)'),
           StackTrace.current,
@@ -310,6 +328,7 @@ class LoopStore extends ChangeNotifier {
         );
         return DeleteAccountError(DeleteAccountFailure.rejected, code: code);
       }
+      _accountDeletionPending = receipt == AccountDeletionReceipt.pending;
       await signOut();
       return null;
     } catch (e, st) {
@@ -544,11 +563,26 @@ class LoopStore extends ChangeNotifier {
   Song createNew() {
     final s = Song(
       id: 'lt${DateTime.now().millisecondsSinceEpoch}',
-      title: 'Untitled loop',
+      title: nextUntitledTitle(_songs.map((s) => s.title)),
       updatedAt: DateTime.now(),
     );
     return s;
   }
+
+  /// "Untitled loop N" with the next free N (2026-11-02: new songs used to
+  /// all be "Untitled loop" and couldn't be told apart).
+  static String nextUntitledTitle(Iterable<String> titles) {
+    var max = 0;
+    for (final t in titles) {
+      final m = kUntitledTitle.firstMatch(t.trim());
+      if (m == null) continue;
+      max = math.max(max, int.tryParse(m.group(1) ?? '') ?? 0);
+    }
+    return 'Untitled loop ${max + 1}';
+  }
+
+  /// The default title of a new song, with or without its number.
+  static final kUntitledTitle = RegExp(r'^Untitled loop(?: (\d+))?$');
 
   Future<void> upsert(Song song) {
     final snapshot = Song.fromJson(song.toJson())..updatedAt = DateTime.now();

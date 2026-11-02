@@ -2736,6 +2736,18 @@ abstract class L10n {
   /// **'승인 대기 중…'**
   String get payPendingButton;
 
+  /// No description provided for @payDesktopInfo.
+  ///
+  /// In ko, this message translates to:
+  /// **'휴대폰 HumTrack 앱에서 Pro를 구독한 뒤 같은 계정으로 로그인해 주세요. 이 프로그램에서는 결제하지 않으며, 서버에서 계정의 구독 상태를 확인합니다.'**
+  String get payDesktopInfo;
+
+  /// No description provided for @payDesktopRefresh.
+  ///
+  /// In ko, this message translates to:
+  /// **'계정 Pro 상태 확인'**
+  String get payDesktopRefresh;
+
   /// No description provided for @payRestore.
   ///
   /// In ko, this message translates to:
@@ -2993,6 +3005,12 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'탈퇴 실패: {err}'**
   String ltSettingsDeleteAccountFailed(String err);
+
+  /// No description provided for @ltSettingsDeleteAccountPending.
+  ///
+  /// In ko, this message translates to:
+  /// **'탈퇴 요청을 접수했어요. 로그아웃되며 서버 데이터 삭제는 계속 진행됩니다. 이 기기에 저장한 곡은 그대로 남아요.'**
+  String get ltSettingsDeleteAccountPending;
 
   /// No description provided for @ltSettingsDeleteAccountDone.
   ///
@@ -3549,7 +3567,7 @@ abstract class L10n {
   /// 허밍을 노트로 바꾸는 버튼
   ///
   /// In ko, this message translates to:
-  /// **'허밍 → MIDI'**
+  /// **'허밍 to MIDI'**
   String get ltEditorHumToMidi;
 
   /// 드럼 그리드 사용 힌트 (대문자로 표시됨)
@@ -3563,6 +3581,12 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'입력 · 영역 선택 · 복사/붙여넣기'**
   String get ltEditorHintGridPitched;
+
+  /// No description provided for @ltEditorHintGridPhone.
+  ///
+  /// In ko, this message translates to:
+  /// **'탭: 노트 추가 · 노트 탭: 선택 · 빈 곳 끌기: 여러 개 선택'**
+  String get ltEditorHintGridPhone;
 
   /// 패드 모드 힌트 — 녹음을 켜고 패드를 치라는 안내
   ///
@@ -3693,7 +3717,7 @@ abstract class L10n {
   /// 허밍 녹음 모달 제목
   ///
   /// In ko, this message translates to:
-  /// **'허밍 → MIDI · {track}'**
+  /// **'허밍 to MIDI · {track}'**
   String ltHumModalTitle(String track);
 
   /// 허밍 모달 — 카운트인 안내
@@ -4362,6 +4386,12 @@ abstract class L10n {
   /// **'공지사항'**
   String get annTitle;
 
+  /// No description provided for @annOpenWeb.
+  ///
+  /// In ko, this message translates to:
+  /// **'웹에서 보기'**
+  String get annOpenWeb;
+
   /// No description provided for @annSettingsSub.
   ///
   /// In ko, this message translates to:
@@ -4469,6 +4499,66 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'파일 보기'**
   String get ltBackupShowFiles;
+
+  /// No description provided for @ltSongsImportMidi.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI 가져오기'**
+  String get ltSongsImportMidi;
+
+  /// No description provided for @ltSongsSelect.
+  ///
+  /// In ko, this message translates to:
+  /// **'작업물 선택'**
+  String get ltSongsSelect;
+
+  /// No description provided for @ltSongsSelected.
+  ///
+  /// In ko, this message translates to:
+  /// **'{count}개 선택'**
+  String ltSongsSelected(int count);
+
+  /// No description provided for @ltSongsSelectAll.
+  ///
+  /// In ko, this message translates to:
+  /// **'전체 선택'**
+  String get ltSongsSelectAll;
+
+  /// No description provided for @ltSongsSelectCancel.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택 끝내기'**
+  String get ltSongsSelectCancel;
+
+  /// No description provided for @ltSongsExportPicked.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업으로 내보내기'**
+  String get ltSongsExportPicked;
+
+  /// No description provided for @ltSongsDeletePicked.
+  ///
+  /// In ko, this message translates to:
+  /// **'삭제'**
+  String get ltSongsDeletePicked;
+
+  /// No description provided for @ltSongsDeletePickedTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'작업물 {count}개를 삭제할까요?'**
+  String ltSongsDeletePickedTitle(int count);
+
+  /// No description provided for @ltSongsExportedPicked.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일 {count}개를 만들었어요. ‘내보낸 파일’에서 저장하거나 공유하세요.'**
+  String ltSongsExportedPicked(int count);
+
+  /// No description provided for @ltCardExport.
+  ///
+  /// In ko, this message translates to:
+  /// **'내보내기'**
+  String get ltCardExport;
 
   /// No description provided for @ltBackupFailed.
   ///
@@ -4689,14 +4779,176 @@ abstract class L10n {
   /// No description provided for @ltGuidedPrepare.
   ///
   /// In ko, this message translates to:
-  /// **'조용한 곳에서 네 박자 준비 신호 뒤에 짧은 멜로디를 흥얼거려 보세요. 변환에는 인터넷 연결이 필요해요.'**
+  /// **'조용한 곳에서 네 박자 준비 신호 뒤에 멜로디를 흥얼거리고, 다 부르면 \'변환\'을 눌러 멈추세요(최대 20초). 변환에는 인터넷 연결이 필요해요.'**
   String get ltGuidedPrepare;
+
+  /// No description provided for @ltGuidedMelodyReady.
+  ///
+  /// In ko, this message translates to:
+  /// **'멜로디가 만들어졌어요'**
+  String get ltGuidedMelodyReady;
+
+  /// No description provided for @ltGuidedCompareHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 허밍과 변환된 멜로디를 비교해 들어 보세요. 악기나 키를 바꿔 볼 수도 있어요.'**
+  String get ltGuidedCompareHint;
+
+  /// No description provided for @ltGuidedMelodyHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'변환된 멜로디를 들어 보세요. 악기나 키를 바꿔 볼 수도 있어요.'**
+  String get ltGuidedMelodyHint;
+
+  /// No description provided for @ltGuidedPlayTake.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 허밍'**
+  String get ltGuidedPlayTake;
+
+  /// No description provided for @ltHumAddTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 새 트랙 추가'**
+  String get ltHumAddTitle;
+
+  /// No description provided for @ltHumAddSteps.
+  ///
+  /// In ko, this message translates to:
+  /// **'1 악기 → 2 허밍 → 3 추가'**
+  String get ltHumAddSteps;
+
+  /// No description provided for @ltHumAddPrepare.
+  ///
+  /// In ko, this message translates to:
+  /// **'악기를 고르고 멜로디를 흥얼거려 보세요. 녹음하는 동안 지금 곡이 함께 재생돼요(이어폰을 쓰면 더 깨끗해요). 다 부르면 \'변환\'을 누르세요. 변환된 멜로디는 새 트랙으로 추가돼요.'**
+  String get ltHumAddPrepare;
+
+  /// No description provided for @ltHumAddInstrument.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 트랙의 악기'**
+  String get ltHumAddInstrument;
+
+  /// No description provided for @ltHumAddRecord.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍 녹음하기'**
+  String get ltHumAddRecord;
+
+  /// No description provided for @ltHumAddRecordDesc.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡에 맞춰 부른 멜로디가 새 트랙이 돼요'**
+  String get ltHumAddRecordDesc;
+
+  /// No description provided for @ltHumAddReady.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 트랙이 준비됐어요'**
+  String get ltHumAddReady;
+
+  /// No description provided for @ltHumAddHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 허밍과 비교하거나 곡과 함께 들어 보세요. 마음에 들면 추가하세요.'**
+  String get ltHumAddHint;
+
+  /// No description provided for @ltHumAddPlaySong.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡과 함께 듣기'**
+  String get ltHumAddPlaySong;
+
+  /// No description provided for @ltHumAddRetake.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 허밍'**
+  String get ltHumAddRetake;
+
+  /// No description provided for @ltHumAddConfirm.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 트랙 추가'**
+  String get ltHumAddConfirm;
+
+  /// No description provided for @ltGuidedPlayNewKey.
+  ///
+  /// In ko, this message translates to:
+  /// **'바뀐 키로 듣기'**
+  String get ltGuidedPlayNewKey;
+
+  /// No description provided for @ltGuidedPlayMelody.
+  ///
+  /// In ko, this message translates to:
+  /// **'변환된 멜로디'**
+  String get ltGuidedPlayMelody;
+
+  /// No description provided for @ltGuidedKey.
+  ///
+  /// In ko, this message translates to:
+  /// **'키 변경'**
+  String get ltGuidedKey;
+
+  /// No description provided for @ltGuidedMakeSong.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 멜로디로 곡 만들기'**
+  String get ltGuidedMakeSong;
+
+  /// No description provided for @ltGuidedVoiceReady.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음했어요'**
+  String get ltGuidedVoiceReady;
+
+  /// No description provided for @ltGuidedPlayVoice.
+  ///
+  /// In ko, this message translates to:
+  /// **'들어보기'**
+  String get ltGuidedPlayVoice;
+
+  /// No description provided for @ltGuidedMakeSongVoice.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 녹음으로 곡 만들기'**
+  String get ltGuidedMakeSongVoice;
 
   /// No description provided for @ltGuidedSteps.
   ///
   /// In ko, this message translates to:
-  /// **'1 멜로디·샘플  →  2 반주  →  3 저장'**
+  /// **'1 녹음 → 2 저장'**
   String get ltGuidedSteps;
+
+  /// No description provided for @ltGuidedHumTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 멜로디 만들기'**
+  String get ltGuidedHumTitle;
+
+  /// No description provided for @ltGuidedHumDesc.
+  ///
+  /// In ko, this message translates to:
+  /// **'흥얼거린 멜로디를 음표로 바꿔요. 악기 소리로 듣고 음을 고칠 수 있어요. 인터넷 연결이 필요해요.'**
+  String get ltGuidedHumDesc;
+
+  /// No description provided for @ltGuidedVoiceTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'목소리 그대로 녹음하기'**
+  String get ltGuidedVoiceTitle;
+
+  /// No description provided for @ltGuidedVoiceDesc.
+  ///
+  /// In ko, this message translates to:
+  /// **'노래나 소리를 녹음 그대로 보컬 트랙에 넣어요. 음표로 바뀌지 않아요(나중에 변환할 수 있어요).'**
+  String get ltGuidedVoiceDesc;
+
+  /// No description provided for @ltGuidedVoiceImport.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 파일 불러오기'**
+  String get ltGuidedVoiceImport;
 
   /// No description provided for @ltSampleTitle.
   ///
@@ -4977,7 +5229,7 @@ abstract class L10n {
   /// No description provided for @ltFirstSongHint.
   ///
   /// In ko, this message translates to:
-  /// **'허밍 → 반주 → 저장\n로그인 없이 무료로 시작해요.'**
+  /// **'녹음 → 저장\n로그인 없이 무료로 시작해요.'**
   String get ltFirstSongHint;
 
   /// No description provided for @ltFilesTitle.

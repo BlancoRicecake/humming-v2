@@ -75,6 +75,33 @@ int stepInScale(int midi, String root, String scale, int dir) {
   return midi + sign;
 }
 
+/// [midi] moved from one key to another: by the root interval the short way
+/// (-6..+5 semitones) and, between two scales of the same size, each scale
+/// degree onto the same degree (C major E → C minor D#; a note off the old
+/// scale keeps its distance from the degree below). Between scales of other
+/// sizes the moved note snaps into the new scale. Stays in 0..127.
+int moveToKey(int midi, String fromRoot, String fromScale, String toRoot, String toScale) {
+  final fr = kNoteNames.indexOf(fromRoot), tr = kNoteNames.indexOf(toRoot);
+  if (fr < 0 || tr < 0) return midi;
+  var shift = (tr - fr) % 12;
+  if (shift > 6) shift -= 12;
+  final fs = kScales[fromScale]?.steps, ts = kScales[toScale]?.steps;
+  var out = midi + shift;
+  if (fs != null && ts != null && fromScale != toScale) {
+    if (fs.length == ts.length) {
+      final rel = (midi - fr) % 12;
+      var i = fs.length - 1;
+      while (fs[i] > rel) {
+        i--;
+      }
+      out = midi - rel + shift + ts[i] + (rel - fs[i]);
+    } else {
+      out = nearestInScale(out, toRoot, toScale);
+    }
+  }
+  return out.clamp(0, 127);
+}
+
 /// A single rung of an in-key ladder.
 class Rung {
   const Rung({

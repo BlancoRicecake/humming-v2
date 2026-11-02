@@ -149,6 +149,13 @@ class SynthEngine {
     if (_useMelty) await _melty.rebuildOutput(forRecording: forRecording);
   }
 
+  /// The editor's transport started / stopped: MeltySynth (iOS / desktop)
+  /// keeps a slightly deeper output buffer while a song plays. No-op on
+  /// Android (FluidSynth renders natively).
+  void setTransportPlaying(bool playing) {
+    if (_useMelty) _melty.setTransportPlaying(playing);
+  }
+
   /// Point [channel] at soundfont [sfId]; when that's a different soundfont
   /// than before, stop every note still sounding on the previous one first.
   Future<void> _bindSf(int channel, int sfId) async {

@@ -383,7 +383,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     if (!mounted) return;
     final msg =
         err == null
-            ? l.ltSettingsDeleteAccountDone
+            ? (store.accountDeletionPending ? l.ltSettingsDeleteAccountPending : l.ltSettingsDeleteAccountDone)
             : l.ltSettingsDeleteAccountFailed(_deleteErrorText(l, err));
     if (err == null) {
       Navigator.of(this.context).pop(); // settings sheet 닫기

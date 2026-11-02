@@ -18,10 +18,12 @@ class DrumHarness extends StatefulWidget {
     required this.notes,
     this.steps = 16,
     this.selectMode = true,
+    this.showChance = true,
+    this.showModeButtons = true,
   });
   final List<DrumNote> notes;
   final int steps;
-  final bool selectMode;
+  final bool selectMode, showChance, showModeButtons;
   @override
   State<DrumHarness> createState() => DrumHarnessState();
 }
@@ -39,6 +41,8 @@ class DrumHarnessState extends State<DrumHarness> {
   Widget build(BuildContext context) => DrumGrid(
     notes: notes,
     initialSelectMode: widget.selectMode,
+    showChance: widget.showChance,
+    showModeButtons: widget.showModeButtons,
     onToggle: (kind, step) => toggled.add((kind, step)),
     onEdit: (before, after) {
       setState(() {
@@ -58,6 +62,8 @@ Future<GlobalKey<DrumHarnessState>> mountDrums(
   List<DrumNote> notes, {
   int steps = 16,
   bool selectMode = true,
+  bool showChance = true,
+  bool showModeButtons = true,
   bool instrument = false,
   List<int>? instrumentHits,
 }) async {
@@ -69,6 +75,8 @@ Future<GlobalKey<DrumHarnessState>> mountDrums(
     notes: notes,
     steps: steps,
     selectMode: selectMode,
+    showChance: showChance,
+    showModeButtons: showModeButtons,
   );
   if (instrument) {
     grid = DesktopInstrument(

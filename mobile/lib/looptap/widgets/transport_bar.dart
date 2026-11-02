@@ -91,8 +91,8 @@ class TransportBar extends StatelessWidget {
                   active: rangeLoop,
                   tooltip:
                       Localizations.localeOf(context).languageCode == 'ko'
-                          ? '구간 반복 전환'
-                          : 'Toggle range loop',
+                          ? '반복 · 구간 듣기'
+                          : 'Loop · listen to a part',
                   onTap: onLoop,
                 ),
                 const SizedBox(width: 12),
@@ -317,22 +317,26 @@ class _BpmStepperState extends State<_BpmStepper> {
             onTap: _editDirect, // tap the number → type a value directly
             child: SizedBox(
               width: 58,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    '$_bpm',
-                    style: LTType.mono(
-                      size: 15,
-                      weight: FontWeight.w700,
-                      color: LT.t1,
+              // a wide font / a 3-digit tempo shrinks instead of overflowing
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '$_bpm',
+                      style: LTType.mono(
+                        size: 15,
+                        weight: FontWeight.w700,
+                        color: LT.t1,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 3),
-                  Text('BPM', style: LTType.inter(size: 9, color: LT.t3)),
-                ],
+                    const SizedBox(width: 3),
+                    Text('BPM', style: LTType.inter(size: 9, color: LT.t3)),
+                  ],
+                ),
               ),
             ),
           ),

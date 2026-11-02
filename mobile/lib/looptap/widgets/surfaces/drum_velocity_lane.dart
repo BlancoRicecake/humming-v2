@@ -134,12 +134,20 @@ class _DrumVelocityLaneState extends State<DrumVelocityLane> {
             height: 18,
             child: Row(
               children: [
-                mode('drum-lane-velocity', ko ? '강약' : 'Velocity', false),
-                const Text(
-                  ' | ',
-                  style: TextStyle(fontSize: 10, color: LT.t3),
-                ),
-                mode('drum-lane-chance', ko ? '확률' : 'Chance', true),
+                if (widget.onModeChanged == null)
+                  // no chance switch (the phone): just what the bars are
+                  Text(
+                    ko ? '세기' : 'Velocity',
+                    style: TextStyle(fontSize: 10, color: widget.accent, fontWeight: FontWeight.w700),
+                  )
+                else ...[
+                  mode('drum-lane-velocity', ko ? '강약' : 'Velocity', false),
+                  const Text(
+                    ' | ',
+                    style: TextStyle(fontSize: 10, color: LT.t3),
+                  ),
+                  mode('drum-lane-chance', ko ? '확률' : 'Chance', true),
+                ],
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(

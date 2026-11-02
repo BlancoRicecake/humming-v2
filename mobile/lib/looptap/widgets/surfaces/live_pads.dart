@@ -58,17 +58,25 @@ class _LivePad extends StatelessWidget {
           // Size label/sub from the pad's own box so they scale with the pad on
           // every device + surface size (see PadScale).
           final sc = PadScale(math.min(c.maxWidth, c.maxHeight));
+          // A short pad (phone landscape, small pad area) keeps the note name
+          // only; FittedBox shrinks whatever is left so it never overflows.
+          final showSub = c.maxHeight >= 48;
           return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(label,
-                    style: LTType.inter(size: sc.title, weight: FontWeight.w900, color: active ? LT.bg : LT.t1)),
-                SizedBox(height: sc.gap),
-                Text(sub,
-                    style: LTType.mono(size: sc.sub, color: active ? LT.bg.withValues(alpha: 0.67) : LT.t3)),
-              ],
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label,
+                      style: LTType.inter(size: sc.title, weight: FontWeight.w900, color: active ? LT.bg : LT.t1)),
+                  if (showSub) ...[
+                    SizedBox(height: sc.gap),
+                    Text(sub,
+                        style: LTType.mono(size: sc.sub, color: active ? LT.bg.withValues(alpha: 0.67) : LT.t3)),
+                  ],
+                ],
+              ),
             ),
           );
         },

@@ -146,6 +146,20 @@ ThemeData loopTapTheme({TargetPlatform? platform}) {
       titleTextStyle: LTType.inter(size: 16, weight: FontWeight.w800),
       contentTextStyle: LTType.inter(size: 13, color: LT.t2),
     ),
+    // 2026-11-02: notices match the dark cards (the Material default was a
+    // bright bar that clashed with the app)
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: LT.surface2,
+      contentTextStyle: LTType.inter(size: 13, color: LT.t1),
+      actionTextColor: LT.lime,
+      closeIconColor: LT.t2,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: LT.borderStrong),
+      ),
+      behavior: SnackBarBehavior.floating,
+    ),
     chipTheme: ChipThemeData(
       color: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.selected) ? lime14 : LT.surface2,

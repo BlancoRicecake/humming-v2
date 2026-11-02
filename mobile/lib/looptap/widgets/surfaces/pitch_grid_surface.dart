@@ -8,13 +8,14 @@
 // optional horizontal zoom. Every x(step) / y(row) goes through
 // [PitchGridAxis] — the painter, ruler, playhead, hit tests, StepGrid's
 // selection math and the velocity lane share it.
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart' show HapticFeedback, HardwareKeyboard;
 import 'package:flutter/gestures.dart'
-    show PointerScrollEvent, PointerSignalEvent, kPrimaryButton;
+    show PointerScrollEvent, PointerSignalEvent, VelocityTracker, kPrimaryButton;
 
 import '../../models/loop_models.dart';
 import '../../music/guitar_articulation.dart' show articulationMark;
@@ -48,6 +49,10 @@ class PitchGridAxis {
   /// Sticky time ruler height above the lane.
   static const double rulerHeight = 22;
 
+  /// The vertical scroll rail's column, right of the lane (2026-11-02);
+  /// always reserved so the lane's x axis is the same with or without it.
+  static const double scrollRailWidth = 14;
+
   double get pxPerStep => size.width / view.length;
   double get rowHeight => rows <= 0 ? 0 : size.height / rows;
   double x(num step) => (step - view.start) * pxPerStep;
@@ -65,6 +70,21 @@ class PitchGridView extends ChangeNotifier {
   PitchGridView(this._steps);
   int _steps;
   double _zoom = 1, _start = 0;
+
+  /// Steps the view may pan past the end (2026-11-02: the phone's note
+  /// panel floats over the roll's right side; this lets a note under it
+  /// slide out to the panel's left edge). 0 = the usual clamp.
+  double _tail = 0;
+  double get tail => _tail;
+  set tail(double v) {
+    final t = math.max(0.0, v);
+    if (t == _tail) return;
+    _tail = t;
+    _start = _start.clamp(0.0, _maxStart).toDouble();
+    notifyListeners();
+  }
+
+  double get _maxStart => math.max(0.0, _steps - length + _tail);
   int get steps => _steps;
   double get zoom => _zoom;
   double get maxZoom => math.max(1.0, _steps / 4);
@@ -86,12 +106,12 @@ class PitchGridView extends ChangeNotifier {
     final a = anchor ?? (_start + length / 2);
     final f = length == 0 ? 0.5 : (a - _start) / length;
     _zoom = z;
-    _start = (a - f * length).clamp(0.0, _steps - length).toDouble();
+    _start = (a - f * length).clamp(0.0, _maxStart).toDouble();
     notifyListeners();
   }
 
   void panTo(double start) {
-    final s = start.clamp(0.0, _steps - length).toDouble();
+    final s = start.clamp(0.0, _maxStart).toDouble();
     if (s == _start) return;
     _start = s;
     notifyListeners();
@@ -245,6 +265,11 @@ class PitchGridSurface extends StatefulWidget {
     this.onGestureMove,
     this.onGestureEnd,
     this.onGestureCancel,
+    this.claimGesture,
+    this.onLongPressGesture,
+    this.panEmpty = false,
+    this.onEmptyTap,
+    this.longPressDelay = const Duration(milliseconds: 400),
     this.selected = const {},
     this.marquee,
     this.focusMidi,
@@ -274,6 +299,22 @@ class PitchGridSurface extends StatefulWidget {
   final ValueChanged<int>? onWindowChanged;
   final ValueChanged<GridPointer>? onGestureStart, onGestureMove;
   final VoidCallback? onGestureEnd, onGestureCancel;
+
+  /// Phone editing (2026-11-02): with [claimGesture], only a press it
+  /// claims (a note, or anything while notes are selected) goes to
+  /// [onGestureStart]…; the others draw. A drawing press held still for
+  /// 400 ms is handed over instead through [onLongPressGesture] (then its
+  /// moves / release go to [onGestureMove] / [onGestureEnd]).
+  final bool Function(GridPointer)? claimGesture;
+  final ValueChanged<GridPointer>? onLongPressGesture;
+
+  /// Phone (2026-11-02): an unclaimed press on empty space MOVES the roll
+  /// (sideways and up / down) instead of drawing; a tap there goes to
+  /// [onEmptyTap]; held still for [longPressDelay] it is handed over through
+  /// [onLongPressGesture] (an area selection).
+  final bool panEmpty;
+  final ValueChanged<GridPointer>? onEmptyTap;
+  final Duration longPressDelay;
   final Set<PitchNote> selected;
   final Rect? marquee;
   final int? focusMidi;
@@ -307,7 +348,7 @@ class PitchGridSurface extends StatefulWidget {
 }
 
 class _PitchGridSurfaceState extends State<PitchGridSurface>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final GlobalKey _laneKey = GlobalKey();
   final ScrollController _vertical = ScrollController();
   PitchGridView? _ownView;
@@ -316,6 +357,56 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
   _Draft? _draft;
   String? _mode; // 'paint' | 'erase'
   int? _pointer;
+
+  /// This press goes to the gesture callbacks (not drawing).
+  bool _routed = false;
+  Timer? _longPress;
+  Offset? _downAt;
+
+  /// panEmpty: the last pointer position, and whether the press moved.
+  Offset? _panLast;
+  bool _panMoved = false;
+
+  /// panEmpty (2026-11-02): a flick keeps the roll gliding, slowing down.
+  VelocityTracker? _panTracker;
+  Ticker? _flingTicker;
+  Offset _flingVelocity = Offset.zero;
+  Duration _flingLast = Duration.zero;
+
+  /// Move the roll by a finger delta in pixels: sideways (time) and up / down.
+  void _panByPixels(Offset d) {
+    final box = _laneKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.size.width > 0 && d.dx != 0) {
+      _view.panBy(-d.dx * _view.length / box.size.width);
+    }
+    if (_vertical.hasClients && d.dy != 0) {
+      final pos = _vertical.position;
+      _vertical.jumpTo((pos.pixels - d.dy).clamp(0.0, pos.maxScrollExtent));
+    }
+  }
+
+  void _stopFling() {
+    _flingTicker?.stop();
+    _flingVelocity = Offset.zero;
+  }
+
+  void _startFling(Offset velocity) {
+    if (velocity.distance < 120) return;
+    _flingVelocity = velocity;
+    _flingLast = Duration.zero;
+    _flingTicker ??= createTicker((elapsed) {
+      final dt = (elapsed - _flingLast).inMicroseconds / 1e6;
+      _flingLast = elapsed;
+      if (dt <= 0) return;
+      _panByPixels(_flingVelocity * dt);
+      // exponential friction: about a third of a second to halve the speed
+      _flingVelocity *= math.exp(-3.2 * dt);
+      if (_flingVelocity.distance < 20) _stopFling();
+    });
+    _flingTicker!
+      ..stop()
+      ..start();
+  }
 
   bool _needsFocus = true, _firstFocus = true;
 
@@ -424,6 +515,8 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
 
   @override
   void dispose() {
+    _longPress?.cancel();
+    _flingTicker?.dispose();
     _vertical.dispose();
     _pulse.dispose();
     _ownView?.dispose();
@@ -462,16 +555,48 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
   void _down(PointerDownEvent e) {
     if (e.buttons != kPrimaryButton) return;
     if (_pointer != null) return;
+    _stopFling(); // a touch catches a gliding roll
     _pointer = e.pointer;
+    _routed = false;
+    _longPress?.cancel();
     if (widget.onGestureStart != null) {
       final point = _point(e.position);
-      if (point != null) widget.onGestureStart!(point);
-      return;
+      final claim = widget.claimGesture;
+      if (claim == null || (point != null && claim(point))) {
+        _routed = true;
+        if (point != null) widget.onGestureStart!(point);
+        return;
+      }
     }
     final h = _hit(e.position);
+    if (widget.onLongPressGesture != null) {
+      _downAt = e.position;
+      _longPress = Timer(widget.longPressDelay, () {
+        final at = _downAt;
+        if (!mounted || _pointer == null || at == null || _routed) return;
+        final point = _point(at);
+        if (point == null) return;
+        _pulse.stop();
+        setState(() {
+          _draft = null;
+          _mode = null;
+        });
+        _routed = true;
+        if (LoopPrefs.instance.haptics.value) HapticFeedback.mediumImpact();
+        widget.onLongPressGesture!(point);
+      });
+    }
     if (h == null) return;
     final rung = _rows[h.row];
     final existing = _noteAt(rung.midi, h.step);
+    if (widget.panEmpty && existing == null && !widget.eraseMode) {
+      _mode = 'pan';
+      _panLast = e.position;
+      _panMoved = false;
+      _panTracker = VelocityTracker.withKind(e.kind)
+        ..addPosition(e.timeStamp, e.position);
+      return;
+    }
     if (LoopPrefs.instance.haptics.value) HapticFeedback.selectionClick();
     if (widget.eraseMode) {
       _mode = 'erase';
@@ -488,10 +613,27 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
 
   void _move(PointerMoveEvent e) {
     if (e.pointer != _pointer) return;
-    if (widget.onGestureMove != null) {
+    if (_routed) {
       final point = _point(e.position);
-      if (point != null) widget.onGestureMove!(point);
+      if (point != null) widget.onGestureMove?.call(point);
       return;
+    }
+    if (_mode == 'pan') {
+      final last = _panLast, at = _downAt;
+      if (last == null) return;
+      if (!_panMoved && at != null && (e.position - at).distance <= 8) return;
+      _panMoved = true;
+      _longPress?.cancel(); // a move, not a hold
+      _longPress = null;
+      _panTracker?.addPosition(e.timeStamp, e.position);
+      _panByPixels(e.position - last);
+      _panLast = e.position;
+      return;
+    }
+    final at = _downAt;
+    if (_longPress != null && at != null && (e.position - at).distance > 8) {
+      _longPress?.cancel(); // a drag: keep drawing
+      _longPress = null;
     }
     final h = _hit(e.position);
     if (h == null) return;
@@ -509,8 +651,25 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
   void _up(PointerUpEvent e) {
     if (e.pointer != _pointer) return;
     _pointer = null;
-    if (widget.onGestureEnd != null) {
-      widget.onGestureEnd!();
+    _longPress?.cancel();
+    _longPress = null;
+    if (_routed) {
+      _routed = false;
+      widget.onGestureEnd?.call();
+      return;
+    }
+    if (_mode == 'pan') {
+      _mode = null;
+      final at = _downAt;
+      if (!_panMoved && at != null) {
+        final point = _point(at);
+        if (point != null) widget.onEmptyTap?.call(point);
+      } else if (_panMoved) {
+        final v = _panTracker?.getVelocity().pixelsPerSecond;
+        if (v != null) _startFling(v);
+      }
+      _panLast = null;
+      _panTracker = null;
       return;
     }
     if (_mode == 'paint' && _draft != null) {
@@ -544,6 +703,9 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
   void _cancelGesture() {
     if (_pointer == null) return;
     _pointer = null;
+    _longPress?.cancel();
+    _longPress = null;
+    _routed = false;
     _pulse.stop();
     setState(() {
       _draft = null;
@@ -607,6 +769,8 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
             );
             // rows stay >= 24 px (usable touch/click targets)
             final height = math.max(viewport, widget.ladder.length * 24.0);
+            // the scroll rail takes its own column (never over the last steps)
+            const railW = PitchGridAxis.scrollRailWidth;
             _scheduleFocus(height);
             _scheduleKeep(height);
             _scheduleReveal(height);
@@ -627,25 +791,38 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
                           onFit: _view.fit,
                         ),
                       ),
+                      SizedBox(width: railW),
                     ],
                   ),
                 ),
                 Expanded(
                   child: Listener(
-                    onPointerSignal: (e) => _signal(e, gutter, laneWidth),
-                    child: Scrollbar(
-                      controller: _vertical,
-                      interactive: true,
-                      thumbVisibility: height > viewport,
-                      child: SingleChildScrollView(
-                        key: const ValueKey('pitch-grid-viewport'),
-                        controller: _vertical,
-                        physics: const NeverScrollableScrollPhysics(),
-                        child: SizedBox(
-                          height: height,
-                          child: _content(rail),
+                    onPointerSignal: (e) => _signal(e, gutter, laneWidth - railW),
+                    // 2026-11-02: our own rail — Scrollbar refuses thumb drags
+                    // under NeverScrollable physics; the thumb follows the
+                    // finger 1:1 (the whole range in one stroke)
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            key: const ValueKey('pitch-grid-viewport'),
+                            controller: _vertical,
+                            physics: const NeverScrollableScrollPhysics(),
+                            child: SizedBox(
+                              height: height,
+                              child: _content(rail),
+                            ),
+                          ),
                         ),
-                      ),
+                        if (height > viewport)
+                          _ScrollRail(
+                            controller: _vertical,
+                            onDragStart: _stopFling,
+                          )
+                        else
+                          const SizedBox(width: railW),
+                      ],
                     ),
                   ),
                 ),
@@ -656,6 +833,7 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
                       children: [
                         SizedBox(width: gutter),
                         Expanded(child: _HBar(view: _view)),
+                        SizedBox(width: railW),
                       ],
                     ),
                   ),
@@ -844,6 +1022,9 @@ class _PitchGridSurfaceState extends State<PitchGridSurface>
             onPointerCancel: (event) {
               if (event.pointer != _pointer) return;
               _pointer = null;
+              _longPress?.cancel();
+              _longPress = null;
+              _routed = false;
               widget.onGestureCancel?.call();
               _pulse.stop();
               setState(() => _draft = null);
@@ -1728,4 +1909,112 @@ class _GridPainter extends CustomPainter {
       old.steps != steps ||
       old.fontFamily != fontFamily ||
       old.pulse != pulse;
+}
+
+/// The roll's vertical scroll rail (2026-11-02): a thin thumb on the right;
+/// dragging it moves the rows as far as the thumb travels (fast), a tap on
+/// the track jumps there.
+class _ScrollRail extends StatefulWidget {
+  const _ScrollRail({required this.controller, this.onDragStart});
+  static const width = PitchGridAxis.scrollRailWidth;
+  final ScrollController controller;
+  final VoidCallback? onDragStart;
+
+  @override
+  State<_ScrollRail> createState() => _ScrollRailState();
+}
+
+class _ScrollRailState extends State<_ScrollRail> {
+  static const _width = _ScrollRail.width, _minThumb = 36.0;
+  bool _dragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  ({double top, double size, double travel, double max})? _metrics(double track) {
+    final c = widget.controller;
+    if (!c.hasClients || !c.position.hasContentDimensions) return null;
+    final pos = c.position;
+    final max = pos.maxScrollExtent;
+    if (max <= 0) return null;
+    final size = (track * pos.viewportDimension / (max + pos.viewportDimension))
+        .clamp(_minThumb, track)
+        .toDouble();
+    final travel = track - size;
+    return (top: travel * (pos.pixels / max), size: size, travel: travel, max: max);
+  }
+
+  void _dragBy(double dy, double track) {
+    final m = _metrics(track);
+    if (m == null || m.travel <= 0) return;
+    final c = widget.controller;
+    c.jumpTo((c.position.pixels + dy * m.max / m.travel).clamp(0.0, m.max));
+  }
+
+  void _jumpTo(double y, double track) {
+    final m = _metrics(track);
+    if (m == null || m.travel <= 0) return;
+    final f = ((y - m.size / 2) / m.travel).clamp(0.0, 1.0);
+    widget.controller.jumpTo(f * m.max);
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, c) {
+      final track = c.maxHeight;
+      final m = _metrics(track);
+      return GestureDetector(
+        key: const ValueKey('pitch-grid-scroll-rail'),
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (d) => _jumpTo(d.localPosition.dy, track),
+        onVerticalDragStart: (_) {
+          widget.onDragStart?.call();
+          setState(() => _dragging = true);
+        },
+        onVerticalDragUpdate: (d) => _dragBy(d.delta.dy, track),
+        onVerticalDragEnd: (_) => setState(() => _dragging = false),
+        onVerticalDragCancel: () => setState(() => _dragging = false),
+        child: SizedBox(
+          width: _width,
+          height: track,
+          child:
+              m == null
+                  ? null
+                  : Stack(
+                    children: [
+                      Positioned(
+                        top: m.top + 2,
+                        right: 3,
+                        child: AnimatedContainer(
+                          duration: LTMotion.fast,
+                          width: _dragging ? 7 : 5,
+                          height: m.size - 4,
+                          decoration: BoxDecoration(
+                            color:
+                                _dragging
+                                    ? LT.lime
+                                    : LT.t2.withValues(alpha: .55),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+        ),
+      );
+    },
+  );
 }

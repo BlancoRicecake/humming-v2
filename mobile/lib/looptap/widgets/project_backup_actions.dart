@@ -56,6 +56,41 @@ Future<void> backupSong(BuildContext context, Song song) async {
   }
 }
 
+/// Song list select mode → "Export as backups" (2026-11-02): one backup
+/// file per song, then one message for all. Returns how many were made.
+Future<int> backupSongs(BuildContext context, List<Song> songs) async {
+  final l = L10n.of(context);
+  var made = 0;
+  var missing = 0;
+  for (final song in songs) {
+    try {
+      final res = await createProjectBackup(song);
+      made++;
+      missing += res.missing;
+    } catch (e) {
+      debugPrint('[backup] create failed: ${e.runtimeType}');
+    }
+  }
+  if (!context.mounted) return made;
+  if (made == 0) {
+    _snack(context, l.ltBackupFailed);
+    return 0;
+  }
+  _snack(
+    context,
+    [
+      l.ltSongsExportedPicked(made),
+      if (made < songs.length) l.ltBackupFailed,
+      if (missing > 0) l.ltBackupMissingTakes(missing),
+    ].join('\n'),
+    action: SnackBarAction(
+      label: l.ltBackupShowFiles,
+      onPressed: () => showExportLibrary(context),
+    ),
+  );
+  return made;
+}
+
 enum BackupPickerPlatform { android, ios, desktop }
 
 BackupPickerPlatform get _pickerPlatform =>

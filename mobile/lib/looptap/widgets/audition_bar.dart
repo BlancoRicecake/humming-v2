@@ -105,23 +105,25 @@ class AuditionBar extends StatelessWidget {
               onPressed: enabled ? onRestart : null,
               icon: const Icon(Icons.first_page, size: 19, color: LT.t2),
             ),
-            const SizedBox(width: 8),
-            TextButton(
-              key: const ValueKey('audition-compare'),
-              onPressed: enabled && soloCount > 0 ? onCompare : null,
-              style: TextButton.styleFrom(
-                foregroundColor: bypassSolo ? LT.t1 : LT.lime,
+            // Solo compare only once a track is soloed (no "select track S
+            // for Solo" hint, 2026-11-02)
+            if (soloCount > 0) ...[
+              const SizedBox(width: 8),
+              TextButton(
+                key: const ValueKey('audition-compare'),
+                onPressed: enabled ? onCompare : null,
+                style: TextButton.styleFrom(
+                  foregroundColor: bypassSolo ? LT.t1 : LT.lime,
+                ),
+                child: Text(
+                  bypassSolo
+                      ? (ko ? '전체 파트 · Solo로 비교' : 'Full mix · compare Solo')
+                      : (ko
+                          ? 'Solo $soloCount · 전체와 비교'
+                          : 'Solo $soloCount · compare full mix'),
+                ),
               ),
-              child: Text(
-                soloCount == 0
-                    ? (ko ? '트랙 S로 Solo 선택' : 'Select track S for Solo')
-                    : bypassSolo
-                    ? (ko ? '전체 파트 · Solo로 비교' : 'Full mix · compare Solo')
-                    : (ko
-                        ? 'Solo $soloCount · 전체와 비교'
-                        : 'Solo $soloCount · compare full mix'),
-              ),
-            ),
+            ],
             if (soloCount > 0)
               TextButton(
                 key: const ValueKey('audition-clear-solo'),

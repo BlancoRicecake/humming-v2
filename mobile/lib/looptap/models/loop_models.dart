@@ -849,6 +849,7 @@ class Section {
     this.repeats = 1,
     Map<String, GrooveAssign?>? grooveOverrides,
     this.linkId,
+    this.family,
   }) : grooveOverrides = grooveOverrides ?? {},
        tracks = tracks ?? _emptyTracks(),
        extras = extras ?? [],
@@ -911,6 +912,10 @@ class Section {
   /// Beat-Fill pads) at runtime. Null = an independent section.
   String? linkId;
 
+  /// Naming only (2026-11-02): a section and its duplicates share this id,
+  /// so they read A, A #2, A #3 (see section_names.dart). Null = its own.
+  String? family;
+
   static Map<String, TrackData> _emptyTracks() => {
     for (final t in kTracks) t.id: TrackData(),
   };
@@ -927,6 +932,7 @@ class Section {
     repeats: repeats,
     grooveOverrides: Map.of(grooveOverrides),
     linkId: linkId,
+    family: family,
   );
 
   Map<String, dynamic> toJson() => {
@@ -944,6 +950,7 @@ class Section {
         (k, v) => MapEntry(k, v?.toJson()),
       ),
     if (linkId != null) 'linkId': linkId,
+    if (family != null) 'family': family,
   };
 
   static Section fromJson(Map<String, dynamic> j) {
@@ -979,6 +986,7 @@ class Section {
         ),
       ),
       linkId: j['linkId'] as String?,
+      family: j['family'] as String?,
     );
   }
 }

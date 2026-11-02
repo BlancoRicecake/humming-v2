@@ -61,6 +61,46 @@ Future<List<int>?> supabaseAnnouncementFetch() async {
   }
 }
 
+/// Debug builds only: --dart-define=HUMTRACK_QA_ANNOUNCEMENTS=true shows a
+/// built-in sample feed (a critical popup + an info notice) instead of the
+/// live one, so the announcement UI can be checked on a device without
+/// writing to the production table. Release builds ignore it (kDebugMode).
+const _qaAnnouncements = bool.fromEnvironment('HUMTRACK_QA_ANNOUNCEMENTS');
+
+Future<List<int>?> qaAnnouncementFetch() async {
+  final now = DateTime.now().toUtc();
+  final starts = now.subtract(const Duration(minutes: 1)).toIso8601String();
+  final ends = now.add(const Duration(days: 1)).toIso8601String();
+  return utf8.encode(
+    jsonEncode([
+      {
+        'id': 'qa-popup',
+        'revision': now.millisecondsSinceEpoch ~/ 60000 % 1000000 + 1,
+        'kind': 'critical',
+        'title_ko': '[QA] 공지 팝업 확인',
+        'title_en': '[QA] Announcement popup check',
+        'body_ko': '개발용 빌드에서만 보이는 시험 공지예요. 확인을 누르면 닫혀요.',
+        'body_en': 'A test announcement shown only in development builds.',
+        'starts_at': starts,
+        'ends_at': ends,
+        'platforms': ['android', 'ios', 'windows', 'macos'],
+      },
+      {
+        'id': 'qa-info',
+        'revision': 1,
+        'kind': 'info',
+        'title_ko': '[QA] 일반 공지 확인',
+        'title_en': '[QA] Info notice check',
+        'body_ko': '공지 목록과 배너가 잘 보이는지 확인하는 시험 공지예요.',
+        'body_en': 'A test notice for the list and the banner.',
+        'starts_at': starts,
+        'ends_at': ends,
+        'platforms': ['android', 'ios', 'windows', 'macos'],
+      },
+    ]),
+  );
+}
+
 AnnouncementPlatform _currentPlatform() {
   if (Platform.isAndroid) return AnnouncementPlatform.android;
   if (Platform.isIOS) return AnnouncementPlatform.ios;
@@ -86,7 +126,11 @@ class AnnouncementService extends ChangeNotifier {
     this.minRefreshInterval = const Duration(minutes: 15),
     this.fetchTimeout = const Duration(seconds: 12),
     this.staleAfter = const Duration(days: 7),
-  }) : _fetch = fetch ?? supabaseAnnouncementFetch,
+  }) : _fetch =
+           fetch ??
+           (kDebugMode && _qaAnnouncements
+               ? qaAnnouncementFetch
+               : supabaseAnnouncementFetch),
        _platform = platform,
        _build = build,
        _buildKnown = buildKnown || build != null,

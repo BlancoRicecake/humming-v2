@@ -700,7 +700,10 @@ void main() {
       expect(find.byType(DesktopTimeline), findsNothing);
       expect(find.byType(DesktopSplitHandle), findsNothing);
       final phone = laneHeight(tester);
-      await tester.tap(find.byKey(const ValueKey('grid-focus')));
+      // 2026-11-02: 편집 확대 was removed; the track list / pad split handle
+      // gives the roll its room
+      expect(find.byKey(const ValueKey('grid-focus')), findsNothing);
+      await tester.drag(find.byKey(const ValueKey('phone-split-handle')), const Offset(0, -400));
       await tester.pumpAndSettle();
       final phoneFocus = laneHeight(tester);
       debugPrint(

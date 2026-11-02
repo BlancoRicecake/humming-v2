@@ -46,6 +46,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLabel"] = "HumTrack"
     }
 
     signingConfigs {
@@ -60,6 +61,16 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Side-by-side dev install (2026-11-02): with the Gradle property
+            // humtrackDev (ORG_GRADLE_PROJECT_humtrackDev=true) the debug build
+            // gets its own package and name, so installing it never replaces —
+            // or makes `flutter run` uninstall — a store install and its songs.
+            if (project.hasProperty("humtrackDev")) {
+                applicationIdSuffix = ".dev"
+                manifestPlaceholders["appLabel"] = "HumTrack Dev"
+            }
+        }
         release {
             // Never fall back to the debug keystore: without key.properties the
             // release variant stays unsigned and verifyReleaseSigningConfiguration

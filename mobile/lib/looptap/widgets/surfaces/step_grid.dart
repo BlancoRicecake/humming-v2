@@ -1,7 +1,8 @@
+import 'dart:async';
 // Pitched grid: legacy drawing plus selection-based, atomic MIDI edits.
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -60,6 +61,7 @@ class StepGrid extends StatefulWidget {
     this.keyHighlight,
     this.inKeyDraw = false,
     this.velocityLaneFold = false,
+    this.phoneSimple = false,
     this.reveal,
   });
 
@@ -80,6 +82,15 @@ class StepGrid extends StatefulWidget {
   /// (LoopPrefs.gridVelocityLaneChosen) it starts folded; the phone keeps
   /// the lane's own default.
   final bool velocityLaneFold;
+
+  /// Phone editing without modes (2026-11-02): tap empty = add a note, tap a
+  /// note = select, drag a note = move, drag its end = length, long-press +
+  /// drag = select several (a chord column too), long-press a note = add it
+  /// to the selection, tap empty while notes are selected = clear. No tool
+  /// row: a selection bar (delete, duplicate, octave, length, ⋯) appears only
+  /// with a selection, and everything else lives in the ⋯ sheet. The
+  /// velocity lane shows only with a selection, chord bars side by side.
+  final bool phoneSimple;
 
   /// ui-001 stage 4 (desktop edit view): the editor draws this grid's tools
   /// (tool row) and selection inspector (Notes tab) from the grid's own item
@@ -177,6 +188,57 @@ class _StepGridState extends State<StepGrid> {
   /// Velocity lane shows chance instead of velocity.
   bool _chanceLane = false;
 
+  // phoneSimple: a press on a note held still for 400 ms ([_held]) adds it
+  // to what was selected before the press ([_preSelection]); on empty space
+  // the hold makes the drag-select add to that selection
+  Timer? _holdTimer;
+  bool _held = false;
+  Set<PitchNote> _preSelection = {};
+
+  // phoneSimple: a new selection scrolls into view (device 2026-11-02: the
+  // selection bar shrank the roll and the picked note was off screen).
+  // Negative serials never collide with the host's own reveals.
+  GridReveal? _phoneReveal;
+  int _phoneRevealSerial = -1;
+  Set<PitchNote> _revealedSelection = {};
+
+  /// The selection last brought out from under the floating note panel.
+  Set<PitchNote> _panelShown = {};
+
+  /// phoneSimple (2026-11-02): with the note panel open the view may pan
+  /// [panelW] past the end; a picked note under the panel slides out to the
+  /// panel's left edge (the roll itself never resizes). Closed: back to the
+  /// usual range.
+  void _keepPickedBesidePanel(double width, double panelW) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_selected.isEmpty) {
+        _panelShown = {};
+        _view.tail = 0;
+        return;
+      }
+      if (_origin != null || setEquals(_selected, _panelShown)) return;
+      _panelShown = Set.of(_selected);
+      final laneW =
+          width - PitchGridAxis.gutterWidth(rail: widget.onWindowChanged != null);
+      if (laneW <= panelW) return;
+      final pxPerStep = laneW / _view.length;
+      _view.tail = panelW / pxPerStep;
+      final v = _view.view;
+      final end = _selected.map((n) => n.endSteps).reduce(math.max);
+      final start = _selected.map((n) => n.startSteps).reduce(math.min);
+      final visibleRight = v.start + (laneW - panelW) / pxPerStep;
+      if (end <= visibleRight) return; // already clear of the panel
+      // the picked note's end right at the panel's left edge (its start
+      // stays on screen)
+      final target = math.min(end - (laneW - panelW) / pxPerStep + .25, start);
+      _view.panTo(target);
+    });
+  }
+
+  /// Bumped on every setState: the ⋯ sheet (another route) follows along.
+  final ValueNotifier<int> _sheetRev = ValueNotifier<int>(0);
+
   /// Chord stamp mode (harmony-001): drawing places a chord, not one note.
   bool _chordStamp = false;
 
@@ -205,7 +267,8 @@ class _StepGridState extends State<StepGrid> {
   Set<PitchNote> get _scope =>
       _selected.isEmpty ? widget.notes.toSet() : _selected;
   bool get _canScope =>
-      widget.enabled && widget.notes.any((n) => _scope.contains(n) && !n.locked);
+      widget.enabled &&
+      widget.notes.any((n) => _scope.contains(n) && !n.locked);
 
   /// A real (non-chromatic) song scale the scale tools can use.
   bool get _hasScale =>
@@ -236,6 +299,7 @@ class _StepGridState extends State<StepGrid> {
   @override
   void setState(VoidCallback fn) {
     super.setState(fn);
+    _sheetRev.value++;
     // the tool row and the inspector outside follow in the same frame
     widget.chrome?.changed();
   }
@@ -246,6 +310,8 @@ class _StepGridState extends State<StepGrid> {
 
   @override
   void dispose() {
+    _holdTimer?.cancel();
+    _sheetRev.dispose();
     _clipboard.removeListener(_clipboardChanged);
     _localClipboard.dispose();
     widget.chrome?.detach(_chromeContent);
@@ -260,6 +326,7 @@ class _StepGridState extends State<StepGrid> {
   @override
   void didUpdateWidget(StepGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.reveal?.serial != widget.reveal?.serial) _phoneReveal = null;
     if (oldWidget.clipboard != widget.clipboard) {
       (oldWidget.clipboard ?? _localClipboard).removeListener(
         _clipboardChanged,
@@ -326,6 +393,28 @@ class _StepGridState extends State<StepGrid> {
 
   void _start(GridPointer p) {
     if (!widget.enabled) return;
+    if (widget.phoneSimple) {
+      _preSelection = Set.of(_selected);
+      _held = false;
+      _holdTimer?.cancel();
+      _holdTimer = Timer(const Duration(milliseconds: 400), () {
+        if (!mounted ||
+            _origin == null ||
+            _preview != null ||
+            _marquee != null) {
+          return;
+        }
+        _held = true;
+        // held on empty space: the drag-select adds to the selection
+        if (_anchor == null) {
+          setState(() {
+            _boxBase = Set.of(_preSelection);
+            _selected = Set.of(_preSelection);
+          });
+        }
+        if (LoopPrefs.instance.haptics.value) HapticFeedback.mediumImpact();
+      });
+    }
     _focus.requestFocus();
     final additive =
         _multiple ||
@@ -367,6 +456,479 @@ class _StepGridState extends State<StepGrid> {
     });
   }
 
+  /// phoneSimple: a tap on empty space adds a note — or, with notes
+  /// selected, only clears the selection.
+  void _emptyTap(GridPointer p) {
+    if (!widget.enabled) return;
+    if (_selected.isNotEmpty) {
+      setState(() {
+        _resetGesture();
+        _selected.clear();
+      });
+      return;
+    }
+    final step = p.position.floor().clamp(0, widget.steps - 1);
+    _place(p.rung, step, step);
+  }
+
+  /// phoneSimple: held 1 s on empty space — the drag that follows selects
+  /// an area, adding to the current selection.
+  void _startMarquee(GridPointer p) {
+    if (!widget.enabled) return;
+    setState(() {
+      _resetGesture();
+      _base = List.of(widget.notes);
+      _origin = p;
+      _anchor = null;
+      _boxBase = Set.of(_selected);
+      // a hold let go without a drag keeps the selection and adds nothing
+      _preSelection = Set.of(_selected);
+      _held = true;
+    });
+  }
+
+  /// phoneSimple: the bar shown while notes are selected.
+  Widget _phoneSelectionBar() => _scrollRow(_toolScroll, [
+    Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Text(
+        key: const ValueKey('phone-selection-count'),
+        _editable.isEmpty
+            ? (_ko ? '잠긴 노트' : 'Locked notes')
+            : (_ko
+                ? '${_selected.length}개 선택'
+                : '${_selected.length} selected'),
+        style: const TextStyle(
+          fontSize: 11,
+          color: LT.t1,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
+    // hum notes come locked: unlocking is right here, not in ⋯ (2026-11-02)
+    if (widget.enabled && _selected.any((n) => n.locked))
+      _button(
+        'phone-unlock',
+        _ko ? '잠금 풀기' : 'Unlock',
+        () => _commit(
+          List.of(widget.notes),
+          setPitchNotesLocked(widget.notes, _selected, false),
+        ),
+        color: widget.accent,
+      ),
+    _button(
+      'phone-delete',
+      _ko ? '삭제' : 'Delete',
+      _canEdit ? _delete : null,
+      color: LT.danger,
+    ),
+    _button(
+      'phone-duplicate',
+      _ko ? '복제' : 'Duplicate',
+      _canEdit ? _duplicate : null,
+    ),
+    _button(
+      'phone-octave-down',
+      _ko ? '옥타브 −' : 'Octave −',
+      _canEdit ? () => _shift(0, -12) : null,
+    ),
+    _button(
+      'phone-octave-up',
+      _ko ? '옥타브 +' : 'Octave +',
+      _canEdit ? () => _shift(0, 12) : null,
+    ),
+    _button(
+      'phone-length-down',
+      _ko ? '길이 −' : 'Length −',
+      _canEdit ? () => _length(-_nudge) : null,
+    ),
+    _button(
+      'phone-length-up',
+      _ko ? '길이 +' : 'Length +',
+      _canEdit ? () => _length(_nudge) : null,
+    ),
+  ]);
+
+  /// phoneSimple: the selected notes' sound, on the right of the roll
+  /// (2026-11-02): velocity (one value for every selected note), pitch by
+  /// a semitone, mute, the guitar's palm / harmonic tones, and the rest of
+  /// the tools ("more"). A tall roll stacks it in one narrow column; a short
+  /// one (phone landscape) puts the velocity beside the buttons.
+  Widget _phoneNotePanel() {
+    final can = _canEdit;
+    final values = _editable.map((n) => n.velocity ?? 100).toList();
+    final velocity =
+        _velocityDraft ??
+        (values.isEmpty
+            ? 100
+            : (values.reduce((a, b) => a + b) / values.length).round());
+    final velocityLabel =
+        _velocityDraft != null || values.toSet().length <= 1
+            ? '$velocity'
+            : (_ko ? '여러 값' : 'Mixed');
+    bool allArt(ArticulationKind k) =>
+        _editable.isNotEmpty &&
+        _editable.every((n) => n.articulation?.kind == k);
+
+    Widget caption(String text) => Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        color: LT.t3,
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+
+    Widget tile(
+      String key,
+      IconData icon,
+      String label,
+      VoidCallback? onTap, {
+      bool on = false,
+    }) {
+      final color = onTap == null ? LT.t3 : (on ? widget.accent : LT.t1);
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Material(
+          color: on ? widget.accent.withValues(alpha: .14) : LT.surface2,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            key: ValueKey(key),
+            borderRadius: BorderRadius.circular(10),
+            onTap: onTap,
+            child: Container(
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: on ? widget.accent : LT.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, size: 16, color: color),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget step(String key, IconData icon, VoidCallback? onTap) => Expanded(
+      child: Material(
+        color: LT.surface2,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          key: ValueKey(key),
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: Container(
+            height: 34,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: LT.border),
+            ),
+            child: Icon(icon, size: 20, color: onTap == null ? LT.t3 : LT.t1),
+          ),
+        ),
+      ),
+    );
+
+    final buttons = <Widget>[
+      caption(_ko ? '음 높이' : 'Pitch'),
+      const SizedBox(height: 4),
+      Row(
+        children: [
+          step(
+            'phone-pitch-down',
+            Icons.keyboard_arrow_down_rounded,
+            can ? () => _semitone(-1) : null,
+          ),
+          const SizedBox(width: 6),
+          step(
+            'phone-pitch-up',
+            Icons.keyboard_arrow_up_rounded,
+            can ? () => _semitone(1) : null,
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      tile(
+        'phone-mute',
+        _allMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+        _ko ? '소리 끄기' : 'Mute',
+        can ? _toggleMute : null,
+        on: _allMuted,
+      ),
+      if (widget.guitar) ...[
+        tile(
+          'phone-palm',
+          Icons.back_hand_outlined,
+          _ko ? '팜뮤트' : 'Palm mute',
+          _canScope
+              ? () => _articulate(
+                allArt(ArticulationKind.palmTone)
+                    ? null
+                    : ArticulationKind.palmTone,
+              )
+              : null,
+          on: allArt(ArticulationKind.palmTone),
+        ),
+        tile(
+          'phone-harmonic',
+          Icons.auto_awesome_outlined,
+          _ko ? '하모닉스' : 'Harmonics',
+          _canScope
+              ? () => _articulate(
+                allArt(ArticulationKind.harmonicTone)
+                    ? null
+                    : ArticulationKind.harmonicTone,
+              )
+              : null,
+          on: allArt(ArticulationKind.harmonicTone),
+        ),
+      ],
+      // 2026-11-02: no "more" here for now (too many tools behind it)
+    ];
+
+    Widget velocitySlider() => Column(
+      children: [
+        caption(_ko ? '세기' : 'Velocity'),
+        const SizedBox(height: 2),
+        Text(
+          velocityLabel,
+          key: const ValueKey('phone-velocity-value'),
+          maxLines: 1,
+          style: TextStyle(
+            color: can ? widget.accent : LT.t3,
+            fontSize: velocityLabel.length > 3 ? 10 : 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Expanded(
+          child: RotatedBox(
+            quarterTurns: 3,
+            child: SliderTheme(
+              // a thin track and a thin, long fader cap (2026-11-02)
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                activeTrackColor: widget.accent,
+                inactiveTrackColor: LT.surface3,
+                thumbColor: widget.accent,
+                overlayColor: widget.accent.withValues(alpha: .12),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                thumbShape: const _FaderCapShape(),
+              ),
+              child: Slider(
+                key: const ValueKey('phone-velocity'),
+                min: 1,
+                max: 127,
+                value: velocity.toDouble().clamp(1, 127),
+                onChangeStart:
+                    !can ? null : (_) => _base = List.of(widget.notes),
+                onChanged:
+                    !can
+                        ? null
+                        : (v) => setState(() {
+                          _velocityDraft = v.round();
+                          _preview = setPitchVelocity(
+                            _base ?? widget.notes,
+                            _selected,
+                            v.round(),
+                          );
+                        }),
+                onChangeEnd: !can ? null : (_) => _finish(),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        // a tall roll: one narrow column; a short one: velocity beside
+        final tall = c.maxHeight >= 320;
+        return Container(
+          key: const ValueKey('phone-note-panel'),
+          width: tall ? 92 : 160,
+          padding: const EdgeInsets.all(8),
+          decoration: const BoxDecoration(
+            color: LT.surface,
+            border: Border(left: BorderSide(color: LT.border)),
+          ),
+          child:
+              tall
+                  ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: velocitySlider()),
+                      const SizedBox(height: 8),
+                      ...buttons,
+                    ],
+                  )
+                  : Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(width: 46, child: velocitySlider()),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: buttons,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+        );
+      },
+    );
+  }
+
+  /// phoneSimple: the one control shown with nothing selected.
+  Widget _phoneMoreButton() => Material(
+    color: LT.surface2.withValues(alpha: .92),
+    shape: const CircleBorder(side: BorderSide(color: LT.border)),
+    child: IconButton(
+      key: const ValueKey('phone-more-idle'),
+      tooltip: _ko ? '편집 도구' : 'Editing tools',
+      iconSize: 18,
+      visualDensity: VisualDensity.compact,
+      onPressed: widget.enabled ? _openPhoneMore : null,
+      icon: const Icon(Icons.more_horiz, color: LT.t1),
+    ),
+  );
+
+  /// phoneSimple: every other tool, in a sheet (follows this grid's state).
+  void _openPhoneMore() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: LT.surface,
+      builder:
+          (ctx) => SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(ctx).height * .7,
+              ),
+              child: ValueListenableBuilder<int>(
+                valueListenable: _sheetRev,
+                builder:
+                    (ctx, _, _) => SingleChildScrollView(
+                      key: const ValueKey('phone-more-sheet'),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _ko ? '편집 도구' : 'Editing tools',
+                            style: const TextStyle(
+                              color: LT.t1,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: [
+                              if (_selected.isNotEmpty)
+                                _button(
+                                  'note-copy',
+                                  _ko ? '복사' : 'Copy',
+                                  _copy,
+                                ),
+                              _button(
+                                'note-paste',
+                                _ko ? '붙여넣기' : 'Paste',
+                                _clipboard.isEmpty ? null : _paste,
+                              ),
+                              _button(
+                                'note-select-all',
+                                _ko ? '전체 선택' : 'Select all',
+                                widget.notes.isEmpty
+                                    ? null
+                                    : () => setState(
+                                      () => _selected = widget.notes.toSet(),
+                                    ),
+                              ),
+                              _button(
+                                'note-scale-snap',
+                                _ko ? '스케일 맞춤' : 'Scale snap',
+                                _hasScale
+                                    ? () {
+                                      final prefs = LoopPrefs.instance;
+                                      prefs.setScaleSnap(
+                                        !prefs.scaleSnap.value,
+                                      );
+                                      setState(() {});
+                                    }
+                                    : null,
+                                active: _scaleSnap,
+                              ),
+                              _button(
+                                'grid-chord-stamp',
+                                _ko ? '코드 찍기' : 'Chord stamp',
+                                _toggleChordStamp,
+                                active: _chordStamp,
+                                onLongPress: _chordSheet,
+                              ),
+                              _button(
+                                'note-snap',
+                                _snap
+                                    ? (_ko ? '격자에 맞춰 이동' : 'Move on the grid')
+                                    : (_ko ? '자유롭게 이동' : 'Move freely'),
+                                () => setState(() => _snap = !_snap),
+                                active: _snap,
+                              ),
+                              // 2026-11-02: no play chance on the phone
+                              // (the desktop keeps it)
+                            ],
+                          ),
+                          if (_selected.isNotEmpty) ...[
+                            const Divider(height: 24),
+                            Text(
+                              _ko ? '선택한 노트' : 'Selected notes',
+                              style: const TextStyle(
+                                color: LT.t1,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: _inspectorItems(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+              ),
+            ),
+          ),
+    );
+  }
+
   void _move(GridPointer p) {
     final origin = _origin, base = _base;
     if (origin == null || base == null) return;
@@ -375,6 +937,7 @@ class _StepGridState extends State<StepGrid> {
         _marquee == null) {
       return;
     }
+    _holdTimer?.cancel(); // a drag, not a hold
     setState(() {
       if (_anchor == null) {
         final rect = Rect.fromPoints(origin.local, p.local);
@@ -423,6 +986,39 @@ class _StepGridState extends State<StepGrid> {
 
   void _finish() {
     final base = _base, preview = _preview;
+    // phoneSimple: a long press on a note (no movement) adds it to — or
+    // removes it from — the selection held before the press
+    _holdTimer?.cancel();
+    final held = _held;
+    _held = false;
+    // phoneSimple (option A, 2026-11-02): a TAP on empty space adds a note
+    // when nothing was selected (with a selection it only clears it); a
+    // drag there selected an area instead
+    final origin = _origin;
+    if (widget.phoneSimple &&
+        origin != null &&
+        _anchor == null &&
+        _marquee == null &&
+        preview == null) {
+      final add = !held && _preSelection.isEmpty;
+      if (held) _selected = Set.of(_preSelection);
+      _cancel();
+      if (add) {
+        final step = origin.position.floor().clamp(0, widget.steps - 1);
+        _place(origin.rung, step, step);
+      }
+      return;
+    }
+    if (widget.phoneSimple && held && preview == null && _anchor != null) {
+      final note = _anchor!;
+      final next = Set.of(_preSelection);
+      if (!next.remove(note)) next.add(note);
+      setState(() {
+        _resetGesture();
+        _selected = next;
+      });
+      return;
+    }
     if (base != null && preview != null) {
       _commit(base, preview);
     } else {
@@ -489,12 +1085,14 @@ class _StepGridState extends State<StepGrid> {
     final base = _base, anchor = _velocityAnchor;
     if (base == null || anchor == null) return;
     setState(() {
+      // phone: only the dragged bar's note (chord bars sit side by side)
+      final targets = widget.phoneSimple ? {anchor} : _selected;
       if (_chanceLane) {
-        _preview = shiftPitchChance(base, _selected, delta / 127);
+        _preview = shiftPitchChance(base, targets, delta / 127);
         _chanceDraft = (anchor.chance + delta / 127).clamp(0.0, 1.0);
         return;
       }
-      _preview = shiftPitchVelocities(base, _selected, delta);
+      _preview = shiftPitchVelocities(base, targets, delta);
       _velocityDraft = ((anchor.velocity ?? 100) + delta).clamp(1, 127);
     });
   }
@@ -509,6 +1107,7 @@ class _StepGridState extends State<StepGrid> {
       steps: widget.steps,
     ),
   );
+
   /// Semitone move; with Scale snap on, each note steps to its next scale
   /// pitch instead.
   void _semitone(int dir) {
@@ -598,9 +1197,7 @@ class _StepGridState extends State<StepGrid> {
       scale: _chordScale,
     );
     if (!identical(edit.notes, widget.notes) && edit.selection.isNotEmpty) {
-      final first = edit.selection
-          .map((n) => n.startSteps)
-          .reduce(math.min);
+      final first = edit.selection.map((n) => n.startSteps).reduce(math.min);
       for (final n in edit.selection) {
         if (n.startSteps == first) widget.onPreview?.call(_rungFor(n.midi));
       }
@@ -630,11 +1227,7 @@ class _StepGridState extends State<StepGrid> {
   void _place(Rung rung, int a, int b) {
     if ((_scaleSnap || (widget.inKeyDraw && _hasScale)) &&
         !inScale(rung.midi, widget.scaleRoot!, widget.scaleName!)) {
-      final m = nearestInScale(
-        rung.midi,
-        widget.scaleRoot!,
-        widget.scaleName!,
-      );
+      final m = nearestInScale(rung.midi, widget.scaleRoot!, widget.scaleName!);
       rung = widget.ladder.firstWhere(
         (r) => r.midi == m,
         orElse:
@@ -879,9 +1472,7 @@ class _StepGridState extends State<StepGrid> {
     if (identical(edit.notes, widget.notes)) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
-          content: Text(
-            _ko ? '변환할 화음이 없습니다.' : 'No chords to convert.',
-          ),
+          content: Text(_ko ? '변환할 화음이 없습니다.' : 'No chords to convert.'),
         ),
       );
       return;
@@ -921,7 +1512,8 @@ class _StepGridState extends State<StepGrid> {
         (n) => n.stroke != null && !n.locked && _scope.contains(n),
       );
 
-  void _revertStroke() => _commitStroke(revertGuitarStroke(widget.notes, _selected));
+  void _revertStroke() =>
+      _commitStroke(revertGuitarStroke(widget.notes, _selected));
 
   Future<void> _strokePanel() async {
     final result = await showGuitarStrokePanel(
@@ -951,7 +1543,9 @@ class _StepGridState extends State<StepGrid> {
       case GuitarStrokeAction.up:
         _stroke(StrokeDir.up);
       case GuitarStrokeAction.pattern:
-        _strokePattern(strokePatternById(LoopPrefs.instance.strokePattern.value));
+        _strokePattern(
+          strokePatternById(LoopPrefs.instance.strokePattern.value),
+        );
       case GuitarStrokeAction.revert:
         _revertStroke();
       case GuitarStrokeAction.assignStrings:
@@ -1012,7 +1606,10 @@ class _StepGridState extends State<StepGrid> {
     if (!identical(edit.notes, widget.notes)) {
       _commit(List.of(widget.notes), edit.notes, selection: edit.selection);
     }
-    _snack(line);
+    // the phone panel's toggles only speak up when a note was refused
+    if (!widget.phoneSimple || edit.outOfRange > 0 || edit.noChannel > 0) {
+      _snack(line);
+    }
   }
 
   /// gt-003 display-only natural-harmonic info for the notes in scope that
@@ -1029,7 +1626,9 @@ class _StepGridState extends State<StepGrid> {
     final spots = <String>{
       for (final n in notes)
         if (naturalHarmonicPosition(n) case final p?)
-          _ko ? '${p.string}번 줄 ${p.fret}프렛' : 'string ${p.string} fret ${p.fret}',
+          _ko
+              ? '${p.string}번 줄 ${p.fret}프렛'
+              : 'string ${p.string} fret ${p.fret}',
     };
     if (spots.isEmpty) {
       return _ko
@@ -1348,7 +1947,10 @@ class _StepGridState extends State<StepGrid> {
       // Ctrl/Cmd+Shift+H: plain H/K belong to the desktop QWERTY piano, whose
       // global handler only steps aside for Ctrl/Cmd (and Cmd+H hides macOS apps).
       if (event is KeyDownEvent) _humanize();
-    } else if (command && key == LogicalKeyboardKey.keyK && _hasScale && _canScope) {
+    } else if (command &&
+        key == LogicalKeyboardKey.keyK &&
+        _hasScale &&
+        _canScope) {
       if (event is KeyDownEvent) _fitScale();
     } else if (command) {
       return KeyEventResult.ignored;
@@ -1426,6 +2028,7 @@ class _StepGridState extends State<StepGrid> {
       child: Text(label),
     );
   }
+
   Widget _scrollRow(ScrollController controller, List<Widget> children) =>
       SizedBox(
         height: 40,
@@ -1581,15 +2184,10 @@ class _StepGridState extends State<StepGrid> {
     ),
     // Layout toggles (UI prefs only, docs/specs/grid-usability.md). 편집 확대
     // itself sits in the editor header next to Pads/Grid.
-    _button(
-      'note-velocity-toggle',
-      _ko ? '강약 막대' : 'Velocity lane',
-      () {
-        setState(_resetGesture);
-        LoopPrefs.instance.setGridLayout(velocityLane: !_showVelocity);
-      },
-      active: _showVelocity,
-    ),
+    _button('note-velocity-toggle', _ko ? '강약 막대' : 'Velocity lane', () {
+      setState(_resetGesture);
+      LoopPrefs.instance.setGridLayout(velocityLane: !_showVelocity);
+    }, active: _showVelocity),
     if (_editing)
       _button(
         'note-tools-more',
@@ -1782,35 +2380,38 @@ class _StepGridState extends State<StepGrid> {
         _ko ? '이어 붙이기' : 'Legato',
         _canScope ? _legato : null,
       ),
-      Text(
-        '${_ko ? '확률' : 'Chance'} ${(chance * 100).round()}%',
-        style: const TextStyle(fontSize: 11, color: LT.t2),
-      ),
-      SizedBox(
-        width: 110,
-        child: Slider(
-          key: const ValueKey('note-chance'),
-          min: 0,
-          max: 100,
-          divisions: 100,
-          value: (chance * 100).clamp(0, 100).toDouble(),
-          activeColor: widget.accent,
-          onChangeStart:
-              !_canEdit ? null : (_) => _base = List.of(widget.notes),
-          onChanged:
-              !_canEdit
-                  ? null
-                  : (value) => setState(() {
-                    _chanceDraft = value.round() / 100;
-                    _preview = setPitchChance(
-                      _base ?? widget.notes,
-                      _selected,
-                      value.round() / 100,
-                    );
-                  }),
-          onChangeEnd: !_canEdit ? null : (_) => _finish(),
+      // the phone has no play chance (2026-11-02): desktop only
+      if (!widget.phoneSimple)
+        Text(
+          '${_ko ? '확률' : 'Chance'} ${(chance * 100).round()}%',
+          style: const TextStyle(fontSize: 11, color: LT.t2),
         ),
-      ),
+      if (!widget.phoneSimple)
+        SizedBox(
+          width: 110,
+          child: Slider(
+            key: const ValueKey('note-chance'),
+            min: 0,
+            max: 100,
+            divisions: 100,
+            value: (chance * 100).clamp(0, 100).toDouble(),
+            activeColor: widget.accent,
+            onChangeStart:
+                !_canEdit ? null : (_) => _base = List.of(widget.notes),
+            onChanged:
+                !_canEdit
+                    ? null
+                    : (value) => setState(() {
+                      _chanceDraft = value.round() / 100;
+                      _preview = setPitchChance(
+                        _base ?? widget.notes,
+                        _selected,
+                        value.round() / 100,
+                      );
+                    }),
+            onChangeEnd: !_canEdit ? null : (_) => _finish(),
+          ),
+        ),
       Text(
         '${_ko ? '세기 변화' : 'Variation'} '
         '${deviation > 0 ? '+' : ''}$deviation',
@@ -1925,18 +2526,32 @@ class _StepGridState extends State<StepGrid> {
     final tools = _toolItems();
     // a slider's key sits on the Slider inside its fixed-width SizedBox
     bool has(Widget w, String key) =>
-        w.key == ValueKey(key) || (w is SizedBox && w.child?.key == ValueKey(key));
+        w.key == ValueKey(key) ||
+        (w is SizedBox && w.child?.key == ValueKey(key));
     Widget k(String key) => items.firstWhere((w) => has(w, key));
     // the value label the phone row shows just before a slider
-    Widget labelOf(String key) => items[items.indexWhere((w) => has(w, key)) - 1];
+    Widget labelOf(String key) =>
+        items[items.indexWhere((w) => has(w, key)) - 1];
     Widget section(String title, List<Widget> children) => Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: LTType.inter(size: 11, weight: FontWeight.w700, color: LT.t3)),
+          Text(
+            title,
+            style: LTType.inter(
+              size: 11,
+              weight: FontWeight.w700,
+              color: LT.t3,
+            ),
+          ),
           const SizedBox(height: 2),
-          Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: children),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: children,
+          ),
         ],
       ),
     );
@@ -1947,14 +2562,19 @@ class _StepGridState extends State<StepGrid> {
         children: [labelOf(key), k(key)],
       ),
     );
-    final picked = _selected.toList()..sort((a, b) => a.startSteps.compareTo(b.startSteps));
+    final picked =
+        _selected.toList()
+          ..sort((a, b) => a.startSteps.compareTo(b.startSteps));
     final names = [
-      for (final n in picked.take(12)) '${kNoteNames[n.midi % 12]}${n.midi ~/ 12 - 1}',
+      for (final n in picked.take(12))
+        '${kNoteNames[n.midi % 12]}${n.midi ~/ 12 - 1}',
     ];
     final lengths = _editable.map((n) => n.soundingSteps).toSet();
     final lengthValue =
         lengths.length == 1
-            ? lengths.single.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')
+            ? lengths.single
+                .toStringAsFixed(2)
+                .replaceFirst(RegExp(r'\.?0+$'), '')
             : '—';
     return Column(
       key: const ValueKey('grid-notes-tab'),
@@ -1969,12 +2589,17 @@ class _StepGridState extends State<StepGrid> {
                 Text(
                   l.inspectorSelectedNotes(_selected.length),
                   key: const ValueKey('grid-notes-title'),
-                  style: LTType.inter(size: 13, weight: FontWeight.w800, color: LT.t1),
+                  style: LTType.inter(
+                    size: 13,
+                    weight: FontWeight.w800,
+                    color: LT.t1,
+                  ),
                 ),
                 if (names.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    names.join(' ') + (picked.length > names.length ? ' …' : ''),
+                    names.join(' ') +
+                        (picked.length > names.length ? ' …' : ''),
                     style: LTType.mono(size: 11, color: LT.t2),
                   ),
                 ],
@@ -1984,7 +2609,10 @@ class _StepGridState extends State<StepGrid> {
                   k('note-pitch-down'),
                   k('note-pitch-up'),
                 ]),
-                section(l.inspectorOctave, [k('note-octave-down'), k('note-octave-up')]),
+                section(l.inspectorOctave, [
+                  k('note-octave-down'),
+                  k('note-octave-up'),
+                ]),
                 section(l.inspectorLength, [
                   k('note-length-down'),
                   SizedBox(
@@ -2010,29 +2638,60 @@ class _StepGridState extends State<StepGrid> {
                       spacing: 4,
                       runSpacing: 4,
                       children: [
-                        for (final key in const ['note-snap', 'note-multiple', 'note-select-all'])
+                        for (final key in const [
+                          'note-snap',
+                          'note-multiple',
+                          'note-select-all',
+                        ])
                           tools.firstWhere((w) => w.key == ValueKey(key)),
                       ],
                     ),
                   ),
                 const SizedBox(height: 8),
-                _sheetRow(k('note-quantize'), 'note-quantize-settings', _quantizeSettings),
-                _sheetRow(k('note-chord-stamp'), 'note-chord-settings', _chordSheet),
-                _sheetRow(k('note-arpeggiate'), 'note-arpeggiate-settings', _arpSettings),
+                _sheetRow(
+                  k('note-quantize'),
+                  'note-quantize-settings',
+                  _quantizeSettings,
+                ),
+                _sheetRow(
+                  k('note-chord-stamp'),
+                  'note-chord-settings',
+                  _chordSheet,
+                ),
+                _sheetRow(
+                  k('note-arpeggiate'),
+                  'note-arpeggiate-settings',
+                  _arpSettings,
+                ),
                 if (widget.guitar)
                   _sheetRow(
-                    Text(l.inspectorGuitar, style: LTType.inter(size: 12, weight: FontWeight.w700, color: LT.t1)),
+                    Text(
+                      l.inspectorGuitar,
+                      style: LTType.inter(
+                        size: 12,
+                        weight: FontWeight.w700,
+                        color: LT.t1,
+                      ),
+                    ),
                     'stroke-more',
                     _strokePanel,
                     below: [
                       k('stroke-down'),
                       k('stroke-up'),
-                      for (final p in kStrokePatterns.skip(1)) k('stroke-pattern-${p.id}'),
+                      for (final p in kStrokePatterns.skip(1))
+                        k('stroke-pattern-${p.id}'),
                       if (_unassigned.isNotEmpty) k('guitar-unassigned-count'),
                     ],
                   ),
                 _sheetRow(
-                  Text(l.inspectorMore, style: LTType.inter(size: 12, weight: FontWeight.w700, color: LT.t1)),
+                  Text(
+                    l.inspectorMore,
+                    style: LTType.inter(
+                      size: 12,
+                      weight: FontWeight.w700,
+                      color: LT.t1,
+                    ),
+                  ),
                   'note-more',
                   () => setState(() => _moreTools = !_moreTools),
                   open: _moreTools,
@@ -2047,7 +2706,11 @@ class _StepGridState extends State<StepGrid> {
                           : const [],
                 ),
                 if (_moreTools)
-                  _sheetRow(k('note-humanize'), 'note-humanize-settings', _humanizeSettings),
+                  _sheetRow(
+                    k('note-humanize'),
+                    'note-humanize-settings',
+                    _humanizeSettings,
+                  ),
               ],
             ),
           ),
@@ -2063,7 +2726,11 @@ class _StepGridState extends State<StepGrid> {
             children: [
               // one line per cell (a long label scales down, never wraps)
               for (final key in _footerKeys)
-                Expanded(child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: k(key)))),
+                Expanded(
+                  child: Center(
+                    child: FittedBox(fit: BoxFit.scaleDown, child: k(key)),
+                  ),
+                ),
             ],
           ),
         ),
@@ -2082,11 +2749,10 @@ class _StepGridState extends State<StepGrid> {
       child: GestureDetector(
         key: const ValueKey('velocity-lane-fold'),
         behavior: HitTestBehavior.opaque,
-        onTap:
-            () {
-              setState(_resetGesture);
-              LoopPrefs.instance.setGridLayout(velocityLane: !open);
-            },
+        onTap: () {
+          setState(_resetGesture);
+          LoopPrefs.instance.setGridLayout(velocityLane: !open);
+        },
         child: Container(
           height: 24,
           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -2095,11 +2761,19 @@ class _StepGridState extends State<StepGrid> {
           ),
           child: Row(
             children: [
-              Icon(open ? Icons.expand_more : Icons.expand_less, size: 16, color: LT.t2),
+              Icon(
+                open ? Icons.expand_more : Icons.expand_less,
+                size: 16,
+                color: LT.t2,
+              ),
               const SizedBox(width: 6),
               Text(
                 l.velocityLaneRow,
-                style: LTType.inter(size: 11, weight: FontWeight.w600, color: LT.t2),
+                style: LTType.inter(
+                  size: 11,
+                  weight: FontWeight.w600,
+                  color: LT.t2,
+                ),
               ),
             ],
           ),
@@ -2135,7 +2809,9 @@ class _StepGridState extends State<StepGrid> {
           ),
           child: Row(
             children: [
-              Expanded(child: Align(alignment: Alignment.centerLeft, child: main)),
+              Expanded(
+                child: Align(alignment: Alignment.centerLeft, child: main),
+              ),
               Tooltip(
                 message: L10n.of(context).inspectorSettings,
                 child: InkResponse(
@@ -2165,8 +2841,18 @@ class _StepGridState extends State<StepGrid> {
     ),
   );
 
+  bool get _gestures =>
+      (widget.phoneSimple || _editing) && widget.onEdit != null;
+
   @override
   Widget build(BuildContext context) {
+    if (widget.phoneSimple &&
+        _origin == null &&
+        _selected.isNotEmpty &&
+        !setEquals(_selected, _revealedSelection)) {
+      _revealedSelection = Set.of(_selected);
+      _phoneReveal = GridReveal(_phoneRevealSerial--, _selected.toList());
+    }
     final display = _preview ?? widget.notes;
     final selected =
         _preview == null
@@ -2184,7 +2870,7 @@ class _StepGridState extends State<StepGrid> {
       child: PitchGridSurface(
         ladder: widget.ladder,
         focusMidi: widget.focusMidi,
-        eraseMode: widget.onEdit == null || _erasing,
+        eraseMode: widget.onEdit == null || (!widget.phoneSimple && _erasing),
         onPreview: widget.onPreview,
         notes: display,
         onPlace: _place,
@@ -2197,17 +2883,29 @@ class _StepGridState extends State<StepGrid> {
         maxOffset: widget.maxOffset,
         onWindowChanged: widget.onWindowChanged,
         view: _view,
-        onGestureStart: _editing && widget.onEdit != null ? _start : null,
-        onGestureMove: _editing && widget.onEdit != null ? _move : null,
-        onGestureEnd: _editing && widget.onEdit != null ? _finish : null,
-        onGestureCancel: _editing && widget.onEdit != null ? _cancel : null,
+        onGestureStart: _gestures ? _start : null,
+        onGestureMove: _gestures ? _move : null,
+        onGestureEnd: _gestures ? _finish : null,
+        onGestureCancel: _gestures ? _cancel : null,
+        // phone (2026-11-02): a note drags / selects; empty space MOVES the
+        // roll (sideways, up / down); a tap there adds a note (or clears a
+        // selection); held 1 s there, a drag selects an area
+        claimGesture:
+            widget.phoneSimple && widget.onEdit != null
+                ? (p) => _at(p) != null
+                : null,
+        panEmpty: widget.phoneSimple && widget.onEdit != null,
+        onEmptyTap: widget.phoneSimple && widget.onEdit != null ? _emptyTap : null,
+        onLongPressGesture:
+            widget.phoneSimple && widget.onEdit != null ? _startMarquee : null,
+        longPressDelay: const Duration(milliseconds: 1000),
         selected: selected,
         marquee: _marquee,
         strokeMarks: widget.guitar,
         stringMarks: _showStrings,
         warnNotes: _unassigned,
         keyHighlight: widget.keyHighlight,
-        reveal: widget.reveal,
+        reveal: _phoneReveal ?? widget.reveal,
       ),
     );
     if (widget.onEdit == null) return surface;
@@ -2226,69 +2924,157 @@ class _StepGridState extends State<StepGrid> {
             prefs.gridVelocityLane,
             prefs.gridVelocityLaneChosen,
           ]),
-          builder: (context, _) => LayoutBuilder(
-          builder: (context, constraints) {
-            final laneHeight =
-                widget.compactVelocityLane
-                    ? 38.0
-                    : (constraints.maxHeight * .2).clamp(38.0, 64.0);
-            // Secondary tools get their own row only when asked for and
-            // there is room; otherwise one scrollable row (primary first).
-            final twoRows =
-                _editing &&
-                prefs.gridToolsExpanded.value &&
-                !prefs.gridFocus.value &&
-                constraints.maxHeight >= 200;
-            // ui-001 stage 4: the desktop editor draws the tools and the
-            // inspector outside (GridChrome)
-            final external = widget.chrome != null;
-            return Column(
-              children: [
-                if (external)
-                  const SizedBox.shrink()
-                else if (_editing && !twoRows)
-                  _scrollRow(_toolScroll, [
-                    ..._toolItems(),
-                    const SizedBox(width: 8),
-                    ..._inspectorItems(),
-                  ])
-                else
-                  _tools(),
-                Expanded(child: surface),
-                if (widget.velocityLaneFold) _velocityFoldRow(),
-                if (_showVelocity && constraints.maxHeight >= 96)
-                  AnimatedBuilder(
-                    animation: _view,
-                    builder: (context, _) => VelocityLane(
-                    height: laneHeight,
-                    notes: display,
-                    selected: selected,
-                    steps: widget.steps,
-                    accent: widget.accent,
-                    leftInset: PitchGridAxis.gutterWidth(
-                      rail: widget.onWindowChanged != null,
-                    ),
-                    view: _view.view,
-                    enabled: widget.enabled,
-                    chanceMode: _chanceLane,
-                    onModeChanged:
-                        (chance) => setState(() {
-                          _chanceLane = chance;
-                          _resetGesture();
-                        }),
-                    onStart: _startVelocity,
-                    onDelta: _moveVelocity,
-                    onEnd: _finish,
-                    onCancel: _cancel,
-                  ),
-                  ),
-                if (twoRows && !external) _inspector(),
-              ],
-            );
-          },
-        ),
+          builder:
+              (context, _) => LayoutBuilder(
+                builder: (context, constraints) {
+                  final laneHeight =
+                      widget.compactVelocityLane
+                          ? 38.0
+                          : (constraints.maxHeight * .2).clamp(38.0, 64.0);
+                  // Secondary tools get their own row only when asked for and
+                  // there is room; otherwise one scrollable row (primary first).
+                  final twoRows =
+                      _editing &&
+                      prefs.gridToolsExpanded.value &&
+                      !prefs.gridFocus.value &&
+                      constraints.maxHeight >= 200;
+                  // ui-001 stage 4: the desktop editor draws the tools and the
+                  // inspector outside (GridChrome)
+                  final external = widget.chrome != null;
+                  if (widget.phoneSimple) {
+                    // 2026-11-02: no velocity lane under the roll — the
+                    // selected notes' sound is set in a panel on the right.
+                    // The selection bar and that panel FLOAT over the roll:
+                    // selecting never resizes it, so no note moves on screen
+                    // (device: tapping a note seemed to shift it).
+                    final panelW = constraints.maxHeight >= 320 ? 92.0 : 160.0;
+                    final picked = _selected.isNotEmpty;
+                    if (picked || _view.tail > 0) {
+                      _keepPickedBesidePanel(constraints.maxWidth, panelW);
+                    }
+                    return Stack(
+                      key: const ValueKey('phone-grid-body'),
+                      children: [
+                        Positioned.fill(child: surface),
+                        if (!picked)
+                          Positioned(
+                            top: 2,
+                            right: 16, // clear of the scroll rail
+                            child: _phoneMoreButton(),
+                          ),
+                        if (picked)
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: panelW,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: LT.surface.withValues(alpha: .96),
+                                border: const Border(
+                                  bottom: BorderSide(color: LT.border),
+                                ),
+                              ),
+                              child: _phoneSelectionBar(),
+                            ),
+                          ),
+                        if (picked)
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: _phoneNotePanel(),
+                          ),
+                      ],
+                    );
+                  }
+                  return Column(
+                    children: [
+                      if (external)
+                        const SizedBox.shrink()
+                      else if (_editing && !twoRows)
+                        _scrollRow(_toolScroll, [
+                          ..._toolItems(),
+                          const SizedBox(width: 8),
+                          ..._inspectorItems(),
+                        ])
+                      else
+                        _tools(),
+                      Expanded(child: surface),
+                      if (widget.velocityLaneFold) _velocityFoldRow(),
+                      if (_showVelocity && constraints.maxHeight >= 96)
+                        AnimatedBuilder(
+                          animation: _view,
+                          builder:
+                              (context, _) => VelocityLane(
+                                height: laneHeight,
+                                notes: display,
+                                selected: selected,
+                                steps: widget.steps,
+                                accent: widget.accent,
+                                leftInset: PitchGridAxis.gutterWidth(
+                                  rail: widget.onWindowChanged != null,
+                                ),
+                                view: _view.view,
+                                enabled: widget.enabled,
+                                chanceMode: _chanceLane,
+                                onModeChanged:
+                                    (chance) => setState(() {
+                                      _chanceLane = chance;
+                                      _resetGesture();
+                                    }),
+                                onStart: _startVelocity,
+                                onDelta: _moveVelocity,
+                                onEnd: _finish,
+                                onCancel: _cancel,
+                              ),
+                        ),
+                      if (twoRows && !external) _inspector(),
+                    ],
+                  );
+                },
+              ),
         ),
       ),
     );
+  }
+}
+
+/// A fader cap for the phone velocity slider: thin along the track, long
+/// across it (the slider is turned upright, so it reads as a flat bar).
+class _FaderCapShape extends SliderComponentShape {
+  const _FaderCapShape();
+
+  static const _along = 4.0, _across = 28.0;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
+      const Size(_along, _across);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final canvas = context.canvas;
+    final r = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: _along, height: _across),
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(
+      r.shift(const Offset(1, 0)),
+      Paint()..color = Colors.black.withValues(alpha: .45),
+    );
+    // solid, no groove (2026-11-02)
+    canvas.drawRRect(r, Paint()..color = sliderTheme.thumbColor ?? LT.lime);
   }
 }

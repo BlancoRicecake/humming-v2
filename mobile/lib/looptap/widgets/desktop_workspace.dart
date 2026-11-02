@@ -415,6 +415,51 @@ class _DesktopTimelineState extends State<DesktopTimeline> {
   }
 }
 
+/// Phone / tablet: the handle between the track list and the editing pad.
+/// A finger-sized strip (28 px tall) with a visible grip; drag up/down,
+/// double-tap to go back to the default split.
+class PhoneSplitHandle extends StatelessWidget {
+  const PhoneSplitHandle({
+    super.key,
+    required this.onDelta,
+    required this.onEnd,
+    required this.onReset,
+  });
+  final ValueChanged<double> onDelta;
+  final VoidCallback onEnd;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final ko = Localizations.localeOf(context).languageCode == 'ko';
+    return Semantics(
+      label: ko ? '트랙과 편집 영역 크기 조절' : 'Resize tracks and editor',
+      hint: ko ? '위아래로 끌기 · 두 번 눌러 초기화' : 'Drag up or down · double-tap to reset',
+      child: GestureDetector(
+        key: const ValueKey('phone-split-handle'),
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: (d) => onDelta(d.delta.dy),
+        onVerticalDragEnd: (_) => onEnd(),
+        onDoubleTap: onReset,
+        child: SizedBox(
+          height: 28,
+          width: double.infinity,
+          child: Center(
+            child: Container(
+              width: 56,
+              height: 5,
+              decoration: BoxDecoration(
+                color: LT.borderStrong,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class DesktopSplitHandle extends StatelessWidget {
   const DesktopSplitHandle({
     super.key,

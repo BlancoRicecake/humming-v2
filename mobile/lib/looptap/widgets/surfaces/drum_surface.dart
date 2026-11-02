@@ -12,6 +12,7 @@ import '../../models/loop_models.dart';
 import '../../music/drum_note_edit.dart';
 import '../../music/percussion.dart';
 import '../../music/pitch_note_edit.dart' show QuantizeGrid;
+import '../../music/theory.dart' show kBeatsPerBar, kStepsPerBeat;
 import '../../state/loop_prefs.dart';
 import '../../theme/atoms.dart';
 import '../../theme/pad_scale.dart';
@@ -363,7 +364,17 @@ class DrumGrid extends StatefulWidget {
     this.enabled = true,
     this.initialSelectMode = false,
     this.chrome,
+    this.showChance = true,
+    this.showModeButtons = true,
   });
+
+  /// The Draw / Select buttons. The phone has none (2026-11-02): a tap on
+  /// the grid toggles the hit there, as it first did.
+  final bool showModeButtons;
+
+  /// Play chance tools (lane switch, slider). The phone app has none
+  /// (2026-11-02).
+  final bool showChance;
 
   /// ui-001 stage 4 (desktop edit view): Draw / Select go to the editor's
   /// tool row and the selection inspector to the Notes tab (this grid's own
@@ -974,18 +985,20 @@ class _DrumGridState extends State<DrumGrid> {
         onLongPress: _humanizeSettings,
       ),
       _button('drum-humanize-settings', '⚙', _humanizeSettings),
-      Text(
-        '${_ko ? '확률' : 'Chance'} ${(chance * 100).round()}%',
-        style: const TextStyle(fontSize: 11, color: LT.t2),
-      ),
-      _slider('drum-chance', 0, 100, chance * 100, (v) {
-        _chanceDraft = v.round() / 100;
-        _preview = setDrumChance(
-          _base ?? widget.notes,
-          _selected,
-          v.round() / 100,
-        );
-      }),
+      if (widget.showChance) ...[
+        Text(
+          '${_ko ? '확률' : 'Chance'} ${(chance * 100).round()}%',
+          style: const TextStyle(fontSize: 11, color: LT.t2),
+        ),
+        _slider('drum-chance', 0, 100, chance * 100, (v) {
+          _chanceDraft = v.round() / 100;
+          _preview = setDrumChance(
+            _base ?? widget.notes,
+            _selected,
+            v.round() / 100,
+          );
+        }),
+      ],
       Text(
         '${_ko ? '세기 변화' : 'Variation'} '
         '${deviation > 0 ? '+' : ''}$deviation',
@@ -1059,7 +1072,9 @@ class _DrumGridState extends State<DrumGrid> {
                   const Spacer(),
                   // ui-001 stage 4: on desktop Draw / Select are in the
                   // editor's tool row
-                  if (editable && widget.chrome == null) ...[
+                  if (editable &&
+                      widget.chrome == null &&
+                      widget.showModeButtons) ...[
                     _drawButton(),
                     _selectButton(),
                     const SizedBox(width: 8),
@@ -1091,10 +1106,12 @@ class _DrumGridState extends State<DrumGrid> {
                   enabled: widget.enabled,
                   chanceMode: _chanceLane,
                   onModeChanged:
-                      (chance) => setState(() {
-                        _chanceLane = chance;
-                        _resetGesture();
-                      }),
+                      !widget.showChance
+                          ? null
+                          : (chance) => setState(() {
+                            _chanceLane = chance;
+                            _resetGesture();
+                          }),
                   onStart: _startVelocity,
                   onDelta: _moveVelocity,
                   onEnd: _finish,
@@ -1130,7 +1147,30 @@ class _DrumGridState extends State<DrumGrid> {
     );
   }
 
+  // 2026-11-02: a bar ruler over the lanes, like the piano roll's
   Widget _lanes(List<DrumNote> display, Set<DrumNote> selected, int cur) =>
+      Column(
+        children: [
+          SizedBox(
+            key: const ValueKey('drum-grid-ruler'),
+            height: 18,
+            child: Row(
+              children: [
+                const SizedBox(width: 52),
+                Expanded(
+                  child: CustomPaint(
+                    size: Size.infinite,
+                    painter: _DrumRulerPainter(steps: widget.steps),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(child: _laneRows(display, selected, cur)),
+        ],
+      );
+
+  Widget _laneRows(List<DrumNote> display, Set<DrumNote> selected, int cur) =>
       LayoutBuilder(
         builder: (context, c) {
           // Rows fill the height when they fit (3-lane main drums); once there
@@ -1267,6 +1307,20 @@ class _DrumGridPainter extends CustomPainter {
         );
       }
       final color = specs[r].color;
+      if (r == specs.length - 1) {
+        // bar lines over every row (2026-11-02), beat ticks lighter
+        const perBar = kBeatsPerBar * kStepsPerBeat;
+        for (var s = kStepsPerBeat; s < steps; s += kStepsPerBeat) {
+          final bar = s % perBar == 0;
+          canvas.drawLine(
+            Offset(s * unit, bar ? 0 : 2),
+            Offset(s * unit, size.height - (bar ? 0 : 2)),
+            Paint()
+              ..color = bar ? LT.t3 : LT.border
+              ..strokeWidth = bar ? 1.5 : 1,
+          );
+        }
+      }
       for (final n in notes) {
         if (n.kind != specs[r].kind) continue;
         final rect = RRect.fromRectAndRadius(
@@ -1339,4 +1393,50 @@ class _DrumGridPainter extends CustomPainter {
       old.current != current ||
       old.marquee != marquee ||
       !listEquals(old.specs, specs);
+}
+
+/// The beat grid's ruler: the bar number at each bar, "bar.beat" at beats.
+class _DrumRulerPainter extends CustomPainter {
+  _DrumRulerPainter({required this.steps});
+  final int steps;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (steps <= 0) return;
+    final unit = size.width / steps;
+    const perBar = kBeatsPerBar * kStepsPerBeat;
+    // fewer labels when beats get narrow
+    final beatW = unit * kStepsPerBeat;
+    for (var s = 0; s < steps; s += kStepsPerBeat) {
+      final bar = s ~/ perBar + 1;
+      final beat = (s % perBar) ~/ kStepsPerBeat + 1;
+      final isBar = beat == 1;
+      if (!isBar && beatW < 34) continue;
+      final x = s * unit;
+      canvas.drawLine(
+        Offset(x, isBar ? 2 : size.height - 6),
+        Offset(x, size.height),
+        Paint()
+          ..color = isBar ? LT.t3 : LT.border
+          ..strokeWidth = isBar ? 1.5 : 1,
+      );
+      final tp = TextPainter(
+        text: TextSpan(
+          text: isBar ? '$bar' : '$bar.$beat',
+          style: TextStyle(
+            fontSize: isBar ? 11 : 10,
+            fontWeight: isBar ? FontWeight.w700 : FontWeight.w400,
+            color: isBar ? LT.t1 : LT.t3,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      if (x + 3 + tp.width <= size.width) {
+        tp.paint(canvas, Offset(x + 3, (size.height - tp.height) / 2 - 1));
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DrumRulerPainter old) => old.steps != steps;
 }

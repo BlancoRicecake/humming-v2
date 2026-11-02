@@ -52,6 +52,24 @@ class LoopPrefs {
   /// 편집 확대 — the grid takes the timeline's and key hints' space.
   final ValueNotifier<bool> gridFocus = ValueNotifier<bool>(false);
 
+  /// Phone editor: the track list's share of the height it shares with the
+  /// editing pad (drag the handle between them; 2026-11-02). Default .4 =
+  /// the previous fixed 2:3 split.
+  static const double kPhoneTimelineShareDefault = .4;
+  static const double kPhoneTimelineShareMin = .15;
+  static const double kPhoneTimelineShareMax = .75;
+  final ValueNotifier<double> phoneTimelineShare = ValueNotifier<double>(
+    kPhoneTimelineShareDefault,
+  );
+
+  /// Live while dragging; call [savePhoneTimelineShare] when the drag ends.
+  void setPhoneTimelineShare(double v) {
+    phoneTimelineShare.value =
+        v.clamp(kPhoneTimelineShareMin, kPhoneTimelineShareMax).toDouble();
+  }
+
+  Future<void> savePhoneTimelineShare() => _persist();
+
   /// Secondary note tools on their own row (off = one merged row).
   final ValueNotifier<bool> gridToolsExpanded = ValueNotifier<bool>(false);
 
@@ -225,6 +243,7 @@ class LoopPrefs {
   @visibleForTesting
   void resetGridLayout() {
     gridFocus.value = false;
+    phoneTimelineShare.value = kPhoneTimelineShareDefault;
     gridToolsExpanded.value = false;
     gridVelocityLane.value = true;
     gridVelocityLaneChosen.value = false;
@@ -292,6 +311,9 @@ class LoopPrefs {
       if (m['haptics'] is bool) haptics.value = m['haptics'] as bool;
       if (m['scaleSnap'] is bool) scaleSnap.value = m['scaleSnap'] as bool;
       if (m['gridFocus'] is bool) gridFocus.value = m['gridFocus'] as bool;
+      if (m['phoneTimelineShare'] is num) {
+        setPhoneTimelineShare((m['phoneTimelineShare'] as num).toDouble());
+      }
       if (m['gridToolsExpanded'] is bool) {
         gridToolsExpanded.value = m['gridToolsExpanded'] as bool;
       }
@@ -416,6 +438,7 @@ class LoopPrefs {
           'instrumentFavorites': instrumentFavorites.value,
           'scaleSnap': scaleSnap.value,
           'gridFocus': gridFocus.value,
+          'phoneTimelineShare': phoneTimelineShare.value,
           'gridToolsExpanded': gridToolsExpanded.value,
           // only a chosen value: an untouched desktop keeps the folded default
           if (gridVelocityLaneChosen.value)

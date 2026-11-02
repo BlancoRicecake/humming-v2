@@ -5,6 +5,7 @@ import '../../models/loop_models.dart';
 import '../../music/theory.dart' show kBeatsPerBar, kStepsPerBeat;
 import '../../music/timeline_view.dart';
 import '../../theme/tokens.dart';
+import 'pitch_grid_surface.dart' show PitchGridAxis;
 
 /// Shares the piano-roll time axis. Chord notes keep the same time position;
 /// selecting a note in the roll gives its velocity handle hit-test priority.
@@ -25,6 +26,8 @@ class VelocityLane extends StatefulWidget {
     this.chanceMode = false,
     this.onModeChanged,
     this.view,
+    this.spreadStacked = false,
+    this.simple = false,
   });
   final List<PitchNote> notes;
   final Set<PitchNote> selected;
@@ -45,8 +48,36 @@ class VelocityLane extends StatefulWidget {
   /// With [leftInset] = the roll's gutter width, x matches the grid exactly.
   final TimelineView? view;
   TimelineView get timeView => view ?? TimelineView(0, steps.toDouble());
+
+  /// Phone (2026-11-02): notes that start together (a chord) get their bars
+  /// side by side, low to high, so each one can be grabbed — instead of all
+  /// on one x where only the top one could be reached.
+  final bool spreadStacked;
+
+  /// Phone: one plain heading ("세기" / "재생 확률") instead of the
+  /// velocity | chance switch (chance moves to the grid's ⋯ sheet).
+  final bool simple;
   @override
   State<VelocityLane> createState() => _VelocityLaneState();
+}
+
+/// Horizontal offsets (px) for bars of notes sharing a start: spread side by
+/// side, ordered by pitch, at most 10 px apart and within ~90% of a step.
+List<double> stackOffsets(List<PitchNote> notes, double stepPx) {
+  final out = List<double>.filled(notes.length, 0);
+  final groups = <int, List<int>>{};
+  for (var i = 0; i < notes.length; i++) {
+    groups.putIfAbsent((notes[i].startSteps * 100).round(), () => []).add(i);
+  }
+  for (final g in groups.values) {
+    if (g.length < 2) continue;
+    g.sort((a, b) => notes[a].midi.compareTo(notes[b].midi));
+    final spacing = (stepPx * .9 / g.length).clamp(4.0, 10.0);
+    for (var j = 0; j < g.length; j++) {
+      out[g[j]] = (j - (g.length - 1) / 2) * spacing;
+    }
+  }
+  return out;
 }
 
 /// The bar height (0..1) a note shows in the lane's current mode.
@@ -61,12 +92,18 @@ class _VelocityLaneState extends State<VelocityLane> {
 
   double _x(num step) => widget.timeView.fraction(step) * _size.width;
 
+  List<double> get _offsets =>
+      widget.spreadStacked
+          ? stackOffsets(widget.notes, (_x(1) - _x(0)).abs())
+          : List<double>.filled(widget.notes.length, 0);
+
   int? _hit(Offset p) {
+    final offsets = _offsets;
     final candidates = <int>[];
     for (var i = 0; i < widget.notes.length; i++) {
       final n = widget.notes[i];
       if (n.startSteps < 0 || n.startSteps >= widget.steps) continue;
-      if ((_x(n.startSteps) - p.dx).abs() <= 8) {
+      if ((_x(n.startSteps) + offsets[i] - p.dx).abs() <= 8) {
         candidates.add(i);
       }
     }
@@ -78,7 +115,7 @@ class _VelocityLaneState extends State<VelocityLane> {
     final pool = selected.isEmpty ? candidates : selected;
     double distance(int i) {
       final n = widget.notes[i];
-      final x = _x(n.startSteps);
+      final x = _x(n.startSteps) + offsets[i];
       final y =
           _size.height -
           4 -
@@ -139,7 +176,9 @@ class _VelocityLaneState extends State<VelocityLane> {
             : '${const ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'][note.midi % 12]}${note.midi ~/ 12 - 1}';
     final detail =
         note == null
-            ? (ko
+            ? (widget.simple
+                ? (ko ? '막대를 위아래로 끌어 조절' : 'Drag a bar up or down')
+                : ko
                 ? '노트 선택 후 막대를 위아래로 끌기'
                 : 'Select notes, then drag a bar up/down')
             : widget.chanceMode
@@ -169,6 +208,19 @@ class _VelocityLaneState extends State<VelocityLane> {
             height: 18,
             child: Row(
               children: [
+                if (widget.simple) ...[
+                  Text(
+                    widget.chanceMode
+                        ? (ko ? '재생 확률' : 'Play chance')
+                        : (ko ? '세기' : 'Velocity'),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: widget.accent,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ] else ...[
                 mode('velocity-lane-velocity', ko ? '강약' : 'Velocity', false),
                 const Text(
                   ' | ',
@@ -176,6 +228,7 @@ class _VelocityLaneState extends State<VelocityLane> {
                 ),
                 mode('velocity-lane-chance', ko ? '확률' : 'Chance', true),
                 const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Text(
                     detail,
@@ -193,7 +246,11 @@ class _VelocityLaneState extends State<VelocityLane> {
           ),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(left: widget.leftInset),
+              // right: the roll's scroll rail column (same x axis)
+              padding: EdgeInsets.only(
+                left: widget.leftInset,
+                right: PitchGridAxis.scrollRailWidth,
+              ),
               child: LayoutBuilder(
                 builder: (context, c) {
                   _size = c.biggest;
@@ -236,6 +293,7 @@ class _VelocityLaneState extends State<VelocityLane> {
                             widget.enabled,
                             widget.chanceMode,
                             widget.timeView,
+                            _offsets,
                           ),
                         ),
                       ),
@@ -260,8 +318,10 @@ class _VelocityPainter extends CustomPainter {
     this.enabled,
     this.chance,
     this.view,
+    this.offsets,
   ) : selected = Set.of(selected);
   final TimelineView view;
+  final List<double> offsets;
   final List<PitchNote> notes;
   final Set<PitchNote> selected;
   final int steps;
@@ -285,12 +345,15 @@ class _VelocityPainter extends CustomPainter {
       );
     }
     // Selected stems are on top so coincident chord attacks remain editable.
-    final ordered = [
-      ...notes.where((n) => !selected.contains(n)),
-      ...notes.where(selected.contains),
+    final order = [
+      for (var i = 0; i < notes.length; i++)
+        if (!selected.contains(notes[i])) i,
+      for (var i = 0; i < notes.length; i++)
+        if (selected.contains(notes[i])) i,
     ];
-    for (final n in ordered) {
-      final x = xOf(n.startSteps);
+    for (final i in order) {
+      final n = notes[i];
+      final x = xOf(n.startSteps) + (i < offsets.length ? offsets[i] : 0);
       if (x < -4 || x > size.width + 4) continue;
       final y = size.height - 4 - _laneValue(n, chance) * (size.height - 8);
       final base =
@@ -331,5 +394,6 @@ class _VelocityPainter extends CustomPainter {
       old.chance != chance ||
       old.view.start != view.start ||
       old.view.end != view.end ||
+      !listEquals(old.offsets, offsets) ||
       old.accent != accent;
 }

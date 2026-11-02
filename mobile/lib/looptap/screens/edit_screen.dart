@@ -8,7 +8,6 @@ import '../widgets/surfaces/grid_chrome.dart';
 import '../widgets/desktop_inspector.dart';
 import '../widgets/shortcut_help.dart';
 import '../widgets/desktop_instrument.dart';
-import '../music/beginner_backing.dart';
 import '../widgets/sheets/sample_workbench.dart';
 
 // LoopTap — Editor (the core screen). README §4.
@@ -22,6 +21,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:audioplayers/audioplayers.dart' show AudioPlayer, DeviceFileSource;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart' show DioException, DioExceptionType;
@@ -40,7 +40,6 @@ import '../audio/vocal_fx_processor.dart';
 import '../models/loop_models.dart';
 import '../music/hum_map.dart';
 import '../music/vocal_midi.dart';
-import '../music/melody_review.dart';
 import '../music/midi_section_import.dart';
 import '../music/drum_note_edit.dart';
 import '../music/groove.dart';
@@ -48,6 +47,7 @@ import '../music/guitar_stroke.dart';
 import '../music/note_random.dart';
 import '../music/pan.dart';
 import '../music/section_links.dart';
+import '../music/section_names.dart';
 import '../music/pitch_note_edit.dart';
 import '../music/pitch_clipboard.dart';
 import '../music/audition.dart';
@@ -81,10 +81,9 @@ import '../widgets/sheets/instrument_sheet.dart';
 import '../widgets/sheets/key_sheet.dart';
 import '../widgets/sheets/lt_modal.dart';
 import '../../audio/headset.dart';
+import '../../audio/synth.dart' show SynthEngine;
 import '../widgets/sheets/mixer_sheet.dart';
-import '../widgets/sheets/melody_review_sheet.dart';
 import '../widgets/sheets/midi_import_sheet.dart';
-import '../widgets/sheets/song_plan_sheet.dart';
 import '../widgets/sheets/vocal_record_modal.dart';
 import '../widgets/sheets/vocal_editor.dart';
 import '../widgets/sheets/vocal_midi_sheet.dart';
@@ -96,6 +95,9 @@ import '../widgets/surfaces/vocal_surface.dart';
 import '../widgets/transport_bar.dart';
 import '../../services/product_analytics.dart';
 
+
+/// Longest guided hum take (2026-11-02: the user stops it; 20 s at most).
+const kGuidedHumMaxMs = 20000;
 class EditScreen extends StatefulWidget {
   const EditScreen({
     super.key,
@@ -103,8 +105,13 @@ class EditScreen extends StatefulWidget {
     this.guidedStart = false,
     this.guidedEntrySource = 'new_song',
     this.midiFilePicker,
+    this.exportOnOpen = false,
   });
   final String guidedEntrySource;
+
+  /// The song list's card "Export" (2026-11-02): open the export drawer at
+  /// once and go back to the list when it closes (saving only if changed).
+  final bool exportOnOpen;
 
   /// Test seam for "MIDI passage as new section"; null = the platform picker.
   @visibleForTesting
@@ -120,10 +127,27 @@ class EditScreen extends StatefulWidget {
   State<EditScreen> createState() => _EditScreenState();
 }
 
+/// Test seam: the editor's sections, and notes put on the active track as a
+/// converted hum would (`tester.state(...) as EditScreenDebug`).
+@visibleForTesting
+abstract interface class EditScreenDebug {
+  List<Section> get debugSections;
+  void debugAddNotesToActive(List<PitchNote> notes);
+}
+
 // TickerProviderStateMixin (not Single*) — the transport clock disposes and
 // re-creates its Ticker on every play/stop, which Single* would assert against.
 class _EditScreenState extends State<EditScreen>
-    with TickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver
+    implements EditScreenDebug {
+  @override
+  List<Section> get debugSections => _sections;
+
+  @override
+  void debugAddNotesToActive(List<PitchNote> notes) => setState(() {
+    _tracks[_activeId]?.pitchNotes.addAll(notes);
+  });
+
   final LoopAudio _audio = LoopAudio.instance;
   final PitchClipboard _noteClipboard = PitchClipboard();
   bool _desktopClosing = false;
@@ -134,14 +158,17 @@ class _EditScreenState extends State<EditScreen>
   /// 편집 확대 applies to the pitched piano roll (docs/specs/grid-usability.md).
   /// 편집 확대 (phone / tablet). ui-001 stage 3: the desktop edit view
   /// replaces it, so desktop never folds the timeline this way.
-  bool get _gridFocused =>
-      !_desktop &&
-      LoopPrefs.instance.gridFocus.value &&
-      _inputMode == 'grid' &&
-      (_meta.kind == TrackKind.pitched || _meta.kind == TrackKind.bass);
+  ///
+  /// 2026-11-02: removed on the phone too — the track list / pad split
+  /// handle gives the grid its room (the button was hard to find and use).
+  /// Kept as a getter so the fold paths stay in one place.
+  bool get _gridFocused => false;
 
   /// The timeline folds to one row: 편집 확대 (phone / tablet).
   bool get _timelineFolded => _gridFocused;
+
+  /// Phone: the track list's share of the track list + pad height.
+  double get _phoneShare => LoopPrefs.instance.phoneTimelineShare.value;
 
   /// ui-001 stage 3 (desktop): 'arrange' = the timeline takes the window,
   /// 'edit' = a 44 px minimap above the editing surface.
@@ -265,16 +292,23 @@ class _EditScreenState extends State<EditScreen>
     widget.song.sections.map((s) => s.deepCopy()).toList(),
   );
   int _activeIdx = 0;
-  BackingStyle? _guidedBacking;
+  // a section played instead of the song while previewing in the guided
+  // flow (none since the backing step was removed, 2026-11-02)
   Section? _guidedPreviewSection;
-  int? _guidedPreviewCandidate;
-  int? _guidedAppliedCandidate;
 
   // ── editor runtime ──
   late String _activeId = widget.guidedStart ? 'melody' : 'drums';
   late bool _guided = widget.guidedStart;
-  bool _playing = false;
-  bool _previewRawMelody = false;
+  bool _playingFlag = false;
+  bool get _playing => _playingFlag;
+  set _playing(bool v) {
+    if (_playingFlag == v) return;
+    _playingFlag = v;
+    SynthEngine().setTransportPlaying(v); // iOS: playback buffer (2026-11-02)
+  }
+  // raw (uncorrected) pitch preview: no longer offered (guided compare
+  // plays the hummed take instead, 2026-11-02)
+  final bool _previewRawMelody = false;
   final Set<String> _solos = {};
   bool _bypassSolo = false;
   bool _rangeLoop = false;
@@ -1007,8 +1041,6 @@ class _EditScreenState extends State<EditScreen>
         'stage':
             _guidedSaveTracked
                 ? 'saved'
-                : _guidedAppliedCandidate != null
-                ? 'backing'
                 : _hasSongContent
                 ? 'music'
                 : 'empty',
@@ -1024,6 +1056,7 @@ class _EditScreenState extends State<EditScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     LoopPrefs.instance.gridFocus.addListener(_layoutPrefsChanged);
+    LoopPrefs.instance.phoneTimelineShare.addListener(_layoutPrefsChanged);
     LoopPrefs.instance.timelineCollapsed.addListener(_layoutPrefsChanged);
     LoopPrefs.instance.desktopView.addListener(_layoutPrefsChanged);
     LoopPrefs.instance.inspectorOpen.addListener(_layoutPrefsChanged);
@@ -1054,13 +1087,29 @@ class _EditScreenState extends State<EditScreen>
       const Duration(seconds: 12),
       (_) => _autoSaveTick(),
     );
+    if (widget.exportOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await _exportOrPaywall();
+        if (!mounted) return;
+        if (_dirty) {
+          await _backWithSave();
+        } else {
+          Navigator.of(context).pop(); // unchanged: no save, the list order stays
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
     _desktopClosing = true;
+    _takePlayer?.dispose();
+    final take = _guidedTakePath;
+    if (take != null) _deleteQuietly(take);
     WidgetsBinding.instance.removeObserver(this);
     LoopPrefs.instance.gridFocus.removeListener(_layoutPrefsChanged);
+    LoopPrefs.instance.phoneTimelineShare.removeListener(_layoutPrefsChanged);
     LoopPrefs.instance.timelineCollapsed.removeListener(_layoutPrefsChanged);
     LoopPrefs.instance.desktopView.removeListener(_layoutPrefsChanged);
     LoopPrefs.instance.inspectorOpen.removeListener(_layoutPrefsChanged);
@@ -1192,9 +1241,13 @@ class _EditScreenState extends State<EditScreen>
   }
 
   Future<void> _autoSaveTick() async {
+    // nothing changed since the last save of a song already in the library:
+    // skip (the whole library used to be re-encoded and written every 12 s,
+    // also during playback — an audible hitch on phones, 2026-11-02)
     if (!mounted || _leaving) return;
     try {
       final store = context.read<LoopStore>();
+      if (!_dirty && store.songs.any((s) => s.id == widget.song.id)) return;
       // an untouched brand-new song doesn't earn a library slot yet (C15)
       if (_isPristineNew(store)) return;
       final rev = _editRev;
@@ -2562,13 +2615,8 @@ class _EditScreenState extends State<EditScreen>
   // Re-letter auto-named sections by position so the chips read A, B, C… left to
   // right after any add / duplicate / move / delete. Custom-renamed sections
   // (autoName == false) keep their name; their position letter is just skipped.
-  void _relabelSections() {
-    for (var i = 0; i < _sections.length; i++) {
-      if (_sections[i].autoName) {
-        _sections[i].name = String.fromCharCode(65 + i % 26);
-      }
-    }
-  }
+  // 2026-11-02: duplicates read "A #2" (section_names.dart).
+  void _relabelSections() => relabelSections(_sections);
 
   // "+" → a brand-new EMPTY section (not a copy of the current one).
   void _addSection() {
@@ -2595,17 +2643,17 @@ class _EditScreenState extends State<EditScreen>
   }
 
   // long-press → Duplicate: deep-copy a section in place (the old "+" behavior).
+  // The copy keeps the name with " #2" (its family, section_names.dart).
   void _duplicateSection(int idx) {
     _pushUndo();
     if (_playing) _stopAll();
+    final src = _sections[idx];
+    src.family ??= src.id;
     final copy =
-        _sections[idx].deepCopy()
+        src.deepCopy()
           ..id = 'sec${DateTime.now().millisecondsSinceEpoch}'
           ..linkId =
-              null // plain Duplicate is independent (AR-001)
-          ..autoName =
-              true // a duplicate gets a fresh position letter
-          ..name = _nextSectionName();
+              null; // plain Duplicate is independent (AR-001)
     setState(() {
       _sections.insert(idx + 1, copy);
       _relabelSections();
@@ -2619,12 +2667,12 @@ class _EditScreenState extends State<EditScreen>
     if (_songSection != null) return;
     _pushUndo();
     if (_playing) _stopAll();
+    final src = _sections[idx];
+    src.family ??= src.id;
     final copy = duplicateLinked(
-      _sections[idx],
+      src,
       'sec${DateTime.now().millisecondsSinceEpoch}',
-    )
-      ..autoName = true
-      ..name = _nextSectionName();
+    )..family = src.family;
     setState(() {
       _sections.insert(idx + 1, copy);
       _relink();
@@ -2698,20 +2746,20 @@ class _EditScreenState extends State<EditScreen>
   }
 
   // long-press → Move left/right (reorder); active follows the moved chip.
-  void _moveSection(int idx, int dir) {
-    final j = idx + dir;
-    if (j < 0 || j >= _sections.length) return;
+  void _moveSection(int idx, int dir) => _moveSectionTo(idx, idx + dir);
+
+  /// Section [from] to position [to] (a chip dragged and dropped, or the
+  /// menu's move left / right). Names follow the new order on the drop.
+  void _moveSectionTo(int from, int to) {
+    if (from == to || to < 0 || to >= _sections.length) return;
     _pushUndo();
     if (_playing) _stopAll();
     setState(() {
-      final s = _sections.removeAt(idx);
-      _sections.insert(j, s);
+      final active = _sections[_activeIdx];
+      final s = _sections.removeAt(from);
+      _sections.insert(to, s);
       _relabelSections();
-      if (_activeIdx == idx) {
-        _activeIdx = j;
-      } else if (_activeIdx == j) {
-        _activeIdx = idx;
-      }
+      _activeIdx = _sections.indexOf(active);
       _playStep.value = 0;
     });
   }
@@ -2738,7 +2786,8 @@ class _EditScreenState extends State<EditScreen>
     setState(() {
       _sections[idx]
         ..name = name
-        ..autoName = false;
+        ..autoName = false
+        ..family = null; // a renamed copy is its own section now
     });
   }
 
@@ -2771,7 +2820,7 @@ class _EditScreenState extends State<EditScreen>
                 }),
                 _menuRow(
                   Icons.link,
-                  _ko ? '연결 복제' : 'Linked duplicate',
+                  _ko ? '복제 (함께 수정됨)' : 'Duplicate (edits together)',
                   () {
                     Navigator.of(context).pop();
                     _duplicateSectionLinked(idx);
@@ -2780,7 +2829,7 @@ class _EditScreenState extends State<EditScreen>
                 ),
                 _menuRow(
                   Icons.library_music,
-                  _ko ? 'MIDI 구간을 새 섹션으로' : 'MIDI passage as new section',
+                  _ko ? 'MIDI 가져오기' : 'Import MIDI',
                   _songSection == null
                       ? () {
                         Navigator.of(context).pop();
@@ -3909,6 +3958,65 @@ class _EditScreenState extends State<EditScreen>
   }
 
   // ── sheets ────────────────────────────────────────────────────────
+  /// Phone: range loop · bars · restart · Solo compare, in a sheet from the
+  /// transport's loop button (the row took editor height, 2026-11-02).
+  void _openAuditionSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: LT.surface,
+      builder:
+          (ctx) => StatefulBuilder(
+            builder: (ctx, setSheet) {
+              void then(VoidCallback f) {
+                f();
+                setSheet(() {});
+              }
+
+              return SafeArea(
+                child: Padding(
+                  key: const ValueKey('audition-sheet'),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        L10n.of(context).localeName.startsWith('ko')
+                            ? '반복 · 구간 듣기'
+                            : 'Loop · listen to a part',
+                        style: const TextStyle(
+                          color: LT.t1,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      AuditionBar(
+                        bars: _bars,
+                        range: _selectedRange,
+                        looping: _rangeLoop && _songSection == null,
+                        soloCount: _solos.length,
+                        bypassSolo: _bypassSolo,
+                        enabled:
+                            _songSection == null &&
+                            !_recording &&
+                            _countDown == 0,
+                        onRange: (r) => then(() => _changeLoop(range: r)),
+                        onLoop:
+                            () => then(() => _changeLoop(enabled: !_rangeLoop)),
+                        onCompare: () => then(_compareSolo),
+                        onClearSolo: () => then(_clearSolo),
+                        onRestart: () => then(_restartPhrase),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+    );
+  }
+
   void _openKey() {
     showKeySheet(
       context,
@@ -3917,11 +4025,45 @@ class _EditScreenState extends State<EditScreen>
       onPick: (r, s) {
         _pushUndo(coalesce: true);
         setState(() {
+          if (_guided) _moveGuidedMelody(r, s);
           _keyRoot = r;
           _scale = s;
         });
       },
     );
+  }
+
+  /// The guided melody as converted, with its key: a guided key pick moves
+  /// THIS to the new key (never the last move again, so picks don't drift).
+  /// Cleared by a new hum.
+  ({List<PitchNote> notes, String root, String scale})? _guidedKeyBase;
+
+  bool get _guidedKeyChanged {
+    final base = _guidedKeyBase;
+    return base != null && (base.root != _keyRoot || base.scale != _scale);
+  }
+
+  /// In the guided start a key pick is heard: the melody moves to the key
+  /// (2026-11-02). Called inside setState.
+  void _moveGuidedMelody(String root, String scale) {
+    final track = _tracks['melody'];
+    if (track == null || track.pitchNotes.isEmpty) return;
+    final base = _guidedKeyBase ??= (
+      notes: track.pitchNotes.map((n) => n.copyWith()).toList(),
+      root: _keyRoot,
+      scale: _scale,
+    );
+    final moved = [
+      for (final n in base.notes)
+        () {
+          final m = moveToKey(n.midi, base.root, base.scale, root, scale);
+          return n.copyWith(midi: m, freq: midiToFreq(m));
+        }(),
+    ];
+    track.pitchNotes
+      ..clear()
+      ..addAll(moved);
+    _dirty = true;
   }
 
   void _openInstrument() {
@@ -4049,6 +4191,10 @@ class _EditScreenState extends State<EditScreen>
       onClick: (accent) => _audio.click(accent),
       startBacking: _startHumBacking,
       stopBacking: _stopHumBacking,
+      // guided start: the user stops the take (at most 20 s); the song grows
+      // to fit it (2026-11-02)
+      maxMs: _guided ? kGuidedHumMaxMs : null,
+      onRecordedMs: (ms) => _humRecordedMs = ms,
     );
   }
 
@@ -4552,43 +4698,81 @@ class _EditScreenState extends State<EditScreen>
   // differs; minor/major/dorian match.
   static const _engineScale = {'pentatonic': 'minor_pentatonic'};
 
-  void _startMelodyPreview({required bool raw}) {
-    _stopAll();
-    setState(() => _previewRawMelody = raw);
-    _togglePlay();
+  // ── guided: the hummed take, kept to compare with the melody ─────────
+  int? _humRecordedMs;
+  String? _guidedTakePath;
+  AudioPlayer? _takePlayer;
+  bool _playingTake = false;
+
+  Future<void> _keepGuidedTake(String audioPath) async {
+    try {
+      final src = File(audioPath);
+      if (!await src.exists()) return;
+      final ext = audioPath.contains('.') ? audioPath.substring(audioPath.lastIndexOf('.')) : '.wav';
+      final dest = '${Directory.systemTemp.path}/humtrack_guided_take_${widget.song.id}$ext';
+      await src.copy(dest);
+      final old = _guidedTakePath;
+      _guidedTakePath = dest;
+      if (old != null && old != dest) _deleteQuietly(old);
+    } catch (_) {
+      // comparison just isn't offered
+    }
   }
 
-  Future<void> _reviewMelody() async {
-    _stopAll();
-    await showMelodyReviewSheet(
-      context,
-      notes: () => _tracks['melody']?.pitchNotes ?? const [],
-      onOctaveDown:
-          (index) => _editMelody((notes) => shiftNoteOctave(notes, index, -1)),
-      onOctaveUp:
-          (index) => _editMelody((notes) => shiftNoteOctave(notes, index, 1)),
-      onSplit:
-          (index) => _editMelody((notes) => splitNoteAtMidpoint(notes, index)),
-      onMerge: (index) => _editMelody((notes) => mergeWithNext(notes, index)),
-    );
+  void _deleteQuietly(String path) {
+    try {
+      File(path).deleteSync();
+    } catch (_) {}
   }
 
-  void _editMelody(List<PitchNote> Function(List<PitchNote>) transform) {
-    final track = _tracks['melody'];
-    if (track == null) return;
-    _pushUndo();
-    final edited = transform(track.pitchNotes);
-    setState(() {
-      track.pitchNotes
-        ..clear()
-        ..addAll(edited);
-      _dirty = true;
-      _previewRawMelody = false;
-    });
+  Future<void> _toggleTake() async {
+    final path = _guidedTakePath;
+    if (path == null) return;
+    if (_playingTake) {
+      await _takePlayer?.stop();
+      if (mounted) setState(() => _playingTake = false);
+      return;
+    }
+    _stopAll();
+    final player = _takePlayer ??= AudioPlayer()
+      ..onPlayerComplete.listen((_) {
+        if (mounted) setState(() => _playingTake = false);
+      });
+    setState(() => _playingTake = true);
+    try {
+      await player.play(DeviceFileSource(path));
+    } catch (_) {
+      if (mounted) setState(() => _playingTake = false);
+    }
+  }
+
+  void _listenMelody() {
+    if (_playingTake) {
+      _takePlayer?.stop();
+      setState(() => _playingTake = false);
+    }
+    _listenGuided();
   }
 
   Future<void> _humConvert(String audioPath) async {
     final drums = _meta.kind == TrackKind.drums;
+    if (_guided && !drums) {
+      // keep the take to compare with the converted melody (this session
+      // only; deleted with the editor)
+      await _keepGuidedTake(audioPath);
+      _guidedKeyBase = null;
+      // a take longer than the loop: grow the new song to fit it
+      final ms = _humRecordedMs;
+      if (ms != null && mounted) {
+        final barMs = kBeatsPerBar * 60000 / _bpm;
+        final need = (ms / barMs).ceil();
+        final fit = const [1, 2, 4, 8, 16].firstWhere(
+          (b) => b >= need,
+          orElse: () => 16,
+        );
+        if (fit > _bars) _setBars(fit);
+      }
+    }
     // The request is built for THIS section/lane/tempo/key; if any of them
     // changes during the network wait, the result no longer fits — offer a
     // retry (against the new target) instead of writing it somewhere else.
@@ -4876,86 +5060,6 @@ class _EditScreenState extends State<EditScreen>
     }
   }
 
-  Section _backingCandidate(BackingStyle style, int variant) =>
-      withBeginnerBacking(
-        _sec,
-        _keyRoot,
-        _scale,
-        style,
-        chordVariant: variant,
-        melodyLocked: _generationLocks['melody'] ?? true,
-        lockedTracks: _generationLocks,
-      );
-
-  void _chooseBackingMood(BackingStyle style) {
-    _stopAll();
-    setState(() {
-      _guidedBacking = style;
-      _guidedPreviewSection = null;
-      _guidedPreviewCandidate = null;
-      _guidedAppliedCandidate = null;
-    });
-  }
-
-  void _previewBacking(int variant) {
-    final style = _guidedBacking;
-    if (style == null) return;
-    if (_playing && _guidedPreviewCandidate == variant) {
-      _stopAll();
-      setState(() => _guidedPreviewSection = null);
-      return;
-    }
-    _stopAll();
-    setState(() {
-      _guidedPreviewSection = _backingCandidate(style, variant);
-      _guidedPreviewCandidate = variant;
-    });
-    ProductAnalytics.instance.track(
-      ProductEvent.guidedBackingPreviewed,
-      properties: {
-        'feature': 'guided_backing',
-        'backing_style': style.name,
-        'candidate': variant + 1,
-      },
-    );
-    _togglePlay();
-  }
-
-  void _applyBacking(int variant) {
-    final style = _guidedBacking;
-    if (style == null) return;
-    _stopAll();
-    final candidate = _backingCandidate(style, variant);
-    _pushUndo();
-    setState(() {
-      final current = _sections[_activeIdx];
-      if (current.linkId == null) {
-        _sections[_activeIdx] = candidate;
-      } else {
-        // linked: write the backing into the shared content
-        current.tracks
-          ..clear()
-          ..addAll(candidate.tracks);
-        current.fillKinds.setAll(0, candidate.fillKinds);
-        for (final i in linkedIndices(_sections, _activeIdx)) {
-          _sections[i].bars = candidate.bars;
-        }
-      }
-      _guidedPreviewSection = null;
-      _guidedPreviewCandidate = variant;
-      _guidedAppliedCandidate = variant;
-    });
-    ProductAnalytics.instance.track(
-      ProductEvent.guidedBackingApplied,
-      properties: {
-        'feature': 'guided_backing',
-        'backing_style': style.name,
-        'candidate': variant + 1,
-      },
-    );
-    _togglePlay();
-  }
-
   void _listenGuided() {
     if (_playing) {
       _stopAll();
@@ -4964,43 +5068,6 @@ class _EditScreenState extends State<EditScreen>
     }
     setState(() => _guidedPreviewSection = null);
     _togglePlay();
-  }
-
-  Future<void> _openSongPlan() async {
-    _stopAll();
-    await showLtModal<void>(
-      context,
-      width: 620,
-      child: StatefulBuilder(
-        builder:
-            (context, refresh) => SongPlanSheet(
-              sections: _sections,
-              activeIndex: _activeIdx,
-              locks: _generationLocks,
-              onSelect: (index) {
-                _switchSection(index);
-                refresh(() {});
-              },
-              onDuplicate: (index) {
-                _duplicateSection(index);
-                refresh(() {});
-              },
-              onMove: (index, direction) {
-                _moveSection(index, direction);
-                refresh(() {});
-              },
-              onRepeats: (index, repeats) {
-                _setRepeats(index, repeats);
-                refresh(() {});
-              },
-              onLock: (track, locked) {
-                _pushUndo();
-                setState(() => _generationLocks[track] = locked);
-                refresh(() {});
-              },
-            ),
-      ),
-    );
   }
 
   // ── persistence ───────────────────────────────────────────────────
@@ -5080,7 +5147,7 @@ class _EditScreenState extends State<EditScreen>
   bool _isPristineNew(LoopStore store) {
     if (store.songs.any((s) => s.id == widget.song.id)) return false;
     final title = _title.trim();
-    if (title.isNotEmpty && title != 'Untitled loop') return false;
+    if (title.isNotEmpty && !LoopStore.kUntitledTitle.hasMatch(title)) return false;
     if (_songVocalPath != null) return false;
     for (final sec in _sections) {
       for (final t in sec.tracks.values) {
@@ -5107,6 +5174,24 @@ class _EditScreenState extends State<EditScreen>
     });
     if (!_saveErrorShown) showSongSaveError(context);
     _saveErrorShown = true;
+  }
+
+  /// The hum screen was opened from the editor's logo button: back closes it
+  /// (the editor stays); otherwise back leaves the editor as before.
+  bool _guidedFromEditor = false;
+
+  void _guidedBack() {
+    if (_guided && _guidedFromEditor) {
+      _stopAll();
+      _takePlayer?.stop();
+      setState(() {
+        _playingTake = false;
+        _guided = false;
+        _guidedFromEditor = false;
+      });
+      return;
+    }
+    _backWithSave();
   }
 
   Future<void> _backWithSave() async {
@@ -5264,7 +5349,7 @@ class _EditScreenState extends State<EditScreen>
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
-          _backWithSave();
+          _guidedBack();
         },
         child: Scaffold(
           backgroundColor: LT.bg,
@@ -5282,9 +5367,19 @@ class _EditScreenState extends State<EditScreen>
                       ),
                       hasMelody:
                           _tracks['melody']?.pitchNotes.isNotEmpty ?? false,
+                      notes: _tracks['melody']?.pitchNotes ?? const [],
+                      steps: _steps,
+                      playhead: _playStep,
+                      keyLabel: '$_keyRoot ${ltScaleLabel(L10n.of(context), _scale)}',
+                      keyChanged: _guidedKeyChanged,
+                      instrumentName: instrumentLabel(
+                        'melody',
+                        _instruments['melody'] ??
+                            trackById('melody').defaultProgram,
+                      ),
                       playing: _playing,
-                      saved: !_dirty && _savedAt != null,
-                      onBack: _backWithSave,
+                      playingTake: _playingTake,
+                      onBack: _guidedBack,
                       onRecord: () {
                         setState(() => _activeId = 'melody');
                         _openHum();
@@ -5293,14 +5388,6 @@ class _EditScreenState extends State<EditScreen>
                         setState(() => _activeId = 'vocal');
                         _openVocalRecord();
                       },
-                      onConvertVocal:
-                          (_tracks['vocal']?.effectiveClips.isNotEmpty ?? false)
-                              ? () {
-                                setState(() => _activeId = 'vocal');
-                                _openVocalEditor(convertImmediately: true);
-                              }
-                              : null,
-                      onExport: _exportOrPaywall,
                       onSample: () async {
                         _stopAll();
                         await Navigator.of(context).push(
@@ -5320,41 +5407,19 @@ class _EditScreenState extends State<EditScreen>
                         );
                         if (mounted) setState(() {});
                       },
-                      backingStyle: _guidedBacking,
-                      previewCandidate: _guidedPreviewCandidate,
-                      appliedCandidate: _guidedAppliedCandidate,
-                      lowConfidenceCount:
-                          uncertainNoteIndices(
-                            _tracks['melody']?.pitchNotes ?? const [],
-                          ).length,
-                      previewingOriginal: _previewRawMelody,
-                      melodyLocked: _generationLocks['melody'] ?? true,
-                      onPreviewOriginal: () => _startMelodyPreview(raw: true),
-                      onPreviewCorrected: () => _startMelodyPreview(raw: false),
-                      onReviewMelody: _reviewMelody,
-                      onBacking: _chooseBackingMood,
-                      onPreviewBacking: _previewBacking,
-                      onApplyBacking: _applyBacking,
-                      onSongPlan: _openSongPlan,
-                      onUndo:
-                          _undo.isNotEmpty
-                              ? () {
-                                _undoAction();
-                                setState(() {
-                                  _guidedBacking = null;
-                                  _guidedPreviewSection = null;
-                                  _guidedPreviewCandidate = null;
-                                  _guidedAppliedCandidate = null;
-                                });
-                              }
-                              : null,
-                      onListen: _listenGuided,
+                      onPlayTake: _guidedTakePath == null ? null : _toggleTake,
+                      onListen: _listenMelody,
                       onInstrument: _openInstrument,
-                      onSave: _saveNow,
+                      onKey: _openKey,
                       onEdit: () {
                         _stopAll();
+                        _takePlayer?.stop();
                         _trackGuidedExit('editor');
-                        setState(() => _guided = false);
+                        setState(() {
+                          _playingTake = false;
+                          _guided = false;
+                          _guidedFromEditor = false;
+                        });
                       },
                     ),
                   )
@@ -5377,6 +5442,7 @@ class _EditScreenState extends State<EditScreen>
                         onRepeats: _setRepeats,
                         onDelete: _deleteSection,
                         onLongPress: _openSectionMenu,
+                        onMove: _moveSectionTo,
                         onPlaySong: _playSong,
                       ),
                       // arrangement : surface = 2 : 3 vertical split. lane 영역이
@@ -5391,28 +5457,32 @@ class _EditScreenState extends State<EditScreen>
                       ] else ...[
                       if (_timelineFolded)
                         _foldedTimeline()
-                      else
-                        Expanded(flex: 2, child: _timelinePanel()),
-                      if (!_desktop)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: AuditionBar(
-                          bars: _bars,
-                          range: _selectedRange,
-                          looping: _rangeLoop && _songSection == null,
-                          soloCount: _solos.length,
-                          bypassSolo: _bypassSolo,
-                          enabled:
-                              _songSection == null &&
-                              !_recording &&
-                              _countDown == 0,
-                          onRange: (r) => _changeLoop(range: r),
-                          onLoop: () => _changeLoop(enabled: !_rangeLoop),
-                          onCompare: _compareSolo,
-                          onClearSolo: _clearSolo,
-                          onRestart: _restartPhrase,
+                      else ...[
+                        // phone: the track list / pad split is draggable
+                        // (2026-11-02; saved, double-tap resets)
+                        Expanded(
+                          flex: (_phoneShare * 1000).round(),
+                          child: ClipAtMinHeight(
+                            minHeight: 72,
+                            child: _timelinePanel(),
+                          ),
                         ),
-                      ),
+                        PhoneSplitHandle(
+                          onDelta: (dy) => LoopPrefs.instance.setPhoneTimelineShare(
+                            _phoneShare +
+                                dy / math.max(200.0, MediaQuery.sizeOf(context).height - 220),
+                          ),
+                          onEnd: LoopPrefs.instance.savePhoneTimelineShare,
+                          onReset: () {
+                            LoopPrefs.instance.setPhoneTimelineShare(
+                              LoopPrefs.kPhoneTimelineShareDefault,
+                            );
+                            LoopPrefs.instance.savePhoneTimelineShare();
+                          },
+                        ),
+                      ],
+                      // phone (2026-11-02): no audition row over the
+                      // editor — the transport's loop button opens it
                       if (!_desktop)
                       SoloStatusNotice(
                         issues: soloIssues(
@@ -5434,7 +5504,13 @@ class _EditScreenState extends State<EditScreen>
                                 : null,
                       ),
                       _surfaceHeader(pitched),
-                      Expanded(flex: 3, child: _surfacePanel()),
+                      Expanded(
+                        flex: _timelineFolded ? 3 : ((1 - _phoneShare) * 1000).round(),
+                        child: ClipAtMinHeight(
+                          minHeight: 64,
+                          child: _surfacePanel(),
+                        ),
+                      ),
                       ],
                       if (!_desktop)
                       Container(
@@ -5444,7 +5520,7 @@ class _EditScreenState extends State<EditScreen>
                         ),
                         child: TransportBar(
                           rangeLoop: _rangeLoop && _songSection == null,
-                          onLoop: () => _changeLoop(enabled: !_rangeLoop),
+                          onLoop: _openAuditionSheet,
                           playing: _playing,
                           recording: _recording,
                           onPlay: _togglePlay,
@@ -5610,20 +5686,8 @@ class _EditScreenState extends State<EditScreen>
     final rightGroup = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconBtn(
-          icon: Icons.auto_awesome,
-          size: btnSize,
-          tooltip: l.ltGuidedStart,
-          onTap: () {
-            _stopAll();
-            setState(() {
-              _activeId = 'melody';
-              _guided = true;
-              _trackGuidedStart('editor');
-            });
-          },
-        ),
-        const SizedBox(width: 8),
+        // 2026-11-02: no logo / star button here any more — "Hum to MIDI"
+        // on the track does the humming
         // Saved indicator — 고정폭 슬롯으로 예약. 라벨이 등장/사라져도 rightGroup
         // 자연 너비 불변 → 다른 버튼들 흔들림/축소 없음.
         SizedBox(
@@ -5740,10 +5804,6 @@ class _EditScreenState extends State<EditScreen>
   }
 
   Widget _surfaceHeader(bool pitched) {
-    final focusable =
-        _inputMode == 'grid' &&
-        (_meta.kind == TrackKind.pitched || _meta.kind == TrackKind.bass);
-    final wide = MediaQuery.sizeOf(context).width >= 700;
     final hasInstrument =
         _meta.kind == TrackKind.pitched ||
         _meta.kind == TrackKind.bass ||
@@ -5778,26 +5838,6 @@ class _EditScreenState extends State<EditScreen>
           ),
         ],
         if (_hasInputToggle) ...[const SizedBox(width: 6), _inputToggle()],
-        // 편집 확대: the piano roll takes the timeline's / key hints' space
-        // (a labelled pill when there is room; narrow screens get an icon
-        // at the front of the grid's tool row instead)
-        if (focusable && wide && !_desktop) ...[
-          const SizedBox(width: 6),
-          KeyedSubtree(
-            key: const ValueKey('grid-focus'),
-            child: _chordKindToggle(
-              label:
-                  Localizations.localeOf(context).languageCode == 'ko'
-                      ? (_gridFocused ? '편집 확대 끄기' : '편집 확대')
-                      : (_gridFocused ? 'Exit enlarged' : 'Enlarge editor'),
-              on: _gridFocused,
-              onTap:
-                  () => LoopPrefs.instance.setGridLayout(
-                    focus: !LoopPrefs.instance.gridFocus.value,
-                  ),
-            ),
-          ),
-        ],
         // chord mode (melody-group pads: melody + melody-fill): pad tap = triad
         if (_meta.group == 'melody' && _inputMode == 'pads') ...[
           const SizedBox(width: 6),
@@ -5871,7 +5911,10 @@ class _EditScreenState extends State<EditScreen>
           ),
         ],
         const SizedBox(width: 8),
-        if (_inputMode == 'grid' && _meta.kind == TrackKind.drums)
+        // 2026-11-02: the phone shows no grid hint text
+        if (_inputMode == 'grid' && !_desktop)
+          const SizedBox.shrink()
+        else if (_inputMode == 'grid' && _meta.kind == TrackKind.drums)
           hintSlot(L10n.of(context).ltEditorHintGridDrums)
         else if (_inputMode == 'grid' && pitched)
           hintSlot(L10n.of(context).ltEditorHintGridPitched)
@@ -6149,9 +6192,14 @@ class _EditScreenState extends State<EditScreen>
         return ValueListenableBuilder<double>(
           valueListenable: _playStep,
           builder:
-              (_, ps, __) => DrumGrid(
+              // its header / tool row need ~150 px (phone landscape is short)
+              (_, ps, __) => ClipAtMinHeight(
+                minHeight: 150,
+                child: DrumGrid(
                 key: ValueKey('drum-grid-$_activeId-$_activeIdx'),
                 chrome: _desktop ? _gridChrome : null,
+                showChance: _desktop,
+                showModeButtons: _desktop,
                 notes: src.drumNotes,
                 onToggle: _toggleDrumCell,
                 onEdit: _drumEditNotes,
@@ -6160,6 +6208,7 @@ class _EditScreenState extends State<EditScreen>
                 steps: _steps,
                 bars: _bars,
                 specs: specs,
+              ),
               ),
         );
       }
@@ -6221,8 +6270,9 @@ class _EditScreenState extends State<EditScreen>
                 initialEditMode: src.label != null,
                 // narrow screens: 편집 확대 lives in the tool row (the header
                 // has no room for it)
-                focusToggle:
-                    !_desktop && MediaQuery.sizeOf(context).width < 700,
+                focusToggle: false, // 편집 확대 removed (2026-11-02)
+                // phone: no modes / tool row, selection bar + ⋯ sheet
+                phoneSimple: !_desktop,
                 // ui-001 stage 3: the minimap follows this roll's view; the
                 // edit view keeps the velocity lane at its 38 px minimum
                 viewLink: _desktop ? _rollView : null,
@@ -6659,3 +6709,29 @@ class _HumTargetChanged implements Exception {
 
 /// What the user picked after a failed save on window close.
 enum _ExitChoice { keepEditing, retry, discard }
+
+/// Phone landscape leaves the two split panels very little height (device,
+/// 2026-11-02: the track list header and the drum grid overflowed). Below
+/// [minHeight] the child is laid out at [minHeight] and clipped from the top
+/// instead — drag the split handle to see the rest.
+class ClipAtMinHeight extends StatelessWidget {
+  const ClipAtMinHeight({super.key, required this.minHeight, required this.child});
+  final double minHeight;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder:
+        (context, c) =>
+            c.maxHeight >= minHeight
+                ? child
+                : ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.topCenter,
+                    minHeight: minHeight,
+                    maxHeight: minHeight,
+                    child: child,
+                  ),
+                ),
+  );
+}

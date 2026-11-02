@@ -607,8 +607,17 @@ void main() {
       });
     }
 
-    // measured before stage 3 at the same setup (artifacts/ui-003-view-modes/probe-baseline.log)
-    for (final (size, top, height) in const [(Size(844, 390), 287.4, 0.0), (Size(390, 844), 469.0, 246.0)]) {
+    // measured before stage 3 at the same setup (artifacts/ui-003-view-modes/probe-baseline.log):
+    // 844x390 top 287.4 / height 0.0, 390x844 top 469.0 / height 246.0.
+    // 2026-11-02: the phone's track list / pad split handle (28 px) sits
+    // between them now (default split unchanged); the user drags it to give
+    // the pad more room — see phone_split_handle_test.dart. The phone roll
+    // also lost its tool row and its always-on velocity lane (simple roll,
+    // phone_grid_simple_test.dart): 844x390 0.0 -> 60.8, 390x844 246 -> 333.2.
+    // Later that day the audition row (loop · bars · Solo) moved into the
+    // transport's loop button sheet: the roll starts 22.8 px higher and
+    // is 22.8 px taller (844x390 60.8 -> 83.6, 390x844 333.2 -> 356.0).
+    for (final (size, top, height) in const [(Size(844, 390), 241.4, 83.6), (Size(390, 844), 423.0, 356.0)]) {
       testWidgets('phone ${size.width.toInt()}x${size.height.toInt()} unchanged', (tester) async {
         final vp = await measure(tester, size, desktop: false);
         expect(vp.top, closeTo(top, .05));

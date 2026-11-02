@@ -388,10 +388,21 @@ void main() {
     });
 
     for (final size in const [Size(390, 844), Size(844, 390)]) {
-      testWidgets('phone ${size.width.toInt()}x${size.height.toInt()}: SectionBar + AuditionBar, no band', (tester) async {
+      testWidgets('phone ${size.width.toInt()}x${size.height.toInt()}: SectionBar, AuditionBar from the loop button, no band', (tester) async {
         await open(tester, size: size, desktop: false);
         expect(find.byType(SectionBar), findsOneWidget);
+        // 2026-11-02: no audition row over the editor; the transport's
+        // loop button opens it in a sheet
+        expect(find.byType(AuditionBar), findsNothing);
+        await tester.tap(find.byTooltip('Loop · listen to a part'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('audition-sheet')), findsOneWidget);
         expect(find.byType(AuditionBar), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('audition-loop')));
+        await tester.pumpAndSettle();
+        expect(find.text('Range loop on'), findsOneWidget, reason: 'the sheet follows the editor');
+        Navigator.of(tester.element(find.byKey(const ValueKey('audition-sheet')))).pop();
+        await tester.pumpAndSettle();
         expect(find.byType(DesktopSectionBand), findsNothing);
         expect(find.byKey(const ValueKey('arrangement-header')), findsNothing);
       });
