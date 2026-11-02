@@ -1,0 +1,4 @@
+• Internal test 1.0.14 (44)
+• Steadier song saving and backups
+• Make a backup file (.humtrack) of a song and open it as a new song
+• Cloud backup is off in this build
