@@ -1,0 +1,26 @@
+From 1ccd2a18826722c3aa9ed54122ebff20e3b92b10 Mon Sep 17 00:00:00 2001
+From: Ilias Aberkane <user.name>
+Date: Fri, 25 Sep 2026 13:38:54 +0200
+Subject: [PATCH] wavlike: copy only the labl bytes actually read into cue
+ names
+
+Backport note: 1.2.2 accesses cue_points via psf->cues rather than a local alias.
+The upstream bounded string copy is unchanged. Original patch retained.
+
+---
+ src/wavlike.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/wavlike.c b/src/wavlike.c
+index 0c3577a86..9d99b74a3 100644
+--- a/src/wavlike.c
++++ b/src/wavlike.c
+@@ -1067,7 +1067,7 @@ wavlike_subchunk_parse (SF_PRIVATE *psf, int chunk, uint32_t chunk_length)
+ 								i++ ;
+ 
+ 							if (i < psf->cues->cue_count)
+-								memcpy (psf->cues->cue_points [i].name, buffer, sizeof (psf->cues->cue_points [i].name)) ;
++								psf_strlcpy (psf->cues->cue_points [i].name, sizeof (psf->cues->cue_points [i].name), buffer) ;
+ 							} ;
+ 						} ;
+ 					break ;
