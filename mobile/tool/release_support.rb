@@ -9,13 +9,21 @@ module HumTrackRelease
     SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID ENGINE_URL
     CLARITY_PROJECT_ID SENTRY_DSN_MOBILE
   ].freeze
+  # SENTRY_ENVIRONMENT (2026-11-04): explicit only. Absent, a release build
+  # reports as "production" (the app's default). Set "internal" only for an
+  # Android internal build that will never be promoted — an iOS TestFlight
+  # build is the binary App Store review gets, and a Play internal AAB can be
+  # promoted. HUMTRACK_CLOUD_BACKUP is deliberately NOT allowed here: release
+  # builds keep cloud backup off until it is verified against production.
   OPTIONAL_DEFINE_KEYS = %w[
+    SENTRY_ENVIRONMENT
     APP_ENVIRONMENT FIREBASE_ANALYTICS_ENABLED FIREBASE_PROJECT_ID
     FIREBASE_MESSAGING_SENDER_ID FIREBASE_MEASUREMENT_ID
     FIREBASE_ANDROID_APP_ID FIREBASE_ANDROID_API_KEY
     FIREBASE_IOS_APP_ID FIREBASE_IOS_API_KEY
   ].freeze
   DEFINE_KEYS = (REQUIRED_DEFINE_KEYS + OPTIONAL_DEFINE_KEYS).freeze
+  SENTRY_ENVIRONMENTS = %w[production internal staging].freeze
   FIREBASE_REQUIRED_DEFINE_KEYS = %w[
     APP_ENVIRONMENT FIREBASE_PROJECT_ID FIREBASE_MESSAGING_SENDER_ID
     FIREBASE_ANDROID_APP_ID FIREBASE_ANDROID_API_KEY
@@ -43,6 +51,10 @@ module HumTrackRelease
     end
     missing = REQUIRED_DEFINE_KEYS.reject { |key| values[key].is_a?(String) && !values[key].strip.empty? }
     raise ArgumentError, "Missing release configuration: #{missing.join(', ')}" unless missing.empty?
+    sentry = values["SENTRY_ENVIRONMENT"]
+    if sentry && !SENTRY_ENVIRONMENTS.include?(sentry)
+      raise ArgumentError, "SENTRY_ENVIRONMENT must be one of #{SENTRY_ENVIRONMENTS.join(', ')}"
+    end
     validate_firebase_analytics!(values, env: env)
     values
   end

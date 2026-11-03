@@ -68,6 +68,7 @@ class ReleaseSupportTest < Minitest::Test
     HumTrackRelease::DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }.merge(
       "APP_ENVIRONMENT" => "staging",
       "FIREBASE_ANALYTICS_ENABLED" => "false",
+      "SENTRY_ENVIRONMENT" => "production",
     )
   end
 
@@ -86,6 +87,28 @@ class ReleaseSupportTest < Minitest::Test
     error = assert_raises(ArgumentError) { HumTrackRelease.defines(env: {"SUPABASE_URL" => "https://private.example"}, secrets_path: "/absent") }
     assert_includes error.message, "SUPABASE_ANON_KEY"
     refute_includes error.message, "https://private.example"
+  end
+
+  def test_sentry_environment_is_explicit_and_validated
+    required = HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
+    refute HumTrackRelease.defines(env: required, secrets_path: "/absent").key?("SENTRY_ENVIRONMENT")
+    internal = HumTrackRelease.defines(env: required.merge("SENTRY_ENVIRONMENT" => "internal"), secrets_path: "/absent")
+    assert_equal "internal", internal["SENTRY_ENVIRONMENT"]
+    error = assert_raises(ArgumentError) do
+      HumTrackRelease.defines(env: required.merge("SENTRY_ENVIRONMENT" => "debug"), secrets_path: "/absent")
+    end
+    assert_includes error.message, "SENTRY_ENVIRONMENT"
+  end
+
+  def test_cloud_backup_flag_never_reaches_a_release_build
+    required = HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
+    json = JSON.generate("HUMTRACK_CLOUD_BACKUP" => "true", "HUMTRACK_QA_PRO" => "true")
+    result = HumTrackRelease.defines(
+      env: required.merge("HUMTRACK_CLOUD_BACKUP" => "true", "HUMTRACK_DART_DEFINES_JSON" => json),
+      secrets_path: "/absent",
+    )
+    refute result.key?("HUMTRACK_CLOUD_BACKUP")
+    refute result.key?("HUMTRACK_QA_PRO")
   end
 
   def test_optional_analytics_settings_do_not_block_existing_releases
