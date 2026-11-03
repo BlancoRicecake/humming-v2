@@ -1,0 +1,5 @@
+• After humming, compare your hum with the converted melody and try another key
+• Pick notes to set velocity, pitch or mute right away
+• Drag the grid to move around; hold 1 second to select several notes
+• Long-press a section to reorder it; duplicates are named #2
+• Select several songs to delete or back up, and read announcements

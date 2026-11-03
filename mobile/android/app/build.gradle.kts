@@ -63,7 +63,7 @@ android {
     buildTypes {
         debug {
             // Side-by-side dev install (2026-11-02): with the Gradle property
-            // humtrackDev (ORG_GRADLE_PROJECT_humtrackDev=true) the debug build
+            // humtrackDev (-P humtrackDev=true; the env-var form was not picked up) the debug build
             // gets its own package and name, so installing it never replaces —
             // or makes `flutter run` uninstall — a store install and its songs.
             if (project.hasProperty("humtrackDev")) {
