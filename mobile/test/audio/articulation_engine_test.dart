@@ -157,6 +157,9 @@ void main() {
     final engine = MeltyEngine();
     late Synthesizer gm;
     setUp(() {
+      // MeltySynth on every host: a Linux CI host would otherwise route
+      // LoopAudio through the Android path (and its path_provider font load)
+      SynthEngine().debugUseMelty();
       engine.debugReset();
       gm = Synthesizer.loadByteData(
         ByteData.sublistView(gmBytes),
@@ -166,6 +169,7 @@ void main() {
     });
     tearDown(() {
       engine.debugReset();
+      SynthEngine().debugUseMidiPro(null); // back to the host's engine
       LoopAudio.instance.debugResetReady();
     });
 

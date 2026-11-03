@@ -55,6 +55,17 @@ class SynthEngine {
       Platform.isIOS || Platform.isWindows || Platform.isMacOS;
   bool _useMelty = _platformMelty;
 
+  /// Test hook: route through MeltySynth (the iOS / desktop engine) whatever
+  /// the host, with fresh caches. A real-MeltySynth test must say so: on a
+  /// Linux CI host the platform engine is the Android (flutter_midi_pro) path,
+  /// which loads its font through path_provider (2026-11-04). Restore the
+  /// platform engine afterwards with `debugUseMidiPro(null)`.
+  @visibleForTesting
+  void debugUseMelty() {
+    debugUseMidiPro(null);
+    _useMelty = true;
+  }
+
   /// Test hook: drive the flutter_midi_pro (Android) path with [midi], or
   /// restore the platform engine with null. Resets the engine's caches.
   @visibleForTesting
