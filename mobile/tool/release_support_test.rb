@@ -64,6 +64,11 @@ class ReleaseSupportTest < Minitest::Test
     refute target.rejected
   end
 
+  # required settings + an explicit cloud decision (off)
+  def required_env
+    HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }.merge("HUMTRACK_CLOUD_BACKUP" => "false")
+  end
+
   def configuration
     HumTrackRelease::DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }.merge(
       "APP_ENVIRONMENT" => "staging",
@@ -91,7 +96,7 @@ class ReleaseSupportTest < Minitest::Test
   end
 
   def test_sentry_environment_is_explicit_and_validated
-    required = HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
+    required = required_env
     refute HumTrackRelease.defines(env: required, secrets_path: "/absent").key?("SENTRY_ENVIRONMENT")
     internal = HumTrackRelease.defines(env: required.merge("SENTRY_ENVIRONMENT" => "internal"), secrets_path: "/absent")
     assert_equal "internal", internal["SENTRY_ENVIRONMENT"]
@@ -132,17 +137,23 @@ class ReleaseSupportTest < Minitest::Test
   end
 
   def test_cloud_off_needs_nothing_and_qa_flags_never_reach_a_build
-    required = HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
     json = JSON.generate("HUMTRACK_QA_PRO" => "true", "HUMTRACK_QA_ANNOUNCEMENTS" => "true")
     never = ->(_) { raise "no network for a cloud-off build" }
-    result = HumTrackRelease.defines(env: required.merge("HUMTRACK_DART_DEFINES_JSON" => json),
-                                     secrets_path: "/absent", probe: never)
-    refute result.key?("HUMTRACK_CLOUD_BACKUP")
-    refute result.key?("HUMTRACK_QA_PRO")
-    refute result.key?("HUMTRACK_QA_ANNOUNCEMENTS")
-    off = HumTrackRelease.defines(env: required.merge("HUMTRACK_CLOUD_BACKUP" => "false"),
+    off = HumTrackRelease.defines(env: required_env.merge("HUMTRACK_DART_DEFINES_JSON" => json),
                                   secrets_path: "/absent", probe: never)
     assert_equal "false", off["HUMTRACK_CLOUD_BACKUP"]
+    refute off.key?("HUMTRACK_QA_PRO")
+    refute off.key?("HUMTRACK_QA_ANNOUNCEMENTS")
+  end
+
+  def test_cloud_must_be_decided_explicitly
+    # a build machine without the setting (e.g. the Mac) stops instead of
+    # quietly building cloud OFF
+    missing = required_env.reject { |key, _| key == "HUMTRACK_CLOUD_BACKUP" }
+    [missing, missing.merge("HUMTRACK_CLOUD_BACKUP" => "")].each do |env|
+      error = assert_raises(ArgumentError) { HumTrackRelease.defines(env: env, secrets_path: "/absent") }
+      assert_includes error.message, "HUMTRACK_CLOUD_BACKUP=true"
+    end
   end
 
   def test_cloud_on_builds_when_server_attestation_and_receipt_agree
@@ -215,7 +226,7 @@ class ReleaseSupportTest < Minitest::Test
   end
 
   def test_optional_analytics_settings_do_not_block_existing_releases
-    required = HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
+    required = required_env
     result = HumTrackRelease.defines(env: required, secrets_path: "/absent")
     assert_equal required, result
     refute result.key?("FIREBASE_ANALYTICS_ENABLED")

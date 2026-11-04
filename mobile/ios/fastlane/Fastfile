@@ -24,6 +24,7 @@ def prepare_ios_release
   HumTrackRelease.require_google_plist!
   version, number = HumTrackRelease.version
   UI.message("Building HumTrack #{version} (#{number}); configuration: #{defines.keys.join(', ')}")
+  UI.important("Cloud backup: #{defines['HUMTRACK_CLOUD_BACKUP'] == 'true' ? 'ON (verified server)' : 'OFF'}")
   Dir.chdir(HumTrackRelease::MOBILE) do
     sh("flutter", "precache", "--ios")
     sh("flutter", "pub", "get")
@@ -142,6 +143,7 @@ platform :mac do
     defines = HumTrackRelease.mac_defines(channel, HumTrackRelease.defines)
     version, number = HumTrackRelease.version
     UI.message("Building HumTrack for Mac #{version} (#{number}), channel #{channel}")
+    UI.important("Cloud backup: #{defines['HUMTRACK_CLOUD_BACKUP'] == 'true' ? 'ON (verified server)' : 'OFF'}")
     Dir.chdir(HumTrackRelease::MOBILE) do
       sh("flutter", "precache", "--macos")
       sh("flutter", "pub", "get")

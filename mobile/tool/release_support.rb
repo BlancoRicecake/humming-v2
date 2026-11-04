@@ -17,9 +17,11 @@ module HumTrackRelease
   # Android internal build that will never be promoted — an iOS TestFlight
   # build is the binary App Store review gets, and a Play internal AAB can be
   # promoted.
-  # HUMTRACK_CLOUD_BACKUP (2026-11-04): "false" or absent = cloud off. "true"
-  # builds only through validate_cloud! — the live server, an operator's
-  # attestation and a fresh provider-contract receipt must all agree.
+  # HUMTRACK_CLOUD_BACKUP (2026-11-04): required, "true" or "false" — a
+  # release decides cloud backup explicitly, so a build machine missing the
+  # setting (e.g. a Mac) never ships cloud OFF by accident. "true" builds only
+  # through validate_cloud! — the live server, an operator's attestation and
+  # a fresh provider-contract receipt must all agree.
   OPTIONAL_DEFINE_KEYS = %w[
     SENTRY_ENVIRONMENT HUMTRACK_CLOUD_BACKUP
     APP_ENVIRONMENT FIREBASE_ANALYTICS_ENABLED FIREBASE_PROJECT_ID
@@ -81,7 +83,11 @@ module HumTrackRelease
   # Any doubt refuses the build; nothing here is logged beyond the host.
   def self.validate_cloud!(values, env: ENV, probe: method(:fetch_json), now: Time.now)
     flag = values["HUMTRACK_CLOUD_BACKUP"]
-    return if flag.nil? || flag == "false"
+    if flag.nil?
+      raise ArgumentError, "Set HUMTRACK_CLOUD_BACKUP=true (verified cloud server) or false: " \
+                           "a release decides cloud backup explicitly"
+    end
+    return if flag == "false"
     raise ArgumentError, "HUMTRACK_CLOUD_BACKUP must be true or false" unless flag == "true"
 
     engine = URI.parse(values.fetch("ENGINE_URL").to_s)

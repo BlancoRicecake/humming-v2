@@ -41,6 +41,7 @@ platform :android do
   desc "Build a release AAB with production configuration and an upload key"
   lane :build do |options|
     defines = HumTrackRelease.defines
+    UI.important("Cloud backup: #{defines['HUMTRACK_CLOUD_BACKUP'] == 'true' ? 'ON (verified server)' : 'OFF'}")
     HumTrackRelease.require_android_signing!
     version, number = HumTrackRelease.version
     entry = options[:entry] || "lib/main.dart"
