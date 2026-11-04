@@ -69,6 +69,7 @@ class ReleaseSupportTest < Minitest::Test
       "APP_ENVIRONMENT" => "staging",
       "FIREBASE_ANALYTICS_ENABLED" => "false",
       "SENTRY_ENVIRONMENT" => "production",
+      "HUMTRACK_CLOUD_BACKUP" => "false",
     )
   end
 
@@ -100,15 +101,117 @@ class ReleaseSupportTest < Minitest::Test
     assert_includes error.message, "SENTRY_ENVIRONMENT"
   end
 
-  def test_cloud_backup_flag_never_reaches_a_release_build
+  # ── cloud release gate (2026-11-04) ──
+  CLOUD_HOST = "api.example.test"
+  NOW = Time.utc(2026, 11, 4, 12)
+
+  def cloud_env(dir, receipt: {}, verified: CLOUD_HOST, flag: "true")
     required = HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
-    json = JSON.generate("HUMTRACK_CLOUD_BACKUP" => "true", "HUMTRACK_QA_PRO" => "true")
-    result = HumTrackRelease.defines(
-      env: required.merge("HUMTRACK_CLOUD_BACKUP" => "true", "HUMTRACK_DART_DEFINES_JSON" => json),
-      secrets_path: "/absent",
-    )
+    required["ENGINE_URL"] = "https://#{CLOUD_HOST}"
+    path = File.join(dir, "receipt.json")
+    File.write(path, JSON.generate({
+      "kind" => "humtrack-cloud-provider-receipt", "passed" => true, "cleanup_confirmed" => true,
+      "api_host" => CLOUD_HOST, "checked_at" => (NOW - 3600).utc.iso8601, "server_version" => "abc1234",
+    }.merge(receipt)))
+    required.merge(
+      "HUMTRACK_CLOUD_BACKUP" => flag,
+      "HUMTRACK_CLOUD_SERVICE_VERIFIED" => verified,
+      "HUMTRACK_CLOUD_PROVIDER_RECEIPT" => path,
+    ).compact
+  end
+
+  def ready(extra = {})
+    ->(url) do
+      raise "unexpected #{url}" unless url == "https://#{CLOUD_HOST}/health/cloud"
+      {"ready" => true, "contract" => 1, "version" => "abc1234"}.merge(extra)
+    end
+  end
+
+  def cloud_defines(env, probe: ready)
+    HumTrackRelease.defines(env: env, secrets_path: "/absent", probe: probe, now: NOW)
+  end
+
+  def test_cloud_off_needs_nothing_and_qa_flags_never_reach_a_build
+    required = HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
+    json = JSON.generate("HUMTRACK_QA_PRO" => "true", "HUMTRACK_QA_ANNOUNCEMENTS" => "true")
+    never = ->(_) { raise "no network for a cloud-off build" }
+    result = HumTrackRelease.defines(env: required.merge("HUMTRACK_DART_DEFINES_JSON" => json),
+                                     secrets_path: "/absent", probe: never)
     refute result.key?("HUMTRACK_CLOUD_BACKUP")
     refute result.key?("HUMTRACK_QA_PRO")
+    refute result.key?("HUMTRACK_QA_ANNOUNCEMENTS")
+    off = HumTrackRelease.defines(env: required.merge("HUMTRACK_CLOUD_BACKUP" => "false"),
+                                  secrets_path: "/absent", probe: never)
+    assert_equal "false", off["HUMTRACK_CLOUD_BACKUP"]
+  end
+
+  def test_cloud_on_builds_when_server_attestation_and_receipt_agree
+    Dir.mktmpdir do |dir|
+      result = cloud_defines(cloud_env(dir))
+      assert_equal "true", result["HUMTRACK_CLOUD_BACKUP"]
+      # the operator inputs steer the gate only; they are never compiled in
+      refute result.key?("HUMTRACK_CLOUD_SERVICE_VERIFIED")
+      refute result.key?("HUMTRACK_CLOUD_PROVIDER_RECEIPT")
+    end
+  end
+
+  def test_cloud_on_refuses_a_bad_flag_value
+    Dir.mktmpdir do |dir|
+      error = assert_raises(ArgumentError) { cloud_defines(cloud_env(dir, flag: "yes")) }
+      assert_includes error.message, "HUMTRACK_CLOUD_BACKUP"
+    end
+  end
+
+  def test_cloud_on_needs_the_operator_attestation_for_this_server
+    Dir.mktmpdir do |dir|
+      [nil, "", "staging.example.test"].each do |verified|
+        error = assert_raises(ArgumentError) { cloud_defines(cloud_env(dir, verified: verified)) }
+        assert_includes error.message, "HUMTRACK_CLOUD_SERVICE_VERIFIED=#{CLOUD_HOST}"
+      end
+    end
+  end
+
+  def test_cloud_on_needs_a_fresh_passed_receipt_for_this_server
+    Dir.mktmpdir do |dir|
+      [
+        {"passed" => false},
+        {"cleanup_confirmed" => false},
+        {"api_host" => "staging.example.test"},
+        {"checked_at" => (NOW - 15 * 24 * 3600).utc.iso8601},
+        {"checked_at" => (NOW + 3600).utc.iso8601},
+        {"checked_at" => "yesterday"},
+        {"kind" => "something-else"},
+        {"server_version" => ""},
+      ].each do |bad|
+        error = assert_raises(ArgumentError) { cloud_defines(cloud_env(dir, receipt: bad)) }
+        assert_includes error.message, "receipt", bad.inspect
+      end
+      env = cloud_env(dir)
+      File.write(env["HUMTRACK_CLOUD_PROVIDER_RECEIPT"], "{not json")
+      assert_raises(ArgumentError) { cloud_defines(env) }
+      env.delete("HUMTRACK_CLOUD_PROVIDER_RECEIPT")
+      assert_raises(ArgumentError) { cloud_defines(env) }
+    end
+  end
+
+  def test_cloud_on_needs_a_ready_server_running_the_tested_version
+    Dir.mktmpdir do |dir|
+      env = cloud_env(dir)
+      [ready("ready" => false), ready("contract" => 2), ->(_) { raise "HTTP 404" }, ->(_) { "not a hash" }].each do |probe|
+        error = assert_raises(ArgumentError) { cloud_defines(env, probe: probe) }
+        assert_includes error.message, "not ready"
+      end
+      error = assert_raises(ArgumentError) { cloud_defines(env, probe: ready("version" => "newer99")) }
+      assert_includes error.message, "another backend version"
+    end
+  end
+
+  def test_cloud_on_needs_an_https_engine
+    Dir.mktmpdir do |dir|
+      env = cloud_env(dir).merge("ENGINE_URL" => "http://#{CLOUD_HOST}")
+      error = assert_raises(ArgumentError) { cloud_defines(env) }
+      assert_includes error.message, "https"
+    end
   end
 
   def test_optional_analytics_settings_do_not_block_existing_releases

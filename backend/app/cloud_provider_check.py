@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import httpx
@@ -49,6 +50,15 @@ class ProviderCheck:
         self.storage = httpx.Client(timeout=20, follow_redirects=False, trust_env=True)
         self.steps = []
         self.created = False
+
+    def server_version(self):
+        """The deployed backend version from the public /health/cloud (or None)."""
+        try:
+            r = self.api.get('/health/cloud')
+            v = r.json().get('version') if r.status_code == 200 else None
+            return v if isinstance(v, str) else None
+        except Exception:
+            return None
 
     def api_request(self, who, method, path, body=None):
         try:
@@ -127,7 +137,13 @@ class ProviderCheck:
         levels = {n: logging.getLogger(n).level for n in ['httpx', 'httpcore']}
         for name in levels: logging.getLogger(name).setLevel(logging.CRITICAL)
         report = {'project_id': self.project, 'passed': False, 'cleanup_confirmed': False,
-                  'synthetic_provider_fixture': True, 'app_import_tested': False, 'steps': self.steps}
+                  'synthetic_provider_fixture': True, 'app_import_tested': False, 'steps': self.steps,
+                  # receipt fields for the app's cloud release gate (2026-11-04):
+                  # which server, when, and which deployed backend version
+                  'kind': 'humtrack-cloud-provider-receipt',
+                  'api_host': self.api.base_url.host,
+                  'checked_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+                  'server_version': self.server_version()}
         try:
             usage = self.expect(self.api_request(0, 'GET', '/storage/usage'), {200}, 'contract')
             if usage.get('contract') != 1: raise RuntimeError('Backup contract 1 is required')

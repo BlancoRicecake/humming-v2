@@ -21,6 +21,14 @@ on:
         description: Replace the existing pending Apple review/release with this new build
         type: boolean
         default: false
+      cloud_backup:
+        description: >-
+          Cloud backup ON (2026-11-04). Builds only when the server's /health/cloud is ready,
+          vars.HUMTRACK_CLOUD_SERVICE_VERIFIED names the API host and the
+          HUMTRACK_CLOUD_PROVIDER_RECEIPT_JSON secret is a fresh passed provider check
+          (mobile/tool/release_support.rb validate_cloud!). Off by default.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -132,7 +140,16 @@ jobs:
           HUMTRACK_DART_DEFINES_JSON: ${{ secrets.HUMTRACK_DART_DEFINES_JSON }}
           HUMTRACK_AUTOMATIC_RELEASE: 'true'
           HUMTRACK_REPLACE_PENDING_RELEASE: ${{ inputs.replace_pending_ios_release }}
+          # cloud gate inputs (validated by the release helper; never compiled in)
+          HUMTRACK_CLOUD_BACKUP: ${{ inputs.cloud_backup && 'true' || 'false' }}
+          HUMTRACK_CLOUD_SERVICE_VERIFIED: ${{ vars.HUMTRACK_CLOUD_SERVICE_VERIFIED }}
+          CLOUD_PROVIDER_RECEIPT_JSON: ${{ secrets.HUMTRACK_CLOUD_PROVIDER_RECEIPT_JSON }}
         run: |
+          if [ "$HUMTRACK_CLOUD_BACKUP" = "true" ]; then
+            umask 077
+            printf '%s' "$CLOUD_PROVIDER_RECEIPT_JSON" > "$RUNNER_TEMP/cloud-provider-receipt.json"
+            export HUMTRACK_CLOUD_PROVIDER_RECEIPT="$RUNNER_TEMP/cloud-provider-receipt.json"
+          fi
           case "$DESTINATION" in
             build) bundle exec fastlane build ;;
             internal) bundle exec fastlane beta ;;
@@ -245,7 +262,16 @@ jobs:
         env:
           DESTINATION: ${{ inputs.destination }}
           HUMTRACK_DART_DEFINES_JSON: ${{ secrets.HUMTRACK_DART_DEFINES_JSON }}
+          # cloud gate inputs (validated by the release helper; never compiled in)
+          HUMTRACK_CLOUD_BACKUP: ${{ inputs.cloud_backup && 'true' || 'false' }}
+          HUMTRACK_CLOUD_SERVICE_VERIFIED: ${{ vars.HUMTRACK_CLOUD_SERVICE_VERIFIED }}
+          CLOUD_PROVIDER_RECEIPT_JSON: ${{ secrets.HUMTRACK_CLOUD_PROVIDER_RECEIPT_JSON }}
         run: |
+          if [ "$HUMTRACK_CLOUD_BACKUP" = "true" ]; then
+            umask 077
+            printf '%s' "$CLOUD_PROVIDER_RECEIPT_JSON" > "$RUNNER_TEMP/cloud-provider-receipt.json"
+            export HUMTRACK_CLOUD_PROVIDER_RECEIPT="$RUNNER_TEMP/cloud-provider-receipt.json"
+          fi
           case "$DESTINATION" in
             build) bundle exec fastlane build ;;
             internal) bundle exec fastlane internal ;;
