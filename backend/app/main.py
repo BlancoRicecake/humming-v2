@@ -52,8 +52,6 @@ _settings = get_settings()
 if _settings.sentry_dsn:
     try:
         import sentry_sdk
-        from sentry_sdk.integrations.fastapi import FastApiIntegration
-        from sentry_sdk.integrations.starlette import StarletteIntegration
         def _traces_sampler(sampling_context):
             # /health is hit every few seconds by Fly's internal health checker
             # (private 172.x source). Tracing it wastes quota AND on *sampled*
@@ -66,24 +64,16 @@ if _settings.sentry_dsn:
                 return 0.0
             return _settings.sentry_traces_sample_rate
 
+        from .sentry_setup import sentry_options
+
+        # no frame locals / request bodies in events (2026-11-04): see
+        # app/sentry_setup.py
         sentry_sdk.init(
-            dsn=_settings.sentry_dsn,
-            environment=_settings.environment,
-            # traces_sampler (takes precedence over traces_sample_rate) so we can
-            # exclude /health — see _traces_sampler.
-            traces_sampler=_traces_sampler,
-            # middleware_spans=False: Sentry's per-middleware span instrumentation
-            # wraps every BaseHTTPMiddleware.__call__ (plus the receive/send
-            # callbacks) on *sampled* requests, multiplying stack frames per
-            # middleware layer. Combined with the per-request task groups that
-            # BaseHTTPMiddleware spins up, deep enough nesting tripped a
-            # RecursionError on sampled requests (seen intermittently even on
-            # /health). We don't rely on middleware spans — turn them off.
-            integrations=[
-                FastApiIntegration(),
-                StarletteIntegration(middleware_spans=False),
-            ],
-            send_default_pii=False,
+            **sentry_options(
+                dsn=_settings.sentry_dsn,
+                environment=_settings.environment,
+                traces_sampler=_traces_sampler,
+            )
         )
         logger.info("Sentry initialised env=%s", _settings.environment)
     except ImportError:
