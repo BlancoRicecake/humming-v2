@@ -16,6 +16,20 @@ with required_tables(name, private) as (values
     'private lifecycle tables grant no direct client data access'
   from required_tables r left join pg_class c on c.oid=to_regclass('public.'||r.name)
   where r.private
+), admin_gate as (
+  -- 006_announcements_admin.sql (applied in production 2026-11-02): the one
+  -- client write policy allowed, and only in exactly this shape. Its gate
+  -- function and admin list must stay closed to the API roles.
+  select coalesce((
+    select f.prosecdef and f.prorettype='boolean'::regtype
+      and not has_function_privilege('anon',f.oid,'EXECUTE')
+    from pg_proc f where f.oid=to_regprocedure('public.is_app_admin()')
+  ),false) and coalesce((
+    select a.relrowsecurity
+      and not has_table_privilege('anon',a.oid,'SELECT,INSERT,UPDATE,DELETE')
+      and not has_table_privilege('authenticated',a.oid,'SELECT,INSERT,UPDATE,DELETE')
+    from pg_class a where a.oid=to_regclass('public.app_admins')
+  ),false) as safe
 ), policy_checks as (
   select 'client_policy:'||r.name as check_name,
     c.oid is not null and exists (
@@ -25,8 +39,18 @@ with required_tables(name, private) as (values
         and (0=any(p.polroles) or p.polroles && array[
           (select oid from pg_roles where rolname='anon'),
           (select oid from pg_roles where rolname='authenticated')])
+        and not (
+          r.name='app_announcements' and p.polname='admin_all' and p.polcmd='*'
+          and p.polpermissive
+          and p.polroles=array[(select oid from pg_roles where rolname='authenticated')]::oid[]
+          and coalesce(pg_get_expr(p.polqual,p.polrelid) ~ '^\(?(public\.)?is_app_admin\(\)\)?$',false)
+          and coalesce(pg_get_expr(p.polwithcheck,p.polrelid) ~ '^\(?(public\.)?is_app_admin\(\)\)?$',false)
+          and (select safe from admin_gate)
+        )
     ) as passed,
-    'SELECT policy exists; no client/public write or ALL policy' as detail
+    case when r.name='app_announcements'
+      then 'SELECT policy exists; no client/public write or ALL policy except the admin_all policy of 006_announcements_admin (authenticated only, is_app_admin() for USING and WITH CHECK, closed admin list)'
+      else 'SELECT policy exists; no client/public write or ALL policy' end as detail
   from required_tables r left join pg_class c on c.oid=to_regclass('public.'||r.name)
   where not r.private
 ), functions(name,signature) as (values
