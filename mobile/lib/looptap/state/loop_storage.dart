@@ -246,17 +246,35 @@ class LoopStorage {
 
   /// Atomic save: write the whole payload to a temp file, then swap it in.
   /// The previous songs.json survives as songs.json.bak.
-  static Future<void> _saveQueue = Future<void>.value();
+  ///
+  /// Saves run one after another (a chain). Once the last one has finished
+  /// nothing is kept: a completed future would stay tied to the zone it was
+  /// made in, and a later save chained onto it would wait for that zone
+  /// (2026-11-04: a widget test's fake clock that no longer runs).
+  static Future<void>? _saveTail;
+  static var _saving = 0;
+
+  /// Tests: whether a save is still running.
+  @visibleForTesting
+  static bool get saving => _saving > 0;
 
   static Future<void> save(List<Song> songs) {
     // Snapshot before waiting: callers may keep editing while an earlier save
     // is in flight. Only one writer may use songs.json.tmp at a time.
     final payload = Song.encodeList(songs);
-    final result = _saveQueue.then((_) => _savePayload(payload));
-    _saveQueue = result.then<void>(
+    final previous = _saveTail;
+    _saving++;
+    final result = previous == null
+        ? Future<void>.sync(() => _savePayload(payload))
+        : previous.then((_) => _savePayload(payload));
+    final tail = result.then<void>(
       (_) {},
       onError: (Object _, StackTrace __) {},
     );
+    _saveTail = tail;
+    tail.whenComplete(() {
+      if (--_saving == 0) _saveTail = null;
+    }).ignore();
     return result;
   }
 

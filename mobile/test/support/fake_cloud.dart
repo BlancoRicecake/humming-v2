@@ -49,6 +49,9 @@ class FakeCloud implements HttpClientAdapter {
   bool failPut = false;
   bool corruptDownload = false;
 
+  /// Answer GET /storage/usage 500 (the screen's reload after an action).
+  bool failUsage = false;
+
   /// Answer every API call 409 account_mismatch (the token on the way was
   /// another account's; server guard, Codex C5).
   bool accountMismatch = false;
@@ -118,6 +121,7 @@ class FakeCloud implements HttpClientAdapter {
     final j = body.isEmpty ? null : jsonDecode(utf8.decode(body));
     final path = uri.path;
     if (path == '/storage/usage') {
+      if (failUsage) return _json({'detail': 'unavailable'}, 500);
       return _json({
         'used_bytes': used,
         'quota_bytes': quota,

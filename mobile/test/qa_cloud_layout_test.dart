@@ -40,11 +40,21 @@ void main(){
           supportedLocales:L10n.supportedLocales,
           builder:(ctx,child)=>MediaQuery(data:MediaQuery.of(ctx).copyWith(textScaler:TextScaler.linear(c.$3)),child:child!),
           home:CloudBackupScreen(api:api))));
-      for(var i=0;i<40 && find.byKey(const ValueKey('cloud-usage')).evaluate().isEmpty;i++){
+      // loaded = the guide is up and the spinner gone; the guide (2026-11-04)
+      // sits above the list, so usage and buttons may start below the screen
+      bool loaded()=>find.byKey(const ValueKey('cloud-guide')).evaluate().isNotEmpty
+          && find.byType(CircularProgressIndicator).evaluate().isEmpty;
+      for(var i=0;i<200 && !loaded();i++){
         await tester.runAsync(()=>Future<void>.delayed(const Duration(milliseconds:10)));
         await tester.pump(const Duration(milliseconds:10));
       }
-      expect(find.byKey(const ValueKey('cloud-usage')),findsOneWidget);
+      expect(loaded(),isTrue);
+      expect(find.byKey(const ValueKey('cloud-retry')),findsNothing);
+      for(final k in ['cloud-usage','cloud-restore-ltqa','cloud-delete-ltqa']){
+        await tester.scrollUntilVisible(find.byKey(ValueKey(k)),120);
+        final r=tester.getRect(find.byKey(ValueKey(k)));
+        expect(r.left>=0 && r.right<=c.$1,isTrue,reason:'$k inside the width: $r');
+      }
       expect(tester.takeException(),isNull,reason:'cloud restore/delete buttons must fit');
       await tester.pumpWidget(const SizedBox());
       store.dispose();

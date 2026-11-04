@@ -171,6 +171,10 @@ class CloudLinks {
   static var _active = 0;
   static var _seq = 0;
 
+  /// Tests: whether a link operation is still running.
+  @visibleForTesting
+  static bool get busy => _active > 0;
+
   static String _safe(String owner) =>
       owner.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
 
@@ -410,6 +414,7 @@ class CloudBackupApi {
   /// Upload [bytes] as the next version of [projectId]'s cloud copy and
   /// commit it. [expected] = the cloud version this device last saw (null:
   /// a first upload). Returns the server's new version string.
+  /// [onProgress] reports the bytes sent to storage (2026-11-04).
   Future<String> upload({
     required String projectId,
     required String title,
@@ -418,6 +423,7 @@ class CloudBackupApi {
     required int takes,
     required int missingTakes,
     String? expected,
+    void Function(int sent, int total)? onProgress,
   }) async {
     await usage(); // feature + contract check before sending anything
     final Map<String, dynamic> grant;
@@ -445,6 +451,7 @@ class CloudBackupApi {
               '${e.key}': '${e.value}',
           },
         ),
+        onSendProgress: onProgress == null ? null : (sent, _) => onProgress(sent, bytes.length),
       );
     } on DioException catch (e) {
       throw CloudFailed('upload ${e.response?.statusCode ?? e.type.name}');
@@ -591,6 +598,7 @@ Future<CloudLink> backupSong(
   CloudBackupApi api,
   Song song, {
   required bool includeAudio,
+  void Function(int sent, int total)? onProgress,
 }) async {
   final link = (await CloudLinks.load(api.owner))[song.id];
   final built = await buildProjectBackup(song, includeAudio: includeAudio);
@@ -603,6 +611,7 @@ Future<CloudLink> backupSong(
     takes: built.takes,
     missingTakes: built.missing,
     expected: link?.updatedAt,
+    onProgress: onProgress,
   );
   final next = CloudLink(projectId, version, includeAudio);
   api.checkOwner();
@@ -636,6 +645,7 @@ Future<CloudLink> backupAsNewCopy(
   CloudBackupApi api,
   Song song, {
   required bool includeAudio,
+  void Function(int sent, int total)? onProgress,
 }) async {
   // a first upload under a new id; the song is linked to it only once the
   // upload is committed (a failure leaves the old link as it was)
@@ -648,6 +658,7 @@ Future<CloudLink> backupAsNewCopy(
     audioIncluded: includeAudio,
     takes: built.takes,
     missingTakes: built.missing,
+    onProgress: onProgress,
   );
   final next = CloudLink(copyId, version, includeAudio);
   api.checkOwner();

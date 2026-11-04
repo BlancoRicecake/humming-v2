@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import '../../main.dart' show engineApi;
 import '../../services/auth_service.dart';
 import '../models/loop_models.dart';
+import '../screens/cloud_backup_screen.dart';
 import '../state/cloud_backup.dart';
 import '../state/loop_storage.dart';
 import '../state/loop_store.dart';
@@ -14,6 +18,9 @@ import 'sheets/paywall_sheet.dart';
 // Cloud backup actions (contract 1, 2026-10-30; behind HUMTRACK_CLOUD_BACKUP).
 // Every upload starts from the user's explicit choice in [backupSongToCloud];
 // recordings go along only when they tick the box (default off).
+// 2026-11-04: the upload shows its progress, a network failure offers
+// "try again", success offers "view" (the cloud list), and the dialog says
+// when this song was last backed up.
 
 /// The API for the account signed in now (null when signed out). It stays
 /// bound to that account: a switch mid-action stops it (CloudAccountChanged).
@@ -27,12 +34,56 @@ CloudBackupApi? cloudApi() {
   );
 }
 
-void _snack(BuildContext context, String text) {
+void _snack(BuildContext context, String text, {SnackBarAction? action}) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
-      SnackBar(content: Text(text), duration: const Duration(seconds: 6)),
+      SnackBar(content: Text(text), action: action, duration: const Duration(seconds: 6)),
     );
+}
+
+/// Runs an upload under a blocking progress dialog ("preparing", then the
+/// percent sent); the dialog closes however the upload ends.
+Future<T> _withProgress<T>(
+  BuildContext context,
+  Future<T> Function(void Function(int sent, int total) onProgress) run,
+) async {
+  final l = L10n.of(context);
+  final progress = ValueNotifier<double?>(null);
+  final nav = Navigator.of(context, rootNavigator: true);
+  var open = true;
+  unawaited(
+    showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          key: const ValueKey('cloud-progress'),
+          content: ValueListenableBuilder<double?>(
+            valueListenable: progress,
+            builder: (_, p, __) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(p == null ? l.ltCloudPreparing : l.ltCloudUploading((p * 100).round())),
+                const SizedBox(height: 12),
+                LinearProgressIndicator(value: p),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ).whenComplete(() => open = false),
+  );
+  try {
+    return await run((sent, total) {
+      if (total > 0) progress.value = (sent / total).clamp(0.0, 1.0);
+    });
+  } finally {
+    if (open) nav.pop();
+  }
 }
 
 /// The message for a cloud error (null: handled elsewhere).
@@ -72,20 +123,41 @@ Future<void> backupSongToCloud(
   final link = (await CloudLinks.load(cloud.owner))[song.id];
   final takes = LoopStorage.audioNamesOf(song).length;
   if (!context.mounted) return;
+  final last = link == null ? null : DateTime.tryParse(link.updatedAt);
   final includeAudio = await showDialog<bool>(
     context: context,
     builder: (_) => _BackupDialog(
       takes: takes,
       cloudHadAudio: link?.audioIncluded ?? false,
+      lastBackup: last,
     ),
   );
   if (includeAudio == null || !context.mounted) return; // cancelled
+  // after a success: open the cloud list; after a network failure: again
+  SnackBarAction view() => SnackBarAction(
+    label: l.ltCloudOpen,
+    onPressed: () {
+      if (context.mounted) CloudBackupScreen.open(context);
+    },
+  );
+  SnackBarAction? retry(Object e) => e is CloudFailed
+      ? SnackBarAction(
+        label: l.ltCloudRetry,
+        onPressed: () {
+          if (context.mounted) backupSongToCloud(context, song, api: api);
+        },
+      )
+      : null;
   try {
-    await backupSong(cloud, song, includeAudio: includeAudio);
+    await _withProgress(
+      context,
+      (onProgress) => backupSong(cloud, song, includeAudio: includeAudio, onProgress: onProgress),
+    );
     if (context.mounted) {
       _snack(
         context,
         includeAudio ? l.ltCloudBackedUp(song.title) : l.ltCloudBackedUpNoAudio(song.title),
+        action: view(),
       );
     }
   } on CloudConflict catch (c) {
@@ -123,27 +195,34 @@ Future<void> backupSongToCloud(
       switch (choice) {
         case _Resolve.keepDevice:
           await keepThisDevice(cloud, song, c);
-          if (context.mounted) _snack(context, l.ltCloudBackedUp(song.title));
+          if (context.mounted) _snack(context, l.ltCloudBackedUp(song.title), action: view());
         case _Resolve.takeCloud:
           final res = await restoreCopy(cloud, store, c.cloud!);
           if (context.mounted) _snack(context, l.ltCloudRestored(res.song.title));
         case _Resolve.keepBoth:
-          await backupAsNewCopy(cloud, song, includeAudio: includeAudio);
-          if (context.mounted) _snack(context, l.ltCloudBackedUp(song.title));
+          if (!context.mounted) return;
+          await _withProgress(
+            context,
+            (onProgress) => backupAsNewCopy(cloud, song, includeAudio: includeAudio, onProgress: onProgress),
+          );
+          if (context.mounted) _snack(context, l.ltCloudBackedUp(song.title), action: view());
       }
     } catch (e) {
-      if (context.mounted) _snack(context, cloudErrorText(l, e));
+      if (context.mounted) _snack(context, cloudErrorText(l, e), action: retry(e));
     }
   } catch (e) {
     debugPrint('[cloud] backup failed: ${e.runtimeType}');
-    if (context.mounted) _snack(context, cloudErrorText(l, e));
+    if (context.mounted) _snack(context, cloudErrorText(l, e), action: retry(e));
   }
 }
 
 class _BackupDialog extends StatefulWidget {
-  const _BackupDialog({required this.takes, required this.cloudHadAudio});
+  const _BackupDialog({required this.takes, required this.cloudHadAudio, this.lastBackup});
   final int takes;
   final bool cloudHadAudio;
+
+  /// When this song was last backed up from this device (null: never).
+  final DateTime? lastBackup;
   @override
   State<_BackupDialog> createState() => _BackupDialogState();
 }
@@ -162,6 +241,15 @@ class _BackupDialogState extends State<_BackupDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(l.ltCloudBackupBody),
+          if (widget.lastBackup case final last?)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                l.ltCloudLastBackup(DateFormat.yMd().add_Hm().format(last.toLocal())),
+                key: const ValueKey('cloud-last-backup'),
+                style: const TextStyle(color: LT.t3, fontSize: 12),
+              ),
+            ),
           const SizedBox(height: 12),
           CheckboxListTile(
             key: const ValueKey('cloud-include-audio'),

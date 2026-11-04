@@ -103,7 +103,7 @@ void main() {
     await tester.tap(find.text('Make backup file'));
     await tester.pumpAndSettle(); // the menu closes, then the action starts
     final made = File('${root.path}/looptap/exports/Mine.humtrack');
-    for (var i = 0; i < 40 && !find.textContaining('Backup file made').hasFound; i++) {
+    for (var i = 0; i < 40 && !find.textContaining('Backup file made').evaluate().isNotEmpty; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pump();
     }

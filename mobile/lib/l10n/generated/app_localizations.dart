@@ -4380,6 +4380,90 @@ abstract class L10n {
   /// **'연결 문제로 끝내지 못했어요. 기존 곡과 클라우드 사본은 그대로예요. 다시 시도해 주세요.'**
   String get ltCloudFailed;
 
+  /// No description provided for @ltCloudGuideTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 백업은 이렇게 써요'**
+  String get ltCloudGuideTitle;
+
+  /// No description provided for @ltCloudGuideWhere.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장 위치: 내 계정의 HumTrack 클라우드에 곡 사본이 보관돼요. 이 기기의 곡은 그대로 남아요.'**
+  String get ltCloudGuideWhere;
+
+  /// No description provided for @ltCloudGuideUpload.
+  ///
+  /// In ko, this message translates to:
+  /// **'올리기: 곡 카드의 ⋯ → ‘클라우드에 백업’. Pro가 필요하고, 녹음은 체크했을 때만 함께 올라가요.'**
+  String get ltCloudGuideUpload;
+
+  /// No description provided for @ltCloudGuideRestore.
+  ///
+  /// In ko, this message translates to:
+  /// **'받기: 아래 목록에서 ‘이 기기로 받기’를 누르면 새 곡으로 추가돼요. 기존 곡을 덮어쓰지 않아요.'**
+  String get ltCloudGuideRestore;
+
+  /// No description provided for @ltCloudGuideDelete.
+  ///
+  /// In ko, this message translates to:
+  /// **'삭제: ‘클라우드에서 삭제’는 클라우드 사본만 지워요. 구독이 끝나도 받기와 삭제는 할 수 있어요.'**
+  String get ltCloudGuideDelete;
+
+  /// No description provided for @ltCloudSignInAction.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그인'**
+  String get ltCloudSignInAction;
+
+  /// No description provided for @ltCloudProNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'올리기는 Pro에서 쓸 수 있어요. 이미 올린 사본은 지금도 받거나 지울 수 있어요.'**
+  String get ltCloudProNote;
+
+  /// No description provided for @ltCloudProAction.
+  ///
+  /// In ko, this message translates to:
+  /// **'Pro 보기'**
+  String get ltCloudProAction;
+
+  /// No description provided for @ltCloudRetry.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 시도'**
+  String get ltCloudRetry;
+
+  /// No description provided for @ltCloudLinkedTo.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기의 ‘{title}’과 연결됨'**
+  String ltCloudLinkedTo(String title);
+
+  /// No description provided for @ltCloudUploading.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 올리는 중… {percent}%'**
+  String ltCloudUploading(int percent);
+
+  /// No description provided for @ltCloudPreparing.
+  ///
+  /// In ko, this message translates to:
+  /// **'올릴 파일을 준비하는 중…'**
+  String get ltCloudPreparing;
+
+  /// No description provided for @ltCloudLastBackup.
+  ///
+  /// In ko, this message translates to:
+  /// **'마지막 백업: {date}'**
+  String ltCloudLastBackup(String date);
+
+  /// No description provided for @ltCloudOpen.
+  ///
+  /// In ko, this message translates to:
+  /// **'보기'**
+  String get ltCloudOpen;
+
   /// No description provided for @annTitle.
   ///
   /// In ko, this message translates to:

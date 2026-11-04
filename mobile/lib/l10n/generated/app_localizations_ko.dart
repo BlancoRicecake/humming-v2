@@ -2418,6 +2418,59 @@ class L10nKo extends L10n {
       '연결 문제로 끝내지 못했어요. 기존 곡과 클라우드 사본은 그대로예요. 다시 시도해 주세요.';
 
   @override
+  String get ltCloudGuideTitle => '클라우드 백업은 이렇게 써요';
+
+  @override
+  String get ltCloudGuideWhere =>
+      '저장 위치: 내 계정의 HumTrack 클라우드에 곡 사본이 보관돼요. 이 기기의 곡은 그대로 남아요.';
+
+  @override
+  String get ltCloudGuideUpload =>
+      '올리기: 곡 카드의 ⋯ → ‘클라우드에 백업’. Pro가 필요하고, 녹음은 체크했을 때만 함께 올라가요.';
+
+  @override
+  String get ltCloudGuideRestore =>
+      '받기: 아래 목록에서 ‘이 기기로 받기’를 누르면 새 곡으로 추가돼요. 기존 곡을 덮어쓰지 않아요.';
+
+  @override
+  String get ltCloudGuideDelete =>
+      '삭제: ‘클라우드에서 삭제’는 클라우드 사본만 지워요. 구독이 끝나도 받기와 삭제는 할 수 있어요.';
+
+  @override
+  String get ltCloudSignInAction => '로그인';
+
+  @override
+  String get ltCloudProNote =>
+      '올리기는 Pro에서 쓸 수 있어요. 이미 올린 사본은 지금도 받거나 지울 수 있어요.';
+
+  @override
+  String get ltCloudProAction => 'Pro 보기';
+
+  @override
+  String get ltCloudRetry => '다시 시도';
+
+  @override
+  String ltCloudLinkedTo(String title) {
+    return '이 기기의 ‘$title’과 연결됨';
+  }
+
+  @override
+  String ltCloudUploading(int percent) {
+    return '클라우드에 올리는 중… $percent%';
+  }
+
+  @override
+  String get ltCloudPreparing => '올릴 파일을 준비하는 중…';
+
+  @override
+  String ltCloudLastBackup(String date) {
+    return '마지막 백업: $date';
+  }
+
+  @override
+  String get ltCloudOpen => '보기';
+
+  @override
   String get annTitle => '공지사항';
 
   @override

@@ -2505,6 +2505,59 @@ class L10nEn extends L10n {
       'Couldn\'t finish because of a connection problem. Your songs and cloud copies are unchanged. Please try again.';
 
   @override
+  String get ltCloudGuideTitle => 'How cloud backup works';
+
+  @override
+  String get ltCloudGuideWhere =>
+      'Where: a copy of the song is kept in your account\'s HumTrack cloud. The song on this device stays as it is.';
+
+  @override
+  String get ltCloudGuideUpload =>
+      'Back up: song card ⋯ → ‘Back up to cloud’. Needs Pro; recordings go along only when you tick them.';
+
+  @override
+  String get ltCloudGuideRestore =>
+      'Restore: tap ‘Get on this device’ below and it is added as a new song. Existing songs are never overwritten.';
+
+  @override
+  String get ltCloudGuideDelete =>
+      'Delete: ‘Delete from cloud’ removes only the cloud copy. After a subscription ends you can still restore and delete.';
+
+  @override
+  String get ltCloudSignInAction => 'Sign in';
+
+  @override
+  String get ltCloudProNote =>
+      'Backing up needs Pro. You can still restore or delete the copies you already have.';
+
+  @override
+  String get ltCloudProAction => 'See Pro';
+
+  @override
+  String get ltCloudRetry => 'Try again';
+
+  @override
+  String ltCloudLinkedTo(String title) {
+    return 'Linked to ‘$title’ on this device';
+  }
+
+  @override
+  String ltCloudUploading(int percent) {
+    return 'Uploading to the cloud… $percent%';
+  }
+
+  @override
+  String get ltCloudPreparing => 'Preparing the file…';
+
+  @override
+  String ltCloudLastBackup(String date) {
+    return 'Last backup: $date';
+  }
+
+  @override
+  String get ltCloudOpen => 'View';
+
+  @override
   String get annTitle => 'Announcements';
 
   @override
