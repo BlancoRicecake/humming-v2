@@ -182,6 +182,12 @@ jobs:
       FASTLANE_SKIP_UPDATE_CHECK: 'true'
     steps:
       - uses: actions/checkout@v4
+      # same bounded reclaim as CI Mobile (2026-11-04 out-of-disk Android
+      # build); Android SDK/NDK, Java, Flutter, Ruby, workspace kept
+      - name: Disk space (measure + reclaim unused preinstalled tools)
+        run: |
+          python3 infra/scripts/test_ci_disk_space.py
+          python3 infra/scripts/ci_disk_space.py reclaim --min-free-gb 15
       - name: Check required release secrets
         env:
           ANDROID_UPLOAD_KEY_BASE64: ${{ secrets.ANDROID_UPLOAD_KEY_BASE64 }}
@@ -257,6 +263,8 @@ jobs:
           properties = {'storeFile': str(key), 'storePassword': os.environ['STORE_PASSWORD'], 'keyAlias': os.environ['KEY_ALIAS'], 'keyPassword': os.environ['KEY_PASSWORD']}
           Path('mobile/android/key.properties').write_text('\n'.join(k + '=' + escape(v) for k, v in properties.items()) + '\n')
           PY
+      - name: Disk space before the Android build
+        run: python3 infra/scripts/ci_disk_space.py report
       - name: Build or publish Android
         working-directory: mobile/android
         env:
@@ -278,6 +286,9 @@ jobs:
             production) bundle exec fastlane release ;;
             *) exit 1 ;;
           esac
+      - name: Disk space after the Android build
+        if: always()
+        run: python3 infra/scripts/ci_disk_space.py report
       - uses: actions/upload-artifact@v4
         if: always() && hashFiles('mobile/build/app/outputs/bundle/release/app-release.aab') != ''
         with:

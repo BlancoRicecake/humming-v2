@@ -10,11 +10,15 @@ on:
     paths:
       - 'mobile/**'
       - 'infra/scripts/check_android_native_alignment.py'
+      - 'infra/scripts/ci_disk_space.py'
+      - 'infra/scripts/test_ci_disk_space.py'
       - '.github/workflows/ci-mobile.yml'
   pull_request:
     paths:
       - 'mobile/**'
       - 'infra/scripts/check_android_native_alignment.py'
+      - 'infra/scripts/ci_disk_space.py'
+      - 'infra/scripts/test_ci_disk_space.py'
       - '.github/workflows/ci-mobile.yml'
 
 # 같은 ref 에 새 커밋이 오면 진행 중이던 런은 취소.
@@ -38,6 +42,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # 2026-11-04: the Android build ran the hosted runner out of disk
+      # ("No space left on device" in the runner's _diag log) after all tests
+      # passed. Remove only named, unused preinstalled toolchains (.NET,
+      # Haskell, Swift, CodeQL…); the Android SDK/NDK, Java, Flutter, Ruby and
+      # the workspace are kept and checked. See infra/scripts/ci_disk_space.py.
+      - name: Disk space (measure + reclaim unused preinstalled tools)
+        working-directory: .
+        run: |
+          python3 infra/scripts/test_ci_disk_space.py
+          python3 infra/scripts/ci_disk_space.py reclaim --min-free-gb 15
 
       - uses: actions/setup-java@v4
         with:
@@ -97,8 +112,15 @@ jobs:
       - name: Android release auth guard regression tests
         run: python3 tool/test_android_auth_guard.py
 
+      - name: Disk space before the Android build
+        run: python3 ../infra/scripts/ci_disk_space.py report
+
       - name: Android debug build
         run: flutter build apk --debug --no-pub --target-platform android-arm64
 
       - name: Native 16KB ELF and APK alignment
         run: python3 ../infra/scripts/check_android_native_alignment.py build/app/outputs/flutter-apk/app-debug.apk --output build/android-16kb-ci.json
+
+      - name: Disk space after the Android build
+        if: always()
+        run: python3 ../infra/scripts/ci_disk_space.py report
