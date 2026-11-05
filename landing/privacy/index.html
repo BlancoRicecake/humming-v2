@@ -132,27 +132,17 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
     <div class="doc-eyebrow" data-ko="Legal · HumTrack" data-en="Legal · HumTrack">Legal · HumTrack</div>
     <h1 data-ko="개인정보처리방침" data-en="Privacy Policy">개인정보처리방침</h1>
     <div class="meta">
-      <!-- 운영자 필독 (게시 전 조치): 아래 시행일 2026-11-01 은 이용약관 제3조 제3항
-           ("회원에게 불리한 변경 또는 중대한 변경의 경우 30일 전 고지") 및 개인정보처리방침 제10조를
-           보수적으로 적용한 날짜입니다.
-           ⚠ 이번 개정에는 Google Firebase Analytics 신규 처리 고지가 포함됩니다.
-           신규 분석 수탁자·처리 항목이므로 30일 사전 고지 대상이며, 고지를
-           생략하거나 기간을 단축할 수 없습니다.
-           본 개정본을 게시할 때 시행일 30일 전까지 반드시
-           (1) 앱 내 공지 게시, (2) 등록 회원 이메일 발송 을 모두 이행해야 합니다.
-           Operator: this revision adds Google Firebase Analytics. In-app notice AND email
-           must go out by 2026-10-02 for the proposed 2026-11-01 effective date. -->
-      <span data-ko="<strong>시행일(예정)</strong>: 2026-11-01" data-en="<strong>Proposed effective date</strong>: 2026-11-01"><strong>시행일(예정)</strong>: 2026-11-01</span>
+      <!-- 게시 전: R2 운영 버킷의 국외 이전 정보를 확인하고, 제10조에 따라 앱 공지와 가입 이메일을 보낸 뒤 시행일을 확정합니다. 이 개정은 Firebase Analytics 운영 수집을 활성화하지 않습니다. -->
+      <span data-ko="<strong>시행일(예정)</strong>: 추후 공지" data-en="<strong>Proposed effective date</strong>: To be announced"><strong>시행일(예정)</strong>: 추후 공지</span>
       &nbsp;·&nbsp;
-      <span data-ko="<strong>최종개정</strong>: 2026-09-28" data-en="<strong>Last updated</strong>: 2026-09-28"><strong>최종개정</strong>: 2026-09-28</span>
+      <span data-ko="<strong>최종개정</strong>: 2026-11-06" data-en="<strong>Last updated</strong>: 2026-11-06"><strong>최종개정</strong>: 2026-11-06</span>
       &nbsp;·&nbsp;
-      <span>1.4-draft</span>
+      <span>1.5-draft</span>
     </div>
   </header>
 
   <aside class="doc-notice" role="note">
-    <span data-ko="<strong>개정 안내</strong> — Firebase Analytics 제품 분석 고지를 추가한 1.4 초안이며 시행 예정일은 2026년 11월 1일입니다. 운영 수집은 아직 비활성입니다. 시행 후에도 설정 → 익명 사용 분석에서 향후 수집을 끌 수 있습니다. 동의하지 않으시면 시행일 전까지 <a href=&quot;mailto:humtrack@gmail.com&quot;>알려주시거나</a> 회원 탈퇴하실 수 있습니다."
-          data-en="<strong>Amendment notice</strong> — this 1.4 draft adds the Firebase Analytics product-analytics disclosure, with a proposed effective date of 1 November 2026. Production collection remains disabled. After activation, future collection can be disabled under Settings → Anonymous usage analytics. If you do not agree you may <a href=&quot;mailto:humtrack@gmail.com&quot;>tell us</a> or close your account before that date."><strong>개정 안내</strong> — Firebase Analytics 제품 분석 고지를 추가한 1.4 초안이며 시행 예정일은 2026년 11월 1일입니다. 운영 수집은 아직 비활성입니다. 시행 후에도 설정 → 익명 사용 분석에서 향후 수집을 끌 수 있습니다. 동의하지 않으시면 시행일 전까지 <a href="mailto:humtrack@gmail.com">알려주시거나</a> 회원 탈퇴하실 수 있습니다.</span>
+    <span data-ko="<strong>개정 안내</strong> — 선택형 클라우드 백업의 저장·복원·삭제 방식을 안내하는 초안입니다. 시행일은 앱 공지와 가입 이메일로 안내합니다." data-en="<strong>Amendment notice</strong> — this draft explains how optional cloud backup stores, restores and deletes your work. We will announce the effective date in the app and by email."><strong>개정 안내</strong> — 선택형 클라우드 백업의 저장·복원·삭제 방식을 안내하는 초안입니다. 시행일은 앱 공지와 가입 이메일로 안내합니다.</span>
   </aside>
 
   <article class="prose lang-body" data-body="ko">
@@ -201,6 +191,20 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <td>분석 / 보컬 처리 / 오토튠 / 이펙트 실행 시</td>
 <td>Fly.io iad 서버 메모리</td>
 <td><strong>처리 완료 즉시 폐기 (저장 ❌)</strong></td>
+<td>계약 이행</td>
+</tr>
+<tr>
+<td>클라우드 백업 사본 (.humtrack) — 곡 제목, 노트, 편집 내용과 곡 설정. 녹음은 별도로 선택한 경우에만 포함</td>
+<td>Pro 회원이 곡의 클라우드 백업을 직접 실행할 때</td>
+<td>Cloudflare R2</td>
+<td>클라우드 사본 삭제 또는 계정 삭제 시까지</td>
+<td>계약 이행</td>
+</tr>
+<tr>
+<td>백업 관리 정보 — 계정·프로젝트 식별자, 곡 제목, 파일 크기와 무결성 확인값, 녹음 포함 여부와 개수, 백업 시각 및 용량 사용량</td>
+<td>백업·갱신·삭제 처리 시</td>
+<td>Supabase Postgres (미국, us-east-1)</td>
+<td>해당 사본 또는 계정 삭제 시까지. 사용량은 계정 삭제 시까지</td>
 <td>계약 이행</td>
 </tr>
 <tr>
@@ -255,7 +259,6 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 </tbody>
 </table>
 <p><strong>중요 (수집하지 않는 항목)</strong>:<br>
-- 회원의 곡·보컬·MIDI 등 작업물의 서버 보관 ❌ — 기기에만 저장되며 업로드되지 않습니다 (분석·처리를 위해 전송된 오디오는 메모리에서 처리 후 즉시 폐기)<br>
 - 결제 카드 번호 직접 처리 ❌ (Apple / Google 이 처리)<br>
 - 위치 정보 ❌<br>
 - 연락처 ❌<br>
@@ -268,7 +271,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <p><strong>Google Firebase Analytics (제품 분석)</strong>: 허용 목록에 든 고정 이벤트와 열거형 값만 전송합니다. 앱 시작과 기능 흐름의 시작·성공·실패를 집계하며 이메일·이름·곡 제목·가사·오디오·파일 경로·노트/MIDI 내용·음성 특성·자유 입력 텍스트는 전송하지 않습니다. 로그인 사용자는 불투명 Supabase 사용자 ID로만 연결됩니다. 광고 식별자와 광고 개인화 신호는 비활성화하며 광고·교차 앱 추적에 사용하지 않습니다.</p>
 <h3>3. 처리 목적</h3>
 <ol>
-<li>서비스 제공: 계정 인증, 보컬 분석 및 처리 (오토튠·이펙트 포함)</li>
+<li>서비스 제공: 계정 인증, 보컬 분석 및 처리, 회원이 요청한 곡 백업·복원·삭제</li>
 <li>결제 및 구독 관리: IAP 영수증 검증, 갱신 webhook 처리, Pro 자격 판정</li>
 <li>안정성 개선: 오류·크래시 추적 (Sentry — PII 자동 수집 비활성)</li>
 <li>제품·UX 개선: 익명 세션 리플레이·히트맵 분석 (Microsoft Clarity)</li>
@@ -278,9 +281,9 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 </ol>
 <h3>4. 보유 및 파기</h3>
 <ol>
-<li><strong>회원 탈퇴 시</strong>: Supabase Auth 의 계정 정보, Supabase Postgres 의 구독·영수증 기록, 그리고 Cloudflare R2 에 해당 회원 prefix 로 남아 있는 객체가 있는 경우 이를 포함하여 <strong>72시간 이내 cascade 영구 삭제</strong>합니다 (SLA: 영업일 기준 3일 이내 접수 확인).</li>
-<li><strong>회원의 작업물</strong>: 곡·보컬·MIDI 등 작업물은 <strong>회원의 기기에만 저장</strong>되며 회사 서버에 보관되지 않습니다. 따라서 회사는 이를 열람·삭제·복구할 수 없으며, 삭제·백업은 회원이 기기에서 직접 수행합니다.</li>
-<li><strong>Pro 구독 만료 시</strong>: Pro 전용 기능(곡 무제한 저장, WAV/MIDI/스템 내보내기)만 잠기며, <strong>이미 기기에 저장된 곡은 삭제되지 않고 그대로 열람·편집·재생할 수 있습니다.</strong> 별도의 휴면 계정 정책이 향후 도입될 경우 시행일 30일 전 본 방침 개정을 통해 사전 고지합니다.</li>
+<li><strong>회원 탈퇴 시</strong>. 법령상 보존해야 하는 기록을 제외하고 계정 정보, 구독 기록, 클라우드 백업 사본과 관리 정보를 72시간 이내에 영구 삭제합니다. 접수 확인은 영업일 기준 3일 이내에 안내합니다.</li>
+<li><strong>클라우드 백업</strong>. 백업을 지원하는 앱에서 Pro 회원이 곡을 직접 선택해 사본을 저장합니다. 곡을 편집하거나 저장할 때 자동으로 동기화하지 않습니다. 녹음 포함은 기본으로 꺼져 있습니다. 설정 → 클라우드 백업에서 사본을 기기에 새 곡으로 복원하거나 클라우드 사본만 삭제할 수 있습니다. 복원은 기존 곡을 덮어쓰지 않으며, 클라우드 사본을 삭제해도 기기의 원본은 남습니다.</li>
+<li><strong>Pro 구독 만료 시</strong>. 새 백업을 만들거나 기존 백업을 갱신할 수 없습니다. 기존 사본은 만료만으로 삭제되지 않으며, 사본이나 계정을 삭제하기 전까지 목록 보기·복원·삭제를 할 수 있습니다. 기기에 저장된 곡은 계속 열고 편집하고 재생할 수 있습니다. 별도의 휴면 계정 정책이 향후 도입될 경우 시행일 30일 전에 안내합니다.</li>
 <li><strong>IAP 영수증</strong>: 「전자상거래법」 및 「전자금융거래법」 상 보존 의무에 따라 결제·계약 기록은 5년 보관.</li>
 <li><strong>IAP webhook 알림 로그</strong>: 90일.</li>
 <li><strong>보컬 오디오 (무료·Pro 공통)</strong>: 분석·보컬 처리·오토튠·이펙트 서버 메모리에서 처리 후 즉시 폐기 (영구 저장 ❌).</li>
@@ -301,13 +304,13 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <td>Supabase Inc.</td>
 <td>DB·인증 호스팅</td>
 <td>미국 (AWS us-east-1)</td>
-<td>계정, 구독·영수증 기록</td>
+<td>계정, 구독·영수증 기록, 백업 관리 정보</td>
 </tr>
 <tr>
 <td>Cloudflare, Inc.</td>
 <td>DNS·CDN, 객체 스토리지 (R2)</td>
-<td>미국 (us-east-1)</td>
-<td>없음 — 현재 앱은 회원 콘텐츠를 R2 에 업로드하지 않습니다</td>
+<td>운영 버킷 저장 위치 확인 중</td>
+<td>회원이 요청한 백업 사본과 선택한 녹음</td>
 </tr>
 <tr>
 <td>Fly.io, Inc.</td>
@@ -355,8 +358,8 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <p><strong>SLA</strong>: 모든 권리 행사 요청은 영업일 기준 3일 이내 접수 확인, <strong>데이터 삭제는 72시간 이내</strong> 완료합니다. 기타 요청(열람·정정 등)은 GDPR 기준 1개월 이내(복잡한 경우 2개월 연장 가능) 처리합니다.</p>
 <h3>7. 보안 조치</h3>
 <ul>
-<li><strong>전송 구간</strong>: TLS 1.3 암호화</li>
-<li><strong>저장 구간</strong>: Supabase 저장 데이터 암호화 (계정·구독·영수증 기록). 회원 작업물은 서버에 저장되지 않으며 기기 내 OS 보호를 따릅니다.</li>
+<li><strong>전송 구간</strong>: TLS 암호화</li>
+<li><strong>저장 구간</strong>: Supabase 저장 데이터 암호화 (계정·구독·영수증 기록). 기기 원본은 OS의 보호를 따릅니다. 클라우드 백업 사본은 Cloudflare R2에, 백업 관리 정보는 Supabase에 암호화하여 저장합니다. 서버가 회원의 계정과 접근 권한을 확인한 뒤 만료 시간이 있는 링크를 발급합니다.</li>
 <li><strong>접근 통제</strong>: Supabase Row-Level Security (사용자별 데이터 격리), 백엔드 API JWT 검증</li>
 <li><strong>인증</strong>: OAuth via Apple / Google (회사가 비밀번호를 직접 저장 ❌)</li>
 <li><strong>PII 최소화</strong>: Sentry 는 PII 자동 수집을 비활성(<code>send_default_pii=false</code>)하고 로그인 사용자를 Supabase 사용자 ID(불투명 UUID)로만 식별합니다. Microsoft Clarity 는 입력 필드를 자동 마스킹합니다. Firebase Analytics는 엄격한 이벤트·속성 허용 목록만 사용하며 광고 식별자와 광고 개인화 신호를 비활성화합니다.</li>
@@ -418,6 +421,20 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <td>Contract</td>
 </tr>
 <tr>
+<td>Cloud backup copy (.humtrack) — song title, notes, edits and song settings. Recordings are included only if selected separately</td>
+<td>When a Pro member explicitly backs up a song</td>
+<td>Cloudflare R2</td>
+<td>Until the cloud copy or account is deleted</td>
+<td>Contract</td>
+</tr>
+<tr>
+<td>Backup management data — account and project identifiers, song title, file size and integrity checksum, recording inclusion and count, backup timestamps and storage usage</td>
+<td>When a backup is created, updated or deleted</td>
+<td>Supabase Postgres (US, us-east-1)</td>
+<td>Until the copy or account is deleted. Usage totals are kept until account deletion</td>
+<td>Contract</td>
+</tr>
+<tr>
 <td>Subscription record (store, product ID, status, expiry, store transaction ID)</td>
 <td>Purchase / renewal / restore</td>
 <td>Supabase Postgres (us-east-1)</td>
@@ -468,20 +485,20 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 </tr>
 </tbody>
 </table>
-<p><strong>We do NOT collect</strong>: your songs, vocals or MIDI; payment card numbers; location; contacts; photo library; or ad identifiers (IDFA/AAID). Analytics events never contain email, name, song title, lyrics, audio, recording paths, note/MIDI content, voice traits, or free-form text.</p>
+<p><strong>We do NOT collect</strong>: payment card numbers; location; contacts; photo library; or ad identifiers (IDFA/AAID). Analytics events never contain email, name, song title, lyrics, audio, recording paths, note/MIDI content, voice traits, or free-form text.</p>
 <p><strong>Analytics and diagnostics</strong>: Sentry and Microsoft Clarity are active today. The Firebase Analytics SDK is integrated, but production collection remains disabled and will be enabled only after this revision takes effect and store disclosures are updated. Future collection can then be stopped under Settings → Anonymous usage analytics.</p>
 <p><strong>Sentry</strong> (error and crash reporting) collects stack traces and the surrounding context (device model, OS/app version, request path) from both the app and the backend, plus a 10% sample of performance traces. The server runs with <code>send_default_pii=False</code> and the app with <code>sendDefaultPii = false</code>, so email and IP are not collected automatically; a signed-in user is identified only by their <strong>Supabase user ID (an opaque UUID)</strong>. Your vocals, songs and MIDI are never sent to Sentry.</p>
 <p><strong>Microsoft Clarity</strong> (session replay &amp; heatmaps) is anonymous behavior analytics: it does not store raw screen recordings or keystrokes, auto-masks sensitive fields, is never used for advertising, transfers no data to third parties, and uses no ad/ATT identifiers. For signed-in users, your <strong>Supabase user ID (an opaque UUID, not directly identifying PII)</strong> is passed to Clarity to filter session replays by user. Approximate city-level location may be inferred from IP but is not linked to identity.</p>
 <p><strong>Google Firebase Analytics</strong> sends only allowlisted fixed events and enum values for app launches and feature-flow starts, successes, and failures. It never sends email, name, song title, lyrics, audio, paths, note/MIDI content, voice traits, or free-form text. Signed-in users are linked only by an opaque Supabase user ID. Advertising identifiers and personalization signals are disabled; the data is not used for advertising or cross-app tracking.</p>
 <h3>3. Purposes</h3>
-<p>Service operation, payment management, security, stability analytics (Sentry), product/UX analytics (Microsoft Clarity), aggregate product-funnel analytics (Google Firebase Analytics, user-controllable), and legal compliance.</p>
+<p>Service operation, including song backup, restoration and deletion at your request, payment management, security, stability analytics (Sentry), product/UX analytics (Microsoft Clarity), aggregate product-funnel analytics (Google Firebase Analytics, user-controllable), and legal compliance.</p>
 <p><strong>We never use vocal recordings, analysis results, or generated music for advertising, AI/ML training, third-party resale, or our own marketing without your explicit consent.</strong></p>
 <h3>4. Retention and Deletion</h3>
 <ul>
 <li><strong>Vocal audio (Free and Pro alike)</strong>: discarded immediately after analysis or processing (memory only, never on disk).</li>
-<li><strong>Your work</strong>: songs, vocals, MIDI and project metadata are stored <strong>only on your device</strong> and are never uploaded to our servers. We therefore cannot read, delete or restore them; deletion and backup happen on your device.</li>
-<li><strong>When Pro expires</strong>: only the Pro-only features (unlimited saved songs, WAV/MIDI/stem export) lock. <strong>Songs already saved on your device are not deleted</strong> and remain viewable, editable and playable. A future dormant-account policy may be introduced with 30 days' prior notice.</li>
-<li><strong>Account deletion request</strong>: cascade delete of your Supabase Auth account, your Supabase Postgres subscription and receipt rows, and any objects remaining under your prefix in Cloudflare R2, within <strong>72 hours</strong>, with confirmation in 3 business days.</li>
+<li><strong>Account deletion</strong>. Except for records we must retain by law, we permanently delete account data, subscription records, cloud backup copies and backup management data within 72 hours. We confirm receipt of the request within three business days.</li>
+<li><strong>Cloud backup</strong>. In app versions that support cloud backup, Pro members choose which songs to back up. Editing or saving a song does not sync it automatically. Including recordings is off by default. Under Settings → Cloud backup, you can restore a backup as a new song on your device or delete the cloud copy. Restoring does not overwrite an existing song. Deleting a cloud copy leaves the original on your device.</li>
+<li><strong>When Pro expires</strong>. You can no longer create or update cloud backups. Subscription expiry does not delete existing copies. You can still view, restore or delete them until you delete the copy or your account. You can continue to open, edit and play songs saved on your device. We will give 30 days’ notice before introducing any dormant-account policy.</li>
 <li><strong>IAP receipts</strong>: retained 5 years per Korean Electronic Commerce Act / Electronic Financial Transactions Act.</li>
 <li><strong>Webhook logs</strong>: 90 days.</li>
 <li><strong>Firebase Analytics</strong>: user- and event-level retention is 2 months. Turning the setting off stops future collection and clears the app-set user ID. Existing data expires under the retention setting and may be deleted on email request. Standard aggregate reports may persist separately.</li>
@@ -498,13 +515,13 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <tbody>
 <tr>
 <td>Supabase, Inc.</td>
-<td>DB and auth hosting (account, subscription and receipt records)</td>
+<td>DB and auth hosting (account, subscription and receipt records, and backup management data)</td>
 <td>US (AWS us-east-1)</td>
 </tr>
 <tr>
 <td>Cloudflare, Inc.</td>
-<td>DNS/CDN and R2 object storage (no member content is currently uploaded to R2)</td>
-<td>US (us-east-1)</td>
+<td>DNS/CDN and R2 storage of requested backup copies, including selected recordings</td>
+<td>Production bucket location pending verification</td>
 </tr>
 <tr>
 <td>Fly.io, Inc.</td>
@@ -544,7 +561,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <p>You can stop future Firebase Analytics collection under <strong>Settings → Anonymous usage analytics</strong>. Email <code>humtrack@gmail.com</code> to request deletion of analytics data already collected.</p>
 <p>Pro Members can export their MIDI/WAV directly in-app. Bulk backend data export UI is planned for a P1 release; meanwhile available on email request.</p>
 <h3>7. Security</h3>
-<p>TLS 1.3 in transit; encryption at rest for account, subscription and receipt records; Row-Level Security; OAuth via Apple/Google; Sentry default PII collection disabled; Clarity input masking; and a strict Firebase Analytics event/property allowlist with advertising identifiers and personalization signals disabled. Your work stays on your device and is protected by its OS.</p>
+<p>TLS in transit; encryption at rest for account, subscription and receipt records; Row-Level Security; OAuth via Apple/Google; Sentry default PII collection disabled; Clarity input masking; and a strict Firebase Analytics event/property allowlist with advertising identifiers and personalization signals disabled. Your device protects the local original. Cloud backup copies are encrypted at rest in Cloudflare R2, and backup management data is encrypted at rest in Supabase. The server verifies your account and access rights before issuing a link that expires.</p>
 <h3>8. Children</h3>
 <p>We do not knowingly collect data from children under 14 (under 13 for U.S. COPPA). The app marketplace age rating is set to restrict download. Parents may contact us to delete a child's data.</p>
 <h3>9. Data Protection</h3>
