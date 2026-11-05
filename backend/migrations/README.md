@@ -24,6 +24,7 @@ production cloud upgrade (below).
 | `006_cloud_lifecycle.sql` | cloud account exit, delayed delete, worker | applied + verified | applied 2026-11-04 |
 | `007_lock_legacy_cloud_rpcs.sql` | revoke client execute on legacy RPCs | applied + verified | applied 2026-11-01 |
 | `008_cloud_cleanup_observability.sql` | admin heartbeat, cleanup backlog view | applied + scheduled run verified | applied 2026-11-04 |
+| `009_announcement_images.sql` | optional announcement image + ko/en alt | not applied (local PostgreSQL rehearsal only) | **not applied** — public feed lacked the image columns (42703) on 2026-11-04; see `docs/release/ANNOUNCEMENT-PUBLISH-2026-11-04.md` |
 
 `006_announcements_admin.sql` being applied in production does **not** mean
 `006_cloud_lifecycle.sql` is. Before any production apply, compare this table
