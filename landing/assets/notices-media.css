@@ -1,0 +1,14 @@
+/* Shared optional illustration; preserve the whole image, including portrait art. */
+.notice-media { margin: 0 0 16px; overflow: hidden; border-radius: 10px; background: var(--surface-alt); }
+.notice-media img { display: block; width: 100%; max-height: 480px; aspect-ratio: 3 / 2; object-fit: contain; }
+.notice-media [hidden] { display: none !important; }
+.notice-image-error { padding: 16px; color: var(--t2); font-size: 13px; white-space: normal; }
+.pv-detail { padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.pv-detail h3 { color: var(--t1); font-size: 17px; margin-bottom: 16px; }
+.pv-copy { white-space: pre-wrap; color: var(--t2); overflow-wrap: anywhere; }
+.pv-popup .notice-media img { max-height: 200px; }
+#previewLang { width: auto; font-size: 13px; }
+#image_url, #image_alt_ko, #image_alt_en, #previewLang, #clearImage { min-height: 44px; }
+#clearImage { margin-top: 8px; }
+.preview-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 24px 0 12px; }
+.preview-toolbar h2, .preview-toolbar label { margin: 0; }

@@ -1,6 +1,7 @@
 .vercel/
 .git/
 node_modules/
+tests/
 README.md
 **/.env*
 **/*.log

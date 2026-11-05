@@ -12,6 +12,7 @@
 <meta property="og:url" content="https://hum-track.com/notices">
 <link rel="canonical" href="https://hum-track.com/notices">
 <link rel="icon" type="image/png" href="/hummingbird.png">
+<link rel="stylesheet" href="/assets/notices-media.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -104,10 +105,11 @@ footer a { color: var(--t2); }
           <span class="date">${N.fmtDate(a.starts_at, lang)}</span></div>
           <div class="title">${N.esc(lang === 'ko' ? a.title_ko : a.title_en)}</div>
         </button>
-        <div class="body">${N.esc(lang === 'ko' ? a.body_ko : a.body_en)}${
+        <div class="body">${N.imageMarkup(a, lang)}${N.esc(lang === 'ko' ? a.body_ko : a.body_en)}${
           action && label ? `<div><a class="action" href="${N.esc(action)}">${N.esc(label)}</a></div>` : ''}</div>
       </article>`;
     }).join('');
+    N.wireImages(list);
     list.querySelectorAll('.card > button').forEach((b) => b.addEventListener('click', () => {
       const card = b.parentElement;
       card.classList.toggle('open');

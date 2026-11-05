@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>공지 관리 — HumTrack</title>
 <link rel="icon" type="image/png" href="/hummingbird.png">
+<link rel="stylesheet" href="/assets/notices-media.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -108,6 +109,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--l
       <div><label>Title (English) <small>max 120</small></label><input type="text" name="title_en" maxlength="120" required></div>
       <div><label>본문 (한국어) <small>최대 4000자</small></label><textarea name="body_ko" maxlength="4000" required></textarea></div>
       <div><label>Body (English) <small>max 4000</small></label><textarea name="body_en" maxlength="4000" required></textarea></div>
+      <div class="full">
+        <label for="image_url">이미지 주소 <small>선택 · PNG, JPG, WebP</small></label>
+        <input id="image_url" type="url" name="image_url" maxlength="512" aria-describedby="imageHelp msg" placeholder="https://hum-track.com/assets/notices/notice-name.png">
+        <p class="muted" id="imageHelp">홈페이지의 /assets/notices/에 올린 이미지 주소를 넣어 주세요. 파일은 자동 업로드되지 않아요. 비우면 글만 표시돼요.</p>
+        <button type="button" id="clearImage">이미지 제거</button>
+      </div>
+      <div><label for="image_alt_ko">이미지 설명 (한국어) <small>이미지를 넣으면 필수</small></label><input id="image_alt_ko" type="text" name="image_alt_ko" maxlength="300" aria-describedby="imageHelp"></div>
+      <div><label for="image_alt_en">Image description (English) <small>required with an image</small></label><input id="image_alt_en" type="text" name="image_alt_en" maxlength="300" aria-describedby="imageHelp"></div>
       <div><label>시작</label><input type="datetime-local" name="starts_at" required></div>
       <div><label>끝 <small>(비우면 계속)</small></label><input type="datetime-local" name="ends_at"></div>
       <div class="full"><label>보일 곳</label>
@@ -121,14 +130,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--l
       <div><label>Button label (English) <small>optional</small></label><input type="text" name="action_label_en" maxlength="40"></div>
       <div class="full"><label>버튼 링크 <small>hum-track.com, 앱스토어, 플레이스토어, mailto:humtrack@gmail.com 만</small></label><input type="url" name="action_url" maxlength="300" placeholder="https://hum-track.com/..."></div>
       <div class="full switch"><input type="checkbox" name="published" id="published"><label for="published" style="margin:0;color:var(--t1)">게시 <small>— 끄면 초안(앱과 웹에 안 보임)</small></label></div>
-      <div class="full msg" id="msg"></div>
+      <div class="full msg" id="msg" role="status" aria-live="polite"></div>
       <div class="full actions">
         <button type="button" id="delete" class="danger" hidden>삭제</button>
         <span class="spacer"></span>
         <button type="submit" class="primary" id="save">저장</button>
       </div>
     </form>
-    <h2 style="margin-top:24px">앱에서 보이는 모습 <span class="muted">(한국어)</span></h2>
+    <div class="preview-toolbar"><h2>공지 미리보기</h2><label for="previewLang">언어</label><select id="previewLang"><option value="ko">한국어</option><option value="en">English</option></select></div>
     <div class="preview" id="preview"></div>
   </section>
 </main>
@@ -152,7 +161,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--l
     async remove(id) { rows = rows.filter((r) => r.id !== id); },
   } : {
     async list() {
-      const { data, error } = await sb.from('app_announcements').select(N.COLUMNS + ',published').order('starts_at', { ascending: false });
+      const { data, error } = await sb.from('app_announcements').select(N.COLUMNS).order('starts_at', { ascending: false });
       if (error) throw error;
       return (rows = data);
     },
@@ -196,7 +205,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--l
   function fill(r) {
     form.nid.value = r.id; form.nid.readOnly = !!editing;
     form.kind.value = r.kind;
-    for (const k of ['title_ko', 'title_en', 'body_ko', 'body_en', 'action_label_ko', 'action_label_en', 'action_url']) form[k].value = r[k] || '';
+    for (const k of ['title_ko', 'title_en', 'body_ko', 'body_en', 'action_label_ko', 'action_label_en', 'action_url', 'image_url', 'image_alt_ko', 'image_alt_en']) form[k].value = r[k] || '';
     form.starts_at.value = toLocal(r.starts_at); form.ends_at.value = toLocal(r.ends_at);
     form.querySelectorAll('[name=pf]').forEach((c) => { c.checked = (r.platforms || []).includes(c.value); });
     form.published.checked = !!r.published;
@@ -212,7 +221,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--l
     fill({ id: newId(), kind: 'info', starts_at: new Date().toISOString(), platforms: ['android', 'ios', 'windows', 'macos'], published: false });
   }
 
-  function read() {
+  function read({ reportErrors = false } = {}) {
     const v = (k) => form[k].value.trim();
     const row = {
       id: v('nid'), kind: v('kind'),
@@ -221,6 +230,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--l
       platforms: [...form.querySelectorAll('[name=pf]:checked')].map((c) => c.value),
       action_label_ko: v('action_label_ko') || null, action_label_en: v('action_label_en') || null,
       action_url: v('action_url') || null, published: form.published.checked,
+      image_url: v('image_url') || null, image_alt_ko: v('image_alt_ko') || null, image_alt_en: v('image_alt_en') || null,
     };
     // the table's own rules, said in words before the server says no
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(row.id)) throw new Error('ID는 영문 소문자·숫자로 시작하고 -, _ 만 쓸 수 있어요');
@@ -228,6 +238,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--l
     if (!row.starts_at) throw new Error('시작 시각을 정해 주세요');
     if (row.ends_at && row.ends_at <= row.starts_at) throw new Error('끝은 시작보다 뒤여야 해요');
     if (!row.platforms.length) throw new Error('보일 곳을 하나 이상 골라 주세요');
+    const anyImage = row.image_url || row.image_alt_ko || row.image_alt_en;
+    if (anyImage && !N.imageData(row)) {
+      if (reportErrors) {
+        form.image_url.setAttribute('aria-invalid', 'true');
+        form.image_url.focus();
+      }
+      throw new Error('이미지는 https://hum-track.com/assets/notices/의 PNG·JPG·WebP 주소와 한국어·영어 설명을 모두 넣어 주세요');
+    }
     const any = row.action_url || row.action_label_ko || row.action_label_en;
     const all = row.action_url && row.action_label_ko && row.action_label_en;
     if (any && !all) throw new Error('버튼을 넣으려면 문구 두 개와 링크를 모두 채워 주세요');
@@ -242,21 +260,33 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--l
     const v = (k) => form[k].value.trim();
     const kind = form.kind.value;
     const icon = { info: '📣', important: '❗', critical: '⚠️' }[kind];
-    const title = N.esc(v('title_ko') || '(제목)'), body = N.esc(v('body_ko') || '(본문)');
-    const label = v('action_label_ko');
+    const lang = $('#previewLang').value;
+    const title = N.esc(v('title_' + lang) || '(제목)'), body = N.esc(v('body_' + lang) || '(본문)');
+    const label = v('action_label_' + lang);
+    const media = N.imageMarkup({ image_url: v('image_url'), image_alt_ko: v('image_alt_ko'), image_alt_en: v('image_alt_en') }, lang);
     let html = '';
     if (kind !== 'info') html += `<div class="pv-banner"><span>${icon}</span><span class="k">${N.KIND.ko[kind]} ·</span><span>${title}</span></div>`;
-    if (kind === 'critical') html += `<div class="pv-popup"><div>${icon}</div><div class="h">${title}</div><div class="b">${body}</div>
+    if (kind === 'critical') html += `<div class="pv-popup"><div>${icon}</div><div class="h">${title}</div>${media}<div class="b">${body}</div>
       <div class="btns"><span style="color:var(--lime);font-weight:700">나중에</span>${label ? `<span style="color:var(--lime);font-weight:700">${N.esc(label)}</span>` : ''}<span class="btn" style="background:var(--lime);color:var(--bg)">확인</span></div></div>`;
-    html += `<p class="muted">${kind === 'info' ? '소식: 앱의 공지사항 목록과 웹 공지사항에만 보여요.' : kind === 'important' ? '중요: 홈 화면 배너 + 목록에 보여요.' : '긴급: 앱을 열면 팝업으로 한 번 뜨고, 배너와 목록에도 보여요.'}
+    html += `<div class="pv-detail"><h3>${title}</h3>${media}<div class="pv-copy">${body}</div></div>`;
+    html += `<p class="muted">${kind === 'info' ? '소식: 목록에서 공지를 열면 이미지와 본문이 보여요.' : kind === 'important' ? '중요: 홈 화면 배너 + 목록에 보여요.' : '긴급: 앱을 열면 팝업으로 한 번 뜨고, 배너와 목록에도 보여요.'}
       ${r && !r.published ? '<br>지금은 초안이라 아무 데도 안 보여요.' : ''}</p>`;
     $('#preview').innerHTML = html;
+    N.wireImages($('#preview'));
   }
-  form.addEventListener('input', renderPreview);
+  form.addEventListener('input', () => { form.image_url.removeAttribute('aria-invalid'); renderPreview(); });
+  $('#previewLang').addEventListener('change', renderPreview);
+  $('#clearImage').addEventListener('click', () => {
+    for (const key of ['image_url', 'image_alt_ko', 'image_alt_en']) form[key].value = '';
+    form.image_url.removeAttribute('aria-invalid');
+    msg('');
+    renderPreview();
+    form.image_url.focus();
+  });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    let row; try { row = read(); } catch (err) { msg(err.message, 'err'); return; }
+    let row; try { row = read({ reportErrors: true }); } catch (err) { msg(err.message, 'err'); return; }
     $('#save').disabled = true;
     try {
       await store.save(row, !editing);
@@ -264,7 +294,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--l
       await store.list();
       edit(row.id);
       msg(row.published ? '저장했어요. 앱은 다음에 공지를 새로 받을 때(최대 15분, 앱을 다시 열면 바로) 보여요.' : '초안으로 저장했어요.', 'ok');
-    } catch (err) { msg('저장하지 못했어요: ' + (err.message || err), 'err'); }
+    } catch (err) {
+      const missingImageSchema = /image_(url|alt)/.test(err.message || '') && ['42703', 'PGRST204'].includes(err.code);
+      msg(missingImageSchema ? '이미지 공지용 DB 변경(009)이 아직 적용되지 않았어요. 입력 내용은 유지돼요.' : '저장하지 못했어요: ' + (err.message || err), 'err');
+    }
     $('#save').disabled = false;
   });
 

@@ -2,9 +2,9 @@
 // Reads the same app_announcements feed the apps read; ?demo=1 uses the
 // sample rows below instead (no network) so the pages can be tried locally.
 (function () {
-  const COLUMNS =
-    'id,revision,kind,title_ko,title_en,body_ko,body_en,starts_at,ends_at,' +
-    'platforms,min_build,max_build,action_label_ko,action_label_en,action_url';
+  // Optional image columns may be absent until migration 009 is applied.
+  // Existing text notices keep working against either schema. RLS is unchanged.
+  const COLUMNS = '*';
 
   const now = Date.now();
   const iso = (ms) => new Date(ms).toISOString();
@@ -75,5 +75,41 @@
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  window.HumNotices = { demo, cfg, DEMO, fetchPublished, KIND, fmtDate, safeAction, esc, COLUMNS };
+  // Same static-asset allowlist as migration 009 and the Flutter client.
+  function safeImage(url) {
+    return typeof url === 'string' && url.length <= 512 && url === url.trim() &&
+      /^https:\/\/(www\.)?hum-track\.com\/assets\/notices\/[A-Za-z0-9_-]+\.(png|jpg|jpeg|webp)$/.test(url)
+      ? url : null;
+  }
+
+  function imageData(row) {
+    const url = safeImage(row.image_url);
+    const validAlt = (s) => typeof s === 'string' && s.trim().length > 0 && s.length <= 300;
+    if (!url || !validAlt(row.image_alt_ko) || !validAlt(row.image_alt_en)) return null;
+    return { url, ko: row.image_alt_ko.trim(), en: row.image_alt_en.trim() };
+  }
+
+  function imageMarkup(row, lang) {
+    const image = imageData(row);
+    if (!image) return '';
+    const ko = lang === 'ko';
+    const failed = ko ? '이미지를 불러오지 못했어요. 아래 공지 내용은 계속 읽을 수 있어요.'
+      : 'The image couldn’t be loaded. You can still read the announcement below.';
+    return `<figure class="notice-media"><img src="${esc(image.url)}" alt="${esc(ko ? image.ko : image.en)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"><figcaption class="notice-image-error" role="status" hidden>${failed}</figcaption></figure>`;
+  }
+
+  function wireImages(root) {
+    root.querySelectorAll('.notice-media img').forEach((img) => {
+      const fail = () => {
+        img.hidden = true;
+        img.parentElement.querySelector('.notice-image-error').hidden = false;
+      };
+      img.addEventListener('error', fail, { once: true });
+      // An immediately cached failure can precede listener registration.
+      if (img.complete && img.naturalWidth === 0) fail();
+    });
+  }
+
+  window.HumNotices = { demo, cfg, DEMO, fetchPublished, KIND, fmtDate, safeAction,
+    safeImage, imageData, imageMarkup, wireImages, esc, COLUMNS };
 })();
