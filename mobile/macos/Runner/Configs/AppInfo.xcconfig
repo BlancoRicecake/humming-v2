@@ -5,10 +5,15 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = humming
+PRODUCT_NAME = HumTrack
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.humtrack.app
 
+// OAuth callback URL scheme (Info.plist CFBundleURLSchemes). The `direct`
+// flavor (*-direct configurations) overrides it with humtrack-direct and the
+// bundle id with com.humtrack.app.direct; see lib/services/auth_service.dart.
+HUMTRACK_URL_SCHEME = humtrack
+
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.humming. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 HumTrack. All rights reserved.

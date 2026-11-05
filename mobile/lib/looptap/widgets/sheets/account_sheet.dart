@@ -5,12 +5,14 @@
 // 글로벌 Apple+Google 만 지원 (legacy auth_service.dart 와 동일). Kakao/Naver 는
 // 백엔드 미연동. Email/password 는 스토어 리뷰용 사전 생성 계정 전용 — 백엔드
 // 가 public sign-up 을 차단한 상태에서만 안전하게 노출.
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../services/auth_service.dart';
+import '../../../services/iap_types.dart' show hasStorePurchases;
 import '../../app.dart' show rootMessengerKey;
 import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
@@ -136,6 +138,10 @@ class _AccountSheetState extends State<_AccountSheet> {
 
   List<Widget> _signedIn(BuildContext context, LoopStore store, Map<String, String> user) {
     final l = L10n.of(context);
+    // no store channel (Windows / Linux / Mac direct): the server check of the
+    // account's Pro instead of "restore purchases"; the Mac App Store build
+    // and the phones keep restore (2026-11-03, same rule as the paywall)
+    final desktop = !hasStorePurchases(defaultTargetPlatform);
     final name = user['name'] ?? 'User';
     final provider = user['provider'] ?? '';
     final email = user['email'] ?? '';
@@ -217,10 +223,11 @@ class _AccountSheetState extends State<_AccountSheet> {
         ),
       _AccRow(
         icon: LtIcons.restore,
-        title: l.payRestore,
-        sub: store.iapEnabled ? '' : l.payStoreUnavailable,
+        title: desktop ? l.payDesktopRefresh : l.payRestore,
+        sub: desktop ? l.payDesktopInfo : store.iapEnabled ? '' : l.payStoreUnavailable,
         busy: _restoring,
-        onTap: store.iapEnabled && !_restoring ? () => _handleRestore(store) : null,
+        onTap: (desktop || store.iapEnabled) && !_restoring
+            ? () => _handleRestore(store, desktop: desktop) : null,
       ),
       const SizedBox(height: 10),
       GestureDetector(
@@ -241,11 +248,22 @@ class _AccountSheetState extends State<_AccountSheet> {
   /// Restore purchases — LoopStore 가 스토어 결과(또는 8초 timeout) 를 기다린
   /// 뒤 /iap/status 로 판정한 [RestoreOutcome] 을 돌려주므로, 그때 문구를
   /// 결정한다 (audit M6). rootMessenger 사용 — account sheet 위에서도 보이도록.
-  Future<void> _handleRestore(LoopStore store) async {
+  Future<void> _handleRestore(LoopStore store, {bool desktop = false}) async {
     if (_restoring) return;
     final l = L10n.of(context);
     setState(() => _restoring = true);
-    final outcome = await store.restorePurchases();
+    RestoreOutcome outcome;
+    try {
+      if (desktop) {
+        final ok = await store.refreshSubscription();
+        outcome = !ok ? RestoreOutcome.error : store.proActive
+            ? RestoreOutcome.alreadyActive : RestoreOutcome.nothingFound;
+      } else {
+        outcome = await store.restorePurchases();
+      }
+    } catch (_) {
+      outcome = RestoreOutcome.error;
+    }
     if (!mounted) return;
     setState(() => _restoring = false);
     rootMessengerKey.currentState
@@ -521,9 +539,10 @@ class _AccRow extends StatelessWidget {
       child: Opacity(
         opacity: disabled ? 0.55 : 1,
         child: Container(
-          height: 54,
+          // at least 54; a longer note (the desktop Pro check) grows the row
+          constraints: const BoxConstraints(minHeight: 54),
           margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: LT.surface2,
             borderRadius: BorderRadius.circular(LTRadius.control),

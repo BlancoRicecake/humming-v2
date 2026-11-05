@@ -9,3 +9,5 @@
 # Same pinning convention as requirements.txt: known-good floor, < next major.
 -r requirements.txt
 pytest>=8,<10
+# Local PostgreSQL transaction/RLS acceptance tests; never a production client.
+psycopg[binary]>=3.2,<4

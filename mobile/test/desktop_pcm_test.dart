@@ -55,4 +55,24 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   }, skip: !Platform.isWindows);
+
+  testWidgets('stereo output asks native for 2 channels (mixer-001)', (
+    tester,
+  ) async {
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          calls.add(call);
+          return call.method == 'remainingFrames' ? 4096 : null;
+        });
+    await PcmOutput.setup(sampleRate: 44100, channelCount: 2);
+    final setup = calls.firstWhere((c) => c.method == 'setup');
+    expect((setup.arguments as Map)['channels'], 2);
+    // one interleaved frame (L=100, R=-100) goes over as 4 bytes
+    await PcmOutput.feed(PcmArrayInt16.fromList([100, -100]));
+    expect(calls.last.arguments as Uint8List, [100, 0, 156, 255]);
+    await PcmOutput.release();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  }, skip: !Platform.isWindows);
 }

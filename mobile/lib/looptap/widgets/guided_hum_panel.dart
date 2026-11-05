@@ -1,312 +1,285 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../l10n/generated/app_localizations.dart';
+import '../models/loop_models.dart';
+import '../music/theory.dart' show kBeatsPerBar, kStepsPerBeat;
 import '../theme/tokens.dart';
-import '../music/beginner_backing.dart';
 
+/// The guided start (2026-11-02 layout):
+/// 1. two ways in — a melody from a hum, or the voice as it is;
+/// 2. after a hum: the converted melody drawn like a MIDI clip, my hum and the
+///    melody side by side to compare, the instrument and the key (a key change
+///    is heard: "hear the new key"), then "make a song with this melody"
+///    (→ editor); after a voice take: listen, then make a song with it.
+/// No listen / save / undo / saved bar: the editor takes over from there.
+///
+/// [addTrack] (the editor's logo button, 2026-11-02): the hum becomes a NEW
+/// track of the song — pick its instrument, hum (the song plays along),
+/// compare / hear it with the song, hum again, then "add this track".
 class GuidedHumPanel extends StatelessWidget {
   const GuidedHumPanel({
     super.key,
     required this.hasNotes,
     this.hasMelody,
     required this.playing,
-    required this.saved,
+    this.playingTake = false,
     required this.onBack,
     required this.onRecord,
     required this.onListen,
     required this.onInstrument,
-    required this.onSave,
     required this.onEdit,
+    this.onKey,
+    this.onPlayTake,
     this.onSample,
     this.onRecordVocal,
-    this.onConvertVocal,
-    this.onExport,
-    this.onBacking,
-    this.onPreviewBacking,
-    this.onApplyBacking,
-    this.onSongPlan,
-    this.onUndo,
-    this.backingStyle,
-    this.previewCandidate,
-    this.appliedCandidate,
-    this.lowConfidenceCount = 0,
-    this.previewingOriginal = false,
-    this.melodyLocked = true,
-    this.onPreviewOriginal,
-    this.onPreviewCorrected,
-    this.onReviewMelody,
+    this.notes = const [],
+    this.steps = 64,
+    this.playhead,
+    this.keyLabel,
+    this.keyChanged = false,
+    this.instrumentName,
+    this.addTrack = false,
   });
-  final bool hasNotes, playing, saved;
+  final bool hasNotes, playing, playingTake;
   final bool? hasMelody;
-  final VoidCallback onBack, onRecord, onListen, onInstrument, onSave, onEdit;
-  final VoidCallback? onSample, onUndo, onSongPlan;
-  final VoidCallback? onRecordVocal, onConvertVocal, onExport;
-  final ValueChanged<BackingStyle>? onBacking;
-  final ValueChanged<int>? onPreviewBacking, onApplyBacking;
-  final BackingStyle? backingStyle;
-  final int? previewCandidate, appliedCandidate;
-  final int lowConfidenceCount;
-  final bool previewingOriginal;
-  final bool melodyLocked;
-  final VoidCallback? onPreviewOriginal, onPreviewCorrected, onReviewMelody;
+  final VoidCallback onBack, onRecord, onListen, onInstrument, onEdit;
+  final VoidCallback? onKey, onPlayTake, onSample, onRecordVocal;
 
-  Widget _card(List<Widget> children) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: LT.surface2,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: LT.border),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
-    ),
+  /// The melody drawn in the clip, its length in steps and the playhead step.
+  final List<PitchNote> notes;
+  final int steps;
+  final ValueListenable<double>? playhead;
+
+  /// The current key and instrument, shown on their buttons.
+  final String? keyLabel, instrumentName;
+
+  /// The key was changed after the hum: the melody button plays the new key.
+  final bool keyChanged;
+
+  /// Hum into a new track of an existing song (see the class doc).
+  final bool addTrack;
+
+  Widget _title(String text) => Text(
+    text,
+    style: const TextStyle(color: LT.t1, fontSize: 21, fontWeight: FontWeight.bold),
   );
+
+  Widget _body(String text) =>
+      Text(text, style: const TextStyle(color: LT.t2, height: 1.4));
 
   @override
   Widget build(BuildContext context) {
     final l = L10n.of(context);
-    final melody = _card([
-      Text(
-        l.ltGuidedTitle,
-        style: const TextStyle(
-          color: LT.t1,
-          fontSize: 21,
-          fontWeight: FontWeight.bold,
+    final melody = hasMelody ?? hasNotes;
+    final Widget content;
+    if (!hasNotes && addTrack) {
+      content = Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: LT.surface2,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: LT.border),
         ),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        hasNotes ? l.ltGuidedReady : l.ltGuidedPrepare,
-        style: const TextStyle(color: LT.t2, height: 1.4),
-      ),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-            onPressed: onRecord,
-            icon: const Icon(Icons.mic),
-            label: Text(hasNotes ? l.ltGuidedMore : l.ltGuidedRecord),
-          ),
-          if (hasMelody ?? hasNotes)
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              onPressed: onInstrument,
-              child: Text(l.ltGuidedSound),
-            ),
-          if (onRecordVocal != null)
-            OutlinedButton.icon(
-              onPressed: onRecordVocal,
-              icon: const Icon(Icons.mic_none),
-              label: Text(l.ltGuidedKeepVocal),
-            ),
-          if (onConvertVocal != null)
-            OutlinedButton.icon(
-              onPressed: onConvertVocal,
-              icon: const Icon(Icons.piano),
-              label: Text(l.ltMidiTitle),
-            ),
-          if (hasNotes && onExport != null)
-            OutlinedButton.icon(
-              onPressed: onExport,
-              icon: const Icon(Icons.ios_share),
-              label: Text(l.projectOptionExport),
-            ),
-          if (onSample != null)
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              onPressed: onSample,
-              icon: const Icon(Icons.graphic_eq),
-              label: Text(l.ltGuidedSample),
-            ),
-        ],
-      ),
-      if (hasMelody ?? hasNotes) ...[
-        const SizedBox(height: 12),
-        Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              melodyLocked ? Icons.lock_outline : Icons.lock_open,
-              color: melodyLocked ? LT.lime : LT.t3,
-              size: 18,
+            _title(l.ltHumAddTitle),
+            const SizedBox(height: 8),
+            _body(l.ltHumAddPrepare),
+            const SizedBox(height: 12),
+            _SettingButton(
+              key: const ValueKey('guided-instrument'),
+              icon: Icons.piano_outlined,
+              label: l.ltHumAddInstrument,
+              value: instrumentName,
+              onTap: onInstrument,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l.ltMelodyLocked,
-                    style: const TextStyle(
-                      color: LT.t1,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    l.ltMelodyLockedHint,
-                    style: const TextStyle(color: LT.t3, fontSize: 12),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 8),
+            _Choice(
+              key: const ValueKey('guided-choice-hum'),
+              primary: true,
+              icon: Icons.mic,
+              title: l.ltHumAddRecord,
+              description: l.ltHumAddRecordDesc,
+              onTap: onRecord,
             ),
           ],
         ),
-      ],
-      if (hasNotes &&
-          onPreviewOriginal != null &&
-          onPreviewCorrected != null) ...[
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
+      );
+    } else if (!hasNotes) {
+      content = Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: LT.surface2,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: LT.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ChoiceChip(
-              label: Text(l.ltMelodyRaw),
-              selected: previewingOriginal,
-              onSelected: (_) => onPreviewOriginal!(),
+            _title(l.ltGuidedTitle),
+            const SizedBox(height: 8),
+            _body(l.ltGuidedPrepare),
+            const SizedBox(height: 12),
+            _Choice(
+              key: const ValueKey('guided-choice-hum'),
+              primary: true,
+              icon: Icons.music_note,
+              title: l.ltGuidedHumTitle,
+              description: l.ltGuidedHumDesc,
+              onTap: onRecord,
             ),
-            ChoiceChip(
-              label: Text(l.ltMelodyCorrected),
-              selected: !previewingOriginal,
-              onSelected: (_) => onPreviewCorrected!(),
-            ),
-            if (onReviewMelody != null)
-              TextButton.icon(
-                onPressed: onReviewMelody,
-                icon: const Icon(Icons.tune),
-                label: Text(
-                  lowConfidenceCount > 0
-                      ? l.ltMelodyUncertain(lowConfidenceCount)
-                      : l.ltMelodyReview,
-                ),
+            if (onRecordVocal != null || onSample != null) ...[
+              const SizedBox(height: 8),
+              _Choice(
+                key: const ValueKey('guided-choice-voice'),
+                icon: Icons.mic_none,
+                title: l.ltGuidedVoiceTitle,
+                description: l.ltGuidedVoiceDesc,
+                onTap: onRecordVocal ?? onSample!,
+                extra:
+                    onSample == null || onRecordVocal == null
+                        ? null
+                        : TextButton.icon(
+                          key: const ValueKey('guided-voice-import'),
+                          onPressed: onSample,
+                          icon: const Icon(Icons.file_open_outlined, size: 18),
+                          label: Text(l.ltGuidedVoiceImport),
+                        ),
               ),
+            ],
           ],
         ),
-      ],
-    ]);
-    final backing = _card([
-      Text(
-        l.ltBackingTitle,
-        style: const TextStyle(
-          color: LT.t1,
-          fontSize: 21,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      const SizedBox(height: 8),
-      Text(l.ltBackingHint, style: const TextStyle(color: LT.t2, height: 1.4)),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
+      );
+    } else if (melody) {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final style in BackingStyle.values)
-            ChoiceChip(
-              label: Text(switch (style) {
-                BackingStyle.calm => l.ltBackingCalm,
-                BackingStyle.bounce => l.ltBackingBounce,
-                BackingStyle.drive => l.ltBackingDrive,
-              }),
-              selected: backingStyle == style,
-              onSelected:
-                  hasNotes && onBacking != null
-                      ? (_) => onBacking!(style)
-                      : null,
-            ),
-        ],
-      ),
-      if (backingStyle != null) ...[
-        const SizedBox(height: 16),
-        Text(
-          l.ltBackingCompare,
-          style: const TextStyle(color: LT.t1, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 8),
-        for (var i = 0; i < 3; i++) ...[
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: LT.lime, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _title(addTrack ? l.ltHumAddReady : l.ltGuidedMelodyReady),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _body(
+            addTrack
+                ? l.ltHumAddHint
+                : (onPlayTake != null ? l.ltGuidedCompareHint : l.ltGuidedMelodyHint),
+          ),
+          const SizedBox(height: 14),
+          // the converted melody, like a MIDI clip
           Container(
-            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+            key: const ValueKey('guided-melody-roll'),
+            // taller on a tall phone screen, compact in a short window
+            height: (MediaQuery.sizeOf(context).height * .3).clamp(120.0, 260.0),
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color:
-                  previewCandidate == i
-                      ? LT.lime.withValues(alpha: .08)
-                      : LT.bg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: previewCandidate == i ? LT.lime : LT.border,
+              color: LT.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: LT.border),
+            ),
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: _MelodyRollPainter(
+                notes: notes,
+                steps: steps,
+                playhead: playing ? playhead : null,
               ),
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 30,
-                  height: 30,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: LT.surface2,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Text(
-                    String.fromCharCode(65 + i),
-                    style: const TextStyle(
-                      color: LT.t1,
-                      fontWeight: FontWeight.w900,
-                    ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (onPlayTake != null) ...[
+                Expanded(
+                  child: _PlayButton(
+                    key: const ValueKey('guided-play-take'),
+                    icon: Icons.mic,
+                    label: l.ltGuidedPlayTake,
+                    on: playingTake,
+                    onTap: onPlayTake!,
                   ),
                 ),
                 const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: _PlayButton(
+                  key: const ValueKey('guided-play-melody'),
+                  icon: Icons.piano,
+                  label:
+                      addTrack
+                          ? l.ltHumAddPlaySong
+                          : (keyChanged ? l.ltGuidedPlayNewKey : l.ltGuidedPlayMelody),
+                  on: playing,
+                  accent: true,
+                  onTap: onListen,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _SettingButton(
+                  key: const ValueKey('guided-instrument'),
+                  icon: Icons.piano_outlined,
+                  label: l.ltGuidedSound,
+                  value: instrumentName,
+                  onTap: onInstrument,
+                ),
+              ),
+              if (addTrack) ...[
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    backingCandidateLabel(backingStyle!, i),
-                    style: const TextStyle(color: LT.t2, fontSize: 12),
+                  child: _SettingButton(
+                    key: const ValueKey('guided-retake'),
+                    icon: Icons.mic,
+                    label: l.ltHumAddRetake,
+                    onTap: onRecord,
                   ),
                 ),
-                IconButton(
-                  tooltip: l.ltBackingPreview,
-                  onPressed:
-                      onPreviewBacking == null
-                          ? null
-                          : () => onPreviewBacking!(i),
-                  icon: Icon(
-                    previewCandidate == i && playing
-                        ? Icons.stop_circle_outlined
-                        : Icons.play_circle_outline,
-                  ),
-                ),
-                FilledButton.tonal(
-                  onPressed:
-                      onApplyBacking == null ? null : () => onApplyBacking!(i),
-                  child: Text(
-                    appliedCandidate == i
-                        ? l.ltBackingApplied
-                        : l.ltBackingApply,
+              ] else if (onKey != null) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _SettingButton(
+                    key: const ValueKey('guided-key'),
+                    icon: Icons.tune,
+                    label: l.ltGuidedKey,
+                    value: keyLabel,
+                    highlight: keyChanged,
+                    onTap: onKey!,
                   ),
                 ),
               ],
-            ),
+            ],
           ),
-          if (i != 2) const SizedBox(height: 8),
         ],
-      ],
-      if (hasNotes && onSongPlan != null) ...[
-        const SizedBox(height: 14),
-        OutlinedButton.icon(
-          onPressed: onSongPlan,
-          icon: const Icon(Icons.account_tree_outlined),
-          label: Text(l.ltSongPlan),
-        ),
-      ],
-    ]);
+      );
+    } else {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _title(l.ltGuidedVoiceReady),
+          const SizedBox(height: 14),
+          _PlayButton(
+            key: const ValueKey('guided-play-melody'),
+            icon: Icons.mic,
+            label: l.ltGuidedPlayVoice,
+            on: playing,
+            accent: true,
+            onTap: onListen,
+          ),
+        ],
+      );
+    }
     return ColoredBox(
       color: LT.bg,
       child: Column(
@@ -322,82 +295,353 @@ class GuidedHumPanel extends StatelessWidget {
                 ),
                 Expanded(
                   child: Text(
-                    l.ltGuidedSteps,
+                    addTrack ? l.ltHumAddSteps : l.ltGuidedSteps,
                     style: const TextStyle(color: LT.t2, fontSize: 13),
                   ),
                 ),
-                TextButton(onPressed: onEdit, child: Text(l.ltGuidedDirect)),
+                if (!hasNotes && !addTrack)
+                  TextButton(onPressed: onEdit, child: Text(l.ltGuidedDirect)),
               ],
             ),
           ),
           Expanded(
-            child: LayoutBuilder(
-              builder:
-                  (context, constraints) => SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 8,
-                    ),
-                    child:
-                        constraints.maxWidth >= 680 && onBacking != null
-                            ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(child: melody),
-                                const SizedBox(width: 16),
-                                Expanded(child: backing),
-                              ],
-                            )
-                            : Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                melody,
-                                if (onBacking != null) ...[
-                                  const SizedBox(height: 16),
-                                  backing,
-                                ],
-                              ],
-                            ),
-                  ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: content,
+                ),
+              ),
             ),
           ),
           if (hasNotes)
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: Align(
+                alignment: Alignment.center,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: FilledButton.icon(
+                      key: const ValueKey('guided-make-song'),
+                      onPressed: onEdit,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: LT.lime,
+                        foregroundColor: LT.bg,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(LTRadius.pill),
+                        ),
+                        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                      ),
+                      icon: const Icon(Icons.arrow_forward),
+                      label: Text(
+                        addTrack
+                            ? l.ltHumAddConfirm
+                            : (melody ? l.ltGuidedMakeSong : l.ltGuidedMakeSongVoice),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A rounded play / stop button; [accent] = the melody (lime when playing).
+class _PlayButton extends StatelessWidget {
+  const _PlayButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.on,
+    required this.onTap,
+    this.accent = false,
+  });
+  final IconData icon;
+  final String label;
+  final bool on, accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = on ? (accent ? LT.lime : LT.pink) : LT.t1;
+    return Material(
+      color: on ? color.withValues(alpha: .12) : LT.surface2,
+      borderRadius: BorderRadius.circular(LTRadius.pill),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(LTRadius.pill),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: LTMotion.state,
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(LTRadius.pill),
+            border: Border.all(color: on ? color : LT.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: on ? color : (accent ? LT.lime : LT.surface3),
+                ),
+                child: Icon(
+                  on ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                  color: on || accent ? LT.bg : LT.t1,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(icon, size: 16, color: on ? color : LT.t2),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: on ? color : LT.t1,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Change instrument · Piano ›": what it changes and what it is now.
+class _SettingButton extends StatelessWidget {
+  const _SettingButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.value,
+    this.highlight = false,
+  });
+  final IconData icon;
+  final String label;
+  final String? value;
+  final bool highlight;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: LT.surface,
+    borderRadius: BorderRadius.circular(LTRadius.card),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(LTRadius.card),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(LTRadius.card),
+          border: Border.all(color: highlight ? LT.lime : LT.border),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: LT.lime),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                    ),
-                    onPressed: onListen,
-                    icon: Icon(playing ? Icons.stop : Icons.play_arrow),
-                    label: Text(playing ? l.ltGuidedStop : l.ltGuidedListen),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: LT.t2, fontSize: 12),
                   ),
-                  FilledButton.tonal(
-                    onPressed: onSave,
-                    child: Text(l.ltGuidedSave),
-                  ),
-                  if (onUndo != null)
-                    TextButton.icon(
-                      onPressed: onUndo,
-                      icon: const Icon(Icons.undo),
-                      label: Text(l.ltEditorUndo),
-                    ),
-                  if (saved)
-                    const Icon(Icons.check_circle_outline, color: LT.lime),
-                  if (saved)
+                  if (value != null)
                     Text(
-                      l.ltEditorSaved,
-                      style: const TextStyle(color: LT.lime),
+                      value!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: LT.t1,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                 ],
               ),
             ),
-        ],
+            const Icon(Icons.chevron_right, size: 18, color: LT.t3),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// The melody as a MIDI clip: lime note bars over beat / bar lines and
+/// darker black-key rows, with the playhead while it plays.
+class _MelodyRollPainter extends CustomPainter {
+  _MelodyRollPainter({required this.notes, required this.steps, this.playhead})
+    : super(repaint: playhead);
+  final List<PitchNote> notes;
+  final int steps;
+  final ValueListenable<double>? playhead;
+
+  static const _black = {1, 3, 6, 8, 10};
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const padX = 10.0, padY = 12.0;
+    final w = size.width - padX * 2, h = size.height - padY * 2;
+    if (w <= 0 || h <= 0) return;
+    final total = math.max(1, steps).toDouble();
+    var lo = 60, hi = 72;
+    if (notes.isNotEmpty) {
+      lo = notes.map((n) => n.midi).reduce(math.min) - 2;
+      hi = notes.map((n) => n.midi).reduce(math.max) + 2;
+    }
+    if (hi - lo < 12) {
+      final mid = (hi + lo) ~/ 2;
+      lo = mid - 6;
+      hi = mid + 6;
+    }
+    final rows = hi - lo + 1;
+    final rowH = h / rows;
+    double y(int midi) => padY + (hi - midi) * rowH;
+    double x(double step) => padX + step / total * w;
+
+    // black-key rows
+    final shade = Paint()..color = LT.bg.withValues(alpha: .55);
+    for (var m = lo; m <= hi; m++) {
+      if (_black.contains(m % 12)) {
+        canvas.drawRect(Rect.fromLTWH(padX, y(m), w, rowH), shade);
+      }
+    }
+    // beat and bar lines
+    const perBeat = kStepsPerBeat, perBar = kBeatsPerBar * kStepsPerBeat;
+    final beat = Paint()..color = LT.border.withValues(alpha: .6);
+    final bar = Paint()
+      ..color = LT.borderStrong
+      ..strokeWidth = 1.2;
+    for (var s = 0; s <= total; s += perBeat) {
+      canvas.drawLine(
+        Offset(x(s.toDouble()), padY),
+        Offset(x(s.toDouble()), padY + h),
+        s % perBar == 0 ? bar : beat,
+      );
+    }
+    // notes
+    final fill = Paint()..color = LT.lime;
+    final glow = Paint()
+      ..color = LT.lime.withValues(alpha: .25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    final noteH = math.max(3.0, math.min(rowH - 1, 14.0));
+    for (final n in notes) {
+      if (n.muted) continue;
+      final start = n.step + n.offsetSteps;
+      final left = x(start), right = x(start + n.soundingSteps);
+      final top = y(n.midi) + (rowH - noteH) / 2;
+      final r = RRect.fromRectAndRadius(
+        Rect.fromLTRB(left + .5, top, math.max(left + 3, right - .5), top + noteH),
+        const Radius.circular(3),
+      );
+      canvas.drawRRect(r, glow);
+      canvas.drawRRect(r, fill);
+    }
+    // playhead
+    final p = playhead?.value;
+    if (p != null) {
+      final px = x(p % total);
+      canvas.drawLine(
+        Offset(px, 4),
+        Offset(px, size.height - 4),
+        Paint()
+          ..color = LT.t1
+          ..strokeWidth = 1.5,
+      );
+    }
+  }
+
+  // the notes list is edited in place (a key change): always repaint
+  @override
+  bool shouldRepaint(_MelodyRollPainter old) => true;
+}
+
+/// One way to start: a title saying what to do and one line saying what you
+/// end up with (2026-11-02).
+class _Choice extends StatelessWidget {
+  const _Choice({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.onTap,
+    this.primary = false,
+    this.extra,
+  });
+  final IconData icon;
+  final String title, description;
+  final VoidCallback onTap;
+  final bool primary;
+  final Widget? extra;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = primary ? LT.lime : LT.t1;
+    return Material(
+      color: primary ? LT.lime.withValues(alpha: .08) : LT.bg,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: primary ? LT.lime : LT.border),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: accent),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: const TextStyle(color: LT.t2, fontSize: 12.5, height: 1.4),
+                    ),
+                    if (extra != null) extra!,
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

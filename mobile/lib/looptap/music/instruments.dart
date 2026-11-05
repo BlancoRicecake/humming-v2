@@ -293,5 +293,20 @@ String instrumentLabel(String trackId, int program) {
   for (final i in list) {
     if (i.program == program) return i.label;
   }
+  // A stored program the picker doesn't offer (e.g. GM 24/25/27 dropped from
+  // the guitar tab, or a non-bass GM voice on the bass lane after a MIDI
+  // import) still gets its real name from the full metadata — display only;
+  // the picker lists are unchanged.
+  final drums = trackId == 'drums' || trackId == 'beatDec';
+  if (drums) {
+    for (final k in kDrumKits) {
+      if (k.program == program) return k.label;
+    }
+  } else {
+    if (program == k808Bass.program) return k808Bass.label;
+    for (final i in kMelodyInstruments) {
+      if (i.program == program) return i.label;
+    }
+  }
   return list.first.label;
 }

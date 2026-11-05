@@ -30,6 +30,18 @@ diagnose.py
 .env
 .env.*
 !.env.example
+secrets
+**/secrets
+**/key.properties
+**/*.jks
+**/*.keystore
+**/*.p8
+**/*.p12
+**/*.pfx
+**/google_play_service_account.json
+
+# Additional local Python environments must not be sent to a remote builder.
+.venv*
 
 # Logs / OS
 *.log

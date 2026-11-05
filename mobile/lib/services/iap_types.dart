@@ -2,6 +2,31 @@
 // (in_app_purchase / supabase pull in platform channels). Re-exported by
 // iap_service.dart; import that from app code.
 
+import 'package:flutter/foundation.dart' show TargetPlatform;
+
+/// Mac App Store build: `--dart-define=HUMTRACK_MAC_APP_STORE=true`. StoreKit
+/// only works for a Mac app installed from the Mac App Store, so the
+/// direct-download Mac build leaves this unset and keeps server account Pro.
+const bool kMacAppStoreBuild = bool.fromEnvironment('HUMTRACK_MAC_APP_STORE');
+
+/// Whether purchases on [platform] go through Apple StoreKit (`app_store`):
+/// iOS, or macOS in the Mac App Store build (same app record and products).
+/// Compiled into the Mac binary so the release script can check the built App
+/// for the channel it meant to ship (see tool/release_support.rb).
+const String kMacStoreChannelMarker = kMacAppStoreBuild
+    ? 'humtrack-mac-channel:app-store'
+    : 'humtrack-mac-channel:direct';
+
+bool usesAppStore(TargetPlatform platform, {bool macAppStore = kMacAppStoreBuild}) =>
+    platform == TargetPlatform.iOS ||
+    (platform == TargetPlatform.macOS && macAppStore);
+
+/// Whether [platform] has a store purchase channel at all (else Pro comes only
+/// from the server account entitlement).
+bool hasStorePurchases(TargetPlatform platform, {bool macAppStore = kMacAppStoreBuild}) =>
+    platform == TargetPlatform.android ||
+    usesAppStore(platform, macAppStore: macAppStore);
+
 const String kProductMonthly = 'humtrack_pro_monthly_v2';
 const String kProductYearly  = 'humtrack_pro_yearly';
 const Set<String> kProductIds = {kProductMonthly, kProductYearly};

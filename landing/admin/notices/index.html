@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>공지 관리 — HumTrack</title>
+<link rel="icon" type="image/png" href="/hummingbird.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0A0A0F; --surface: #16161E; --surface-alt: #1F1F27;
+  --lime: #A3E635; --border: #27272A; --border-strong: #3F3F46;
+  --t1: #FAFAFA; --t2: #A1A1AA; --t3: #71717A; --danger: #EF4444; --amber: #F59E0B;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--t1); -webkit-font-smoothing: antialiased; line-height: 1.5; font-size: 14px; }
+header { position: sticky; top: 0; z-index: 10; background: rgba(10,10,15,.9); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+.bar { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 20px; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 16px; color: var(--t1); text-decoration: none; }
+.brand img { width: 24px; height: 24px; border-radius: 6px; }
+.brand b { color: var(--lime); }
+.spacer { flex: 1; }
+.who { color: var(--t2); font-size: 13px; }
+button, .btn { font: inherit; font-weight: 700; border-radius: 999px; padding: 8px 14px; border: 1px solid var(--border-strong); background: var(--surface-alt); color: var(--t1); cursor: pointer; text-decoration: none; }
+button.primary { background: var(--lime); color: var(--bg); border-color: var(--lime); }
+button.danger { color: var(--danger); border-color: rgba(239,68,68,.5); background: transparent; }
+button:disabled { opacity: .4; cursor: default; }
+main { max-width: 1200px; margin: 0 auto; padding: 24px 20px 60px; display: grid; grid-template-columns: 360px 1fr; gap: 20px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+h2 { font-size: 15px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.demo { background: rgba(163,230,53,.08); border: 1px dashed var(--lime); color: var(--lime); border-radius: 12px; padding: 10px 14px; margin: 16px 20px 0; max-width: 1160px; }
+@media (min-width: 1200px) { .demo { margin: 16px auto 0; } }
+.item { padding: 12px; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; cursor: pointer; background: var(--bg); }
+.item.sel { border-color: var(--lime); }
+.item .t { font-weight: 700; margin: 4px 0 2px; }
+.item .d { color: var(--t3); font-size: 12px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--t2); }
+.chip.live { color: var(--lime); border-color: var(--lime); }
+.chip.scheduled { color: var(--amber); border-color: var(--amber); }
+.chip.ended, .chip.draft { color: var(--t3); }
+.chip.critical { color: var(--danger); border-color: var(--danger); }
+.chip.important { color: var(--lime); border-color: rgba(163,230,53,.5); }
+form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.full { grid-column: 1 / -1; }
+label { display: block; color: var(--t2); font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+label small { color: var(--t3); font-weight: 500; }
+input[type=text], input[type=url], input[type=datetime-local], select, textarea {
+  width: 100%; background: var(--bg); color: var(--t1); border: 1px solid var(--border-strong); border-radius: 10px; padding: 9px 11px; font: inherit; }
+textarea { min-height: 110px; resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--lime); }
+.checks { display: flex; gap: 14px; flex-wrap: wrap; padding-top: 6px; }
+.checks label { display: flex; align-items: center; gap: 6px; color: var(--t1); font-size: 13px; margin: 0; }
+.switch { display: flex; align-items: center; gap: 8px; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.msg { min-height: 20px; font-size: 13px; color: var(--t2); }
+.msg.err { color: var(--danger); }
+.msg.ok { color: var(--lime); }
+.preview { display: grid; gap: 12px; margin-top: 4px; }
+.pv-banner { display: flex; align-items: center; gap: 10px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.pv-banner .k { font-weight: 800; }
+.pv-popup { background: #1E1E1E; border: 1px solid var(--border-strong); border-radius: 16px; padding: 20px; text-align: center; max-width: 420px; }
+.pv-popup .h { font-size: 17px; font-weight: 800; margin: 6px 0 8px; }
+.pv-popup .b { color: var(--t2); white-space: pre-wrap; }
+.pv-popup .btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.muted { color: var(--t3); font-size: 12px; }
+.center { max-width: 420px; margin: 80px auto; text-align: center; }
+.center p { color: var(--t2); margin: 10px 0 20px; }
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <a class="brand" href="/"><img src="/hummingbird.png" alt=""><span>Hum<b>Track</b> · 공지 관리</span></a>
+  <span class="spacer"></span>
+  <a class="btn" href="/notices" target="_blank" rel="noopener">공개 페이지</a>
+  <span id="who" class="who"></span>
+  <button id="signout" hidden>로그아웃</button>
+</div></header>
+<div id="demoNote" class="demo" hidden>데모 모드 — 로그인 없이 써 볼 수 있고, 아무것도 저장되지 않아요(새로고침하면 처음으로 돌아가요).</div>
+
+<section id="gate" class="center" hidden>
+  <h2 style="justify-content:center">관리자 로그인</h2>
+  <p id="gateMsg">관리자 계정(Google)으로 로그인하세요.</p>
+  <button id="signin" class="primary">Google로 로그인</button>
+</section>
+
+<main id="app" hidden>
+  <section class="panel">
+    <h2>공지 목록 <span class="spacer"></span><button id="new" class="primary">+ 새 공지</button></h2>
+    <div id="list"></div>
+  </section>
+  <section class="panel">
+    <h2 id="formTitle">새 공지</h2>
+    <form id="form" autocomplete="off">
+      <div><label>ID <small>(영문 소문자·숫자·-·_ / 만들 때만)</small></label><input type="text" name="nid" required pattern="[a-z0-9][a-z0-9_\-]{0,63}"></div>
+      <div><label>종류</label>
+        <select name="kind">
+          <option value="info">소식 — 목록에만</option>
+          <option value="important">중요 — 홈 배너</option>
+          <option value="critical">긴급 — 앱을 열면 팝업</option>
+        </select></div>
+      <div><label>제목 (한국어) <small>최대 120자</small></label><input type="text" name="title_ko" maxlength="120" required></div>
+      <div><label>Title (English) <small>max 120</small></label><input type="text" name="title_en" maxlength="120" required></div>
+      <div><label>본문 (한국어) <small>최대 4000자</small></label><textarea name="body_ko" maxlength="4000" required></textarea></div>
+      <div><label>Body (English) <small>max 4000</small></label><textarea name="body_en" maxlength="4000" required></textarea></div>
+      <div><label>시작</label><input type="datetime-local" name="starts_at" required></div>
+      <div><label>끝 <small>(비우면 계속)</small></label><input type="datetime-local" name="ends_at"></div>
+      <div class="full"><label>보일 곳</label>
+        <div class="checks">
+          <label><input type="checkbox" name="pf" value="android" checked> Android</label>
+          <label><input type="checkbox" name="pf" value="ios" checked> iOS</label>
+          <label><input type="checkbox" name="pf" value="windows" checked> Windows</label>
+          <label><input type="checkbox" name="pf" value="macos" checked> macOS</label>
+        </div></div>
+      <div><label>버튼 문구 (한국어) <small>선택</small></label><input type="text" name="action_label_ko" maxlength="40"></div>
+      <div><label>Button label (English) <small>optional</small></label><input type="text" name="action_label_en" maxlength="40"></div>
+      <div class="full"><label>버튼 링크 <small>hum-track.com, 앱스토어, 플레이스토어, mailto:humtrack@gmail.com 만</small></label><input type="url" name="action_url" maxlength="300" placeholder="https://hum-track.com/..."></div>
+      <div class="full switch"><input type="checkbox" name="published" id="published"><label for="published" style="margin:0;color:var(--t1)">게시 <small>— 끄면 초안(앱과 웹에 안 보임)</small></label></div>
+      <div class="full msg" id="msg"></div>
+      <div class="full actions">
+        <button type="button" id="delete" class="danger" hidden>삭제</button>
+        <span class="spacer"></span>
+        <button type="submit" class="primary" id="save">저장</button>
+      </div>
+    </form>
+    <h2 style="margin-top:24px">앱에서 보이는 모습 <span class="muted">(한국어)</span></h2>
+    <div class="preview" id="preview"></div>
+  </section>
+</main>
+
+<script src="/assets/notices-config.js"></script>
+<script src="/assets/notices-common.js"></script>
+<script>
+(() => {
+  const N = window.HumNotices;
+  const $ = (s) => document.querySelector(s);
+  const form = $('#form');
+  let rows = [], editing = null, sb = null;
+
+  // ── data: Supabase (admin token) or the demo rows ──
+  const store = N.demo ? {
+    async list() { return rows.length ? rows : (rows = N.DEMO.map((r) => ({ ...r }))); },
+    async save(row, isNew) {
+      if (isNew && rows.some((r) => r.id === row.id)) throw new Error('같은 ID가 이미 있어요');
+      if (isNew) rows.unshift(row); else rows = rows.map((r) => r.id === row.id ? { ...r, ...row, revision: r.revision + 1 } : r);
+    },
+    async remove(id) { rows = rows.filter((r) => r.id !== id); },
+  } : {
+    async list() {
+      const { data, error } = await sb.from('app_announcements').select(N.COLUMNS + ',published').order('starts_at', { ascending: false });
+      if (error) throw error;
+      return (rows = data);
+    },
+    async save(row, isNew) {
+      const q = isNew ? sb.from('app_announcements').insert(row) : sb.from('app_announcements').update(row).eq('id', row.id);
+      const { error } = await q;
+      if (error) throw error;
+    },
+    async remove(id) {
+      const { error } = await sb.from('app_announcements').delete().eq('id', id);
+      if (error) throw error;
+    },
+  };
+
+  // ── status ──
+  function status(r) {
+    if (!r.published) return ['draft', '초안'];
+    const now = Date.now();
+    if (new Date(r.starts_at).getTime() > now) return ['scheduled', '예약'];
+    if (r.ends_at && new Date(r.ends_at).getTime() <= now) return ['ended', '종료'];
+    return ['live', '게시 중'];
+  }
+
+  function renderList() {
+    $('#list').innerHTML = rows.length ? rows.map((r) => {
+      const [k, label] = status(r);
+      return `<div class="item${editing === r.id ? ' sel' : ''}" data-id="${N.esc(r.id)}">
+        <div class="chips"><span class="chip ${k}">${label}</span><span class="chip ${r.kind}">${N.KIND.ko[r.kind]}</span></div>
+        <div class="t">${N.esc(r.title_ko)}</div>
+        <div class="d">${N.fmtDate(r.starts_at, 'ko')}${r.ends_at ? ' ~ ' + N.fmtDate(r.ends_at, 'ko') : ''} · rev ${r.revision}</div>
+      </div>`;
+    }).join('') : '<p class="muted">아직 공지가 없어요. “+ 새 공지”로 만들어 보세요.</p>';
+    document.querySelectorAll('.item').forEach((el) => el.addEventListener('click', () => edit(el.dataset.id)));
+  }
+
+  // ── form ──
+  const toLocal = (s) => { if (!s) return ''; const d = new Date(s); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+  const fromLocal = (v) => v ? new Date(v).toISOString() : null;
+  const newId = () => { const d = new Date(); return `${d.toISOString().slice(0, 10)}-${Math.random().toString(36).slice(2, 6)}`; };
+
+  function fill(r) {
+    form.nid.value = r.id; form.nid.readOnly = !!editing;
+    form.kind.value = r.kind;
+    for (const k of ['title_ko', 'title_en', 'body_ko', 'body_en', 'action_label_ko', 'action_label_en', 'action_url']) form[k].value = r[k] || '';
+    form.starts_at.value = toLocal(r.starts_at); form.ends_at.value = toLocal(r.ends_at);
+    form.querySelectorAll('[name=pf]').forEach((c) => { c.checked = (r.platforms || []).includes(c.value); });
+    form.published.checked = !!r.published;
+    $('#formTitle').textContent = editing ? '공지 수정' : '새 공지';
+    $('#delete').hidden = !editing;
+    msg('');
+    renderPreview(); renderList();
+  }
+
+  function edit(id) { editing = id; fill(rows.find((r) => r.id === id)); }
+  function blank() {
+    editing = null;
+    fill({ id: newId(), kind: 'info', starts_at: new Date().toISOString(), platforms: ['android', 'ios', 'windows', 'macos'], published: false });
+  }
+
+  function read() {
+    const v = (k) => form[k].value.trim();
+    const row = {
+      id: v('nid'), kind: v('kind'),
+      title_ko: v('title_ko'), title_en: v('title_en'), body_ko: v('body_ko'), body_en: v('body_en'),
+      starts_at: fromLocal(form.starts_at.value), ends_at: fromLocal(form.ends_at.value),
+      platforms: [...form.querySelectorAll('[name=pf]:checked')].map((c) => c.value),
+      action_label_ko: v('action_label_ko') || null, action_label_en: v('action_label_en') || null,
+      action_url: v('action_url') || null, published: form.published.checked,
+    };
+    // the table's own rules, said in words before the server says no
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(row.id)) throw new Error('ID는 영문 소문자·숫자로 시작하고 -, _ 만 쓸 수 있어요');
+    if (!row.title_ko || !row.title_en || !row.body_ko || !row.body_en) throw new Error('제목과 본문을 한국어·영어 모두 써 주세요');
+    if (!row.starts_at) throw new Error('시작 시각을 정해 주세요');
+    if (row.ends_at && row.ends_at <= row.starts_at) throw new Error('끝은 시작보다 뒤여야 해요');
+    if (!row.platforms.length) throw new Error('보일 곳을 하나 이상 골라 주세요');
+    const any = row.action_url || row.action_label_ko || row.action_label_en;
+    const all = row.action_url && row.action_label_ko && row.action_label_en;
+    if (any && !all) throw new Error('버튼을 넣으려면 문구 두 개와 링크를 모두 채워 주세요');
+    if (row.action_url && !N.safeAction(row.action_url)) throw new Error('버튼 링크는 hum-track.com, 앱스토어, 플레이스토어, mailto:humtrack@gmail.com 만 돼요');
+    return row;
+  }
+
+  function msg(text, kind) { const m = $('#msg'); m.textContent = text; m.className = 'full msg' + (kind ? ' ' + kind : ''); }
+
+  function renderPreview() {
+    let r; try { r = read(); } catch (_) { r = null; }
+    const v = (k) => form[k].value.trim();
+    const kind = form.kind.value;
+    const icon = { info: '📣', important: '❗', critical: '⚠️' }[kind];
+    const title = N.esc(v('title_ko') || '(제목)'), body = N.esc(v('body_ko') || '(본문)');
+    const label = v('action_label_ko');
+    let html = '';
+    if (kind !== 'info') html += `<div class="pv-banner"><span>${icon}</span><span class="k">${N.KIND.ko[kind]} ·</span><span>${title}</span></div>`;
+    if (kind === 'critical') html += `<div class="pv-popup"><div>${icon}</div><div class="h">${title}</div><div class="b">${body}</div>
+      <div class="btns"><span style="color:var(--lime);font-weight:700">나중에</span>${label ? `<span style="color:var(--lime);font-weight:700">${N.esc(label)}</span>` : ''}<span class="btn" style="background:var(--lime);color:var(--bg)">확인</span></div></div>`;
+    html += `<p class="muted">${kind === 'info' ? '소식: 앱의 공지사항 목록과 웹 공지사항에만 보여요.' : kind === 'important' ? '중요: 홈 화면 배너 + 목록에 보여요.' : '긴급: 앱을 열면 팝업으로 한 번 뜨고, 배너와 목록에도 보여요.'}
+      ${r && !r.published ? '<br>지금은 초안이라 아무 데도 안 보여요.' : ''}</p>`;
+    $('#preview').innerHTML = html;
+  }
+  form.addEventListener('input', renderPreview);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    let row; try { row = read(); } catch (err) { msg(err.message, 'err'); return; }
+    $('#save').disabled = true;
+    try {
+      await store.save(row, !editing);
+      editing = row.id;
+      await store.list();
+      edit(row.id);
+      msg(row.published ? '저장했어요. 앱은 다음에 공지를 새로 받을 때(최대 15분, 앱을 다시 열면 바로) 보여요.' : '초안으로 저장했어요.', 'ok');
+    } catch (err) { msg('저장하지 못했어요: ' + (err.message || err), 'err'); }
+    $('#save').disabled = false;
+  });
+
+  $('#delete').addEventListener('click', async () => {
+    if (!editing || !confirm('이 공지를 삭제할까요? 앱과 웹에서 바로 사라져요. (잠시 내리려면 “게시”를 끄세요)')) return;
+    try { await store.remove(editing); await store.list(); blank(); msg('삭제했어요.', 'ok'); }
+    catch (err) { msg('삭제하지 못했어요: ' + (err.message || err), 'err'); }
+  });
+  $('#new').addEventListener('click', blank);
+
+  async function showApp() {
+    $('#gate').hidden = true; $('#app').hidden = false;
+    try { await store.list(); } catch (err) { msg('목록을 불러오지 못했어요: ' + (err.message || err), 'err'); }
+    if (rows.length) edit(rows[0].id); else blank();
+  }
+
+  // ── sign-in ──
+  if (N.demo) {
+    $('#demoNote').hidden = false; $('#who').textContent = 'demo';
+    document.querySelector('a[href="/notices"]').href = '/notices?demo=1';
+    showApp();
+    return;
+  }
+  // the Supabase client only for the real page (demo needs no network)
+  const lib = document.createElement('script');
+  lib.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+  lib.onload = start;
+  lib.onerror = () => { $('#gate').hidden = false; $('#gateMsg').textContent = '로그인 모듈을 불러오지 못했어요. 새로고침해 주세요.'; $('#signin').hidden = true; };
+  document.head.appendChild(lib);
+
+  function start() {
+  if (!window.supabase || !N.cfg.url) { $('#gate').hidden = false; $('#gateMsg').textContent = '설정을 불러오지 못했어요.'; $('#signin').hidden = true; return; }
+  sb = window.supabase.createClient(N.cfg.url, N.cfg.anonKey);
+  $('#signin').addEventListener('click', () => sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } }));
+  $('#signout').addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
+
+  sb.auth.getSession().then(async ({ data }) => {
+    const user = data.session?.user;
+    if (!user) { $('#gate').hidden = false; return; }
+    $('#who').textContent = user.email; $('#signout').hidden = false;
+    const { data: isAdmin } = await sb.rpc('is_app_admin');
+    if (!isAdmin) {
+      $('#gate').hidden = false; $('#signin').hidden = true;
+      $('#gateMsg').textContent = `${user.email} 계정은 공지 관리 권한이 없어요.`;
+      return;
+    }
+    showApp();
+  });
+  }
+})();
+</script>
+</body>
+</html>

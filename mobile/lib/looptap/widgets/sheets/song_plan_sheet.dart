@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
 import '../../models/loop_models.dart';
+import '../../music/section_links.dart';
+import '../section_bar.dart' show LinkBadge;
 import '../../theme/tokens.dart';
 
 class SongPlanSheet extends StatelessWidget {
@@ -29,6 +31,7 @@ class SongPlanSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = L10n.of(context);
+    final groups = linkGroupNumbers(sections);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -50,6 +53,7 @@ class SongPlanSheet extends StatelessWidget {
         for (var i = 0; i < sections.length; i++) ...[
           _SectionRow(
             section: sections[i],
+            linkGroup: groups[sections[i].linkId],
             barsLabel: l.ltSongPlanBars,
             duplicateLabel: l.projectOptionDuplicate,
             moveLeftLabel: l.ltEditorMoveLeft,
@@ -101,6 +105,7 @@ class SongPlanSheet extends StatelessWidget {
 class _SectionRow extends StatelessWidget {
   const _SectionRow({
     required this.section,
+    this.linkGroup,
     required this.barsLabel,
     required this.duplicateLabel,
     required this.moveLeftLabel,
@@ -116,6 +121,7 @@ class _SectionRow extends StatelessWidget {
   });
 
   final Section section;
+  final int? linkGroup;
   final String barsLabel, duplicateLabel, moveLeftLabel, moveRightLabel;
   final bool selected, canMoveLeft, canMoveRight;
   final VoidCallback onSelect, onDuplicate, onMoveLeft, onMoveRight;
@@ -147,6 +153,11 @@ class _SectionRow extends StatelessWidget {
               ),
             ),
           ),
+          if (linkGroup != null)
+            LinkBadge(
+              key: ValueKey('section-link-${section.id}'),
+              group: linkGroup!,
+            ),
           const SizedBox(width: 8),
           Text(
             '${section.bars} $barsLabel',

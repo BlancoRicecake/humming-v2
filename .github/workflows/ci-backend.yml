@@ -1,10 +1,10 @@
 name: CI Backend
 
 # 검증 전용 워크플로 — 배포/시크릿/레포 쓰기 없음.
-# backend/ 가 바뀐 main 푸시와 PR 에서만 돈다.
+# backend/ changes on main/develop and PRs. No publishing.
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - 'backend/**'
       - '.github/workflows/ci-backend.yml'
@@ -26,6 +26,22 @@ jobs:
     name: pytest (Python 3.11)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local_ci_fixture_only
+          POSTGRES_DB: humtrack_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      CLOUD_TEST_PG_URI: postgresql://postgres:local_ci_fixture_only@127.0.0.1:5432/humtrack_test
     defaults:
       run:
         working-directory: backend
@@ -59,7 +75,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-test.txt
 
-      # Supabase/R2 자격증명을 일부러 주지 않는다 → tests/test_cloud_sync.py 의
-      # 11 개는 skip 유지가 정상. 기대 결과: 153 passed, 11 skipped.
+      # Production credentials are never supplied. The service database above
+      # runs the cloud transaction/RLS and announcement migration tests locally.
+      # Legacy pre-contract live tests remain skipped; real provider acceptance
+      # is a separate release gate (not replaced by the FakeR2 tests).
       - name: Run pytest
         run: python -m pytest tests -q

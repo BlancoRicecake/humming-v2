@@ -58,17 +58,25 @@ class _LivePad extends StatelessWidget {
           // Size label/sub from the pad's own box so they scale with the pad on
           // every device + surface size (see PadScale).
           final sc = PadScale(math.min(c.maxWidth, c.maxHeight));
+          // A short pad (phone landscape, small pad area) keeps the note name
+          // only; FittedBox shrinks whatever is left so it never overflows.
+          final showSub = c.maxHeight >= 48;
           return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(label,
-                    style: LTType.inter(size: sc.title, weight: FontWeight.w900, color: active ? LT.bg : LT.t1)),
-                SizedBox(height: sc.gap),
-                Text(sub,
-                    style: LTType.mono(size: sc.sub, color: active ? LT.bg.withValues(alpha: 0.67) : LT.t3)),
-              ],
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label,
+                      style: LTType.inter(size: sc.title, weight: FontWeight.w900, color: active ? LT.bg : LT.t1)),
+                  if (showSub) ...[
+                    SizedBox(height: sc.gap),
+                    Text(sub,
+                        style: LTType.mono(size: sc.sub, color: active ? LT.bg.withValues(alpha: 0.67) : LT.t3)),
+                  ],
+                ],
+              ),
             ),
           );
         },
@@ -121,12 +129,19 @@ class _NotePadsState extends State<NotePads> with SingleTickerProviderStateMixin
   // without ever swiping would trigger first-init inside dispose() — an unsafe
   // TickerMode lookup that throws.
   late final AnimationController _snap;
-  Animation<double>? _snapAnim;
+  // Built once: a fresh CurvedAnimation + listener per swipe would pile up
+  // listeners on the shared controller. A swipe end only retargets the tween.
+  late final CurvedAnimation _snapCurve;
+  final Tween<double> _snapTween = Tween<double>(begin: 0, end: 0);
+  late final Animation<double> _snapAnim;
 
   @override
   void initState() {
     super.initState();
     _snap = AnimationController(vsync: this, duration: const Duration(milliseconds: 260));
+    _snapCurve = CurvedAnimation(parent: _snap, curve: Curves.easeOutCubic);
+    _snapAnim = _snapTween.animate(_snapCurve)
+      ..addListener(() => setState(() => _scroll = _snapAnim.value));
   }
 
   double get _maxScroll =>
@@ -145,6 +160,7 @@ class _NotePadsState extends State<NotePads> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
+    _snapCurve.dispose();
     _snap.dispose();
     super.dispose();
   }
@@ -163,9 +179,9 @@ class _NotePadsState extends State<NotePads> with SingleTickerProviderStateMixin
   void _slideEnd() {
     _dragging = false;
     final target = _scroll.round().clamp(0, _maxScroll.round()).toDouble();
-    _snapAnim = Tween<double>(begin: _scroll, end: target)
-        .animate(CurvedAnimation(parent: _snap, curve: Curves.easeOutCubic))
-      ..addListener(() => setState(() => _scroll = _snapAnim!.value));
+    _snapTween
+      ..begin = _scroll
+      ..end = target;
     _snap.forward(from: 0).whenComplete(() => widget.onOffsetChanged(target.round()));
   }
 

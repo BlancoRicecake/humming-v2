@@ -51,7 +51,10 @@ Section withBeginnerBacking(
   final root = rootMidi(tonic, 2);
   final chordRoot = rootMidi(tonic, 4);
   final progression = backingChordCandidates(style)[chordVariant.clamp(0, 2)];
-  final melody = source.tracks['melody']?.pitchNotes ?? [];
+  final melody = [
+    for (final n in source.tracks['melody']?.pitchNotes ?? const <PitchNote>[])
+      if (!n.muted) n,
+  ];
   for (var bar = 0; bar < source.bars; bar++) {
     final start = bar * 16;
     final notes =

@@ -4,7 +4,7 @@ Each section below corresponds to one of the 9 pipeline stages described in
 ``analyze.py``. Adding a feature later = extend the relevant model only.
 """
 from typing import List, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # --- Stage 7 inputs (key/scale/instrument) ------------------------------------
@@ -17,9 +17,10 @@ Scale = Literal[
 
 class AnalyzeOptions(BaseModel):
     """User-facing knobs. Stage numbers in comments map back to analyze.py."""
-    # Stage 2 — preprocessing
-    fmin_hz: float = 65.0
-    fmax_hz: float = 1000.0
+    # Stage 2 — preprocessing. Bounded so a bad value is a 400, not a librosa
+    # 500 (fmax must stay well below Nyquist of the 22.05 kHz analysis rate).
+    fmin_hz: float = Field(65.0, ge=30.0, le=2000.0, allow_inf_nan=False)
+    fmax_hz: float = Field(1000.0, ge=60.0, le=4000.0, allow_inf_nan=False)
 
     # Stage 3 — voice region detection
     enter_ratio: float = Field(0.20, ge=0.0, le=1.0)
@@ -112,6 +113,12 @@ class AnalyzeOptions(BaseModel):
     timing_max_delay_sec: float = Field(0.06, ge=0.0, le=0.20)
     timing_fill_gaps: bool = True
     timing_fill_max_gap_sec: float = Field(0.50, ge=0.0, le=0.50)
+
+    @model_validator(mode="after")
+    def _check_pitch_band(self) -> "AnalyzeOptions":
+        if self.fmin_hz >= self.fmax_hz:
+            raise ValueError("fmin_hz must be below fmax_hz")
+        return self
 
 
 # --- Stage 6 output -----------------------------------------------------------

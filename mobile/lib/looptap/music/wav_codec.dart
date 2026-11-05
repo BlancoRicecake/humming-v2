@@ -4,6 +4,8 @@
 // recorder, the export mixer, and tests.
 import 'dart:typed_data';
 
+import 'pan.dart';
+
 const double _wavHeadroomPeak = 0.94;
 
 /// Decoded mono audio. [samples] are normalized to [-1, 1].
@@ -152,7 +154,50 @@ Uint8List encodeWavMono16FromStereo(
   return data.buffer.asUint8List();
 }
 
-void _writeWavHeader(ByteData data, int sampleCount, int sr) {
+/// Stereo 16-bit PCM WAV from L/R buffers (mixer-001: the WAV mix and stems).
+///
+/// Same level rules as [encodeWavMono16FromStereo], with the peak taken over
+/// both channels (max(|L|, |R|)) so one gain keeps the stereo image:
+/// [normalize] scales the whole file up/down to the headroom ceiling (final
+/// mix); otherwise only a peak above the ceiling is pulled down (stems). With
+/// [limit] false no gain is applied at all (samples are only clamped).
+Uint8List encodeWavStereo16(
+  Float32List left,
+  Float32List right,
+  int sr, {
+  bool normalize = false,
+  bool limit = true,
+}) {
+  final len = left.length < right.length ? left.length : right.length;
+  final data = ByteData(44 + len * 4);
+  _writeWavHeader(data, len, sr, channels: 2);
+  var peak = 0.0;
+  for (var i = 0; i < len; i++) {
+    final a = left[i].abs(), b = right[i].abs();
+    if (a > peak) peak = a;
+    if (b > peak) peak = b;
+  }
+  final gain = !limit || peak <= 0
+      ? 1.0
+      : (normalize || peak > _wavHeadroomPeak)
+          ? _wavHeadroomPeak / peak
+          : 1.0;
+  var off = 44;
+  int pcm(double x) {
+    final s = (x * gain).clamp(-1.0, 1.0);
+    return (s < 0 ? s * 0x8000 : s * 0x7fff).round();
+  }
+
+  for (var i = 0; i < len; i++) {
+    data.setInt16(off, pcm(left[i]), Endian.little);
+    data.setInt16(off + 2, pcm(right[i]), Endian.little);
+    off += 4;
+  }
+  return data.buffer.asUint8List();
+}
+
+void _writeWavHeader(ByteData data, int frameCount, int sr, {int channels = 1}) {
+  final blockAlign = channels * 2;
   void wr(int o, String s) {
     for (var i = 0; i < s.length; i++) {
       data.setUint8(o + i, s.codeUnitAt(i));
@@ -160,18 +205,18 @@ void _writeWavHeader(ByteData data, int sampleCount, int sr) {
   }
 
   wr(0, 'RIFF');
-  data.setUint32(4, 36 + sampleCount * 2, Endian.little);
+  data.setUint32(4, 36 + frameCount * blockAlign, Endian.little);
   wr(8, 'WAVE');
   wr(12, 'fmt ');
   data.setUint32(16, 16, Endian.little);
   data.setUint16(20, 1, Endian.little); // PCM
-  data.setUint16(22, 1, Endian.little); // mono
+  data.setUint16(22, channels, Endian.little);
   data.setUint32(24, sr, Endian.little);
-  data.setUint32(28, sr * 2, Endian.little);
-  data.setUint16(32, 2, Endian.little);
+  data.setUint32(28, sr * blockAlign, Endian.little);
+  data.setUint16(32, blockAlign, Endian.little);
   data.setUint16(34, 16, Endian.little);
   wr(36, 'data');
-  data.setUint32(40, sampleCount * 2, Endian.little);
+  data.setUint32(40, frameCount * blockAlign, Endian.little);
 }
 
 /// One scheduled vocal occurrence in a flattened-song render: [pcm] (mono,
@@ -182,23 +227,29 @@ class VocalMix {
     required this.start,
     required this.len,
     required this.gain,
+    this.pan = 0,
   });
   final Float32List pcm;
   final int start;
   final int len; // truncated at the section-instance boundary
   final double gain;
+
+  /// mixer-001: the lane's pan, applied with the balance law ([panBalance]).
+  final double pan;
 }
 
-/// Sum scheduled vocal clips into stereo render buffers. Adds `pcm*gain` to
-/// BOTH channels so a downstream (L+R)/2 mono fold contributes exactly
-/// `pcm*gain`. Buffers must already be long enough (see [vocalMixEnd]).
+/// Sum scheduled vocal clips into stereo render buffers. A centred clip adds
+/// `pcm*gain` to BOTH channels (unchanged level per side); a panned one scales
+/// each side by the balance law gL = min(1, 1 - p), gR = min(1, 1 + p).
+/// Buffers must already be long enough (see [vocalMixEnd]).
 void mixVocalsInto(Float32List left, Float32List right, List<VocalMix> vocals) {
   for (final v in vocals) {
     final n = v.len < v.pcm.length ? v.len : v.pcm.length;
+    final b = panBalance(v.pan);
     for (var i = 0; i < n; i++) {
       final s = v.pcm[i] * v.gain;
-      left[v.start + i] += s;
-      right[v.start + i] += s;
+      left[v.start + i] += s * b.left;
+      right[v.start + i] += s * b.right;
     }
   }
 }

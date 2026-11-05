@@ -22,7 +22,11 @@ import '../../state/loop_prefs.dart';
 import '../../state/loop_store.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
+import '../../announcements/announcement_widgets.dart';
 import '../policy_notice.dart';
+import '../../screens/cloud_backup_screen.dart';
+import '../../state/cloud_backup.dart' show kCloudBackupEnabled;
+import '../project_backup_actions.dart';
 import 'lt_modal.dart';
 import 'export_library_screen.dart';
 
@@ -151,17 +155,45 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         ),
         _Row(
           icon: LtIcons.timer,
-          title: 'Vocal sync',
-          sub: 'Increase if the take lands late; decrease if early',
+          title: l.ltSettingsVocalSync,
+          sub: l.ltSettingsVocalSyncSub,
           right: _LatencyStepper(
             value: _vocalLatencyMs,
             onChanged: _setVocalLatencyMs,
           ),
         ),
         _Row(
+          key: const ValueKey('settings-announcements'),
+          icon: Icons.campaign_outlined,
+          title: l.annTitle,
+          sub: l.annSettingsSub,
+          onTap: () => AnnouncementCenterScreen.open(context),
+        ),
+        _Row(
           icon: LtIcons.iosShare,
           title: l.ltFilesTitle,
           onTap: () => showExportLibrary(context),
+        ),
+        if (kCloudBackupEnabled)
+          _Row(
+            key: const ValueKey('settings-cloud-backup'),
+            icon: Icons.cloud_outlined,
+            title: l.ltCloudTitle,
+            sub: l.ltCloudSettingsSub,
+            onTap: () => CloudBackupScreen.open(context),
+          ),
+        _Row(
+          key: const ValueKey('settings-open-backup'),
+          icon: LtIcons.openBackup,
+          title: l.ltBackupOpen,
+          sub: l.ltBackupOpenSub,
+          onTap: () {
+            // the sheet closes; the picker and its message belong to the
+            // screen below (the navigator's context outlives the sheet)
+            final host = Navigator.of(context).context;
+            Navigator.of(context).pop();
+            openBackupAsNewSong(host);
+          },
         ),
         _Row(
           icon: LtIcons.translate,
@@ -249,7 +281,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   /// 해지하지 않으므로, 사용자가 직접 해지할 수 있게 링크를 연다.
   Future<void> _openManageSubscription(LoopStore store) async {
     final uri = manageSubscriptionUri(
-      isIOS: Platform.isIOS,
+      isIOS: Platform.isIOS || Platform.isMacOS,
       productId: store.proProductId,
     );
     try {
@@ -351,7 +383,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     if (!mounted) return;
     final msg =
         err == null
-            ? l.ltSettingsDeleteAccountDone
+            ? (store.accountDeletionPending ? l.ltSettingsDeleteAccountPending : l.ltSettingsDeleteAccountDone)
             : l.ltSettingsDeleteAccountFailed(_deleteErrorText(l, err));
     if (err == null) {
       Navigator.of(this.context).pop(); // settings sheet 닫기
@@ -388,6 +420,7 @@ class _SectionLabel extends StatelessWidget {
 
 class _Row extends StatelessWidget {
   const _Row({
+    super.key,
     required this.icon,
     required this.title,
     this.sub,
@@ -435,7 +468,7 @@ class _Row extends StatelessWidget {
           ),
           if (right != null) right!,
           if (onTap != null && right == null)
-            const Ms(LtIcons.arrowBack, size: 16, color: LT.t3),
+            const Ms(LtIcons.chevronRight, size: 16, color: LT.t3),
         ],
       ),
     );

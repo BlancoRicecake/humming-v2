@@ -2736,6 +2736,18 @@ abstract class L10n {
   /// **'승인 대기 중…'**
   String get payPendingButton;
 
+  /// No description provided for @payDesktopInfo.
+  ///
+  /// In ko, this message translates to:
+  /// **'휴대폰 HumTrack 앱에서 Pro를 구독한 뒤 같은 계정으로 로그인해 주세요. 이 프로그램에서는 결제하지 않으며, 서버에서 계정의 구독 상태를 확인합니다.'**
+  String get payDesktopInfo;
+
+  /// No description provided for @payDesktopRefresh.
+  ///
+  /// In ko, this message translates to:
+  /// **'계정 Pro 상태 확인'**
+  String get payDesktopRefresh;
+
   /// No description provided for @payRestore.
   ///
   /// In ko, this message translates to:
@@ -2753,6 +2765,12 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'이 기기에서는 스토어를 사용할 수 없어요.'**
   String get payStoreUnavailableDevice;
+
+  /// No description provided for @payAccountProOnly.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 버전에서는 앱 안에서 구독할 수 없어요. App Store나 Google Play에서 구독한 계정으로 로그인하면 Pro가 자동으로 적용돼요.'**
+  String get payAccountProOnly;
 
   /// No description provided for @payPurchaseFailed.
   ///
@@ -2988,6 +3006,12 @@ abstract class L10n {
   /// **'탈퇴 실패: {err}'**
   String ltSettingsDeleteAccountFailed(String err);
 
+  /// No description provided for @ltSettingsDeleteAccountPending.
+  ///
+  /// In ko, this message translates to:
+  /// **'탈퇴 요청을 접수했어요. 로그아웃되며 서버 데이터 삭제는 계속 진행됩니다. 이 기기에 저장한 곡은 그대로 남아요.'**
+  String get ltSettingsDeleteAccountPending;
+
   /// No description provided for @ltSettingsDeleteAccountDone.
   ///
   /// In ko, this message translates to:
@@ -3041,6 +3065,30 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'트랙별 WAV 분리'**
   String get ltExportStemsSub;
+
+  /// No description provided for @ltExportNewVariation.
+  ///
+  /// In ko, this message translates to:
+  /// **'다른 변주로'**
+  String get ltExportNewVariation;
+
+  /// No description provided for @ltExportNewVariationSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'확률·세기 변화를 새로 뽑습니다 (되돌리기 가능)'**
+  String get ltExportNewVariationSub;
+
+  /// No description provided for @ltExportNewVariationDone.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 변주를 만들었습니다'**
+  String get ltExportNewVariationDone;
+
+  /// No description provided for @ltExportMidiAllNotes.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI: 확률 무시하고 모든 노트 포함'**
+  String get ltExportMidiAllNotes;
 
   /// No description provided for @ltExportShareTitle.
   ///
@@ -3131,6 +3179,18 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'제품 개선용 Clarity·Firebase 분석 허용'**
   String get ltSettingsAnalyticsSub;
+
+  /// No description provided for @ltSettingsVocalSync.
+  ///
+  /// In ko, this message translates to:
+  /// **'보컬 싱크'**
+  String get ltSettingsVocalSync;
+
+  /// No description provided for @ltSettingsVocalSyncSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음이 늦으면 늘리고, 빠르면 줄여요'**
+  String get ltSettingsVocalSyncSub;
 
   /// No description provided for @ltSettingsAbout.
   ///
@@ -3507,7 +3567,7 @@ abstract class L10n {
   /// 허밍을 노트로 바꾸는 버튼
   ///
   /// In ko, this message translates to:
-  /// **'허밍 → MIDI'**
+  /// **'허밍 to MIDI'**
   String get ltEditorHumToMidi;
 
   /// 드럼 그리드 사용 힌트 (대문자로 표시됨)
@@ -3519,13 +3579,19 @@ abstract class L10n {
   /// 멜로디 그리드 사용 힌트 (대문자로 표시됨)
   ///
   /// In ko, this message translates to:
-  /// **'탭 · 드래그로 길이 조절 · 자동 병합'**
+  /// **'입력 · 영역 선택 · 복사/붙여넣기'**
   String get ltEditorHintGridPitched;
+
+  /// No description provided for @ltEditorHintGridPhone.
+  ///
+  /// In ko, this message translates to:
+  /// **'탭: 노트 추가 · 노트 탭: 선택 · 빈 곳 끌기: 여러 개 선택'**
+  String get ltEditorHintGridPhone;
 
   /// 패드 모드 힌트 — 녹음을 켜고 패드를 치라는 안내
   ///
   /// In ko, this message translates to:
-  /// **'녹음 후 탭'**
+  /// **'녹음을 켠 상태에서 연주'**
   String get ltEditorHintPads;
 
   /// 드럼 서피스 — 가운데 비트 그리드 섹션 라벨 (대문자로 표시됨)
@@ -3651,7 +3717,7 @@ abstract class L10n {
   /// 허밍 녹음 모달 제목
   ///
   /// In ko, this message translates to:
-  /// **'허밍 → MIDI · {track}'**
+  /// **'허밍 to MIDI · {track}'**
   String ltHumModalTitle(String track);
 
   /// 허밍 모달 — 카운트인 안내
@@ -3689,6 +3755,12 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'녹음을 시작할 수 없어요'**
   String get ltRecErrUnavailable;
+
+  /// 녹음 코덱 미지원 (Opus/WAV 모두 불가)
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기에서 쓸 수 있는 녹음 형식이 없어요'**
+  String get ltRecErrNoCodec;
 
   /// 전화 등 시스템 인터럽트로 녹음이 끊김
   ///
@@ -3891,7 +3963,7 @@ abstract class L10n {
   /// 보컬 편집기 — 편집값 초기화
   ///
   /// In ko, this message translates to:
-  /// **'되돌리기'**
+  /// **'편집값 초기화'**
   String get ltVocalEditorReset;
 
   /// 이펙트가 서버에서 처리됨을 알리는 작은 태그
@@ -4050,6 +4122,618 @@ abstract class L10n {
   /// **'변경 사항을 저장하지 못했어요. 기기의 저장 공간을 확인하고 다시 시도해 주세요.'**
   String get ltSongSaveFailed;
 
+  /// No description provided for @ltLibraryRecovered.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 목록 파일을 읽지 못해 마지막으로 저장된 백업에서 되살렸어요. 최근 몇 초의 변경은 빠졌을 수 있어요.'**
+  String get ltLibraryRecovered;
+
+  /// No description provided for @ltLibrarySkipped.
+  ///
+  /// In ko, this message translates to:
+  /// **'일부 곡을 읽지 못해 목록에서 뺐어요. 원본 파일은 지우지 않고 따로 보관했어요.'**
+  String get ltLibrarySkipped;
+
+  /// No description provided for @ltLibraryUnreadable.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 목록 파일을 읽지 못했어요. 파일은 그대로 두었고, 녹음 파일 정리도 멈췄어요.'**
+  String get ltLibraryUnreadable;
+
+  /// No description provided for @ltLibraryNewer.
+  ///
+  /// In ko, this message translates to:
+  /// **'더 새 버전의 HumTrack이 저장한 곡 목록이에요. 볼 수는 있지만 이 버전에서는 저장하지 않아요. 앱을 업데이트해 주세요.'**
+  String get ltLibraryNewer;
+
+  /// No description provided for @ltLibraryFolder.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장 위치: {path}'**
+  String ltLibraryFolder(String path);
+
+  /// No description provided for @ltCloudMenu.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 백업'**
+  String get ltCloudMenu;
+
+  /// No description provided for @ltCloudTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 백업'**
+  String get ltCloudTitle;
+
+  /// No description provided for @ltCloudSettingsSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡을 직접 올리고, 다른 기기에서 새 곡으로 받아요'**
+  String get ltCloudSettingsSub;
+
+  /// No description provided for @ltCloudBackupTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 백업'**
+  String get ltCloudBackupTitle;
+
+  /// No description provided for @ltCloudBackupBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 곡의 노트·악기·구성을 내 계정 클라우드에 올려요. 자동으로 올라가지 않고, 누를 때만 올라가요.'**
+  String get ltCloudBackupBody;
+
+  /// No description provided for @ltCloudIncludeAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 {count}개도 함께 올리기'**
+  String ltCloudIncludeAudio(int count);
+
+  /// No description provided for @ltCloudAudioOn.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 파일이 클라우드에 보관돼요. 클라우드 사본을 지우면 함께 지워져요.'**
+  String get ltCloudAudioOn;
+
+  /// No description provided for @ltCloudAudioOff.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음은 이 기기에만 남아요. 다른 기기에서 받으면 녹음 자리는 비어 있어요.'**
+  String get ltCloudAudioOff;
+
+  /// No description provided for @ltCloudAudioOptOut.
+  ///
+  /// In ko, this message translates to:
+  /// **'지금 클라우드 사본에는 녹음이 들어 있어요. 녹음 없이 올리면 그 사본이 녹음 없는 사본으로 바뀌고, 클라우드의 이전 녹음은 삭제돼요.'**
+  String get ltCloudAudioOptOut;
+
+  /// No description provided for @ltCloudBackupConfirm.
+  ///
+  /// In ko, this message translates to:
+  /// **'올리기'**
+  String get ltCloudBackupConfirm;
+
+  /// No description provided for @ltCloudBackedUp.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 올렸어요: {title}'**
+  String ltCloudBackedUp(String title);
+
+  /// No description provided for @ltCloudBackedUpNoAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 없이 클라우드에 올렸어요: {title}'**
+  String ltCloudBackedUpNoAudio(String title);
+
+  /// No description provided for @ltCloudConflictTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 더 최근 사본이 있어요'**
+  String get ltCloudConflictTitle;
+
+  /// No description provided for @ltCloudConflictBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'다른 기기에서 이 곡을 그사이에 올렸어요. 어떻게 할까요? 고르기 전에는 아무것도 바뀌지 않아요.'**
+  String get ltCloudConflictBody;
+
+  /// No description provided for @ltCloudConflictGone.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 곡의 클라우드 사본이 다른 기기에서 지워졌거나 다시 만들어졌어요. 어떻게 할까요?'**
+  String get ltCloudConflictGone;
+
+  /// No description provided for @ltCloudKeepDevice.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기 것으로 바꾸기'**
+  String get ltCloudKeepDevice;
+
+  /// No description provided for @ltCloudTakeCloud.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 것 받기(새 곡)'**
+  String get ltCloudTakeCloud;
+
+  /// No description provided for @ltCloudKeepBoth.
+  ///
+  /// In ko, this message translates to:
+  /// **'둘 다 보관'**
+  String get ltCloudKeepBoth;
+
+  /// No description provided for @ltCloudRestore.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기로 받기'**
+  String get ltCloudRestore;
+
+  /// No description provided for @ltCloudRestored.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 곡으로 받았어요: {title}'**
+  String ltCloudRestored(String title);
+
+  /// No description provided for @ltCloudRestoredNoAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 없이 올린 사본이라 녹음 자리는 비어 있어요.'**
+  String get ltCloudRestoredNoAudio;
+
+  /// No description provided for @ltCloudDelete.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에서 삭제'**
+  String get ltCloudDelete;
+
+  /// No description provided for @ltCloudDeleteTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에서 ‘{title}’ 삭제'**
+  String ltCloudDeleteTitle(String title);
+
+  /// No description provided for @ltCloudDeleteBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 사본(올린 녹음 포함)만 지워요. 이 기기와 다른 기기에 저장된 곡은 그대로예요. 되돌릴 수 없어요.'**
+  String get ltCloudDeleteBody;
+
+  /// No description provided for @ltCloudDeleteYes.
+  ///
+  /// In ko, this message translates to:
+  /// **'삭제'**
+  String get ltCloudDeleteYes;
+
+  /// No description provided for @ltCloudDeleted.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 사본을 지웠어요.'**
+  String get ltCloudDeleted;
+
+  /// No description provided for @ltCloudUsage.
+  ///
+  /// In ko, this message translates to:
+  /// **'사용량 {used} / {quota}'**
+  String ltCloudUsage(String used, String quota);
+
+  /// No description provided for @ltCloudEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 올린 곡이 없어요. 곡 메뉴의 ‘클라우드에 백업’으로 올려 보세요.'**
+  String get ltCloudEmpty;
+
+  /// No description provided for @ltCloudWithAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 포함'**
+  String get ltCloudWithAudio;
+
+  /// No description provided for @ltCloudNoAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 제외'**
+  String get ltCloudNoAudio;
+
+  /// No description provided for @ltCloudPrivacyNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 사본은 직접 지울 때까지 보관돼요. 구독이 끝나도 받기·삭제는 할 수 있어요.'**
+  String get ltCloudPrivacyNote;
+
+  /// No description provided for @ltCloudUnavailable.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 백업을 아직 쓸 수 없어요. 아무것도 올리지 않았어요.'**
+  String get ltCloudUnavailable;
+
+  /// No description provided for @ltCloudSignIn.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 백업은 로그인한 뒤 쓸 수 있어요.'**
+  String get ltCloudSignIn;
+
+  /// No description provided for @ltCloudProRequired.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 올리기는 Pro에서 쓸 수 있어요. 받기와 삭제는 계속 할 수 있어요.'**
+  String get ltCloudProRequired;
+
+  /// No description provided for @ltCloudQuotaExceeded.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 용량이 부족해 올리지 않았어요. 기존 사본은 그대로예요.'**
+  String get ltCloudQuotaExceeded;
+
+  /// No description provided for @ltCloudDamaged.
+  ///
+  /// In ko, this message translates to:
+  /// **'받은 파일이 올린 것과 달라 가져오지 않았어요. 아무것도 바뀌지 않았어요.'**
+  String get ltCloudDamaged;
+
+  /// No description provided for @ltCloudAccountChanged.
+  ///
+  /// In ko, this message translates to:
+  /// **'작업 중에 로그인한 계정이 바뀌어 멈췄어요. 다른 계정에는 아무것도 올리거나 가져오지 않았어요.'**
+  String get ltCloudAccountChanged;
+
+  /// No description provided for @ltCloudFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'연결 문제로 끝내지 못했어요. 기존 곡과 클라우드 사본은 그대로예요. 다시 시도해 주세요.'**
+  String get ltCloudFailed;
+
+  /// No description provided for @ltCloudGuideTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드 백업은 이렇게 써요'**
+  String get ltCloudGuideTitle;
+
+  /// No description provided for @ltCloudGuideWhere.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장 위치: 내 계정의 HumTrack 클라우드에 곡 사본이 보관돼요. 이 기기의 곡은 그대로 남아요.'**
+  String get ltCloudGuideWhere;
+
+  /// No description provided for @ltCloudGuideUpload.
+  ///
+  /// In ko, this message translates to:
+  /// **'올리기: 곡 카드의 ⋯ → ‘클라우드에 백업’. Pro가 필요하고, 녹음은 체크했을 때만 함께 올라가요.'**
+  String get ltCloudGuideUpload;
+
+  /// No description provided for @ltCloudGuideRestore.
+  ///
+  /// In ko, this message translates to:
+  /// **'받기: 아래 목록에서 ‘이 기기로 받기’를 누르면 새 곡으로 추가돼요. 기존 곡을 덮어쓰지 않아요.'**
+  String get ltCloudGuideRestore;
+
+  /// No description provided for @ltCloudGuideDelete.
+  ///
+  /// In ko, this message translates to:
+  /// **'삭제: ‘클라우드에서 삭제’는 클라우드 사본만 지워요. 구독이 끝나도 받기와 삭제는 할 수 있어요.'**
+  String get ltCloudGuideDelete;
+
+  /// No description provided for @ltCloudSignInAction.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그인'**
+  String get ltCloudSignInAction;
+
+  /// No description provided for @ltCloudProNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'올리기는 Pro에서 쓸 수 있어요. 이미 올린 사본은 지금도 받거나 지울 수 있어요.'**
+  String get ltCloudProNote;
+
+  /// No description provided for @ltCloudProAction.
+  ///
+  /// In ko, this message translates to:
+  /// **'Pro 보기'**
+  String get ltCloudProAction;
+
+  /// No description provided for @ltCloudRetry.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 시도'**
+  String get ltCloudRetry;
+
+  /// No description provided for @ltCloudLinkedTo.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기의 ‘{title}’과 연결됨'**
+  String ltCloudLinkedTo(String title);
+
+  /// No description provided for @ltCloudUploading.
+  ///
+  /// In ko, this message translates to:
+  /// **'클라우드에 올리는 중… {percent}%'**
+  String ltCloudUploading(int percent);
+
+  /// No description provided for @ltCloudPreparing.
+  ///
+  /// In ko, this message translates to:
+  /// **'올릴 파일을 준비하는 중…'**
+  String get ltCloudPreparing;
+
+  /// No description provided for @ltCloudLastBackup.
+  ///
+  /// In ko, this message translates to:
+  /// **'마지막 백업: {date}'**
+  String ltCloudLastBackup(String date);
+
+  /// No description provided for @ltCloudOpen.
+  ///
+  /// In ko, this message translates to:
+  /// **'보기'**
+  String get ltCloudOpen;
+
+  /// No description provided for @annTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'공지사항'**
+  String get annTitle;
+
+  /// No description provided for @annOpenWeb.
+  ///
+  /// In ko, this message translates to:
+  /// **'웹에서 보기'**
+  String get annOpenWeb;
+
+  /// No description provided for @annSettingsSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'개발 소식과 장애·긴급 안내'**
+  String get annSettingsSub;
+
+  /// No description provided for @annKindInfo.
+  ///
+  /// In ko, this message translates to:
+  /// **'소식'**
+  String get annKindInfo;
+
+  /// No description provided for @annKindImportant.
+  ///
+  /// In ko, this message translates to:
+  /// **'중요'**
+  String get annKindImportant;
+
+  /// No description provided for @annKindCritical.
+  ///
+  /// In ko, this message translates to:
+  /// **'긴급'**
+  String get annKindCritical;
+
+  /// No description provided for @annAll.
+  ///
+  /// In ko, this message translates to:
+  /// **'모두 보기'**
+  String get annAll;
+
+  /// No description provided for @annAllWithCount.
+  ///
+  /// In ko, this message translates to:
+  /// **'모두 보기 ({count})'**
+  String annAllWithCount(int count);
+
+  /// No description provided for @annHomeLink.
+  ///
+  /// In ko, this message translates to:
+  /// **'공지사항 {count}'**
+  String annHomeLink(int count);
+
+  /// No description provided for @annUnread.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 공지'**
+  String get annUnread;
+
+  /// No description provided for @annEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'지금 표시할 공지가 없어요.'**
+  String get annEmpty;
+
+  /// No description provided for @annStale.
+  ///
+  /// In ko, this message translates to:
+  /// **'인터넷에 연결되지 않아 {date}에 받은 공지를 보여 드려요. 내용이 바뀌었을 수 있어요.'**
+  String annStale(String date);
+
+  /// No description provided for @annConfirm.
+  ///
+  /// In ko, this message translates to:
+  /// **'확인'**
+  String get annConfirm;
+
+  /// No description provided for @annLater.
+  ///
+  /// In ko, this message translates to:
+  /// **'나중에'**
+  String get annLater;
+
+  /// No description provided for @ltBackupMake.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일 만들기'**
+  String get ltBackupMake;
+
+  /// No description provided for @ltBackupOpen.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 열기'**
+  String get ltBackupOpen;
+
+  /// No description provided for @ltBackupOpenSub.
+  ///
+  /// In ko, this message translates to:
+  /// **'다른 기기에서 만든 .humtrack 파일을 새 곡으로 가져와요'**
+  String get ltBackupOpenSub;
+
+  /// No description provided for @ltBackupMade.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일을 만들었어요: {name}\n‘내보낸 파일’에서 원하는 폴더에 저장하거나 공유하세요.'**
+  String ltBackupMade(String name);
+
+  /// No description provided for @ltBackupMissingTakes.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 파일 {count}개는 이미 없어서 빠졌어요.'**
+  String ltBackupMissingTakes(int count);
+
+  /// No description provided for @ltBackupShowFiles.
+  ///
+  /// In ko, this message translates to:
+  /// **'파일 보기'**
+  String get ltBackupShowFiles;
+
+  /// No description provided for @ltSongsImportMidi.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI 가져오기'**
+  String get ltSongsImportMidi;
+
+  /// No description provided for @ltSongsSelect.
+  ///
+  /// In ko, this message translates to:
+  /// **'작업물 선택'**
+  String get ltSongsSelect;
+
+  /// No description provided for @ltSongsSelected.
+  ///
+  /// In ko, this message translates to:
+  /// **'{count}개 선택'**
+  String ltSongsSelected(int count);
+
+  /// No description provided for @ltSongsSelectAll.
+  ///
+  /// In ko, this message translates to:
+  /// **'전체 선택'**
+  String get ltSongsSelectAll;
+
+  /// No description provided for @ltSongsSelectCancel.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택 끝내기'**
+  String get ltSongsSelectCancel;
+
+  /// No description provided for @ltSongsExportPicked.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업으로 내보내기'**
+  String get ltSongsExportPicked;
+
+  /// No description provided for @ltSongsDeletePicked.
+  ///
+  /// In ko, this message translates to:
+  /// **'삭제'**
+  String get ltSongsDeletePicked;
+
+  /// No description provided for @ltSongsDeletePickedTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'작업물 {count}개를 삭제할까요?'**
+  String ltSongsDeletePickedTitle(int count);
+
+  /// No description provided for @ltSongsExportedPicked.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일 {count}개를 만들었어요. ‘내보낸 파일’에서 저장하거나 공유하세요.'**
+  String ltSongsExportedPicked(int count);
+
+  /// No description provided for @ltCardExport.
+  ///
+  /// In ko, this message translates to:
+  /// **'내보내기'**
+  String get ltCardExport;
+
+  /// No description provided for @ltBackupFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일을 만들지 못했어요. 저장 공간을 확인해 주세요. 곡은 그대로예요.'**
+  String get ltBackupFailed;
+
+  /// No description provided for @ltBackupImported.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업을 새 곡으로 가져왔어요: {title}'**
+  String ltBackupImported(String title);
+
+  /// No description provided for @ltBackupImportedMissing.
+  ///
+  /// In ko, this message translates to:
+  /// **'원래 기기에서도 없던 녹음 {count}개는 빈 자리로 남겼어요(소리 없음).'**
+  String ltBackupImportedMissing(int count);
+
+  /// No description provided for @ltBackupNotBackup.
+  ///
+  /// In ko, this message translates to:
+  /// **'HumTrack 백업 파일(.humtrack)이 아니에요. 아무것도 바꾸지 않았어요.'**
+  String get ltBackupNotBackup;
+
+  /// No description provided for @ltBackupNewer.
+  ///
+  /// In ko, this message translates to:
+  /// **'더 새 버전의 HumTrack에서 만든 백업이에요. 앱을 업데이트한 뒤 열어 주세요.'**
+  String get ltBackupNewer;
+
+  /// No description provided for @ltBackupUnsafe.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 안에 허용되지 않은 파일이 있어 열지 않았어요. 아무것도 바꾸지 않았어요.'**
+  String get ltBackupUnsafe;
+
+  /// No description provided for @ltBackupTooLarge.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일이 너무 커서 열 수 없어요.'**
+  String get ltBackupTooLarge;
+
+  /// No description provided for @ltBackupMissingAudio.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡에 필요한 녹음 파일이 백업에 없어 가져오지 않았어요.'**
+  String get ltBackupMissingAudio;
+
+  /// No description provided for @ltBackupDamaged.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 파일이 손상되어 가져오지 않았어요. 아무것도 바꾸지 않았어요.'**
+  String get ltBackupDamaged;
+
+  /// No description provided for @ltBackupImportFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'백업을 가져오지 못했어요. 저장 공간을 확인해 주세요. 기존 곡은 그대로예요.'**
+  String get ltBackupImportFailed;
+
+  /// No description provided for @ltExitSaveFailedTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장하지 못했어요'**
+  String get ltExitSaveFailedTitle;
+
+  /// No description provided for @ltExitSaveFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'마지막 변경 사항을 저장하지 못해 창을 그대로 두었어요. 저장 공간을 확인한 뒤 다시 저장해 주세요. 편집 내용은 그대로 있어요.'**
+  String get ltExitSaveFailed;
+
+  /// No description provided for @ltExitKeepEditing.
+  ///
+  /// In ko, this message translates to:
+  /// **'계속 편집'**
+  String get ltExitKeepEditing;
+
+  /// No description provided for @ltExitRetrySave.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 저장'**
+  String get ltExitRetrySave;
+
+  /// No description provided for @ltExitDiscardQuit.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장하지 않고 종료'**
+  String get ltExitDiscardQuit;
+
   /// No description provided for @policyNoticeTitle.
   ///
   /// In ko, this message translates to:
@@ -4179,14 +4863,176 @@ abstract class L10n {
   /// No description provided for @ltGuidedPrepare.
   ///
   /// In ko, this message translates to:
-  /// **'조용한 곳에서 네 박자 준비 신호 뒤에 짧은 멜로디를 흥얼거려 보세요. 변환에는 인터넷 연결이 필요해요.'**
+  /// **'조용한 곳에서 네 박자 준비 신호 뒤에 멜로디를 흥얼거리고, 다 부르면 \'변환\'을 눌러 멈추세요(최대 20초). 변환에는 인터넷 연결이 필요해요.'**
   String get ltGuidedPrepare;
+
+  /// No description provided for @ltGuidedMelodyReady.
+  ///
+  /// In ko, this message translates to:
+  /// **'멜로디가 만들어졌어요'**
+  String get ltGuidedMelodyReady;
+
+  /// No description provided for @ltGuidedCompareHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 허밍과 변환된 멜로디를 비교해 들어 보세요. 악기나 키를 바꿔 볼 수도 있어요.'**
+  String get ltGuidedCompareHint;
+
+  /// No description provided for @ltGuidedMelodyHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'변환된 멜로디를 들어 보세요. 악기나 키를 바꿔 볼 수도 있어요.'**
+  String get ltGuidedMelodyHint;
+
+  /// No description provided for @ltGuidedPlayTake.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 허밍'**
+  String get ltGuidedPlayTake;
+
+  /// No description provided for @ltHumAddTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 새 트랙 추가'**
+  String get ltHumAddTitle;
+
+  /// No description provided for @ltHumAddSteps.
+  ///
+  /// In ko, this message translates to:
+  /// **'1 악기 → 2 허밍 → 3 추가'**
+  String get ltHumAddSteps;
+
+  /// No description provided for @ltHumAddPrepare.
+  ///
+  /// In ko, this message translates to:
+  /// **'악기를 고르고 멜로디를 흥얼거려 보세요. 녹음하는 동안 지금 곡이 함께 재생돼요(이어폰을 쓰면 더 깨끗해요). 다 부르면 \'변환\'을 누르세요. 변환된 멜로디는 새 트랙으로 추가돼요.'**
+  String get ltHumAddPrepare;
+
+  /// No description provided for @ltHumAddInstrument.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 트랙의 악기'**
+  String get ltHumAddInstrument;
+
+  /// No description provided for @ltHumAddRecord.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍 녹음하기'**
+  String get ltHumAddRecord;
+
+  /// No description provided for @ltHumAddRecordDesc.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡에 맞춰 부른 멜로디가 새 트랙이 돼요'**
+  String get ltHumAddRecordDesc;
+
+  /// No description provided for @ltHumAddReady.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 트랙이 준비됐어요'**
+  String get ltHumAddReady;
+
+  /// No description provided for @ltHumAddHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'내 허밍과 비교하거나 곡과 함께 들어 보세요. 마음에 들면 추가하세요.'**
+  String get ltHumAddHint;
+
+  /// No description provided for @ltHumAddPlaySong.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡과 함께 듣기'**
+  String get ltHumAddPlaySong;
+
+  /// No description provided for @ltHumAddRetake.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 허밍'**
+  String get ltHumAddRetake;
+
+  /// No description provided for @ltHumAddConfirm.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 트랙 추가'**
+  String get ltHumAddConfirm;
+
+  /// No description provided for @ltGuidedPlayNewKey.
+  ///
+  /// In ko, this message translates to:
+  /// **'바뀐 키로 듣기'**
+  String get ltGuidedPlayNewKey;
+
+  /// No description provided for @ltGuidedPlayMelody.
+  ///
+  /// In ko, this message translates to:
+  /// **'변환된 멜로디'**
+  String get ltGuidedPlayMelody;
+
+  /// No description provided for @ltGuidedKey.
+  ///
+  /// In ko, this message translates to:
+  /// **'키 변경'**
+  String get ltGuidedKey;
+
+  /// No description provided for @ltGuidedMakeSong.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 멜로디로 곡 만들기'**
+  String get ltGuidedMakeSong;
+
+  /// No description provided for @ltGuidedVoiceReady.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음했어요'**
+  String get ltGuidedVoiceReady;
+
+  /// No description provided for @ltGuidedPlayVoice.
+  ///
+  /// In ko, this message translates to:
+  /// **'들어보기'**
+  String get ltGuidedPlayVoice;
+
+  /// No description provided for @ltGuidedMakeSongVoice.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 녹음으로 곡 만들기'**
+  String get ltGuidedMakeSongVoice;
 
   /// No description provided for @ltGuidedSteps.
   ///
   /// In ko, this message translates to:
-  /// **'1 멜로디·샘플  →  2 반주  →  3 저장'**
+  /// **'1 녹음 → 2 저장'**
   String get ltGuidedSteps;
+
+  /// No description provided for @ltGuidedHumTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 멜로디 만들기'**
+  String get ltGuidedHumTitle;
+
+  /// No description provided for @ltGuidedHumDesc.
+  ///
+  /// In ko, this message translates to:
+  /// **'흥얼거린 멜로디를 음표로 바꿔요. 악기 소리로 듣고 음을 고칠 수 있어요. 인터넷 연결이 필요해요.'**
+  String get ltGuidedHumDesc;
+
+  /// No description provided for @ltGuidedVoiceTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'목소리 그대로 녹음하기'**
+  String get ltGuidedVoiceTitle;
+
+  /// No description provided for @ltGuidedVoiceDesc.
+  ///
+  /// In ko, this message translates to:
+  /// **'노래나 소리를 녹음 그대로 보컬 트랙에 넣어요. 음표로 바뀌지 않아요(나중에 변환할 수 있어요).'**
+  String get ltGuidedVoiceDesc;
+
+  /// No description provided for @ltGuidedVoiceImport.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 파일 불러오기'**
+  String get ltGuidedVoiceImport;
 
   /// No description provided for @ltSampleTitle.
   ///
@@ -4467,7 +5313,7 @@ abstract class L10n {
   /// No description provided for @ltFirstSongHint.
   ///
   /// In ko, this message translates to:
-  /// **'허밍 → 반주 → 저장\n로그인 없이 무료로 시작해요.'**
+  /// **'녹음 → 저장\n로그인 없이 무료로 시작해요.'**
   String get ltFirstSongHint;
 
   /// No description provided for @ltFilesTitle.
@@ -4661,6 +5507,864 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'목소리 그대로 녹음'**
   String get ltGuidedKeepVocal;
+
+  /// No description provided for @ltVocalEditorClearFx.
+  ///
+  /// In ko, this message translates to:
+  /// **'효과 전체 제거'**
+  String get ltVocalEditorClearFx;
+
+  /// No description provided for @ltVocalEditorRestoreOriginal.
+  ///
+  /// In ko, this message translates to:
+  /// **'원음 복원'**
+  String get ltVocalEditorRestoreOriginal;
+
+  /// No description provided for @ltVocalEditorFxSourceMissing.
+  ///
+  /// In ko, this message translates to:
+  /// **'원본 파일이 없어 효과를 변경할 수 없습니다. 기존 소리는 유지됩니다.'**
+  String get ltVocalEditorFxSourceMissing;
+
+  /// No description provided for @ltVocalFxPresets.
+  ///
+  /// In ko, this message translates to:
+  /// **'보컬 프리셋'**
+  String get ltVocalFxPresets;
+
+  /// No description provided for @ltVocalFxPresetHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'프리셋은 오토튠을 유지하고 나머지 효과를 교체합니다.'**
+  String get ltVocalFxPresetHint;
+
+  /// No description provided for @ltVocalFxLocal.
+  ///
+  /// In ko, this message translates to:
+  /// **'효과 추가 · 기기에서 처리'**
+  String get ltVocalFxLocal;
+
+  /// No description provided for @ltVocalFxAmount.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용 강도'**
+  String get ltVocalFxAmount;
+
+  /// No description provided for @ltVocalFxAmountHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'다음에 추가할 개별 효과에 적용됩니다.'**
+  String get ltVocalFxAmountHint;
+
+  /// No description provided for @ltVocalFxServer.
+  ///
+  /// In ko, this message translates to:
+  /// **'기존 효과 · 서버 연결 필요'**
+  String get ltVocalFxServer;
+
+  /// No description provided for @ltVocalPreviewOriginal.
+  ///
+  /// In ko, this message translates to:
+  /// **'원음 듣기'**
+  String get ltVocalPreviewOriginal;
+
+  /// No description provided for @ltVocalPreviewProcessed.
+  ///
+  /// In ko, this message translates to:
+  /// **'효과음 듣기'**
+  String get ltVocalPreviewProcessed;
+
+  /// No description provided for @ltVocalPreviewOriginalPlaying.
+  ///
+  /// In ko, this message translates to:
+  /// **'원음 재생 중'**
+  String get ltVocalPreviewOriginalPlaying;
+
+  /// No description provided for @ltVocalPreviewProcessedPlaying.
+  ///
+  /// In ko, this message translates to:
+  /// **'효과음 재생 중'**
+  String get ltVocalPreviewProcessedPlaying;
+
+  /// No description provided for @ltVocalPreviewStopped.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 정지'**
+  String get ltVocalPreviewStopped;
+
+  /// No description provided for @ltVocalPreviewLoading.
+  ///
+  /// In ko, this message translates to:
+  /// **'비교음 준비 중…'**
+  String get ltVocalPreviewLoading;
+
+  /// No description provided for @ltVocalPreviewNoEffects.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용된 효과 없음'**
+  String get ltVocalPreviewNoEffects;
+
+  /// No description provided for @ltVocalPreviewEffects.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용 효과'**
+  String get ltVocalPreviewEffects;
+
+  /// No description provided for @ltVocalPreviewLoop.
+  ///
+  /// In ko, this message translates to:
+  /// **'구간 반복'**
+  String get ltVocalPreviewLoop;
+
+  /// No description provided for @ltVocalPreviewLevel.
+  ///
+  /// In ko, this message translates to:
+  /// **'음량 맞춤'**
+  String get ltVocalPreviewLevel;
+
+  /// No description provided for @ltVocalPreviewAuto.
+  ///
+  /// In ko, this message translates to:
+  /// **'적용 후 듣기'**
+  String get ltVocalPreviewAuto;
+
+  /// No description provided for @ltVocalPreviewFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'오디오를 재생하지 못했습니다. 파일과 출력 장치를 확인해주세요.'**
+  String get ltVocalPreviewFailed;
+
+  /// No description provided for @topBarBackToSongs.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 목록으로'**
+  String get topBarBackToSongs;
+
+  /// No description provided for @topBarAutoSaved.
+  ///
+  /// In ko, this message translates to:
+  /// **'자동 저장됨 {time}'**
+  String topBarAutoSaved(String time);
+
+  /// No description provided for @topBarRangeLoop.
+  ///
+  /// In ko, this message translates to:
+  /// **'구간 반복 켜기/끄기'**
+  String get topBarRangeLoop;
+
+  /// No description provided for @topBarPosition.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 위치 (마디.박.16분)'**
+  String get topBarPosition;
+
+  /// No description provided for @topBarBpmTap.
+  ///
+  /// In ko, this message translates to:
+  /// **'눌러서 BPM 입력'**
+  String get topBarBpmTap;
+
+  /// No description provided for @topBarKeyTap.
+  ///
+  /// In ko, this message translates to:
+  /// **'키 바꾸기'**
+  String get topBarKeyTap;
+
+  /// No description provided for @topBarSongSettings.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 설정'**
+  String get topBarSongSettings;
+
+  /// No description provided for @topBarTempo.
+  ///
+  /// In ko, this message translates to:
+  /// **'템포'**
+  String get topBarTempo;
+
+  /// No description provided for @topBarSwingHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'그루브가 지정되지 않은 트랙에 적용'**
+  String get topBarSwingHint;
+
+  /// No description provided for @topBarSectionLength.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 길이 (마디)'**
+  String get topBarSectionLength;
+
+  /// No description provided for @topBarMore.
+  ///
+  /// In ko, this message translates to:
+  /// **'더 보기'**
+  String get topBarMore;
+
+  /// No description provided for @topBarShortcuts.
+  ///
+  /// In ko, this message translates to:
+  /// **'단축키 보기'**
+  String get topBarShortcuts;
+
+  /// No description provided for @topBarProBadge.
+  ///
+  /// In ko, this message translates to:
+  /// **'PRO'**
+  String get topBarProBadge;
+
+  /// No description provided for @shortcutPlay.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 / 일시정지'**
+  String get shortcutPlay;
+
+  /// No description provided for @shortcutRecord.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음'**
+  String get shortcutRecord;
+
+  /// No description provided for @shortcutSave.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장'**
+  String get shortcutSave;
+
+  /// No description provided for @shortcutUndo.
+  ///
+  /// In ko, this message translates to:
+  /// **'실행 취소'**
+  String get shortcutUndo;
+
+  /// No description provided for @shortcutRedo.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 실행'**
+  String get shortcutRedo;
+
+  /// No description provided for @shortcutGroove.
+  ///
+  /// In ko, this message translates to:
+  /// **'그루브'**
+  String get shortcutGroove;
+
+  /// No description provided for @shortcutDuplicateLinked.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 연결 복제'**
+  String get shortcutDuplicateLinked;
+
+  /// No description provided for @shortcutRangeLoop.
+  ///
+  /// In ko, this message translates to:
+  /// **'구간 반복 켜기/끄기'**
+  String get shortcutRangeLoop;
+
+  /// No description provided for @shortcutMixer.
+  ///
+  /// In ko, this message translates to:
+  /// **'믹서'**
+  String get shortcutMixer;
+
+  /// No description provided for @shortcutHelp.
+  ///
+  /// In ko, this message translates to:
+  /// **'단축키 보기'**
+  String get shortcutHelp;
+
+  /// No description provided for @shortcutHelpLegatoNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'피아노롤(선택 편집)에 포커스가 있고 고칠 노트가 있으면 Ctrl/⌘+L은 기존대로 레가토입니다(선택이 없으면 트랙 전체). 그 밖에는 구간 반복입니다.'**
+  String get shortcutHelpLegatoNote;
+
+  /// No description provided for @shortcutHelpTypingNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'글자를 입력하는 중에는 단축키가 동작하지 않습니다.'**
+  String get shortcutHelpTypingNote;
+
+  /// No description provided for @shortcutSectionWorkspace.
+  ///
+  /// In ko, this message translates to:
+  /// **'작업 공간'**
+  String get shortcutSectionWorkspace;
+
+  /// No description provided for @shortcutSectionPianoRoll.
+  ///
+  /// In ko, this message translates to:
+  /// **'피아노롤 (그리드 · 선택 편집)'**
+  String get shortcutSectionPianoRoll;
+
+  /// No description provided for @shortcutSectionGuitar.
+  ///
+  /// In ko, this message translates to:
+  /// **'기타 트랙 피아노롤'**
+  String get shortcutSectionGuitar;
+
+  /// No description provided for @shortcutSectionDrums.
+  ///
+  /// In ko, this message translates to:
+  /// **'드럼 그리드 (선택 모드)'**
+  String get shortcutSectionDrums;
+
+  /// No description provided for @shortcutEditDeselect.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택 해제'**
+  String get shortcutEditDeselect;
+
+  /// No description provided for @shortcutEditSelectAll.
+  ///
+  /// In ko, this message translates to:
+  /// **'전체 선택'**
+  String get shortcutEditSelectAll;
+
+  /// No description provided for @shortcutEditArpeggiate.
+  ///
+  /// In ko, this message translates to:
+  /// **'펼치기 (아르페지오)'**
+  String get shortcutEditArpeggiate;
+
+  /// No description provided for @shortcutEditCopy.
+  ///
+  /// In ko, this message translates to:
+  /// **'복사 (선택한 노트)'**
+  String get shortcutEditCopy;
+
+  /// No description provided for @shortcutEditPaste.
+  ///
+  /// In ko, this message translates to:
+  /// **'붙여넣기 (입력 모드에서도)'**
+  String get shortcutEditPaste;
+
+  /// No description provided for @shortcutEditDuplicate.
+  ///
+  /// In ko, this message translates to:
+  /// **'복제'**
+  String get shortcutEditDuplicate;
+
+  /// No description provided for @shortcutEditSplitPlayhead.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 위치에서 자르기'**
+  String get shortcutEditSplitPlayhead;
+
+  /// No description provided for @shortcutEditSplitSheet.
+  ///
+  /// In ko, this message translates to:
+  /// **'자르기 설정'**
+  String get shortcutEditSplitSheet;
+
+  /// No description provided for @shortcutEditGlue.
+  ///
+  /// In ko, this message translates to:
+  /// **'이어 붙이기'**
+  String get shortcutEditGlue;
+
+  /// No description provided for @shortcutEditLegato.
+  ///
+  /// In ko, this message translates to:
+  /// **'레가토 (선택한 노트, 선택이 없으면 트랙 전체)'**
+  String get shortcutEditLegato;
+
+  /// No description provided for @shortcutEditQuantize.
+  ///
+  /// In ko, this message translates to:
+  /// **'퀀타이즈 (선택, 없으면 트랙 전체)'**
+  String get shortcutEditQuantize;
+
+  /// No description provided for @shortcutEditQuantizeSettings.
+  ///
+  /// In ko, this message translates to:
+  /// **'퀀타이즈 설정'**
+  String get shortcutEditQuantizeSettings;
+
+  /// No description provided for @shortcutEditHumanize.
+  ///
+  /// In ko, this message translates to:
+  /// **'휴머나이즈 (선택, 없으면 트랙 전체)'**
+  String get shortcutEditHumanize;
+
+  /// No description provided for @shortcutEditFitScale.
+  ///
+  /// In ko, this message translates to:
+  /// **'스케일에 맞추기 (곡에 스케일이 있을 때)'**
+  String get shortcutEditFitScale;
+
+  /// No description provided for @shortcutEditChance.
+  ///
+  /// In ko, this message translates to:
+  /// **'확률 올리기/내리기 (확률 막대가 열려 있을 때)'**
+  String get shortcutEditChance;
+
+  /// No description provided for @shortcutEditChordStampMode.
+  ///
+  /// In ko, this message translates to:
+  /// **'코드 찍기 모드 켜기/끄기 (모든 도구)'**
+  String get shortcutEditChordStampMode;
+
+  /// No description provided for @shortcutEditDelete.
+  ///
+  /// In ko, this message translates to:
+  /// **'삭제'**
+  String get shortcutEditDelete;
+
+  /// No description provided for @shortcutEditMute.
+  ///
+  /// In ko, this message translates to:
+  /// **'소리 끄기/켜기'**
+  String get shortcutEditMute;
+
+  /// No description provided for @shortcutEditChordBelow.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택한 노트 아래에 코드 깔기'**
+  String get shortcutEditChordBelow;
+
+  /// No description provided for @shortcutEditChordType.
+  ///
+  /// In ko, this message translates to:
+  /// **'코드 종류 고르기'**
+  String get shortcutEditChordType;
+
+  /// No description provided for @shortcutEditMove.
+  ///
+  /// In ko, this message translates to:
+  /// **'앞뒤로 옮기기'**
+  String get shortcutEditMove;
+
+  /// No description provided for @shortcutEditLength.
+  ///
+  /// In ko, this message translates to:
+  /// **'길이 줄이기/늘리기'**
+  String get shortcutEditLength;
+
+  /// No description provided for @shortcutEditSemitone.
+  ///
+  /// In ko, this message translates to:
+  /// **'반음 올리기/내리기'**
+  String get shortcutEditSemitone;
+
+  /// No description provided for @shortcutEditOctave.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브 올리기/내리기'**
+  String get shortcutEditOctave;
+
+  /// No description provided for @shortcutGuitarStroke.
+  ///
+  /// In ko, this message translates to:
+  /// **'다운/업 스트로크'**
+  String get shortcutGuitarStroke;
+
+  /// No description provided for @shortcutGuitarStrings.
+  ///
+  /// In ko, this message translates to:
+  /// **'줄 배정'**
+  String get shortcutGuitarStrings;
+
+  /// No description provided for @shortcutGuitarRing.
+  ///
+  /// In ko, this message translates to:
+  /// **'울림 아르페지오'**
+  String get shortcutGuitarRing;
+
+  /// No description provided for @shortcutDrumToggleSelect.
+  ///
+  /// In ko, this message translates to:
+  /// **'그리기 ⇄ 선택 모드 (모든 모드)'**
+  String get shortcutDrumToggleSelect;
+
+  /// No description provided for @shortcutDrumMoveFine.
+  ///
+  /// In ko, this message translates to:
+  /// **'조금씩 옮기기'**
+  String get shortcutDrumMoveFine;
+
+  /// No description provided for @shortcutDrumVelocity.
+  ///
+  /// In ko, this message translates to:
+  /// **'세기 올리기/내리기'**
+  String get shortcutDrumVelocity;
+
+  /// No description provided for @shortcutDrumVelocityBig.
+  ///
+  /// In ko, this message translates to:
+  /// **'세기 크게 올리기/내리기'**
+  String get shortcutDrumVelocityBig;
+
+  /// No description provided for @bandSongPlay.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 재생'**
+  String get bandSongPlay;
+
+  /// No description provided for @bandAddSection.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 추가'**
+  String get bandAddSection;
+
+  /// No description provided for @bandChipTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'클릭: 선택 · 두 번 클릭: 이름 · 우클릭: 메뉴 · 휠: 반복 수'**
+  String get bandChipTooltip;
+
+  /// No description provided for @bandLinkedNotice.
+  ///
+  /// In ko, this message translates to:
+  /// **'연결된 구간 {count}개에 함께 적용'**
+  String bandLinkedNotice(int count);
+
+  /// No description provided for @bandRenameTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 이름'**
+  String get bandRenameTitle;
+
+  /// No description provided for @bandRepeats.
+  ///
+  /// In ko, this message translates to:
+  /// **'반복'**
+  String get bandRepeats;
+
+  /// No description provided for @bandDeleteSection.
+  ///
+  /// In ko, this message translates to:
+  /// **'섹션 삭제'**
+  String get bandDeleteSection;
+
+  /// No description provided for @rulerTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'끌어서 반복 구간 지정 · 양 끝을 끌어 조절 · 클릭해서 재생 위치 이동'**
+  String get rulerTooltip;
+
+  /// No description provided for @auditionRestart.
+  ///
+  /// In ko, this message translates to:
+  /// **'같은 구간 처음부터 듣기'**
+  String get auditionRestart;
+
+  /// No description provided for @soloCompareFull.
+  ///
+  /// In ko, this message translates to:
+  /// **'Solo {count} · 전체와 비교'**
+  String soloCompareFull(int count);
+
+  /// No description provided for @soloCompareBack.
+  ///
+  /// In ko, this message translates to:
+  /// **'전체 파트 · Solo로 비교'**
+  String get soloCompareBack;
+
+  /// No description provided for @soloClear.
+  ///
+  /// In ko, this message translates to:
+  /// **'해제'**
+  String get soloClear;
+
+  /// No description provided for @soloOpenVelocity.
+  ///
+  /// In ko, this message translates to:
+  /// **'강약 보기'**
+  String get soloOpenVelocity;
+
+  /// No description provided for @soloIssueMuted.
+  ///
+  /// In ko, this message translates to:
+  /// **'음소거가 켜져 있어요'**
+  String get soloIssueMuted;
+
+  /// No description provided for @soloIssueZeroVolume.
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙 음량이 0이에요'**
+  String get soloIssueZeroVolume;
+
+  /// No description provided for @soloIssueNoNotes.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 구간에 재생할 노트·오디오가 없어요'**
+  String get soloIssueNoNotes;
+
+  /// No description provided for @soloIssueVeryQuiet.
+  ///
+  /// In ko, this message translates to:
+  /// **'노트 세기 {min}–{max}/127 · 매우 작게 들릴 수 있어요'**
+  String soloIssueVeryQuiet(int min, int max);
+
+  /// No description provided for @soloIssueOpenHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'눌러서 강약 보기'**
+  String get soloIssueOpenHint;
+
+  /// No description provided for @shortcutViewToggle.
+  ///
+  /// In ko, this message translates to:
+  /// **'편곡 ↔ 편집 보기'**
+  String get shortcutViewToggle;
+
+  /// No description provided for @shortcutOpenEditor.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택한 트랙 편집 (편곡 보기)'**
+  String get shortcutOpenEditor;
+
+  /// No description provided for @viewArrange.
+  ///
+  /// In ko, this message translates to:
+  /// **'편곡'**
+  String get viewArrange;
+
+  /// No description provided for @viewEdit.
+  ///
+  /// In ko, this message translates to:
+  /// **'편집'**
+  String get viewEdit;
+
+  /// No description provided for @viewLocked.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 중에는 보기를 바꿀 수 없어요'**
+  String get viewLocked;
+
+  /// No description provided for @minimapEditing.
+  ///
+  /// In ko, this message translates to:
+  /// **'{track} 편집 중'**
+  String minimapEditing(String track);
+
+  /// No description provided for @minimapToArrange.
+  ///
+  /// In ko, this message translates to:
+  /// **'편곡 보기로'**
+  String get minimapToArrange;
+
+  /// No description provided for @minimapOverviewTooltip.
+  ///
+  /// In ko, this message translates to:
+  /// **'곡 전체 · 클릭: 재생 위치 이동 · 사각형 끌기: 피아노롤 이동'**
+  String get minimapOverviewTooltip;
+
+  /// No description provided for @arrangeHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙 줄을 두 번 누르거나 Enter를 누르면 편집 보기로 넘어가요'**
+  String get arrangeHint;
+
+  /// No description provided for @shortcutInspector.
+  ///
+  /// In ko, this message translates to:
+  /// **'인스펙터 접기 / 펼치기'**
+  String get shortcutInspector;
+
+  /// No description provided for @inspectorTrack.
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙'**
+  String get inspectorTrack;
+
+  /// No description provided for @inspectorNotes.
+  ///
+  /// In ko, this message translates to:
+  /// **'노트 {count}'**
+  String inspectorNotes(int count);
+
+  /// No description provided for @inspectorCollapse.
+  ///
+  /// In ko, this message translates to:
+  /// **'인스펙터 접기'**
+  String get inspectorCollapse;
+
+  /// No description provided for @inspectorExpand.
+  ///
+  /// In ko, this message translates to:
+  /// **'인스펙터 펼치기'**
+  String get inspectorExpand;
+
+  /// No description provided for @inspectorSummary.
+  ///
+  /// In ko, this message translates to:
+  /// **'노트 {notes}개 · {bars}마디'**
+  String inspectorSummary(int notes, int bars);
+
+  /// No description provided for @inspectorInstrument.
+  ///
+  /// In ko, this message translates to:
+  /// **'악기'**
+  String get inspectorInstrument;
+
+  /// No description provided for @inspectorOctave.
+  ///
+  /// In ko, this message translates to:
+  /// **'옥타브'**
+  String get inspectorOctave;
+
+  /// No description provided for @inspectorVolume.
+  ///
+  /// In ko, this message translates to:
+  /// **'볼륨'**
+  String get inspectorVolume;
+
+  /// No description provided for @inspectorPan.
+  ///
+  /// In ko, this message translates to:
+  /// **'Pan'**
+  String get inspectorPan;
+
+  /// No description provided for @inspectorPanHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'두 번 클릭 또는 Alt+클릭: 가운데로'**
+  String get inspectorPanHint;
+
+  /// No description provided for @inspectorMute.
+  ///
+  /// In ko, this message translates to:
+  /// **'음소거'**
+  String get inspectorMute;
+
+  /// No description provided for @inspectorGroove.
+  ///
+  /// In ko, this message translates to:
+  /// **'그루브'**
+  String get inspectorGroove;
+
+  /// No description provided for @inspectorGrooveNone.
+  ///
+  /// In ko, this message translates to:
+  /// **'없음'**
+  String get inspectorGrooveNone;
+
+  /// No description provided for @inspectorHum.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 노트 넣기'**
+  String get inspectorHum;
+
+  /// No description provided for @inspectorMidiImport.
+  ///
+  /// In ko, this message translates to:
+  /// **'MIDI 구간 가져오기'**
+  String get inspectorMidiImport;
+
+  /// No description provided for @inspectorClear.
+  ///
+  /// In ko, this message translates to:
+  /// **'트랙 비우기'**
+  String get inspectorClear;
+
+  /// No description provided for @inspectorNoNotes.
+  ///
+  /// In ko, this message translates to:
+  /// **'그리드에서 노트를 고르면 여기서 편집해요'**
+  String get inspectorNoNotes;
+
+  /// No description provided for @inspectorArrangeOnly.
+  ///
+  /// In ko, this message translates to:
+  /// **'편곡 보기에서는 트랙 탭만 보여요'**
+  String get inspectorArrangeOnly;
+
+  /// No description provided for @inspectorSelectedNotes.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택한 노트 {count}개'**
+  String inspectorSelectedNotes(int count);
+
+  /// No description provided for @inspectorPosition.
+  ///
+  /// In ko, this message translates to:
+  /// **'위치'**
+  String get inspectorPosition;
+
+  /// No description provided for @inspectorLength.
+  ///
+  /// In ko, this message translates to:
+  /// **'길이'**
+  String get inspectorLength;
+
+  /// No description provided for @inspectorMore.
+  ///
+  /// In ko, this message translates to:
+  /// **'더 보기'**
+  String get inspectorMore;
+
+  /// No description provided for @inspectorGuitar.
+  ///
+  /// In ko, this message translates to:
+  /// **'기타 스트로크·줄'**
+  String get inspectorGuitar;
+
+  /// No description provided for @inspectorSettings.
+  ///
+  /// In ko, this message translates to:
+  /// **'설정'**
+  String get inspectorSettings;
+
+  /// No description provided for @inspectorDrumSelectHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'선택 모드에서 노트를 고르세요'**
+  String get inspectorDrumSelectHint;
+
+  /// No description provided for @velocityLaneRow.
+  ///
+  /// In ko, this message translates to:
+  /// **'강약 · 확률'**
+  String get velocityLaneRow;
+
+  /// No description provided for @velocityLaneFold.
+  ///
+  /// In ko, this message translates to:
+  /// **'강약 막대 접기'**
+  String get velocityLaneFold;
+
+  /// No description provided for @velocityLaneUnfold.
+  ///
+  /// In ko, this message translates to:
+  /// **'강약 막대 펼치기'**
+  String get velocityLaneUnfold;
+
+  /// No description provided for @gridInKeyOnly.
+  ///
+  /// In ko, this message translates to:
+  /// **'키 안의 음만'**
+  String get gridInKeyOnly;
+
+  /// No description provided for @gridInKeyOnlyTip.
+  ///
+  /// In ko, this message translates to:
+  /// **'키 밖의 빈 줄을 숨기고, 새 음은 키 안에 넣어요'**
+  String get gridInKeyOnlyTip;
+
+  /// No description provided for @gridOutOfKeyCount.
+  ///
+  /// In ko, this message translates to:
+  /// **'키 밖 음 {count}개'**
+  String gridOutOfKeyCount(int count);
+
+  /// No description provided for @humPrimary.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 넣기'**
+  String get humPrimary;
+
+  /// No description provided for @shortcutHum.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍으로 넣기'**
+  String get shortcutHum;
+
+  /// No description provided for @shortcutHelpHumNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'피아노롤·드럼 그리드에 포커스가 있고 고칠 노트가 있으면 Ctrl/⌘+Shift+H는 기존대로 휴머나이즈입니다. 그 밖에는 활성 트랙의 허밍 창을 엽니다.'**
+  String get shortcutHelpHumNote;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

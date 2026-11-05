@@ -111,9 +111,13 @@ class EngineApi {
     if (await target.exists()) {
       start = await target.length();
       // 이미 완전한 파일 — 서버를 부르지 않는다.
-      if (expectedBytes > 0 && start >= expectedBytes) {
+      if (expectedBytes > 0 && start == expectedBytes) {
         onProgress?.call(start, expectedBytes);
         return;
+      }
+      if (expectedBytes > 0 && start > expectedBytes) {
+        await target.delete();
+        start = 0;
       }
     }
 
@@ -129,6 +133,9 @@ class EngineApi {
     );
 
     if (r.statusCode == 416) {
+      if (start == 0) {
+        throw StateError('Soundfont server rejected a fresh download');
+      }
       if (await target.exists()) await target.delete();
       return downloadSoundfontToFile(
         id,
@@ -229,9 +236,38 @@ class EngineApi {
     required String scale,
     double strength = 1.0,
     double retuneMs = 80,
+  }) async => _autotuneVocal(
+    await MultipartFile.fromFile(path, filename: 'vocal.wav'),
+    keyTonic: keyTonic,
+    scale: scale,
+    strength: strength,
+    retuneMs: retuneMs,
+  );
+
+  Future<({Uint8List wav, List<double> peaks, double duration})>
+  autotuneVocalBytes(
+    Uint8List audio, {
+    required String keyTonic,
+    required String scale,
+    double strength = 1.0,
+    double retuneMs = 80,
+  }) => _autotuneVocal(
+    MultipartFile.fromBytes(audio, filename: 'vocal.wav'),
+    keyTonic: keyTonic,
+    scale: scale,
+    strength: strength,
+    retuneMs: retuneMs,
+  );
+
+  Future<({Uint8List wav, List<double> peaks, double duration})> _autotuneVocal(
+    MultipartFile audio, {
+    required String keyTonic,
+    required String scale,
+    required double strength,
+    required double retuneMs,
   }) async {
     final form = FormData.fromMap({
-      'audio': await MultipartFile.fromFile(path, filename: 'vocal.wav'),
+      'audio': audio,
       'key': keyTonic,
       'scale': scale,
       'strength': '$strength',
@@ -262,9 +298,29 @@ class EngineApi {
     String path, {
     required String fxType,
     Map<String, dynamic> params = const {},
+  }) async => _processFx(
+    await MultipartFile.fromFile(path, filename: 'vocal.wav'),
+    fxType: fxType,
+    params: params,
+  );
+
+  Future<({Uint8List wav, List<double> peaks, double duration})> processFxBytes(
+    Uint8List audio, {
+    required String fxType,
+    Map<String, dynamic> params = const {},
+  }) => _processFx(
+    MultipartFile.fromBytes(audio, filename: 'vocal.wav'),
+    fxType: fxType,
+    params: params,
+  );
+
+  Future<({Uint8List wav, List<double> peaks, double duration})> _processFx(
+    MultipartFile audio, {
+    required String fxType,
+    required Map<String, dynamic> params,
   }) async {
     final form = FormData.fromMap({
-      'audio': await MultipartFile.fromFile(path, filename: 'vocal.wav'),
+      'audio': audio,
       'fx_type': fxType,
       'params': jsonEncode(params),
     });

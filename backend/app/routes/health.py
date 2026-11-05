@@ -53,3 +53,68 @@ async def health() -> dict:
         "env": _resolve_env(),
         "version": _resolve_version(),
     }
+
+
+# ── GET /health/cloud — is cloud backup really ready? (2026-11-04) ─────────
+# Public and token-free so the app's release gate (mobile/tool/
+# release_support.rb) can refuse a cloud-ON build against a server that only
+# looks open. Reports switches and readiness only: no counts, ids, keys or
+# URLs. The DB check runs at most every 30 s (cached) and never writes.
+_CLOUD_TTL = 30.0
+_cloud_cache: tuple[float, dict] | None = None
+# the codes migration 008's cloud_cleanup_health() can report
+_ALERT_CODES = frozenset({
+    "scheduled_worker_missing", "worker_pass_failed", "scheduled_worker_stale",
+    "delete_queue_old", "account_scans_overdue", "auth_deletion_overdue",
+    "primary_purge_overdue",
+})
+
+
+def _cloud_readiness() -> dict:
+    from ..cloud_quota import BACKUP_CONTRACT
+    from ..settings import get_settings
+
+    s = get_settings()
+    storage = all([s.r2_access_key_id, s.r2_secret_access_key, s.r2_endpoint, s.r2_bucket])
+    out = {
+        "contract": BACKUP_CONTRACT,
+        "version": _resolve_version(),
+        "sync_enabled": bool(s.cloud_sync_enabled),
+        "writes_enabled": bool(s.cloud_backup_writes_enabled),
+        "cleanup_enabled": bool(s.cloud_cleanup_enabled),
+        "storage_configured": bool(storage),
+        # migration 006 (lifecycle) + 008 (cleanup health) answer
+        "lifecycle_db": False,
+        "cleanup_healthy": False,
+        "alerts": [],
+    }
+    if out["sync_enabled"]:
+        try:
+            from ..cloud_monitor import health as cleanup_health
+            from ..deps import require_supabase
+
+            report = cleanup_health(require_supabase())
+            out["lifecycle_db"] = True
+            out["cleanup_healthy"] = bool(report.get("healthy"))
+            out["alerts"] = sorted(
+                a for a in report.get("alerts", []) if isinstance(a, str) and a in _ALERT_CODES
+            )
+        except Exception:
+            out["alerts"] = ["cloud_health_unavailable"]
+    out["ready"] = all(
+        out[k] for k in ("sync_enabled", "writes_enabled", "cleanup_enabled",
+                         "storage_configured", "lifecycle_db", "cleanup_healthy")
+    )
+    return out
+
+
+@router.get("/health/cloud")
+async def cloud_health() -> dict:
+    # async for the same Sentry reason as /health; the DB call runs in a thread
+    global _cloud_cache
+    now = time.monotonic()
+    if _cloud_cache is None or now - _cloud_cache[0] > _CLOUD_TTL:
+        import anyio
+
+        _cloud_cache = (now, await anyio.to_thread.run_sync(_cloud_readiness))
+    return dict(_cloud_cache[1])

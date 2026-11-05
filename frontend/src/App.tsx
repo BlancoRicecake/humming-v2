@@ -81,6 +81,10 @@ export default function App() {
   const [presets, setPresets] = useState<SoundfontPreset[]>([]);
   const [selectedPresetKey, setSelectedPresetKey] = useState<string>("");
   const [previewing, setPreviewing] = useState(false);
+  // Monotonic request ids — a response is applied only if no newer request
+  // (or reset) has started since, so late replies can't clobber newer state.
+  const analyzeSeq = useRef(0);
+  const assistSeq = useRef(0);
 
   useEffect(() => {
     getRenderCapabilities().then((c) => {
@@ -99,6 +103,9 @@ export default function App() {
   // Stage 2 boundary — try to decode in browser to WAV; fall back to raw blob
   // (backend handles m4a/mp3 via librosa + ffmpeg).
   const runAnalyze = useCallback(async (blob: Blob, label: string) => {
+    const id = ++analyzeSeq.current;
+    assistSeq.current++; // result is being replaced — drop any pending assist
+    setAssisting(false);
     setAnalyzing(true);
     setError(null);
     setSourceLabel(label);
@@ -112,14 +119,16 @@ export default function App() {
       } catch (decodeErr) {
         console.warn("client decode failed, sending raw bytes:", decodeErr);
       }
+      if (id !== analyzeSeq.current) return;
       setLastSource(upload);
       const res = await analyzeAudio(upload, options, filename);
+      if (id !== analyzeSeq.current) return;
       setResult(res);
       setSelectedNote(null);
     } catch (e: any) {
-      setError(e?.message ?? String(e));
+      if (id === analyzeSeq.current) setError(e?.message ?? String(e));
     } finally {
-      setAnalyzing(false);
+      if (id === analyzeSeq.current) setAnalyzing(false);
     }
   }, [options]);
 
@@ -127,6 +136,8 @@ export default function App() {
   const onRecordToggle = useCallback(async () => {
     if (recorder.state === "recording") recorder.stop();
     else {
+      analyzeSeq.current++; assistSeq.current++; // drop in-flight responses
+      setAnalyzing(false); setAssisting(false);
       setResult(null); setLastSource(null); setSourceLabel("");
       await recorder.start();
     }
@@ -181,11 +192,15 @@ export default function App() {
   // Stage 9 — MIDI export
   const onDownloadMidi = useCallback(async () => {
     if (!renderNotes.length) return;
-    const blob = await exportMidi(renderNotes, 120, sfProgram, sfBank);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "soundlab.mid"; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    try {
+      const blob = await exportMidi(renderNotes, 120, sfProgram, sfBank);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "soundlab.mid"; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e: any) {
+      setError(`MIDI export failed: ${e?.message ?? e}`);
+    }
   }, [renderNotes, sfProgram, sfBank]);
 
   // Stage 8 — SoundFont render & play
@@ -310,6 +325,7 @@ export default function App() {
     const merged = { ...options, ...patch };
     setOptions(merged);
     if (!result) return;
+    const id = ++assistSeq.current;
     setAssisting(true);
     setError(null);
     try {
@@ -320,8 +336,9 @@ export default function App() {
         key_tonic: merged.key_tonic,
         scale: merged.scale,
       });
-      setResult({
-        ...result,
+      if (id !== assistSeq.current) return;
+      setResult((prev) => prev && {
+        ...prev,
         notes: r.notes,
         detected_key: r.detected_key,
         assist_applied_count: r.assist_applied_count,
@@ -329,9 +346,9 @@ export default function App() {
       });
       setSelectedNote(null);
     } catch (e: any) {
-      setError(e?.message ?? String(e));
+      if (id === assistSeq.current) setError(e?.message ?? String(e));
     } finally {
-      setAssisting(false);
+      if (id === assistSeq.current) setAssisting(false);
     }
   }, [options, result]);
 

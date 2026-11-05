@@ -9,7 +9,42 @@ import '../theme/tokens.dart';
 const policyNoticeId = 'policies-2026-10-20';
 const policyEffectiveDate = '2026-10-20';
 
-/// Visible on the library until acknowledged, and always accessible in Settings.
+/// The terms update the user hasn't confirmed yet (shown in the
+/// announcement center and as the megaphone's dot, 2026-11-02).
+bool get policyNoticePending =>
+    LoopPrefs.instance.acknowledgedPolicyNotice.value != policyNoticeId;
+
+/// The pending terms update as a row at the top of the announcement center.
+class PolicyNoticeTile extends StatelessWidget {
+  const PolicyNoticeTile({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L10n.of(context);
+    return ValueListenableBuilder<String?>(
+      valueListenable: LoopPrefs.instance.acknowledgedPolicyNotice,
+      builder: (context, seen, _) {
+        if (seen == policyNoticeId) return const SizedBox.shrink();
+        return Card(
+          key: const ValueKey('policy-notice-tile'),
+          child: ListTile(
+            leading: const Icon(Icons.info_outline, color: LT.lime),
+            title: Text(
+              l.policyNoticeTitle,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            subtitle: Text(l.policyNoticeEffective(policyEffectiveDate)),
+            onTap: () => showPolicyNotice(context),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// (2026-11-02: no longer on the library — it covered too much; the
+/// announcement center lists it. Kept for screens that still want a bar.)
+/// Visible until acknowledged, and always accessible in Settings.
 class PolicyNoticeBanner extends StatelessWidget {
   const PolicyNoticeBanner({super.key});
 

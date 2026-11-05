@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:dart_melty_soundfont/soundfont_math.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:humming/looptap/models/loop_models.dart';
@@ -20,7 +21,13 @@ void main() {
         'jobs': [{'sf2': 0, 'midi': midi}],
         'sampleRate': 44100, 'tail': 1.2, 'mix': true,
       }).single;
-      final samples = parseWav(wav)!.samples;
+      // the mix is stereo (mixer-001): the peak is over both channels
+      expect(parseWav(wav)!.channels, 2);
+      final pcm = ByteData.sublistView(wav, 44);
+      final samples = [
+        for (var i = 0; i + 1 < pcm.lengthInBytes; i += 2)
+          pcm.getInt16(i, Endian.little) / 32768.0,
+      ];
       final peak = samples.fold<double>(0, (p, v) => v.abs() > p ? v.abs() : p);
       expect(peak, volume == 0 ? equals(0) : greaterThan(0.9));
       expect(SoundFontMath.nonAudible, previous);

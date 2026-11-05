@@ -7,6 +7,8 @@
 import 'dart:async';
 import 'dart:io' show File;
 
+import 'package:flutter/services.dart' show PlatformException;
+
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -27,11 +29,12 @@ Future<void> showHumModal(
   required Future<void> Function(String audioPath) onConvert,
   required int bpm,
   required int bars,
-  double swing = 0,
   int countInBeats = 4,
   void Function(bool accent)? onClick,
   VoidCallback? startBacking,
   VoidCallback? stopBacking,
+  int? maxMs,
+  ValueChanged<int>? onRecordedMs,
 }) {
   return showLtModal(
     context,
@@ -47,6 +50,8 @@ Future<void> showHumModal(
       onClick: onClick,
       startBacking: startBacking,
       stopBacking: stopBacking,
+      maxMs: maxMs,
+      onRecordedMs: onRecordedMs,
     ),
   );
 }
@@ -62,6 +67,8 @@ class _HumModal extends StatefulWidget {
     this.onClick,
     this.startBacking,
     this.stopBacking,
+    this.maxMs,
+    this.onRecordedMs,
   });
   final String trackLabel;
   final Color accent;
@@ -72,6 +79,13 @@ class _HumModal extends StatefulWidget {
   final void Function(bool accent)? onClick;
   final VoidCallback? startBacking;
   final VoidCallback? stopBacking;
+
+  /// Longest take before an automatic stop (default: one loop pass). The
+  /// guided start lets the user stop it (up to 20 s, 2026-11-02).
+  final int? maxMs;
+
+  /// How long the take was (ms), told just before conversion.
+  final ValueChanged<int>? onRecordedMs;
 
   @override
   State<_HumModal> createState() => _HumModalState();
@@ -216,25 +230,44 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   }
 
   Future<void> _beginCapture() async {
+    final platform = RecordingPlatform.current();
+    RecordingChoice? choice;
     try {
       final dir = await getTemporaryDirectory();
       // Opus + 플랫폼별 컨테이너(.caf/.ogg) — AAC .m4a 는 stop() 직후 moov atom
       // finalize 가 안 끝나 partial file 로 업로드되던 회귀 fix. Android API 29
-      // 미만은 Opus 인코더가 없어 AAC-LC(.m4a) 로 폴백 (audit A3).
-      final opus = opusSupported(await androidSdkInt());
+      // 미만은 Opus 인코더가 없어 AAC-LC(.m4a) 로 폴백 (audit A3). Windows 는
+      // record_windows 에 Opus 출력이 없어 WAV (QA 2026-10-30 P1-01).
+      choice = selectHumRecording(
+        platform: platform,
+        androidSdkInt: await androidSdkInt(),
+      );
+      // The plugin's own answer, once: an encoder it rejects falls back to WAV
+      // (container + extension together), never a codec start() would refuse.
+      if (!await _rec.isEncoderSupported(choice.encoder)) {
+        const wav = RecordingChoice(RecordingCodec.wav, '.wav');
+        if (choice != wav && await _rec.isEncoderSupported(wav.encoder)) {
+          debugPrint('[hum] ${platform.name}: ${choice.codec.name} unsupported -> wav');
+          choice = wav;
+        } else {
+          debugPrint('[hum] ${platform.name}: no supported recording codec');
+          if (!_closed && _phase == 'countin') _fail('codec');
+          return;
+        }
+      }
       if (_closed || _finishing || _phase != 'countin' || !mounted) return;
       final path =
-          '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${takeContainerExt(opus: opus)}';
+          '${dir.path}/humtrack_hum_${DateTime.now().millisecondsSinceEpoch}${choice.extension}';
       // Record at the device's CURRENT output rate (iOS), not a fixed 16k. On
       // iOS record_ios pins the shared session to config.sampleRate and never
       // restores it; a lower rate (16k) drags the hardware down and the synth
       // output keeps crackling AFTER recording. Matching the live rate = no drag,
       // so output stays clean once recording stops. Fallback 16000 off iOS.
       final deviceRate = await outputSampleRate() ?? 16000;
-      debugPrint('[hum] >>> rec start, recordRate=$deviceRate');
+      debugPrint('[hum] >>> rec start, recordRate=$deviceRate codec=$choice');
       await _rec.start(
         RecordConfig(
-          encoder: opus ? AudioEncoder.opus : AudioEncoder.aacLc,
+          encoder: choice.encoder,
           sampleRate: deviceRate,
           numChannels: 1,
           // see vocal_record_modal: keep the recorder off Bluetooth SCO so it
@@ -274,6 +307,17 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
       if (await headsetRoute() == HeadsetRoute.none) {
         await overrideOutputToSpeaker();
       }
+      // Cancel / lifecycle abort may have landed during the awaits above —
+      // starting the backing now would leave it playing with no modal.
+      if (_closed || _finishing || _phase != 'countin' || !mounted) {
+        String? p;
+        try {
+          p = await _rec.stop();
+        } catch (_) {}
+        _deleteQuiet(p);
+        await _restoreOutput();
+        return;
+      }
       // Start the loop backing on the downbeat, right after recording opens, so
       // audio t≈0 lines up with loop step 0 (the engine absorbs the small
       // constant latency via its grid-phase estimate).
@@ -296,9 +340,16 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
               );
             }
           });
-      // Capture exactly one loop pass, then convert automatically.
-      _autoStop = Timer(Duration(milliseconds: _loopMs), _finish);
+      // One loop pass (or the caller's maximum), then convert automatically;
+      // the Convert button stops earlier.
+      _autoStop = Timer(Duration(milliseconds: widget.maxMs ?? _loopMs), _finish);
     } catch (e) {
+      // Minimal diagnostics: platform, codec, error type / code. No paths, no
+      // audio, no user data.
+      debugPrint(
+        '[hum] rec start failed: platform=${platform.name} codec=$choice '
+        'error=${e.runtimeType}${e is PlatformException ? ' code=${e.code}' : ''}',
+      );
       if (!_closed && _phase == 'countin') _fail('unavailable');
     }
   }
@@ -322,6 +373,7 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   String _errorText(L10n l) => switch (_errorCode) {
     'permission' => l.editMicPermNeededTitle,
     'unavailable' => l.ltRecErrUnavailable,
+    'codec' => l.ltRecErrNoCodec,
     'interrupted' => l.ltRecErrInterrupted,
     _ => l.ltRecErrNoAudio,
   };
@@ -384,6 +436,7 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
       return;
     }
     if (mounted) setState(() => _phase = 'converting');
+    widget.onRecordedMs?.call(_ms);
     try {
       await widget.onConvert(path);
     } catch (_) {
@@ -424,139 +477,148 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
       'error' => _errorText(l),
       _ => l.ltHumDone,
     };
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Ms(LtIcons.graphicEq, size: 18, color: widget.accent),
-            const SizedBox(width: 8),
-            Text(
-              l.ltHumModalTitle(widget.trackLabel),
-              style: LTType.inter(
-                size: 16,
-                weight: FontWeight.w800,
-                color: LT.t1,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: LTType.inter(
-            size: 12,
-            color: _phase == 'error' ? LT.danger : LT.t2,
-          ),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          height: 70,
-          child: Center(
-            child:
-                _phase == 'done'
-                    ? Ms(
-                      LtIcons.checkCircle,
-                      size: 48,
-                      color: widget.accent,
-                      fill: 1,
-                    )
-                    : _phase == 'error'
-                    ? Ms(LtIcons.info, size: 44, color: LT.danger)
-                    : _phase == 'countin'
-                    ? Text(
-                      '$_count',
-                      style: LTType.mono(
-                        size: 48,
-                        weight: FontWeight.w800,
-                        color: widget.accent,
-                      ),
-                    )
-                    : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        for (final l in _levels)
-                          Container(
-                            width: 5,
-                            height: (l * (_phase == 'listen' ? 64 : 24)).clamp(
-                              6,
-                              64,
-                            ),
-                            margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                            decoration: BoxDecoration(
-                              color: _phase == 'listen' ? widget.accent : LT.t3,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                      ],
-                    ),
-          ),
-        ),
-        const SizedBox(height: 22),
-        if (_phase == 'listen')
+    // System back must run _cancel (stop recorder, delete temp file,
+    // restore the output session) like vocal_record_modal does.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _cancel();
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: LT.danger,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 6),
+              Ms(LtIcons.graphicEq, size: 18, color: widget.accent),
+              const SizedBox(width: 8),
               Text(
-                time,
-                style: LTType.mono(
-                  size: 14,
-                  weight: FontWeight.w700,
-                  color: LT.danger,
+                l.ltHumModalTitle(widget.trackLabel),
+                style: LTType.inter(
+                  size: 16,
+                  weight: FontWeight.w800,
+                  color: LT.t1,
                 ),
               ),
-              const SizedBox(width: 14),
-              GestureDetector(
-                onTap: _finish,
-                child: Container(
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 26),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: widget.accent,
-                    borderRadius: BorderRadius.circular(999),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: LTType.inter(
+              size: 12,
+              color: _phase == 'error' ? LT.danger : LT.t2,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 70,
+            child: Center(
+              child:
+                  _phase == 'done'
+                      ? Ms(
+                        LtIcons.checkCircle,
+                        size: 48,
+                        color: widget.accent,
+                        fill: 1,
+                      )
+                      : _phase == 'error'
+                      ? Ms(LtIcons.info, size: 44, color: LT.danger)
+                      : _phase == 'countin'
+                      ? Text(
+                        '$_count',
+                        style: LTType.mono(
+                          size: 48,
+                          weight: FontWeight.w800,
+                          color: widget.accent,
+                        ),
+                      )
+                      : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (final l in _levels)
+                            Container(
+                              width: 5,
+                              height: (l * (_phase == 'listen' ? 64 : 24))
+                                  .clamp(6, 64),
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    _phase == 'listen' ? widget.accent : LT.t3,
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            ),
+                        ],
+                      ),
+            ),
+          ),
+          const SizedBox(height: 22),
+          if (_phase == 'listen')
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: LT.danger,
+                    shape: BoxShape.circle,
                   ),
-                  child: Text(
-                    l.ltHumConvert,
-                    style: LTType.inter(
-                      size: 14,
-                      weight: FontWeight.w800,
-                      color: LT.bg,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  time,
+                  style: LTType.mono(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: LT.danger,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                GestureDetector(
+                  onTap: _finish,
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 26),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: widget.accent,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      l.ltHumConvert,
+                      style: LTType.inter(
+                        size: 14,
+                        weight: FontWeight.w800,
+                        color: LT.bg,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 14),
-              _ghostBtn(l.cancel, _cancel),
-            ],
-          )
-        else if (_phase == 'countin')
-          _ghostBtn(l.cancel, _cancel)
-        else if (_phase == 'error')
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_permissionDenied) ...[
-                _solidBtn(l.retry, _requestPermissionThenCountIn),
-                const SizedBox(width: 8),
-                _ghostBtn(l.editOpenSettings, () => openAppSettings()),
-                const SizedBox(width: 8),
+                const SizedBox(width: 14),
+                _ghostBtn(l.cancel, _cancel),
               ],
-              _ghostBtn(l.close, _cancel),
-            ],
-          ),
-      ],
+            )
+          else if (_phase == 'countin')
+            _ghostBtn(l.cancel, _cancel)
+          else if (_phase == 'error')
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_permissionDenied) ...[
+                  _solidBtn(l.retry, _requestPermissionThenCountIn),
+                  const SizedBox(width: 8),
+                  _ghostBtn(l.editOpenSettings, () => openAppSettings()),
+                  const SizedBox(width: 8),
+                ],
+                _ghostBtn(l.close, _cancel),
+              ],
+            ),
+        ],
+      ),
     );
   }
 

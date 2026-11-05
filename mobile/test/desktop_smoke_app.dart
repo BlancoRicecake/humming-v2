@@ -4,10 +4,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:humming/looptap/screens/edit_screen.dart';
 import 'package:humming/looptap/widgets/guided_hum_panel.dart';
-import 'package:humming/looptap/state/loop_store.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
@@ -142,21 +140,16 @@ Future<void> main() async {
 
     WidgetsBinding.instance.rootElement!.visitChildren(findPanel);
     if (panel == null) throw StateError('Guided editor did not open');
-    panel!.onBacking!(BackingStyle.drive);
+    // 2026-11-02: the guided backing step was removed; listen starts the
+    // transport instead
+    panel!.onListen();
     await Future<void>.delayed(const Duration(milliseconds: 900));
     WidgetsBinding.instance.rootElement!.visitChildren(findPanel);
-    if (!panel!.playing) throw StateError('Backing did not start transport');
+    if (!panel!.playing) throw StateError('Listen did not start transport');
     panel!.onListen();
-    panel!.onSave();
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    final saved = navigator!.context.read<LoopStore>().songs.where(
-      (s) => s.id == song.id,
-    );
-    if (saved.isEmpty ||
-        saved.first.sections.first.tracks['drums']!.drumNotes.isEmpty) {
-      throw StateError('Editor save failed');
-    }
-    report['guidedEditorSave'] = true;
+    // 2026-11-02: the guided panel has no save button any more ("make a song"
+    // goes to the editor, which saves) — straight to the editor
+    report['guidedEditorSave'] = 'removed from the guided panel';
     panel!.onEdit();
     await Future<void>.delayed(const Duration(milliseconds: 500));
     DesktopInstrument? instrument;

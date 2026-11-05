@@ -62,6 +62,27 @@ void main() {
     },
   );
 
+  test('duplicate keeps generationLocks and does not share state', () async {
+    final source = Song(
+      id: 'locks',
+      title: 'Locked',
+      generationLocks: {'melody': false, 'bass': true},
+      bpm: 133,
+    );
+    await store.upsert(source);
+    final duplicate = await store.duplicate(source);
+    expect(duplicate.id, isNot(source.id));
+    expect(duplicate.title, 'Locked (copy)');
+    expect(duplicate.bpm, 133);
+    expect(duplicate.generationLocks, {'melody': false, 'bass': true});
+    final persisted = (await LoopStorage.load()).firstWhere(
+      (s) => s.id == duplicate.id,
+    );
+    expect(persisted.generationLocks, {'melody': false, 'bass': true});
+    duplicate.generationLocks['bass'] = false;
+    expect(source.generationLocks['bass'], isTrue);
+  });
+
   test(
     'failed delete keeps memory, persisted song and its vocal; retry succeeds',
     () async {
@@ -82,7 +103,13 @@ void main() {
       await store.delete('a');
       expect(store.songs.map((s) => s.id), ['b']);
       expect((await LoopStorage.load()).map((s) => s.id), ['b']);
-      expect(await vocal.exists(), isFalse);
+      // Storage audit 2026-10-30 S1: songs.json.bak (the library before the
+      // delete) still references the take, and restoring the .bak must bring
+      // its audio back — so the take stays until the backup rotates.
+      expect(await vocal.exists(), isTrue);
+      await store.upsert(Song(id: 'b', title: 'Other song, saved again'));
+      await store.sweepVocals();
+      expect(await vocal.exists(), isFalse, reason: 'neither the library nor its backup references it');
     },
   );
 

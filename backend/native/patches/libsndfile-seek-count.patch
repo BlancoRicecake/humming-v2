@@ -1,0 +1,56 @@
+--- a/src/ima_adpcm.c
++++ b/src/ima_adpcm.c
+@@ -728,7 +728,7 @@
+ 		return 0 ;
+ 		} ;
+ 
+-	if (offset < 0 || offset > pima->blocks * pima->samplesperblock)
++	if (offset < 0 || offset > (sf_count_t) pima->blocks * pima->samplesperblock)
+ 	{	psf->error = SFE_BAD_SEEK ;
+ 		return	PSF_SEEK_ERROR ;
+ 		} ;
+@@ -738,7 +738,7 @@
+ 	newblockaiff	= newblock * psf->sf.channels ;
+ 
+ 	if (mode == SFM_READ)
+-	{	psf_fseek (psf, psf->dataoffset + newblockaiff * pima->blocksize, SEEK_SET) ;
++	{	psf_fseek (psf, psf->dataoffset + (sf_count_t) newblockaiff * pima->blocksize, SEEK_SET) ;
+ 		pima->blockcount = newblockaiff ;
+ 		pima->decode_block (psf, pima) ;
+ 		pima->samplecount = newsample ;
+@@ -749,7 +749,7 @@
+ 		return	PSF_SEEK_ERROR ;
+ 		} ;
+ 
+-	return newblock * pima->samplesperblock + newsample ;
++	return (sf_count_t) newblock * pima->samplesperblock + newsample ;
+ } /* aiff_ima_seek */
+ 
+ static sf_count_t
+@@ -777,7 +777,7 @@
+ 		return 0 ;
+ 		} ;
+ 
+-	if (offset < 0 || offset > pima->blocks * pima->samplesperblock)
++	if (offset < 0 || offset > (sf_count_t) pima->blocks * pima->samplesperblock)
+ 	{	psf->error = SFE_BAD_SEEK ;
+ 		return	PSF_SEEK_ERROR ;
+ 		} ;
+@@ -786,7 +786,7 @@
+ 	newsample	= offset % pima->samplesperblock ;
+ 
+ 	if (mode == SFM_READ)
+-	{	psf_fseek (psf, psf->dataoffset + newblock * pima->blocksize, SEEK_SET) ;
++	{	psf_fseek (psf, psf->dataoffset + (sf_count_t) newblock * pima->blocksize, SEEK_SET) ;
+ 		pima->blockcount = newblock ;
+ 		pima->decode_block (psf, pima) ;
+ 		pima->samplecount = newsample ;
+@@ -797,7 +797,7 @@
+ 		return	PSF_SEEK_ERROR ;
+ 		} ;
+ 
+-	return newblock * pima->samplesperblock + newsample ;
++	return (sf_count_t) newblock * pima->samplesperblock + newsample ;
+ } /* wavlike_ima_seek */
+ 
+ /*==========================================================================================

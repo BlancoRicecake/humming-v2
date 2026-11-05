@@ -811,3 +811,66 @@ def test_verify_still_works_when_migration_002_is_missing(client, db, chain, mon
     row = db.sub(USER_A)
     assert row["status"] == "active"
     assert "original_transaction_id" not in row  # dropped, not fatal
+
+
+# --- 2026-10-22 review fixes ---------------------------------------------------
+def test_transfer_refused_for_snapshot_older_than_bound_state(client, db, chain):
+    """A pre-refund JWS replayed from a fresh account must not move Pro."""
+    old = chain.sign(apple_tx(signedDate=ms(datetime.now(timezone.utc) - timedelta(days=2))))
+    assert verify_apple(client, chain.sign(apple_tx()), USER_A).status_code == 200
+    assert verify_apple(client, old, USER_B).status_code == 409
+    assert db.sub(USER_A)["status"] == "active" and db.sub(USER_B) is None
+
+
+def test_apple_jws_prefers_live_state(client, db, chain, monkeypatch):
+    revoked = apple_tx(revocationDate=ms(datetime.now(timezone.utc)))
+
+    async def live(orig):
+        assert orig == "1000000000000001"
+        return revoked, {}
+
+    monkeypatch.setattr(iap_mod, "_apple_api_configured", lambda: True)
+    monkeypatch.setattr(iap_mod, "_apple_lookup_subscription", live)
+    r = verify_apple(client, chain.sign(apple_tx()))
+    assert r.status_code == 200 and r.json()["pro"] is False
+
+
+def test_apple_jws_falls_back_to_snapshot_when_live_lookup_fails(client, db, chain, monkeypatch):
+    async def down(_orig):
+        raise HTTPException(502, "apple subscription lookup failed")
+
+    monkeypatch.setattr(iap_mod, "_apple_api_configured", lambda: True)
+    monkeypatch.setattr(iap_mod, "_apple_lookup_subscription", down)
+    assert verify_apple(client, chain.sign(apple_tx())).json()["pro"] is True
+
+
+@pytest.mark.parametrize("ack_state, expect_ack", [(0, True), (1, False)])
+def test_google_unacknowledged_purchase_is_acknowledged_server_side(
+        client, db, google, monkeypatch, ack_state, expect_ack):
+    acked = []
+
+    async def fake_ack(product_id, token):
+        acked.append((product_id, token))
+
+    monkeypatch.setattr(iap_mod, "_google_acknowledge", fake_ack)
+    google["resource"] = gsub(acknowledgementState=ack_state)
+    assert verify_google(client).status_code == 200
+    assert acked == ([("humtrack_pro_monthly_v2", "tok-1")] if expect_ack else [])
+
+
+def test_cloud_sync_routes_dark_by_default(client, db):
+    assert client.post("/storage/presign", json={}, headers=auth()).status_code == 404
+    assert client.get("/projects", headers=auth()).status_code == 404
+
+# --- APPLE_BUNDLE_ID required in production ----------------------------------
+def test_apple_verify_503_in_production_without_bundle_id(client, db, chain, monkeypatch):
+    monkeypatch.delenv("APPLE_BUNDLE_ID"); get_settings.cache_clear()
+    r = verify_apple(client, chain.sign(apple_tx()))
+    assert r.status_code == 503
+    assert db.sub(USER_A) is None
+
+
+def test_apple_verify_without_bundle_id_still_works_outside_production(client, db, chain, monkeypatch):
+    monkeypatch.delenv("APPLE_BUNDLE_ID"); monkeypatch.setenv("ENV", "dev"); get_settings.cache_clear()
+    r = verify_apple(client, chain.sign(apple_tx()))
+    assert r.status_code == 200, r.text

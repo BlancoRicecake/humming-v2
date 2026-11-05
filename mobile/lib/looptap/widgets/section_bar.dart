@@ -2,14 +2,17 @@
 // Horizontally-scrolling section chips; the active chip shows an inline rename
 // input, a −/+ repeat stepper, and a delete ×. A dashed + adds a section.
 // Far right: Play song / Stop song.
+// 2026-11-02: long-press a chip and drag it to reorder (the others slide
+// aside); long-press and let go without moving opens the section menu.
 import 'package:flutter/material.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import '../models/loop_models.dart';
+import '../music/section_links.dart';
 import '../theme/atoms.dart';
 import '../theme/tokens.dart';
 
-class SectionBar extends StatelessWidget {
+class SectionBar extends StatefulWidget {
   const SectionBar({
     super.key,
     required this.sections,
@@ -22,6 +25,7 @@ class SectionBar extends StatelessWidget {
     required this.onDelete,
     required this.onLongPress,
     required this.onPlaySong,
+    this.onMove,
   });
 
   final List<Section> sections;
@@ -35,8 +39,32 @@ class SectionBar extends StatelessWidget {
   final ValueChanged<int> onLongPress;
   final VoidCallback onPlaySong;
 
+  /// A chip dragged from one position to another (indices in [sections]
+  /// after removing the dragged one). Null = no drag reorder.
+  final void Function(int from, int to)? onMove;
+
+  @override
+  State<SectionBar> createState() => _SectionBarState();
+}
+
+class _SectionBarState extends State<SectionBar> {
+  int? _dragFrom;
+
+  List<Section> get sections => widget.sections;
+
   @override
   Widget build(BuildContext context) {
+    final activeIdx = widget.activeIdx;
+    final groups = linkGroupNumbers(sections);
+    final active =
+        activeIdx >= 0 && activeIdx < sections.length
+            ? sections[activeIdx]
+            : null;
+    final linked =
+        active?.linkId == null
+            ? 0
+            : sections.where((s) => s.linkId == active!.linkId).length;
+    final ko = Localizations.localeOf(context).languageCode == 'ko';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
       child: Row(
@@ -46,33 +74,86 @@ class SectionBar extends StatelessWidget {
           Expanded(
             child: SizedBox(
               height: 30,
-              child: ListView.separated(
+              child: ReorderableListView.builder(
+                key: const ValueKey('section-bar-list'),
                 scrollDirection: Axis.horizontal,
-                itemCount: sections.length + 1,
-                separatorBuilder: (_, __) => const SizedBox(width: 6),
-                itemBuilder: (context, i) {
-                  if (i == sections.length) {
-                    return _AddChip(onTap: onAdd);
-                  }
-                  return _Chip(
-                    // key by id so each chip's edit state follows its section
-                    // across reorder/duplicate (not the stale list position).
-                    key: ValueKey(sections[i].id),
-                    section: sections[i],
-                    active: i == activeIdx,
-                    canDelete: sections.length > 1,
-                    onTap: () => onSwitch(i),
-                    onRename: (name) => onRename(i, name),
-                    onRepeats: (r) => onRepeats(i, r),
-                    onDelete: () => onDelete(i),
-                    onLongPress: () => onLongPress(i),
-                  );
+                buildDefaultDragHandles: false,
+                itemCount: sections.length,
+                footer: Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: _AddChip(onTap: widget.onAdd),
+                ),
+                proxyDecorator:
+                    (child, index, animation) => AnimatedBuilder(
+                      animation: animation,
+                      builder:
+                          (context, child) => Transform.scale(
+                            scale: 1 + .08 * Curves.easeOut.transform(animation.value),
+                            child: Material(
+                              color: Colors.transparent,
+                              elevation: 8 * animation.value,
+                              shadowColor: Colors.black,
+                              borderRadius: BorderRadius.circular(LTRadius.chip),
+                              child: child,
+                            ),
+                          ),
+                      child: child,
+                    ),
+                onReorderStart: (i) => _dragFrom = i,
+                onReorderItem: (from, to) => widget.onMove?.call(from, to),
+                onReorderEnd: (at) {
+                  // held and let go in place (the drop index is before the
+                  // removal: from or from + 1): the section menu, as before
+                  final from = _dragFrom;
+                  _dragFrom = null;
+                  if (from == null || (at != from && at != from + 1)) return;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) widget.onLongPress(from);
+                  });
                 },
+                itemBuilder:
+                    (context, i) => Padding(
+                      // key by id so each chip's edit state follows its
+                      // section across reorder/duplicate (not the stale list
+                      // position).
+                      key: ValueKey(sections[i].id),
+                      padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
+                      child: ReorderableDelayedDragStartListener(
+                        index: i,
+                        enabled: widget.onMove != null,
+                        child: _Chip(
+                          section: sections[i],
+                          linkGroup: groups[sections[i].linkId],
+                          active: i == activeIdx,
+                          canDelete: sections.length > 1,
+                          onTap: () => widget.onSwitch(i),
+                          onRename: (name) => widget.onRename(i, name),
+                          onRepeats: (r) => widget.onRepeats(i, r),
+                          onDelete: () => widget.onDelete(i),
+                          // with drag on, the long press belongs to the drag
+                          onLongPress:
+                              widget.onMove == null
+                                  ? () => widget.onLongPress(i)
+                                  : null,
+                          onMenu: () => widget.onLongPress(i),
+                        ),
+                      ),
+                    ),
               ),
             ),
           ),
+          if (linked > 1) ...[
+            const SizedBox(width: 8),
+            Text(
+              ko
+                  ? '연결된 구간 $linked개에 함께 적용'
+                  : 'Edits apply to $linked linked sections',
+              key: const ValueKey('section-link-notice'),
+              style: LTType.inter(size: 10, color: LT.t3),
+            ),
+          ],
           const SizedBox(width: 10),
-          _PlaySongButton(songMode: songMode, onTap: onPlaySong),
+          _PlaySongButton(songMode: widget.songMode, onTap: widget.onPlaySong),
         ],
       ),
     );
@@ -81,25 +162,30 @@ class SectionBar extends StatelessWidget {
 
 class _Chip extends StatefulWidget {
   const _Chip({
-    super.key,
     required this.section,
+    this.linkGroup,
     required this.active,
     required this.canDelete,
     required this.onTap,
     required this.onRename,
     required this.onRepeats,
     required this.onDelete,
-    required this.onLongPress,
+    this.onLongPress,
+    required this.onMenu,
   });
 
   final Section section;
+
+  /// AR-001 link group number (null = not linked).
+  final int? linkGroup;
   final bool active;
   final bool canDelete;
   final VoidCallback onTap;
   final ValueChanged<String> onRename;
   final ValueChanged<int> onRepeats;
   final VoidCallback onDelete;
-  final VoidCallback onLongPress;
+  final VoidCallback? onLongPress;
+  final VoidCallback onMenu;
 
   @override
   State<_Chip> createState() => _ChipState();
@@ -134,6 +220,7 @@ class _ChipState extends State<_Chip> {
     return GestureDetector(
       onTap: a ? null : widget.onTap,
       onLongPress: widget.onLongPress,
+      onSecondaryTap: widget.onMenu, // desktop right-click menu
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -144,6 +231,13 @@ class _ChipState extends State<_Chip> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.linkGroup != null) ...[
+              LinkBadge(
+                key: ValueKey('section-link-${s.id}'),
+                group: widget.linkGroup!,
+              ),
+              const SizedBox(width: 4),
+            ],
             if (a)
               IntrinsicWidth(
                 child: ConstrainedBox(
@@ -185,6 +279,29 @@ class _ChipState extends State<_Chip> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// AR-001: link icon + group number, tinted per group.
+class LinkBadge extends StatelessWidget {
+  const LinkBadge({super.key, required this.group});
+  final int group;
+
+  static const _colors = [LT.blue, LT.amber, LT.pink, LT.lime];
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _colors[(group - 1) % _colors.length];
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.link, size: 12, color: color),
+        Text(
+          '$group',
+          style: LTType.mono(size: 10, weight: FontWeight.w700, color: color),
+        ),
+      ],
     );
   }
 }

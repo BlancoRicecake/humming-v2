@@ -1,5 +1,6 @@
 // LoopTap design tokens — ported 1:1 from prototype/shared.jsx (APP).
 // Near-black canvas + single neon-lime accent. "Game-like" tactile feedback.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -9,6 +10,8 @@ class LT {
   static const surface = Color(0xFF161616); // cards / sheets
   static const surface2 = Color(0xFF1E1E1E); // raised controls, pads (idle)
   static const surface3 = Color(0xFF262626); // hover / nested
+  // ui-001 stage 5: a piano-roll row outside the song's key (desktop)
+  static const laneOutOfKey = Color(0xFF111111);
   static const lime = Color(0xFFA3E635); // primary accent, active, CTAs, playhead
   static const limeDim = Color(0xFF7FB52A); // pressed lime
   static const border = Color(0xFF2A2A2A); // hairline borders
@@ -88,8 +91,18 @@ List<BoxShadow> neonGlow(Color accent, {double blur = 44}) => [
       BoxShadow(color: accent.withValues(alpha: 0.8), blurRadius: blur, spreadRadius: 1),
     ];
 
-ThemeData loopTapTheme() {
+/// ui-001 stage 0: theme defaults so every sheet / dialog that relies on the
+/// Material theme (expand, chord type, quantize, groove, guitar stroke, split,
+/// MIDI import, rename / delete / settings confirmations, …) uses the LoopTap
+/// palette instead of the M3 purple-tinted defaults. Applies on every device;
+/// only the bottom-sheet width cap is desktop-specific.
+ThemeData loopTapTheme({TargetPlatform? platform}) {
   final base = ThemeData.dark(useMaterial3: true);
+  final p = platform ?? defaultTargetPlatform;
+  final desktop = p == TargetPlatform.windows || p == TargetPlatform.macOS || p == TargetPlatform.linux;
+  final lime14 = LT.lime.withValues(alpha: 0.14);
+  final label = LTType.inter(size: 13, weight: FontWeight.w700);
+  final controlShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(LTRadius.control));
   return base.copyWith(
     scaffoldBackgroundColor: LT.bg,
     colorScheme: base.colorScheme.copyWith(
@@ -97,10 +110,139 @@ ThemeData loopTapTheme() {
       surface: LT.surface,
       onPrimary: LT.bg,
       onSurface: LT.t1,
+      surfaceContainerLowest: LT.bg,
+      surfaceContainerLow: LT.surface,
+      surfaceContainer: LT.surface,
+      surfaceContainerHigh: LT.surface2,
+      surfaceContainerHighest: LT.surface3,
+      surfaceTint: Colors.transparent,
+      secondaryContainer: lime14,
+      onSecondaryContainer: LT.lime,
+      outline: LT.borderStrong,
+      outlineVariant: LT.border,
+      error: LT.danger,
     ),
     textTheme: GoogleFonts.interTextTheme(base.textTheme)
         .apply(bodyColor: LT.t1, displayColor: LT.t1),
     splashColor: LT.lime.withValues(alpha: 0.08),
     highlightColor: Colors.transparent,
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: LT.surface,
+      modalBackgroundColor: LT.surface,
+      surfaceTintColor: Colors.transparent,
+      modalBarrierColor: Colors.black.withValues(alpha: 0.65), // = lt_modal
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(LTRadius.sheet)),
+      ),
+      constraints: desktop ? const BoxConstraints(maxWidth: 640) : null,
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: LT.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(LTRadius.sheet),
+        side: const BorderSide(color: LT.border),
+      ),
+      titleTextStyle: LTType.inter(size: 16, weight: FontWeight.w800),
+      contentTextStyle: LTType.inter(size: 13, color: LT.t2),
+    ),
+    // 2026-11-02: notices match the dark cards (the Material default was a
+    // bright bar that clashed with the app)
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: LT.surface2,
+      contentTextStyle: LTType.inter(size: 13, color: LT.t1),
+      actionTextColor: LT.lime,
+      closeIconColor: LT.t2,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: LT.borderStrong),
+      ),
+      behavior: SnackBarBehavior.floating,
+    ),
+    chipTheme: ChipThemeData(
+      color: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? lime14 : LT.surface2,
+      ),
+      side: WidgetStateBorderSide.resolveWith(
+        (s) => BorderSide(color: s.contains(WidgetState.selected) ? LT.lime : LT.border),
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(LTRadius.chip)),
+      labelStyle: LTType.inter(size: 13, weight: FontWeight.w600).copyWith(
+        color: WidgetStateColor.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? LT.lime : LT.t1,
+        ),
+      ),
+      checkmarkColor: LT.lime,
+      surfaceTintColor: Colors.transparent,
+    ),
+    sliderTheme: const SliderThemeData(
+      activeTrackColor: LT.lime,
+      inactiveTrackColor: LT.surface3,
+      thumbColor: LT.lime,
+      valueIndicatorColor: LT.surface2,
+      valueIndicatorTextStyle: TextStyle(color: LT.t1),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? LT.lime : Colors.transparent,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? LT.bg : LT.t2,
+        ),
+        iconColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? LT.bg : LT.t2,
+        ),
+        side: const WidgetStatePropertyAll(BorderSide(color: LT.border)),
+      ),
+    ),
+    switchTheme: SwitchThemeData(
+      trackColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? LT.lime : LT.surface3,
+      ),
+      thumbColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? LT.bg : LT.t3,
+      ),
+      trackOutlineColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? LT.lime : LT.border,
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: LT.lime,
+        foregroundColor: LT.bg,
+        shape: controlShape,
+        textStyle: label,
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: LT.t1,
+        side: const BorderSide(color: LT.borderStrong),
+        shape: controlShape,
+        textStyle: label,
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: LT.lime,
+        shape: controlShape,
+        textStyle: label,
+      ),
+    ),
+    checkboxTheme: CheckboxThemeData(
+      fillColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? LT.lime : Colors.transparent,
+      ),
+      checkColor: const WidgetStatePropertyAll(LT.bg),
+      side: const BorderSide(color: LT.borderStrong, width: 2),
+    ),
+    radioTheme: RadioThemeData(
+      fillColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? LT.lime : LT.t3,
+      ),
+    ),
+    dividerTheme: const DividerThemeData(color: LT.border),
   );
 }

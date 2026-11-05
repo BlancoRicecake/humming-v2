@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>공지사항 — HumTrack</title>
+<meta name="description" content="HumTrack 새 기능, 점검, 중요한 안내">
+<meta property="og:type" content="website">
+<meta property="og:title" content="공지사항 — HumTrack">
+<meta property="og:description" content="HumTrack 새 기능, 점검, 중요한 안내">
+<meta property="og:image" content="https://hum-track.com/hummingbird.png">
+<meta property="og:url" content="https://hum-track.com/notices">
+<link rel="canonical" href="https://hum-track.com/notices">
+<link rel="icon" type="image/png" href="/hummingbird.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0A0A0F; --surface: #16161E; --surface-alt: #1F1F27;
+  --lime: #A3E635; --border: #27272A; --border-strong: #3F3F46;
+  --t1: #FAFAFA; --t2: #A1A1AA; --t3: #71717A; --danger: #EF4444;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+body { background: var(--bg); color: var(--t1); -webkit-font-smoothing: antialiased; line-height: 1.5; }
+.nav { position: sticky; top: 0; z-index: 50; background: rgba(10,10,15,.85); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+.nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; text-decoration: none; color: var(--t1); }
+.brand img { width: 26px; height: 26px; border-radius: 7px; }
+.brand b { color: var(--lime); font-weight: 800; }
+.lang { display: inline-flex; background: var(--surface); border-radius: 999px; padding: 3px; border: 1px solid var(--border); }
+.lang button { background: none; border: 0; color: var(--t2); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.lang button.on { background: var(--lime); color: var(--bg); }
+main { max-width: 760px; margin: 0 auto; padding: 48px 20px 80px; }
+.eyebrow { color: var(--lime); font-weight: 700; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; margin-bottom: 12px; }
+h1 { font-size: 36px; font-weight: 900; letter-spacing: -1px; margin-bottom: 8px; }
+.sub { color: var(--t2); margin-bottom: 32px; }
+.demo { background: rgba(163,230,53,.08); border: 1px dashed var(--lime); color: var(--lime); border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-bottom: 20px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 12px; overflow: hidden; scroll-margin-top: 80px; }
+.card.target { border-color: var(--lime); box-shadow: 0 0 0 3px rgba(163,230,53,.15); }
+.card > button { all: unset; display: block; width: 100%; box-sizing: border-box; padding: 18px 20px; cursor: pointer; }
+.row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.badge { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--t2); }
+.badge.important { color: var(--lime); border-color: var(--lime); }
+.badge.critical { color: var(--danger); border-color: var(--danger); }
+.date { color: var(--t3); font-size: 12px; }
+.title { font-size: 17px; font-weight: 800; }
+.body { padding: 0 20px 20px; color: var(--t2); white-space: pre-wrap; display: none; }
+.card.open .body { display: block; }
+.action { display: inline-block; margin-top: 14px; background: var(--lime); color: var(--bg); font-weight: 800; font-size: 14px; padding: 9px 16px; border-radius: 999px; text-decoration: none; }
+.empty, .error { color: var(--t3); text-align: center; padding: 48px 0; }
+footer { color: var(--t3); font-size: 12px; text-align: center; padding: 24px; }
+footer a { color: var(--t2); }
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="/"><img src="/hummingbird.png" alt=""><span>Hum<b>Track</b></span></a>
+  <div class="lang"><button data-lang="ko" class="on">한국어</button><button data-lang="en">EN</button></div>
+</div></nav>
+<main>
+  <div class="eyebrow" data-t="eyebrow"></div>
+  <h1 data-t="title"></h1>
+  <p class="sub" data-t="sub"></p>
+  <div id="demo" class="demo" hidden></div>
+  <div id="list"></div>
+</main>
+<footer><a href="/">HumTrack</a> · <a href="mailto:humtrack@gmail.com">humtrack@gmail.com</a></footer>
+<script src="/assets/notices-config.js"></script>
+<script src="/assets/notices-common.js"></script>
+<script>
+(() => {
+  const N = window.HumNotices;
+  const T = {
+    ko: { eyebrow: 'Notices', title: '공지사항', sub: '새 기능, 점검, 중요한 안내를 알려 드려요. 앱의 공지사항과 같은 내용이에요.',
+          empty: '지금은 공지가 없어요.', error: '공지를 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.',
+          demo: '미리보기(데모) — 실제 공지가 아닌 예시예요.' },
+    en: { eyebrow: 'Notices', title: 'Notices', sub: 'New features, maintenance and important news — the same as in the app.',
+          empty: 'No notices right now.', error: "Couldn't load the notices. Please try again soon.",
+          demo: 'Preview (demo) — sample notices, not real ones.' },
+  };
+  let lang = (navigator.language || 'ko').startsWith('ko') ? 'ko' : 'en';
+  try { lang = localStorage.getItem('humtrack-lang') || lang; } catch (_) {}
+  let rows = null, failed = false;
+
+  function render() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = T[lang][el.dataset.t]; });
+    document.querySelectorAll('.lang button').forEach((b) => b.classList.toggle('on', b.dataset.lang === lang));
+    const demo = document.getElementById('demo');
+    demo.hidden = !N.demo; demo.textContent = T[lang].demo;
+    const list = document.getElementById('list');
+    if (failed) { list.innerHTML = `<p class="error">${T[lang].error}</p>`; return; }
+    if (!rows) return;
+    if (!rows.length) { list.innerHTML = `<p class="empty">${T[lang].empty}</p>`; return; }
+    const target = decodeURIComponent(location.hash.slice(1));
+    list.innerHTML = rows.map((a) => {
+      const action = N.safeAction(a.action_url);
+      const label = lang === 'ko' ? a.action_label_ko : a.action_label_en;
+      const open = a.id === target || rows.length === 1;
+      return `<article class="card${open ? ' open' : ''}${a.id === target ? ' target' : ''}" id="${N.esc(a.id)}">
+        <button aria-expanded="${open}">
+          <div class="row"><span class="badge ${N.esc(a.kind)}">${N.KIND[lang][a.kind] || ''}</span>
+          <span class="date">${N.fmtDate(a.starts_at, lang)}</span></div>
+          <div class="title">${N.esc(lang === 'ko' ? a.title_ko : a.title_en)}</div>
+        </button>
+        <div class="body">${N.esc(lang === 'ko' ? a.body_ko : a.body_en)}${
+          action && label ? `<div><a class="action" href="${N.esc(action)}">${N.esc(label)}</a></div>` : ''}</div>
+      </article>`;
+    }).join('');
+    list.querySelectorAll('.card > button').forEach((b) => b.addEventListener('click', () => {
+      const card = b.parentElement;
+      card.classList.toggle('open');
+      b.setAttribute('aria-expanded', card.classList.contains('open'));
+    }));
+    if (target) document.getElementById(target)?.scrollIntoView({ block: 'start' });
+  }
+
+  document.querySelectorAll('.lang button').forEach((b) => b.addEventListener('click', () => {
+    lang = b.dataset.lang;
+    try { localStorage.setItem('humtrack-lang', lang); } catch (_) {}
+    render();
+  }));
+  window.addEventListener('hashchange', render);
+  render();
+  N.fetchPublished().then((r) => { rows = r; render(); }).catch(() => { failed = true; render(); });
+})();
+</script>
+</body>
+</html>

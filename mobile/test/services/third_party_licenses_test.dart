@@ -28,6 +28,17 @@ void main() {
     expect(textOf('Avicii Pluck (SoundFont)'), contains('CC BY 3.0'));
   });
 
+  test(
+    'bundled GeneralUser GS includes its creator and full original license',
+    () {
+      final text = textOf('GeneralUser GS (SoundFont)');
+      expect(text, contains('S. Christian Collins'));
+      expect(text, contains('GeneralUser GS v2.0.3'));
+      expect(text, contains('License v2.0'));
+      expect(text, contains('License of contained samples'));
+    },
+  );
+
   test('registers LGPL dependencies with version, source and full text', () {
     const expected = {
       'GLib': ('GLib 2.72.4', 'https://gitlab.gnome.org/GNOME/glib'),

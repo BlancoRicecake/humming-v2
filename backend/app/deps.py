@@ -59,7 +59,9 @@ def get_r2_client():
         endpoint_url=s.r2_endpoint,
         aws_access_key_id=s.r2_access_key_id,
         aws_secret_access_key=s.r2_secret_access_key,
-        config=Config(signature_version="s3v4", region_name="auto"),
+        config=Config(signature_version="s3v4", region_name="auto",
+                      connect_timeout=5, read_timeout=15,
+                      retries={"mode": "standard", "total_max_attempts": 2}),
     )
 
 
@@ -125,14 +127,18 @@ def decode_supabase_jwt(token: str, *, tag: str = "auth") -> dict:
 
     try:
         header = pyjwt.get_unverified_header(token)
-    except Exception as e:
-        logger.warning("%s: malformed token header: %s", tag, e)
+    except Exception:
+        logger.warning("%s: malformed token header", tag)
         raise HTTPException(401, "invalid token")
-    alg = (header.get("alg") or "").strip()
+    alg = header.get("alg")
+    if not isinstance(alg, str):
+        raise HTTPException(401, "invalid token")
+    alg = alg.strip()
     if alg.upper() in ("RS256", "ES256"):
         alg = alg.upper()
 
-    options = {"require": ["exp", "sub"]}
+    issuer = s.supabase_url.rstrip('/') + '/auth/v1' if s.supabase_url else None
+    options = {"require": ["exp", "sub"] + (["iss"] if issuer else [])}
     try:
         if alg in _ASYMMETRIC_ALGS:
             jwks = _get_supabase_jwks_client()
@@ -141,7 +147,7 @@ def decode_supabase_jwt(token: str, *, tag: str = "auth") -> dict:
             signing_key = jwks.get_signing_key_from_jwt(token).key
             claims = pyjwt.decode(
                 token, signing_key, algorithms=[alg], audience=_USER_AUDIENCE,
-                leeway=_LEEWAY_SEC, options=options,
+                issuer=issuer, leeway=_LEEWAY_SEC, options=options,
             )
         elif alg == "HS256":
             if not s.supabase_jwt_secret:
@@ -151,21 +157,21 @@ def decode_supabase_jwt(token: str, *, tag: str = "auth") -> dict:
                 raise HTTPException(503, "auth not configured (SUPABASE_JWT_SECRET missing)")
             claims = pyjwt.decode(
                 token, s.supabase_jwt_secret, algorithms=["HS256"], audience=_USER_AUDIENCE,
-                leeway=_LEEWAY_SEC, options=options,
+                issuer=issuer, leeway=_LEEWAY_SEC, options=options,
             )
         else:
-            logger.warning("%s: unsupported alg=%r", tag, alg)
+            logger.warning("%s: unsupported token algorithm", tag)
             raise HTTPException(401, "invalid token")
     except HTTPException:
         raise
     except pyjwt.ExpiredSignatureError:
         raise HTTPException(401, "token expired")
-    except Exception as e:  # signature, audience, claims, JWKS fetch …
-        logger.warning("%s: token rejected (alg=%s): %s", tag, alg, e)
+    except Exception:  # JWT/JWKS exception text can contain attacker-controlled kid/claims.
+        logger.warning("%s: token rejected", tag)
         raise HTTPException(401, "invalid token")
 
     if claims.get("role") != _USER_AUDIENCE:
-        logger.warning("%s: rejecting role=%r", tag, claims.get("role"))
+        logger.warning("%s: rejecting non-user role", tag)
         raise HTTPException(403, "requires an authenticated user")
     if not claims.get("sub"):
         raise HTTPException(401, "invalid token")
@@ -239,13 +245,19 @@ def fetch_subscription(sb, user_id: str) -> Optional[dict]:
     return rows[0] if rows else None
 
 
-def require_pro(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+def user_is_pro(user_id: str) -> bool:
+    """Same verdict as GET /iap/status ``pro`` for ``user_id`` (also used by
+    the cloud backup gate, ``cloud_quota.require_cloud_pro``)."""
     sb = require_supabase()
     try:
-        row = fetch_subscription(sb, user.id)
+        row = fetch_subscription(sb, user_id)
     except Exception:
         logger.exception("subscription lookup failed")
         raise HTTPException(500, "subscription lookup failed")
-    if not subscription_is_pro(row):
+    return subscription_is_pro(row)
+
+
+def require_pro(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    if not user_is_pro(user.id):
         raise HTTPException(402, "Pro subscription required")
     return user

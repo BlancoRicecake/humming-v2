@@ -42,17 +42,19 @@ class SongSpec {
             for (final entry in section.tracks.entries)
               entry.key: SongSpecTrack(
                 notes: [
+                  // deactivated notes are not generation input
                   for (final note in entry.value.pitchNotes)
-                    SongSpecNote(
-                      midi: note.midi,
-                      step: note.step,
-                      duration: note.dur,
-                      sourceMidi: note.sourceMidi,
-                      confidence: note.confidence,
-                      locked:
-                          note.locked ||
-                          (song.generationLocks[entry.key] ?? false),
-                    ),
+                    if (!note.muted)
+                      SongSpecNote(
+                        midi: note.midi,
+                        step: note.step,
+                        duration: note.dur,
+                        sourceMidi: note.sourceMidi,
+                        confidence: note.confidence,
+                        locked:
+                            note.locked ||
+                            (song.generationLocks[entry.key] ?? false),
+                      ),
                 ],
               ),
           },

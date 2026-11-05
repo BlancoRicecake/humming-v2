@@ -16,9 +16,9 @@ Future<T?> showLtModal<T>(
     barrierLabel: 'modal',
     barrierColor: Colors.black.withValues(alpha: 0.65),
     transitionDuration: const Duration(milliseconds: 140),
-    pageBuilder: (_, __, ___) => Center(
+    pageBuilder: (dialogContext, __, ___) => Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: width, maxHeight: MediaQuery.of(context).size.height * 0.88),
+        constraints: BoxConstraints(maxWidth: width, maxHeight: MediaQuery.of(dialogContext).size.height * 0.88),
         child: Material(
           color: Colors.transparent,
           child: Container(

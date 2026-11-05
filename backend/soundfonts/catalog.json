@@ -152,7 +152,7 @@
     "file": "freepats_pad_choir.sf2",
     "sf_bank": 0,
     "sf_program": 0,
-    "midi_fallback": 92,
+    "midi_fallback": 91,
     "license": "CC0"
   },
   {
@@ -176,7 +176,7 @@
     "file": "freepats_pad_newage.sf2",
     "sf_bank": 0,
     "sf_program": 0,
-    "midi_fallback": 89,
+    "midi_fallback": 88,
     "license": "CC0"
   },
   {
@@ -188,7 +188,7 @@
     "file": "freepats_pad_bowed.sf2",
     "sf_bank": 0,
     "sf_program": 0,
-    "midi_fallback": 93,
+    "midi_fallback": 92,
     "license": "CC0"
   },
   {

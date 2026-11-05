@@ -44,12 +44,242 @@ class LoopPrefs {
     {},
   );
 
+  /// Piano-roll tool settings (app preferences, not song data).
+  /// Scale snap: draw / semitone moves land on the song's scale.
+  final ValueNotifier<bool> scaleSnap = ValueNotifier<bool>(false);
+
+  /// Piano-roll layout (UI only, docs/specs/grid-usability.md):
+  /// 편집 확대 — the grid takes the timeline's and key hints' space.
+  final ValueNotifier<bool> gridFocus = ValueNotifier<bool>(false);
+
+  /// Phone editor: the track list's share of the height it shares with the
+  /// editing pad (drag the handle between them; 2026-11-02). Default .4 =
+  /// the previous fixed 2:3 split.
+  static const double kPhoneTimelineShareDefault = .4;
+  static const double kPhoneTimelineShareMin = .15;
+  static const double kPhoneTimelineShareMax = .75;
+  final ValueNotifier<double> phoneTimelineShare = ValueNotifier<double>(
+    kPhoneTimelineShareDefault,
+  );
+
+  /// Live while dragging; call [savePhoneTimelineShare] when the drag ends.
+  void setPhoneTimelineShare(double v) {
+    phoneTimelineShare.value =
+        v.clamp(kPhoneTimelineShareMin, kPhoneTimelineShareMax).toDouble();
+  }
+
+  Future<void> savePhoneTimelineShare() => _persist();
+
+  /// Secondary note tools on their own row (off = one merged row).
+  final ValueNotifier<bool> gridToolsExpanded = ValueNotifier<bool>(false);
+
+  /// Velocity / chance lane under the roll.
+  final ValueNotifier<bool> gridVelocityLane = ValueNotifier<bool>(true);
+
+  /// ui-001 stage 5: whether [gridVelocityLane] is a choice the user made
+  /// (toggled it, or an older prefs file already holds it). Without one the
+  /// desktop editor starts with the lane folded to its 24 px row; the phone
+  /// keeps the lane's own default (on).
+  final ValueNotifier<bool> gridVelocityLaneChosen = ValueNotifier<bool>(false);
+
+  /// ui-001 stage 5 (desktop piano roll): only the rows in the song's key
+  /// (plus rows that already hold notes); new notes land in the key.
+  final ValueNotifier<bool> gridInKeyOnly = ValueNotifier<bool>(true);
+
+  Future<void> setGridInKeyOnly(bool v) async {
+    gridInKeyOnly.value = v;
+    await _persist();
+  }
+
+  /// Desktop timeline (arrangement) collapsed to one row. Phone/tablet only
+  /// since ui-001 stage 3: the desktop editor uses [desktopView] instead.
+  final ValueNotifier<bool> timelineCollapsed = ValueNotifier<bool>(false);
+
+  /// ui-001 stage 3: the desktop editor's view, 'arrange' (the timeline takes
+  /// the window) or 'edit' (a 44 px minimap above the editing surface).
+  final ValueNotifier<String> desktopView = ValueNotifier<String>(kDesktopViewEdit);
+  static const kDesktopViewEdit = 'edit', kDesktopViewArrange = 'arrange';
+
+  /// ui-001 stage 4: the desktop editor's right inspector open (docked on
+  /// windows 1100 px wide or more; narrower windows start with the 40 px bar
+  /// and open it over the editor without changing this).
+  final ValueNotifier<bool> inspectorOpen = ValueNotifier<bool>(true);
+
+  Future<void> setInspectorOpen(bool open) async {
+    inspectorOpen.value = open;
+    await _persist();
+  }
+
+  Future<void> setDesktopView(String view) async {
+    if (view != kDesktopViewEdit && view != kDesktopViewArrange) return;
+    desktopView.value = view;
+    await _persist();
+  }
+
+  /// Quantize: grid id (see `QuantizeGrid.name`), strength 0..100 and
+  /// whether note ends are quantized too.
+  final ValueNotifier<String> quantizeGrid = ValueNotifier<String>('sixteenth');
+  final ValueNotifier<double> quantizeStrength = ValueNotifier<double>(100);
+  final ValueNotifier<bool> quantizeEnds = ValueNotifier<bool>(false);
+
+  /// Humanize: timing range as a fraction of a 16th step (0..0.5) and
+  /// velocity range (0..40).
+  final ValueNotifier<double> humanizeTiming = ValueNotifier<double>(.1);
+  final ValueNotifier<int> humanizeVelocity = ValueNotifier<int>(10);
+
+  /// Chord stamp: chord kind (see `ChordType.name`) and inversion 0..2.
+  final ValueNotifier<String> chordType = ValueNotifier<String>('diatonic3');
+  final ValueNotifier<int> chordInversion = ValueNotifier<int>(0);
+
+  Future<void> setChord({String? type, int? inversion}) async {
+    if (type != null) chordType.value = type;
+    if (inversion != null) chordInversion.value = inversion.clamp(0, 2).toInt();
+    await _persist();
+  }
+
+  /// Arpeggiate: style / rate names, gate 10..200 %, octaves 1..4 and
+  /// whether the source chord is kept (muted).
+  final ValueNotifier<String> arpStyle = ValueNotifier<String>('up');
+  final ValueNotifier<String> arpGrid = ValueNotifier<String>('sixteenth');
+  final ValueNotifier<int> arpGate = ValueNotifier<int>(90);
+  final ValueNotifier<int> arpOctaves = ValueNotifier<int>(1);
+  final ValueNotifier<bool> arpKeepOriginal = ValueNotifier<bool>(false);
+
+  Future<void> setArp({
+    String? style,
+    String? grid,
+    int? gate,
+    int? octaves,
+    bool? keepOriginal,
+  }) async {
+    if (style != null) arpStyle.value = style;
+    if (grid != null) arpGrid.value = grid;
+    if (gate != null) arpGate.value = gate.clamp(10, 200).toInt();
+    if (octaves != null) arpOctaves.value = octaves.clamp(1, 4).toInt();
+    if (keepOriginal != null) arpKeepOriginal.value = keepOriginal;
+    await _persist();
+  }
+
+  /// gt-001 guitar stroke defaults: the last pattern preset, spread (ms,
+  /// 5..60) and accent (%, 50..130) per direction, and falloff (%, 0..40).
+  final ValueNotifier<String> strokePattern = ValueNotifier<String>('down');
+  final ValueNotifier<int> strokeDownSpread = ValueNotifier<int>(28);
+  final ValueNotifier<int> strokeUpSpread = ValueNotifier<int>(18);
+  final ValueNotifier<int> strokeFalloff = ValueNotifier<int>(18);
+  final ValueNotifier<int> strokeDownAccent = ValueNotifier<int>(100);
+  final ValueNotifier<int> strokeUpAccent = ValueNotifier<int>(80);
+
+  Future<void> setStroke({
+    String? pattern,
+    int? downSpread,
+    int? upSpread,
+    int? falloff,
+    int? downAccent,
+    int? upAccent,
+  }) async {
+    if (pattern != null) strokePattern.value = pattern;
+    if (downSpread != null) {
+      strokeDownSpread.value = downSpread.clamp(5, 60).toInt();
+    }
+    if (upSpread != null) strokeUpSpread.value = upSpread.clamp(5, 60).toInt();
+    if (falloff != null) strokeFalloff.value = falloff.clamp(0, 40).toInt();
+    if (downAccent != null) {
+      strokeDownAccent.value = downAccent.clamp(50, 130).toInt();
+    }
+    if (upAccent != null) {
+      strokeUpAccent.value = upAccent.clamp(50, 130).toInt();
+    }
+    await _persist();
+  }
+
+  /// gt-003 articulation defaults for NEW applies only (each note keeps the
+  /// snapshot it was given): 짧게 gate (ms), palm-tone gate (ms) and
+  /// palm-tone velocity (%).
+  final ValueNotifier<int> articulationStaccatoMs = ValueNotifier<int>(120);
+  final ValueNotifier<int> articulationPalmMs = ValueNotifier<int>(250);
+  final ValueNotifier<int> articulationPalmVelocity = ValueNotifier<int>(85);
+
+  Future<void> setArticulationDefaults({
+    int? staccatoMs,
+    int? palmMs,
+    int? palmVelocity,
+  }) async {
+    if (staccatoMs != null) {
+      articulationStaccatoMs.value = staccatoMs.clamp(30, 1000).toInt();
+    }
+    if (palmMs != null) {
+      articulationPalmMs.value = palmMs.clamp(30, 1000).toInt();
+    }
+    if (palmVelocity != null) {
+      articulationPalmVelocity.value = palmVelocity.clamp(20, 120).toInt();
+    }
+    await _persist();
+  }
+
+  Future<void> setScaleSnap(bool v) async {
+    scaleSnap.value = v;
+    await _persist();
+  }
+
+  Future<void> setGridLayout({
+    bool? focus,
+    bool? toolsExpanded,
+    bool? velocityLane,
+    bool? timelineCollapsed,
+  }) async {
+    if (focus != null) gridFocus.value = focus;
+    if (toolsExpanded != null) gridToolsExpanded.value = toolsExpanded;
+    if (velocityLane != null) {
+      gridVelocityLane.value = velocityLane;
+      gridVelocityLaneChosen.value = true;
+    }
+    if (timelineCollapsed != null) {
+      this.timelineCollapsed.value = timelineCollapsed;
+    }
+    await _persist();
+  }
+
+  /// Back to the default grid layout (tests / reset).
+  @visibleForTesting
+  void resetGridLayout() {
+    gridFocus.value = false;
+    phoneTimelineShare.value = kPhoneTimelineShareDefault;
+    gridToolsExpanded.value = false;
+    gridVelocityLane.value = true;
+    gridVelocityLaneChosen.value = false;
+    gridInKeyOnly.value = true;
+    timelineCollapsed.value = false;
+    desktopView.value = kDesktopViewEdit;
+    inspectorOpen.value = true;
+  }
+
+  Future<void> setQuantize({String? grid, double? strength, bool? ends}) async {
+    if (grid != null) quantizeGrid.value = grid;
+    if (strength != null) {
+      quantizeStrength.value = strength.clamp(0, 100).toDouble();
+    }
+    if (ends != null) quantizeEnds.value = ends;
+    await _persist();
+  }
+
+  Future<void> setHumanize({double? timing, int? velocity}) async {
+    if (timing != null) humanizeTiming.value = timing.clamp(0, .5).toDouble();
+    if (velocity != null) {
+      humanizeVelocity.value = velocity.clamp(0, 40).toInt();
+    }
+    await _persist();
+  }
+
   Future<void> setKeyboardBindings(String group, List<int> keys) async {
     keyboardBindings.value = {...keyboardBindings.value, group: List.of(keys)};
     await _persist();
   }
 
   bool _loaded = false;
+
+  /// Lets the next [bootstrap] read the file again (an app restart in tests).
+  @visibleForTesting
+  void debugAllowReload() => _loaded = false;
 
   static Future<File> _file() async {
     final dir = rootOverride ?? await getApplicationDocumentsDirectory();
@@ -62,6 +292,7 @@ class LoopPrefs {
   Future<void> bootstrap() async {
     if (_loaded) return;
     _loaded = true;
+    var migrateView = false;
     try {
       final f = await _file();
       if (!await f.exists()) return;
@@ -78,6 +309,92 @@ class LoopPrefs {
         };
       }
       if (m['haptics'] is bool) haptics.value = m['haptics'] as bool;
+      if (m['scaleSnap'] is bool) scaleSnap.value = m['scaleSnap'] as bool;
+      if (m['gridFocus'] is bool) gridFocus.value = m['gridFocus'] as bool;
+      if (m['phoneTimelineShare'] is num) {
+        setPhoneTimelineShare((m['phoneTimelineShare'] as num).toDouble());
+      }
+      if (m['gridToolsExpanded'] is bool) {
+        gridToolsExpanded.value = m['gridToolsExpanded'] as bool;
+      }
+      if (m['gridVelocityLane'] is bool) {
+        gridVelocityLane.value = m['gridVelocityLane'] as bool;
+        gridVelocityLaneChosen.value = true; // a saved choice is kept
+      }
+      if (m['timelineCollapsed'] is bool) {
+        timelineCollapsed.value = m['timelineCollapsed'] as bool;
+      }
+      // ui-001 stage 3: a saved valid desktopView wins. Missing (older
+      // prefs: once, including users whose timeline was collapsed, who were
+      // already looking at the editor) or invalid = 'edit', saved right away.
+      if (m['gridInKeyOnly'] is bool) {
+        gridInKeyOnly.value = m['gridInKeyOnly'] as bool;
+      }
+      if (m['inspectorOpen'] is bool) {
+        inspectorOpen.value = m['inspectorOpen'] as bool;
+      }
+      final view = m['desktopView'];
+      if (view == kDesktopViewEdit || view == kDesktopViewArrange) {
+        desktopView.value = view as String;
+      } else {
+        desktopView.value = kDesktopViewEdit;
+        migrateView = true;
+      }
+      if (m['quantizeGrid'] is String) {
+        quantizeGrid.value = m['quantizeGrid'] as String;
+      }
+      if (m['quantizeStrength'] is num) {
+        quantizeStrength.value =
+            (m['quantizeStrength'] as num).toDouble().clamp(0, 100).toDouble();
+      }
+      if (m['quantizeEnds'] is bool) {
+        quantizeEnds.value = m['quantizeEnds'] as bool;
+      }
+      if (m['humanizeTiming'] is num) {
+        humanizeTiming.value =
+            (m['humanizeTiming'] as num).toDouble().clamp(0, .5).toDouble();
+      }
+      if (m['humanizeVelocity'] is num) {
+        humanizeVelocity.value =
+            (m['humanizeVelocity'] as num).toInt().clamp(0, 40).toInt();
+      }
+      if (m['chordType'] is String) chordType.value = m['chordType'] as String;
+      if (m['chordInversion'] is num) {
+        chordInversion.value =
+            (m['chordInversion'] as num).toInt().clamp(0, 2).toInt();
+      }
+      if (m['arpStyle'] is String) arpStyle.value = m['arpStyle'] as String;
+      if (m['arpGrid'] is String) arpGrid.value = m['arpGrid'] as String;
+      if (m['arpGate'] is num) {
+        arpGate.value = (m['arpGate'] as num).toInt().clamp(10, 200).toInt();
+      }
+      if (m['arpOctaves'] is num) {
+        arpOctaves.value = (m['arpOctaves'] as num).toInt().clamp(1, 4).toInt();
+      }
+      if (m['arpKeepOriginal'] is bool) {
+        arpKeepOriginal.value = m['arpKeepOriginal'] as bool;
+      }
+      if (m['strokePattern'] is String) {
+        strokePattern.value = m['strokePattern'] as String;
+      }
+      int? pct(String k, int lo, int hi) =>
+          m[k] is num ? (m[k] as num).toInt().clamp(lo, hi).toInt() : null;
+      strokeDownSpread.value =
+          pct('strokeDownSpread', 5, 60) ?? strokeDownSpread.value;
+      strokeUpSpread.value = pct('strokeUpSpread', 5, 60) ?? strokeUpSpread.value;
+      strokeFalloff.value = pct('strokeFalloff', 0, 40) ?? strokeFalloff.value;
+      strokeDownAccent.value =
+          pct('strokeDownAccent', 50, 130) ?? strokeDownAccent.value;
+      strokeUpAccent.value =
+          pct('strokeUpAccent', 50, 130) ?? strokeUpAccent.value;
+      articulationStaccatoMs.value =
+          pct('articulationStaccatoMs', 30, 1000) ??
+          articulationStaccatoMs.value;
+      articulationPalmMs.value =
+          pct('articulationPalmMs', 30, 1000) ?? articulationPalmMs.value;
+      articulationPalmVelocity.value =
+          pct('articulationPalmVelocity', 20, 120) ??
+          articulationPalmVelocity.value;
       if (m['metro'] is bool) metro.value = m['metro'] as bool;
       if (m['analyticsEnabled'] is bool) {
         analyticsEnabled.value = m['analyticsEnabled'] as bool;
@@ -104,6 +421,7 @@ class LoopPrefs {
     } catch (e) {
       debugPrint('[looptap] prefs load failed: $e');
     }
+    if (migrateView) await _persist();
   }
 
   Future<void> _persist() async {
@@ -118,6 +436,38 @@ class LoopPrefs {
           'acknowledgedPolicyNotice': acknowledgedPolicyNotice.value,
           'vocalLatencyMs': vocalLatencyMs.value,
           'instrumentFavorites': instrumentFavorites.value,
+          'scaleSnap': scaleSnap.value,
+          'gridFocus': gridFocus.value,
+          'phoneTimelineShare': phoneTimelineShare.value,
+          'gridToolsExpanded': gridToolsExpanded.value,
+          // only a chosen value: an untouched desktop keeps the folded default
+          if (gridVelocityLaneChosen.value)
+            'gridVelocityLane': gridVelocityLane.value,
+          'gridInKeyOnly': gridInKeyOnly.value,
+          'timelineCollapsed': timelineCollapsed.value,
+          'desktopView': desktopView.value,
+          'inspectorOpen': inspectorOpen.value,
+          'quantizeGrid': quantizeGrid.value,
+          'quantizeStrength': quantizeStrength.value,
+          'quantizeEnds': quantizeEnds.value,
+          'humanizeTiming': humanizeTiming.value,
+          'humanizeVelocity': humanizeVelocity.value,
+          'chordType': chordType.value,
+          'chordInversion': chordInversion.value,
+          'arpStyle': arpStyle.value,
+          'arpGrid': arpGrid.value,
+          'arpGate': arpGate.value,
+          'arpOctaves': arpOctaves.value,
+          'arpKeepOriginal': arpKeepOriginal.value,
+          'strokePattern': strokePattern.value,
+          'strokeDownSpread': strokeDownSpread.value,
+          'strokeUpSpread': strokeUpSpread.value,
+          'strokeFalloff': strokeFalloff.value,
+          'strokeDownAccent': strokeDownAccent.value,
+          'strokeUpAccent': strokeUpAccent.value,
+          'articulationStaccatoMs': articulationStaccatoMs.value,
+          'articulationPalmMs': articulationPalmMs.value,
+          'articulationPalmVelocity': articulationPalmVelocity.value,
         }),
       );
     } catch (e) {

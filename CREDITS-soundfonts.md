@@ -16,6 +16,15 @@ Source: https://freepats.zenvoid.org/Synthesizer/
 - Lately Bass, Synth Bass 1, Synth Bass 2 — CC0
 - Synth Pad Choir, Sweep Pad, New Age, Synth Pad Bowed — CC0
 
+These seven sounds, plus the Nylon Acoustic guitar above (slot 1001, so the
+first guitar works without a download), are bundled for offline use in
+`mobile/assets/sounds/reference/` (eight fonts in total). The catalog records the
+exact upstream release URL, archive and SF2 SHA256, and actual bank/program.
+Upstream README and license text are retained alongside each font. Reproduce the
+pack with `python tools/prepare_reference_soundfonts.py` (bass/pads) and
+`python tools/prepare_guitar_soundfont.py` (nylon guitar). Either tool merges
+into `catalog.json`, so running one never drops the other's rows.
+
 ## EDM synths — Musical Artifacts
 - **Supersaw Lead / Supersaw Pluck** — "Supersaw Collection" by Strix SoundFont Team — Public Domain
   https://musical-artifacts.com/artifacts/701

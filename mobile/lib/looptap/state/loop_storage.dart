@@ -14,6 +14,34 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/loop_models.dart';
 
+/// songs.json was written by a newer app (schema [found] > what this build
+/// knows); saving is refused so the newer data is never overwritten.
+class NewerSongsSchemaException implements Exception {
+  const NewerSongsSchemaException(this.found);
+  final int found;
+  @override
+  String toString() =>
+      'songs.json schema v$found is newer than v${Song.kSchemaVersion}';
+}
+
+/// What the last [LoopStorage.load] had to do (storage audit 2026-10-30): the
+/// song list tells the user instead of only a debug log.
+enum LoadIssue {
+  none,
+
+  /// songs.json was missing or unreadable; the previous save (.bak) was used.
+  recoveredFromBackup,
+
+  /// Some songs couldn't be read; the original file was kept.
+  skippedSongs,
+
+  /// Nothing could be read; the file was kept, cleanup is paused.
+  unreadable,
+
+  /// A newer app version wrote the library: shown, never overwritten.
+  newerSchema,
+}
+
 class LoopStorage {
   // Documents path cache so vocal basenames can be resolved synchronously from
   // widgets/painters. Filled by [ensureDirs] (called at bootstrap + editor open).
@@ -61,6 +89,25 @@ class LoopStorage {
       File('${(await _folder()).path}/songs.json');
   static Future<File> _tmpFile() async =>
       File('${(await _folder()).path}/songs.json.tmp');
+  /// The `v` of a songs.json-shaped file, reading only its head when it
+  /// starts the way [Song.encodeList] writes it (`{"v":N,...`); otherwise the
+  /// whole file (other shapes / hand edits). Saves used to decode both the
+  /// library and its backup in full just for this check (2026-11-02).
+  static Future<int?> _schemaOfFile(File f) async {
+    RandomAccessFile? raf;
+    try {
+      raf = await f.open();
+      final head = String.fromCharCodes(await raf.read(64));
+      final m = RegExp(r'^\s*\{\s*"v"\s*:\s*(\d+)\s*[,}]').firstMatch(head);
+      if (m != null) return int.parse(m.group(1)!);
+    } catch (_) {
+      // fall through to the full read
+    } finally {
+      await raf?.close();
+    }
+    return Song.schemaVersionOf(await f.readAsString());
+  }
+
   static Future<File> _bakFile() async =>
       File('${(await _folder()).path}/songs.json.bak');
   static Future<File> _metaFile() async =>
@@ -80,9 +127,29 @@ class LoopStorage {
   static int get skippedOnLoad => _skippedOnLoad;
   static bool _hasPreservedCorruption = false;
 
+  static LoadIssue _lastIssue = LoadIssue.none;
+  static LoadIssue get lastIssue => _lastIssue;
+
+  /// The folder holding songs.json, vocals/ and exports/ (shown to the user).
+  static Future<String> libraryPath() async => (await _folder()).path;
+
   static Future<List<Song>> load() async {
     _loadFailed = false;
     _skippedOnLoad = 0;
+    _lastIssue = LoadIssue.none;
+    final songs = await _load();
+    if (_loadFailed && _lastIssue == LoadIssue.none) {
+      _lastIssue = LoadIssue.unreadable;
+    }
+    return songs;
+  }
+
+  static bool _newer(String raw) {
+    final v = Song.schemaVersionOf(raw);
+    return v != null && v > Song.kSchemaVersion;
+  }
+
+  static Future<List<Song>> _load() async {
     File? f;
     try {
       _hasPreservedCorruption = await (await _folder()).list().any(
@@ -97,7 +164,12 @@ class LoopStorage {
         if (await bak.exists()) {
           debugPrint('[looptap] songs.json missing, restoring from .bak');
           final r = await _decodeFile(bak);
-          if (r != null) return r;
+          if (r != null) {
+            _lastIssue = _newer(await bak.readAsString())
+                ? LoadIssue.newerSchema
+                : LoadIssue.recoveredFromBackup;
+            return r;
+          }
           _loadFailed = true;
         }
         _loadFailed = _loadFailed || _hasPreservedCorruption;
@@ -111,7 +183,9 @@ class LoopStorage {
         debugPrint('[looptap] load: skipped ${r.skipped} unreadable song(s)');
         // keep the original around — the skipped entries may be recoverable.
         await _preserveCorrupt(f);
+        _lastIssue = LoadIssue.skippedSongs;
       }
+      if (_newer(raw)) _lastIssue = LoadIssue.newerSchema;
       return r.songs;
     } catch (e) {
       debugPrint('[looptap] load failed: $e');
@@ -124,6 +198,9 @@ class LoopStorage {
         final r = await _decodeFile(bak);
         if (r != null) {
           debugPrint('[looptap] recovered ${r.length} song(s) from .bak');
+          _lastIssue = _newer(await bak.readAsString())
+              ? LoadIssue.newerSchema
+              : LoadIssue.recoveredFromBackup;
           return r;
         }
       }
@@ -169,17 +246,35 @@ class LoopStorage {
 
   /// Atomic save: write the whole payload to a temp file, then swap it in.
   /// The previous songs.json survives as songs.json.bak.
-  static Future<void> _saveQueue = Future<void>.value();
+  ///
+  /// Saves run one after another (a chain). Once the last one has finished
+  /// nothing is kept: a completed future would stay tied to the zone it was
+  /// made in, and a later save chained onto it would wait for that zone
+  /// (2026-11-04: a widget test's fake clock that no longer runs).
+  static Future<void>? _saveTail;
+  static var _saving = 0;
+
+  /// Tests: whether a save is still running.
+  @visibleForTesting
+  static bool get saving => _saving > 0;
 
   static Future<void> save(List<Song> songs) {
     // Snapshot before waiting: callers may keep editing while an earlier save
     // is in flight. Only one writer may use songs.json.tmp at a time.
     final payload = Song.encodeList(songs);
-    final result = _saveQueue.then((_) => _savePayload(payload));
-    _saveQueue = result.then<void>(
+    final previous = _saveTail;
+    _saving++;
+    final result = previous == null
+        ? Future<void>.sync(() => _savePayload(payload))
+        : previous.then((_) => _savePayload(payload));
+    final tail = result.then<void>(
       (_) {},
       onError: (Object _, StackTrace __) {},
     );
+    _saveTail = tail;
+    tail.whenComplete(() {
+      if (--_saving == 0) _saveTail = null;
+    }).ignore();
     return result;
   }
 
@@ -188,6 +283,17 @@ class LoopStorage {
       final f = await _file();
       final tmp = await _tmpFile();
       final bak = await _bakFile();
+      // A newer app build wrote this library: overwriting it would drop the
+      // fields this build doesn't know (e.g. after a downgrade). Fail instead.
+      // Both files count (storage audit 2026-10-30 S2): with songs.json gone,
+      // a newer-schema .bak is the library and a save would rotate it away.
+      for (final existing in [f, bak]) {
+        if (!await existing.exists()) continue;
+        final onDisk = await _schemaOfFile(existing);
+        if (onDisk != null && onDisk > Song.kSchemaVersion) {
+          throw NewerSongsSchemaException(onDisk);
+        }
+      }
       await tmp.writeAsString(payload, flush: true);
       if (await f.exists()) {
         if (await bak.exists()) await bak.delete();
@@ -288,53 +394,99 @@ class LoopStorage {
     }
   }
 
+  /// The editor's live-preview section bounces (`_mix_<song>_<section>_<rev>.wav`)
+  /// are rebuilt on demand and never stored in a song, so they are always safe
+  /// to delete. User takes are named `<song>_<section>_<ts>…` (never `_mix_`).
+  static bool isRegenerableMix(String name) =>
+      name.startsWith('_mix_') && name.endsWith('.wav');
+
+  /// Every audio file name [song] references: section takes (current /
+  /// original), clip lanes (path / original / FX source) and the song-level
+  /// take. Basenames only, as stored. Shared by the sweep and project backups.
+  static Set<String> audioNamesOf(Song song) {
+    final names = <String>{};
+    void add(String? p) {
+      if (p == null || p.isEmpty) return;
+      names.add(p.split('/').last.split('\\').last);
+    }
+
+    add(song.songVocalPath);
+    for (final sec in song.sections) {
+      for (final t in sec.tracks.values) {
+        add(t.vocalPath);
+        add(t.vocalOrigPath);
+        for (final c in t.clips ?? const <VocalClip>[]) {
+          add(c.path);
+          add(c.origPath);
+          add(c.fxSourcePath);
+        }
+      }
+    }
+    return names;
+  }
+
   /// Delete vocal files no song references anymore (re-record leftovers,
   /// cleared tracks, deleted sections). Safe to call once the editor's undo
-  /// stack is gone — i.e. on leaving the edit screen.
+  /// stack is gone — i.e. on leaving the edit screen. Takes the backup
+  /// songs.json.bak still references are kept too (storage audit 2026-10-30
+  /// S1: restoring the .bak must bring its audio back); a .bak this build
+  /// can't fully read, or that a newer build wrote, keeps every user take.
   static Future<void> sweepVocals(List<Song> songs) async {
     // a failed load leaves [songs] silently empty — sweeping then would
     // mass-delete takes that are still referenced by the unreadable file.
-    // Likewise a partial load: the skipped songs' takes are still theirs.
-    if (_loadFailed || _skippedOnLoad > 0 || _hasPreservedCorruption) return;
+    // Likewise a partial load: the skipped songs' takes are still theirs, and
+    // so are those a preserved songs.json.corrupt-* may reference. In those
+    // cases only regenerable `_mix_*` editor bounces (never persisted in any
+    // song) are swept, so they can't pile up forever; user takes are kept.
+    var mixesOnly =
+        _loadFailed || _skippedOnLoad > 0 || _hasPreservedCorruption;
     try {
       final vocals = Directory('${(await _folder()).path}/vocals');
       if (!await vocals.exists()) return;
       // belt and braces: an empty library legitimately has no takes to keep,
       // but if the list is empty while takes exist on disk, prefer keeping
       // them over an irreversible mass delete.
-      if (songs.isEmpty && !await vocals.list().isEmpty) {
+      if (!mixesOnly &&
+          songs.isEmpty &&
+          await vocals.list().any(
+            (f) => !isRegenerableMix(f.uri.pathSegments.last),
+          )) {
         debugPrint(
-          '[looptap] sweepVocals skipped: empty song list with takes on disk',
+          '[looptap] sweepVocals: empty song list with takes on disk, '
+          'sweeping bounces only',
         );
-        return;
+        mixesOnly = true;
+      }
+      final keep = <Song>[...songs];
+      final bak = await _bakFile();
+      if (!mixesOnly && await bak.exists()) {
+        try {
+          final raw = await bak.readAsString();
+          final v = Song.schemaVersionOf(raw);
+          final r = Song.decodeListLenient(raw);
+          if ((v != null && v > Song.kSchemaVersion) || r.skipped > 0) {
+            mixesOnly = true; // can't tell everything it references
+          } else {
+            keep.addAll(r.songs);
+          }
+        } catch (_) {
+          mixesOnly = true;
+        }
       }
       final referenced = <String>{};
-      for (final song in songs) {
-        if (song.songVocalPath != null) referenced.add(song.songVocalPath!);
-        for (final sec in song.sections) {
-          for (final t in sec.tracks.values) {
-            final paths = <String?>[
-              t.vocalPath,
-              t.vocalOrigPath,
-              for (final c in t.clips ?? const <VocalClip>[]) ...[
-                c.path,
-                c.origPath,
-              ],
-            ];
-            for (final p in paths) {
-              if (p != null) {
-                final base = p.split('/').last.split('\\').last;
-                referenced.add(base);
-                // keep the legacy-conversion cache wav_export writes next to
-                // legacy takes (see _loadVocalBytes: '<take>.cnv.wav')
-                referenced.add('$base.cnv.wav');
-              }
-            }
-          }
+      for (final song in keep) {
+        for (final base in audioNamesOf(song)) {
+          referenced.add(base);
+          // keep the legacy-conversion cache wav_export writes next to legacy
+          // takes (see _loadVocalBytes: '<take>.cnv.wav') — the song-level
+          // take's too
+          referenced.add('$base.cnv.wav');
         }
       }
       await for (final f in vocals.list()) {
-        if (f is File && !referenced.contains(f.uri.pathSegments.last)) {
+        final name = f.uri.pathSegments.last;
+        if (mixesOnly && !isRegenerableMix(name)) continue;
+        if (f is File && !referenced.contains(name)) {
           try {
             await f.delete();
           } catch (_) {}

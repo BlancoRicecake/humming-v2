@@ -249,12 +249,14 @@ String addVocalMidiTrack(
   }
   for (final section in sections) {
     section.extras.add(TrackRef(id, 'melody'));
-    section.tracks[id] = TrackData(
-      notes:
-          section.id == sectionId
-              ? result.notes.map((n) => n.copyWith()).toList()
-              : [],
-    );
+    if (section.id == sectionId) {
+      section.tracks[id] = TrackData(
+        notes: result.notes.map((n) => n.copyWith()).toList(),
+      );
+    } else {
+      // a section linked to the target shares its map (AR-001): keep the notes
+      section.tracks.putIfAbsent(id, TrackData.new);
+    }
   }
   return id;
 }

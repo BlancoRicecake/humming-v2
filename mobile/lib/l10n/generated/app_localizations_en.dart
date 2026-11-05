@@ -1516,6 +1516,13 @@ class L10nEn extends L10n {
   String get payPendingButton => 'Waiting for approval…';
 
   @override
+  String get payDesktopInfo =>
+      'Subscribe to Pro in the HumTrack phone app, then sign in here with the same account. This desktop app does not process purchases. Your subscription is checked with the server.';
+
+  @override
+  String get payDesktopRefresh => 'Check account Pro status';
+
+  @override
   String get payRestore => 'Restore purchases';
 
   @override
@@ -1523,6 +1530,10 @@ class L10nEn extends L10n {
 
   @override
   String get payStoreUnavailableDevice => 'Store unavailable on this device.';
+
+  @override
+  String get payAccountProOnly =>
+      'Subscriptions can\'t be bought in this version. Sign in with the account you subscribed with on the App Store or Google Play and Pro applies automatically.';
 
   @override
   String get payPurchaseFailed =>
@@ -1663,6 +1674,10 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get ltSettingsDeleteAccountPending =>
+      'Your deletion request was accepted. You are signed out; server data deletion will continue in the background. Music saved on this device is kept.';
+
+  @override
   String get ltSettingsDeleteAccountDone => 'Account deleted.';
 
   @override
@@ -1698,6 +1713,19 @@ class L10nEn extends L10n {
 
   @override
   String get ltExportStemsSub => 'Separate WAV per track';
+
+  @override
+  String get ltExportNewVariation => 'Another variation';
+
+  @override
+  String get ltExportNewVariationSub =>
+      'Re-roll note chance and velocity variation (undoable)';
+
+  @override
+  String get ltExportNewVariationDone => 'New variation ready';
+
+  @override
+  String get ltExportMidiAllNotes => 'MIDI: include all notes (ignore chance)';
 
   @override
   String get ltExportShareTitle => 'Share';
@@ -1755,6 +1783,13 @@ class L10nEn extends L10n {
   @override
   String get ltSettingsAnalyticsSub =>
       'Allow Clarity and Firebase analytics for product improvement';
+
+  @override
+  String get ltSettingsVocalSync => 'Vocal sync';
+
+  @override
+  String get ltSettingsVocalSyncSub =>
+      'Increase if the take lands late; decrease if early';
 
   @override
   String get ltSettingsAbout => 'About';
@@ -1976,10 +2011,14 @@ class L10nEn extends L10n {
   String get ltEditorHintGridDrums => 'tap cells to toggle';
 
   @override
-  String get ltEditorHintGridPitched => 'tap · drag to lengthen · auto-merge';
+  String get ltEditorHintGridPitched => 'Draw · select area · copy/paste';
 
   @override
-  String get ltEditorHintPads => 'rec, then tap';
+  String get ltEditorHintGridPhone =>
+      'Tap: add · tap a note: select · drag empty space: select several';
+
+  @override
+  String get ltEditorHintPads => 'Play while recording is on';
 
   @override
   String get ltDrumBeatGrid => 'Beat grid';
@@ -2081,6 +2120,10 @@ class L10nEn extends L10n {
 
   @override
   String get ltRecErrUnavailable => 'Recording unavailable';
+
+  @override
+  String get ltRecErrNoCodec =>
+      'This device has no recording format the app can use';
 
   @override
   String get ltRecErrInterrupted => 'Recording was interrupted — try again';
@@ -2206,7 +2249,7 @@ class L10nEn extends L10n {
   String get ltVocalEditorEffectsGroup => 'Effects';
 
   @override
-  String get ltVocalEditorReset => 'Reset';
+  String get ltVocalEditorReset => 'Reset edits';
 
   @override
   String get ltVocalEditorServerTag => 'server';
@@ -2298,6 +2341,387 @@ class L10nEn extends L10n {
       'Couldn\'t save your changes. Check your device\'s available storage and try again.';
 
   @override
+  String get ltLibraryRecovered =>
+      'Your song list couldn\'t be read, so it was restored from the last saved backup. The most recent few seconds of changes may be missing.';
+
+  @override
+  String get ltLibrarySkipped =>
+      'Some songs couldn\'t be read and were left out. The original file was kept, not deleted.';
+
+  @override
+  String get ltLibraryUnreadable =>
+      'Your song list couldn\'t be read. The file was left as is, and recording cleanup is paused.';
+
+  @override
+  String get ltLibraryNewer =>
+      'This song list was saved by a newer HumTrack. You can view it, but this version won\'t save over it. Please update the app.';
+
+  @override
+  String ltLibraryFolder(String path) {
+    return 'Saved in: $path';
+  }
+
+  @override
+  String get ltCloudMenu => 'Back up to cloud';
+
+  @override
+  String get ltCloudTitle => 'Cloud backup';
+
+  @override
+  String get ltCloudSettingsSub =>
+      'Upload songs yourself; get them as new songs on another device';
+
+  @override
+  String get ltCloudBackupTitle => 'Back up to cloud';
+
+  @override
+  String get ltCloudBackupBody =>
+      'Uploads this song\'s notes, instruments and structure to your account\'s cloud. Nothing uploads on its own, only when you tap.';
+
+  @override
+  String ltCloudIncludeAudio(int count) {
+    return 'Also upload $count recording(s)';
+  }
+
+  @override
+  String get ltCloudAudioOn =>
+      'The recordings are kept in the cloud. Deleting the cloud copy deletes them too.';
+
+  @override
+  String get ltCloudAudioOff =>
+      'Recordings stay on this device only. On another device their places will be empty.';
+
+  @override
+  String get ltCloudAudioOptOut =>
+      'The cloud copy now includes recordings. Uploading without them replaces it with a copy without recordings, and the earlier recordings in the cloud are deleted.';
+
+  @override
+  String get ltCloudBackupConfirm => 'Upload';
+
+  @override
+  String ltCloudBackedUp(String title) {
+    return 'Uploaded to the cloud: $title';
+  }
+
+  @override
+  String ltCloudBackedUpNoAudio(String title) {
+    return 'Uploaded without recordings: $title';
+  }
+
+  @override
+  String get ltCloudConflictTitle => 'The cloud has a newer copy';
+
+  @override
+  String get ltCloudConflictBody =>
+      'Another device uploaded this song in the meantime. What would you like to do? Nothing changes until you choose.';
+
+  @override
+  String get ltCloudConflictGone =>
+      'This song\'s cloud copy was deleted or recreated on another device. What would you like to do?';
+
+  @override
+  String get ltCloudKeepDevice => 'Use this device\'s';
+
+  @override
+  String get ltCloudTakeCloud => 'Get the cloud\'s (new song)';
+
+  @override
+  String get ltCloudKeepBoth => 'Keep both';
+
+  @override
+  String get ltCloudRestore => 'Get on this device';
+
+  @override
+  String ltCloudRestored(String title) {
+    return 'Added as a new song: $title';
+  }
+
+  @override
+  String get ltCloudRestoredNoAudio =>
+      'This copy was uploaded without recordings, so their places are empty.';
+
+  @override
+  String get ltCloudDelete => 'Delete from cloud';
+
+  @override
+  String ltCloudDeleteTitle(String title) {
+    return 'Delete \'$title\' from the cloud';
+  }
+
+  @override
+  String get ltCloudDeleteBody =>
+      'Deletes the cloud copy (with any uploaded recordings) only. Songs saved on this and other devices stay. This can\'t be undone.';
+
+  @override
+  String get ltCloudDeleteYes => 'Delete';
+
+  @override
+  String get ltCloudDeleted => 'Cloud copy deleted.';
+
+  @override
+  String ltCloudUsage(String used, String quota) {
+    return 'Used $used of $quota';
+  }
+
+  @override
+  String get ltCloudEmpty =>
+      'No songs in the cloud yet. Use \'Back up to cloud\' in a song\'s menu.';
+
+  @override
+  String get ltCloudWithAudio => 'with recordings';
+
+  @override
+  String get ltCloudNoAudio => 'without recordings';
+
+  @override
+  String get ltCloudPrivacyNote =>
+      'Cloud copies are kept until you delete them. After a subscription ends you can still get and delete them.';
+
+  @override
+  String get ltCloudUnavailable =>
+      'Cloud backup isn\'t available yet. Nothing was uploaded.';
+
+  @override
+  String get ltCloudSignIn => 'Sign in to use cloud backup.';
+
+  @override
+  String get ltCloudProRequired =>
+      'Uploading to the cloud needs Pro. You can still get and delete your copies.';
+
+  @override
+  String get ltCloudQuotaExceeded =>
+      'Not enough cloud space, so nothing was uploaded. Your existing copy is unchanged.';
+
+  @override
+  String get ltCloudDamaged =>
+      'The downloaded file doesn\'t match what was uploaded, so it wasn\'t imported. Nothing changed.';
+
+  @override
+  String get ltCloudAccountChanged =>
+      'The signed-in account changed during this, so it stopped. Nothing was uploaded to or added for the other account.';
+
+  @override
+  String get ltCloudFailed =>
+      'Couldn\'t finish because of a connection problem. Your songs and cloud copies are unchanged. Please try again.';
+
+  @override
+  String get ltCloudGuideTitle => 'How cloud backup works';
+
+  @override
+  String get ltCloudGuideWhere =>
+      'Where: a copy of the song is kept in your account\'s HumTrack cloud. The song on this device stays as it is.';
+
+  @override
+  String get ltCloudGuideUpload =>
+      'Back up: song card ⋯ → ‘Back up to cloud’. Needs Pro; recordings go along only when you tick them.';
+
+  @override
+  String get ltCloudGuideRestore =>
+      'Restore: tap ‘Get on this device’ below and it is added as a new song. Existing songs are never overwritten.';
+
+  @override
+  String get ltCloudGuideDelete =>
+      'Delete: ‘Delete from cloud’ removes only the cloud copy. After a subscription ends you can still restore and delete.';
+
+  @override
+  String get ltCloudSignInAction => 'Sign in';
+
+  @override
+  String get ltCloudProNote =>
+      'Backing up needs Pro. You can still restore or delete the copies you already have.';
+
+  @override
+  String get ltCloudProAction => 'See Pro';
+
+  @override
+  String get ltCloudRetry => 'Try again';
+
+  @override
+  String ltCloudLinkedTo(String title) {
+    return 'Linked to ‘$title’ on this device';
+  }
+
+  @override
+  String ltCloudUploading(int percent) {
+    return 'Uploading to the cloud… $percent%';
+  }
+
+  @override
+  String get ltCloudPreparing => 'Preparing the file…';
+
+  @override
+  String ltCloudLastBackup(String date) {
+    return 'Last backup: $date';
+  }
+
+  @override
+  String get ltCloudOpen => 'View';
+
+  @override
+  String get annTitle => 'Announcements';
+
+  @override
+  String get annOpenWeb => 'Open on the web';
+
+  @override
+  String get annSettingsSub => 'News, outages and urgent notices';
+
+  @override
+  String get annKindInfo => 'News';
+
+  @override
+  String get annKindImportant => 'Important';
+
+  @override
+  String get annKindCritical => 'Urgent';
+
+  @override
+  String get annAll => 'See all';
+
+  @override
+  String annAllWithCount(int count) {
+    return 'See all ($count)';
+  }
+
+  @override
+  String annHomeLink(int count) {
+    return 'Announcements $count';
+  }
+
+  @override
+  String get annUnread => 'New';
+
+  @override
+  String get annEmpty => 'No announcements right now.';
+
+  @override
+  String annStale(String date) {
+    return 'You\'re offline, so these are the announcements received on $date. They may have changed.';
+  }
+
+  @override
+  String get annConfirm => 'Got it';
+
+  @override
+  String get annLater => 'Later';
+
+  @override
+  String get ltBackupMake => 'Make backup file';
+
+  @override
+  String get ltBackupOpen => 'Open backup';
+
+  @override
+  String get ltBackupOpenSub =>
+      'Add a .humtrack file from another device as a new song';
+
+  @override
+  String ltBackupMade(String name) {
+    return 'Backup file made: $name\nSave it to a folder you choose, or share it, from Exported files.';
+  }
+
+  @override
+  String ltBackupMissingTakes(int count) {
+    return '$count recording(s) were already missing and aren\'t included.';
+  }
+
+  @override
+  String get ltBackupShowFiles => 'Show files';
+
+  @override
+  String get ltSongsImportMidi => 'Import MIDI';
+
+  @override
+  String get ltSongsSelect => 'Select songs';
+
+  @override
+  String ltSongsSelected(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get ltSongsSelectAll => 'Select all';
+
+  @override
+  String get ltSongsSelectCancel => 'Done selecting';
+
+  @override
+  String get ltSongsExportPicked => 'Export as backups';
+
+  @override
+  String get ltSongsDeletePicked => 'Delete';
+
+  @override
+  String ltSongsDeletePickedTitle(int count) {
+    return 'Delete $count songs?';
+  }
+
+  @override
+  String ltSongsExportedPicked(int count) {
+    return 'Made $count backup files. Save or share them from Exported files.';
+  }
+
+  @override
+  String get ltCardExport => 'Export';
+
+  @override
+  String get ltBackupFailed =>
+      'Couldn\'t make the backup file. Check your storage. The song is unchanged.';
+
+  @override
+  String ltBackupImported(String title) {
+    return 'Backup added as a new song: $title';
+  }
+
+  @override
+  String ltBackupImportedMissing(int count) {
+    return '$count recording(s) were already missing on the original device and stay empty (silent).';
+  }
+
+  @override
+  String get ltBackupNotBackup =>
+      'This isn\'t a HumTrack backup (.humtrack). Nothing was changed.';
+
+  @override
+  String get ltBackupNewer =>
+      'This backup was made by a newer HumTrack. Update the app, then open it.';
+
+  @override
+  String get ltBackupUnsafe =>
+      'The backup contains files that aren\'t allowed, so it wasn\'t opened. Nothing was changed.';
+
+  @override
+  String get ltBackupTooLarge => 'This backup is too large to open.';
+
+  @override
+  String get ltBackupMissingAudio =>
+      'A recording the song needs is missing from the backup, so it wasn\'t imported.';
+
+  @override
+  String get ltBackupDamaged =>
+      'The backup file is damaged, so it wasn\'t imported. Nothing was changed.';
+
+  @override
+  String get ltBackupImportFailed =>
+      'Couldn\'t import the backup. Check your storage. Your songs are unchanged.';
+
+  @override
+  String get ltExitSaveFailedTitle => 'Couldn\'t save';
+
+  @override
+  String get ltExitSaveFailed =>
+      'Your latest changes couldn\'t be saved, so the window stayed open. Check your storage, then save again. Your edits are still here.';
+
+  @override
+  String get ltExitKeepEditing => 'Keep editing';
+
+  @override
+  String get ltExitRetrySave => 'Save again';
+
+  @override
+  String get ltExitDiscardQuit => 'Quit without saving';
+
+  @override
   String get policyNoticeTitle => 'Updated policies';
 
   @override
@@ -2370,10 +2794,98 @@ class L10nEn extends L10n {
 
   @override
   String get ltGuidedPrepare =>
-      'In a quiet place, hum a short melody after the four count-in beats. Conversion needs an internet connection.';
+      'In a quiet place, hum after the four count-in beats, then tap Convert to stop (20 s at most). Conversion needs an internet connection.';
 
   @override
-  String get ltGuidedSteps => '1 Melody or sample  →  2 Backing  →  3 Save';
+  String get ltGuidedMelodyReady => 'Your melody is ready';
+
+  @override
+  String get ltGuidedCompareHint =>
+      'Compare your hum with the converted melody. You can also try another instrument or key.';
+
+  @override
+  String get ltGuidedMelodyHint =>
+      'Listen to the converted melody. You can also try another instrument or key.';
+
+  @override
+  String get ltGuidedPlayTake => 'My hum';
+
+  @override
+  String get ltHumAddTitle => 'Add a track by humming';
+
+  @override
+  String get ltHumAddSteps => '1 Instrument → 2 Hum → 3 Add';
+
+  @override
+  String get ltHumAddPrepare =>
+      'Pick an instrument and hum a melody. The song plays while you record (earphones keep it clean). Tap Convert when you\'re done — the melody becomes a new track.';
+
+  @override
+  String get ltHumAddInstrument => 'New track\'s instrument';
+
+  @override
+  String get ltHumAddRecord => 'Record a hum';
+
+  @override
+  String get ltHumAddRecordDesc =>
+      'The melody you hum to the song becomes a new track';
+
+  @override
+  String get ltHumAddReady => 'Your new track is ready';
+
+  @override
+  String get ltHumAddHint =>
+      'Compare it with your hum or hear it with the song. Add it if you like it.';
+
+  @override
+  String get ltHumAddPlaySong => 'Hear it with the song';
+
+  @override
+  String get ltHumAddRetake => 'Hum again';
+
+  @override
+  String get ltHumAddConfirm => 'Add this track';
+
+  @override
+  String get ltGuidedPlayNewKey => 'Hear the new key';
+
+  @override
+  String get ltGuidedPlayMelody => 'Converted melody';
+
+  @override
+  String get ltGuidedKey => 'Change key';
+
+  @override
+  String get ltGuidedMakeSong => 'Make a song with this melody';
+
+  @override
+  String get ltGuidedVoiceReady => 'Recorded';
+
+  @override
+  String get ltGuidedPlayVoice => 'Listen';
+
+  @override
+  String get ltGuidedMakeSongVoice => 'Make a song with this recording';
+
+  @override
+  String get ltGuidedSteps => '1 Record → 2 Save';
+
+  @override
+  String get ltGuidedHumTitle => 'Make a melody from a hum';
+
+  @override
+  String get ltGuidedHumDesc =>
+      'Your hummed melody becomes notes you can play with any instrument and fix note by note. Needs an internet connection.';
+
+  @override
+  String get ltGuidedVoiceTitle => 'Record your voice as it is';
+
+  @override
+  String get ltGuidedVoiceDesc =>
+      'Your singing or sound goes onto the vocal track as a recording, not notes (you can convert it later).';
+
+  @override
+  String get ltGuidedVoiceImport => 'Import a recording';
 
   @override
   String get ltSampleTitle => 'My sound samples';
@@ -2527,8 +3039,7 @@ class L10nEn extends L10n {
   String get ltFirstSongTitle => 'Make your first song';
 
   @override
-  String get ltFirstSongHint =>
-      'Hum → add backing → save\nStart free, no sign-in needed.';
+  String get ltFirstSongHint => 'Record → save\nStart free, no sign-in needed.';
 
   @override
   String get ltFilesTitle => 'Exported files';
@@ -2637,4 +3148,476 @@ class L10nEn extends L10n {
 
   @override
   String get ltGuidedKeepVocal => 'Keep my voice recording';
+
+  @override
+  String get ltVocalEditorClearFx => 'Remove all effects';
+
+  @override
+  String get ltVocalEditorRestoreOriginal => 'Restore original';
+
+  @override
+  String get ltVocalEditorFxSourceMissing =>
+      'The source recording is missing. Existing audio and effects have been kept.';
+
+  @override
+  String get ltVocalFxPresets => 'Vocal presets';
+
+  @override
+  String get ltVocalFxPresetHint =>
+      'Presets keep autotune and replace the other effects.';
+
+  @override
+  String get ltVocalFxLocal => 'Add effects · on device';
+
+  @override
+  String get ltVocalFxAmount => 'Amount';
+
+  @override
+  String get ltVocalFxAmountHint =>
+      'Applies to the next individual effect you add.';
+
+  @override
+  String get ltVocalFxServer => 'Existing effects · internet required';
+
+  @override
+  String get ltVocalPreviewOriginal => 'Hear original';
+
+  @override
+  String get ltVocalPreviewProcessed => 'Hear effects';
+
+  @override
+  String get ltVocalPreviewOriginalPlaying => 'Playing original';
+
+  @override
+  String get ltVocalPreviewProcessedPlaying => 'Playing effects';
+
+  @override
+  String get ltVocalPreviewStopped => 'Stopped';
+
+  @override
+  String get ltVocalPreviewLoading => 'Preparing comparison…';
+
+  @override
+  String get ltVocalPreviewNoEffects => 'No effects applied';
+
+  @override
+  String get ltVocalPreviewEffects => 'Applied effects';
+
+  @override
+  String get ltVocalPreviewLoop => 'Loop section';
+
+  @override
+  String get ltVocalPreviewLevel => 'Match volume';
+
+  @override
+  String get ltVocalPreviewAuto => 'Hear after applying';
+
+  @override
+  String get ltVocalPreviewFailed =>
+      'Audio could not play. Check the file and output device.';
+
+  @override
+  String get topBarBackToSongs => 'Back to songs';
+
+  @override
+  String topBarAutoSaved(String time) {
+    return 'Auto-saved $time';
+  }
+
+  @override
+  String get topBarRangeLoop => 'Toggle range loop';
+
+  @override
+  String get topBarPosition => 'Playhead (bar.beat.16th)';
+
+  @override
+  String get topBarBpmTap => 'Click to type a BPM';
+
+  @override
+  String get topBarKeyTap => 'Change key';
+
+  @override
+  String get topBarSongSettings => 'Song settings';
+
+  @override
+  String get topBarTempo => 'Tempo';
+
+  @override
+  String get topBarSwingHint => 'Applies to tracks without a groove';
+
+  @override
+  String get topBarSectionLength => 'Section length (bars)';
+
+  @override
+  String get topBarMore => 'More';
+
+  @override
+  String get topBarShortcuts => 'Keyboard shortcuts';
+
+  @override
+  String get topBarProBadge => 'PRO';
+
+  @override
+  String get shortcutPlay => 'Play / pause';
+
+  @override
+  String get shortcutRecord => 'Record';
+
+  @override
+  String get shortcutSave => 'Save';
+
+  @override
+  String get shortcutUndo => 'Undo';
+
+  @override
+  String get shortcutRedo => 'Redo';
+
+  @override
+  String get shortcutGroove => 'Groove';
+
+  @override
+  String get shortcutDuplicateLinked => 'Linked section duplicate';
+
+  @override
+  String get shortcutRangeLoop => 'Toggle range loop';
+
+  @override
+  String get shortcutMixer => 'Mixer';
+
+  @override
+  String get shortcutHelp => 'Keyboard shortcuts';
+
+  @override
+  String get shortcutHelpLegatoNote =>
+      'With the piano roll (select/edit) focused and notes to edit, Ctrl/⌘+L keeps doing legato (the whole track when nothing is selected); elsewhere it toggles the range loop.';
+
+  @override
+  String get shortcutHelpTypingNote =>
+      'Shortcuts are off while you type in a text field.';
+
+  @override
+  String get shortcutSectionWorkspace => 'Workspace';
+
+  @override
+  String get shortcutSectionPianoRoll => 'Piano roll (grid · select/edit)';
+
+  @override
+  String get shortcutSectionGuitar => 'Guitar track piano roll';
+
+  @override
+  String get shortcutSectionDrums => 'Drum grid (select mode)';
+
+  @override
+  String get shortcutEditDeselect => 'Clear selection';
+
+  @override
+  String get shortcutEditSelectAll => 'Select all';
+
+  @override
+  String get shortcutEditArpeggiate => 'Arpeggiate';
+
+  @override
+  String get shortcutEditCopy => 'Copy (selected notes)';
+
+  @override
+  String get shortcutEditPaste => 'Paste (also while drawing)';
+
+  @override
+  String get shortcutEditDuplicate => 'Duplicate';
+
+  @override
+  String get shortcutEditSplitPlayhead => 'Split at playhead';
+
+  @override
+  String get shortcutEditSplitSheet => 'Split options';
+
+  @override
+  String get shortcutEditGlue => 'Glue';
+
+  @override
+  String get shortcutEditLegato =>
+      'Legato (selection, or the whole track when nothing is selected)';
+
+  @override
+  String get shortcutEditQuantize => 'Quantize (selection, or the whole track)';
+
+  @override
+  String get shortcutEditQuantizeSettings => 'Quantize options';
+
+  @override
+  String get shortcutEditHumanize => 'Humanize (selection, or the whole track)';
+
+  @override
+  String get shortcutEditFitScale => 'Fit to scale (when the song has a scale)';
+
+  @override
+  String get shortcutEditChance => 'Chance up/down (with the chance lane open)';
+
+  @override
+  String get shortcutEditChordStampMode => 'Chord stamp mode on/off (any tool)';
+
+  @override
+  String get shortcutEditDelete => 'Delete';
+
+  @override
+  String get shortcutEditMute => 'Mute / unmute';
+
+  @override
+  String get shortcutEditChordBelow => 'Chord below the selected notes';
+
+  @override
+  String get shortcutEditChordType => 'Pick the chord type';
+
+  @override
+  String get shortcutEditMove => 'Move earlier/later';
+
+  @override
+  String get shortcutEditLength => 'Shorter/longer';
+
+  @override
+  String get shortcutEditSemitone => 'Semitone up/down';
+
+  @override
+  String get shortcutEditOctave => 'Octave up/down';
+
+  @override
+  String get shortcutGuitarStroke => 'Down/up stroke';
+
+  @override
+  String get shortcutGuitarStrings => 'Assign strings';
+
+  @override
+  String get shortcutGuitarRing => 'Ringing arpeggio';
+
+  @override
+  String get shortcutDrumToggleSelect => 'Draw ⇄ select mode (any mode)';
+
+  @override
+  String get shortcutDrumMoveFine => 'Nudge';
+
+  @override
+  String get shortcutDrumVelocity => 'Velocity up/down';
+
+  @override
+  String get shortcutDrumVelocityBig => 'Velocity up/down (big steps)';
+
+  @override
+  String get bandSongPlay => 'Play song';
+
+  @override
+  String get bandAddSection => 'Add section';
+
+  @override
+  String get bandChipTooltip =>
+      'Click: select · Double-click: rename · Right-click: menu · Wheel: repeats';
+
+  @override
+  String bandLinkedNotice(int count) {
+    return 'Edits apply to $count linked sections';
+  }
+
+  @override
+  String get bandRenameTitle => 'Section name';
+
+  @override
+  String get bandRepeats => 'Repeats';
+
+  @override
+  String get bandDeleteSection => 'Delete section';
+
+  @override
+  String get rulerTooltip =>
+      'Drag to set the loop range · drag its ends to adjust · click to move the playhead';
+
+  @override
+  String get auditionRestart => 'Restart this phrase';
+
+  @override
+  String soloCompareFull(int count) {
+    return 'Solo $count · compare full mix';
+  }
+
+  @override
+  String get soloCompareBack => 'Full mix · compare Solo';
+
+  @override
+  String get soloClear => 'Clear';
+
+  @override
+  String get soloOpenVelocity => 'View velocity';
+
+  @override
+  String get soloIssueMuted => 'Mute is on';
+
+  @override
+  String get soloIssueZeroVolume => 'Track volume is zero';
+
+  @override
+  String get soloIssueNoNotes => 'No notes or audio in this range';
+
+  @override
+  String soloIssueVeryQuiet(int min, int max) {
+    return 'Velocity $min–$max/127 · may be very quiet';
+  }
+
+  @override
+  String get soloIssueOpenHint => 'Click to view velocity';
+
+  @override
+  String get shortcutViewToggle => 'Arrange ↔ edit view';
+
+  @override
+  String get shortcutOpenEditor => 'Edit the selected track (arrange view)';
+
+  @override
+  String get viewArrange => 'Arrange';
+
+  @override
+  String get viewEdit => 'Edit';
+
+  @override
+  String get viewLocked => 'Views can\'t change while recording';
+
+  @override
+  String minimapEditing(String track) {
+    return 'Editing $track';
+  }
+
+  @override
+  String get minimapToArrange => 'Back to the arrange view';
+
+  @override
+  String get minimapOverviewTooltip =>
+      'Whole song · click: move the playhead · drag the box: scroll the piano roll';
+
+  @override
+  String get arrangeHint => 'Double-click a track or press Enter to edit it';
+
+  @override
+  String get shortcutInspector => 'Show / hide the inspector';
+
+  @override
+  String get inspectorTrack => 'Track';
+
+  @override
+  String inspectorNotes(int count) {
+    return 'Notes $count';
+  }
+
+  @override
+  String get inspectorCollapse => 'Hide the inspector';
+
+  @override
+  String get inspectorExpand => 'Show the inspector';
+
+  @override
+  String inspectorSummary(int notes, int bars) {
+    return '$notes notes · $bars bars';
+  }
+
+  @override
+  String get inspectorInstrument => 'Instrument';
+
+  @override
+  String get inspectorOctave => 'Octave';
+
+  @override
+  String get inspectorVolume => 'Volume';
+
+  @override
+  String get inspectorPan => 'Pan';
+
+  @override
+  String get inspectorPanHint => 'Double-click or Alt+click: centre';
+
+  @override
+  String get inspectorMute => 'Mute';
+
+  @override
+  String get inspectorGroove => 'Groove';
+
+  @override
+  String get inspectorGrooveNone => 'None';
+
+  @override
+  String get inspectorHum => 'Add notes by humming';
+
+  @override
+  String get inspectorMidiImport => 'Import a MIDI passage';
+
+  @override
+  String get inspectorClear => 'Clear this track';
+
+  @override
+  String get inspectorNoNotes =>
+      'Switch to Grid and select notes to edit them here';
+
+  @override
+  String get inspectorArrangeOnly => 'The arrange view shows the Track tab';
+
+  @override
+  String inspectorSelectedNotes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count notes selected',
+      one: '1 note selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get inspectorPosition => 'Position';
+
+  @override
+  String get inspectorLength => 'Length';
+
+  @override
+  String get inspectorMore => 'More';
+
+  @override
+  String get inspectorGuitar => 'Guitar stroke · strings';
+
+  @override
+  String get inspectorSettings => 'Settings';
+
+  @override
+  String get inspectorDrumSelectHint => 'Pick hits in Select mode';
+
+  @override
+  String get velocityLaneRow => 'Velocity · chance';
+
+  @override
+  String get velocityLaneFold => 'Fold the velocity lane';
+
+  @override
+  String get velocityLaneUnfold => 'Show the velocity lane';
+
+  @override
+  String get gridInKeyOnly => 'In-key notes only';
+
+  @override
+  String get gridInKeyOnlyTip =>
+      'Hides empty rows outside the key; new notes land in the key';
+
+  @override
+  String gridOutOfKeyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count notes out of key',
+      one: '1 note out of key',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get humPrimary => 'Add by humming';
+
+  @override
+  String get shortcutHum => 'Add notes by humming';
+
+  @override
+  String get shortcutHelpHumNote =>
+      'With the piano roll or drum grid focused and notes to edit, Ctrl/⌘+Shift+H keeps doing humanize; elsewhere it opens humming for the active track.';
 }

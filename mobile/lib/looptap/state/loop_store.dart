@@ -3,6 +3,8 @@
 // 노출하는 thin facade. 키 미설정 / 스토어 미가용 시 services 가 자체적으로
 // 비활성(enabled=false) 되므로 여기서는 그대로 흘려보낸다.
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -25,6 +27,17 @@ enum RestoreOutcome { restored, alreadyActive, nothingFound, error }
 
 /// [LoopStore.deleteAccount] 실패 사유 — UI 가 l10n 으로 해석 (audit M9/M12).
 enum DeleteAccountFailure { notSignedIn, rejected, network }
+
+/// A queued deletion must never be described as an already completed purge.
+enum AccountDeletionReceipt {
+  complete, pending, rejected;
+
+  static AccountDeletionReceipt fromResponse(int status, Object? body) {
+    if (status == 200 || status == 204) return complete;
+    if (status == 202 && body is Map && body['status'] == 'deletion_pending') return pending;
+    return rejected;
+  }
+}
 
 class DeleteAccountError {
   const DeleteAccountError(this.kind, {this.code});
@@ -69,6 +82,16 @@ class LoopStore extends ChangeNotifier {
 
   List<Song> get songs => List.unmodifiable(_songs);
   bool get loaded => _loaded;
+
+  /// What loading the library had to do (storage audit 2026-10-30), shown on
+  /// the song list until dismissed.
+  LoadIssue _loadIssue = LoadIssue.none;
+  LoadIssue get loadIssue => _loadIssue;
+  void dismissLoadIssue() {
+    if (_loadIssue == LoadIssue.none) return;
+    _loadIssue = LoadIssue.none;
+    notifyListeners();
+  }
   Map<String, String>? get user => _user;
   bool get isSignedIn => _user != null;
   // Debug-only Pro override so paywall-gated features (export) can be exercised
@@ -117,6 +140,7 @@ class LoopStore extends ChangeNotifier {
     await SoundfontCatalog.instance.warm();
     unawaited(SoundfontCatalog.instance.refresh());
     final loaded = await LoopStorage.load();
+    _loadIssue = LoopStorage.lastIssue;
     // Seed the demos exactly once per install (C30): an empty library after
     // the user deleted everything stays empty. NEVER seed + persist over an
     // unreadable songs.json (C1) — that would overwrite the user's data with
@@ -277,7 +301,11 @@ class LoopStore extends ChangeNotifier {
 
   /// 회원 탈퇴 — backend DELETE /account → Supabase user + 관련 row 삭제 → 로컬
   /// signOut. 실패 시 사유 반환 (문구는 UI 가 l10n 으로).
+  bool _accountDeletionPending = false;
+  bool get accountDeletionPending => _accountDeletionPending;
+
   Future<DeleteAccountError?> deleteAccount() async {
+    _accountDeletionPending = false;
     if (!AuthService.instance.enabled || _user == null) {
       return const DeleteAccountError(DeleteAccountFailure.notSignedIn);
     }
@@ -286,10 +314,12 @@ class LoopStore extends ChangeNotifier {
       final dio = engineApi.dio;
       final res = await dio.delete<dynamic>(
         '/account',
-        options: Options(validateStatus: (_) => true),
+        options: Options(validateStatus: (_) => true,
+          headers: {'X-Account-Deletion-Receipt': 'pending-v1'}),
       );
       final code = res.statusCode ?? 0;
-      if (code != 200 && code != 204) {
+      final receipt = AccountDeletionReceipt.fromResponse(code, res.data);
+      if (receipt == AccountDeletionReceipt.rejected) {
         ObservabilityService.instance.captureException(
           StateError('account delete rejected ($code)'),
           StackTrace.current,
@@ -298,6 +328,7 @@ class LoopStore extends ChangeNotifier {
         );
         return DeleteAccountError(DeleteAccountFailure.rejected, code: code);
       }
+      _accountDeletionPending = receipt == AccountDeletionReceipt.pending;
       await signOut();
       return null;
     } catch (e, st) {
@@ -342,8 +373,12 @@ class LoopStore extends ChangeNotifier {
   Future<void> loadProducts() => IapService.instance.loadProducts();
 
   /// null = 스토어 시트가 떴음 (결과는 IapService.onPurchaseResult).
-  Future<IapError?> buyMonthly() => IapService.instance.buy(kProductMonthly);
-  Future<IapError?> buyYearly() => IapService.instance.buy(kProductYearly);
+  /// [onAlreadyOwned]: Android 에서 이미 다른 Pro 구독이 자동 갱신 중이라
+  /// 새 결제 대신 그 영수증을 검증할 때, 결과가 올 상품 id 로 호출된다.
+  Future<IapError?> buyMonthly({void Function(String)? onAlreadyOwned}) =>
+      IapService.instance.buy(kProductMonthly, onAlreadyOwned: onAlreadyOwned);
+  Future<IapError?> buyYearly({void Function(String)? onAlreadyOwned}) =>
+      IapService.instance.buy(kProductYearly, onAlreadyOwned: onAlreadyOwned);
 
   /// 구매 복원 (audit M6): 스토어 restore 를 요청하고 **첫 결과**(onPurchaseResult)
   /// 또는 pro 가 켜지는 상태 변화를 [timeout] 까지 기다린 뒤 /iap/status 로
@@ -528,11 +563,26 @@ class LoopStore extends ChangeNotifier {
   Song createNew() {
     final s = Song(
       id: 'lt${DateTime.now().millisecondsSinceEpoch}',
-      title: 'Untitled loop',
+      title: nextUntitledTitle(_songs.map((s) => s.title)),
       updatedAt: DateTime.now(),
     );
     return s;
   }
+
+  /// "Untitled loop N" with the next free N (2026-11-02: new songs used to
+  /// all be "Untitled loop" and couldn't be told apart).
+  static String nextUntitledTitle(Iterable<String> titles) {
+    var max = 0;
+    for (final t in titles) {
+      final m = kUntitledTitle.firstMatch(t.trim());
+      if (m == null) continue;
+      max = math.max(max, int.tryParse(m.group(1) ?? '') ?? 0);
+    }
+    return 'Untitled loop ${max + 1}';
+  }
+
+  /// The default title of a new song, with or without its number.
+  static final kUntitledTitle = RegExp(r'^Untitled loop(?: (\d+))?$');
 
   Future<void> upsert(Song song) {
     final snapshot = Song.fromJson(song.toJson())..updatedAt = DateTime.now();
@@ -560,30 +610,43 @@ class LoopStore extends ChangeNotifier {
   Future<void> sweepVocals() =>
       _changeSongs(() => LoopStorage.sweepVocals(_songs));
 
+  /// Add [song] (a new id) together with the audio files [write] puts in
+  /// place, as one library change: no vocal sweep can run between the files
+  /// landing and the library referencing them. If writing or saving fails,
+  /// [undo] removes what was written and the error is rethrown (storage
+  /// audit 2026-10-30: project backup import).
+  Future<void> addWithFiles(
+    Song song, {
+    required Future<void> Function() write,
+    required Future<void> Function() undo,
+  }) {
+    final snapshot = Song.fromJson(song.toJson())..updatedAt = DateTime.now();
+    return _changeSongs(() async {
+      if (_songs.any((s) => s.id == snapshot.id)) {
+        throw StateError('song ${snapshot.id} already exists');
+      }
+      try {
+        await write();
+        await _commitSongs([snapshot, ..._songs]);
+      } catch (_) {
+        await undo();
+        rethrow;
+      }
+    });
+  }
+
   /// 새 ID 로 deep-copy + " (copy)" suffix. 새 노래는 grid 맨 앞으로.
+  /// JSON 왕복으로 복제 — 필드를 하나씩 옮기면 generationLocks 처럼 새로
+  /// 추가된 필드가 조용히 빠진다. jsonEncode 를 거쳐 공유 참조도 남지 않는다.
   Future<Song> duplicate(Song src) async {
-    final dup = Song(
-      id: 'lt${DateTime.now().millisecondsSinceEpoch}',
-      title: '${src.title} (copy)',
-      key: src.key,
-      scale: src.scale,
-      bpm: src.bpm,
-      swing: src.swing,
-      bars: src.bars,
-      vol: Map.of(src.vol),
-      mutes: Map.of(src.mutes),
-      instruments: Map.of(src.instruments),
-      sections: src.sections.map((s) => s.deepCopy()).toList(),
-      wave: List<double>.of(src.wave),
-      songVocalPath: src.songVocalPath,
-      songVocalPeaks:
-          src.songVocalPeaks == null
-              ? null
-              : List<double>.of(src.songVocalPeaks!),
-      songVocalBpm: src.songVocalBpm,
-      songVocalBars: src.songVocalBars,
-      updatedAt: DateTime.now(),
-    );
+    final dup =
+        Song.fromJson(
+            (jsonDecode(jsonEncode(src.toJson())) as Map)
+                .cast<String, dynamic>(),
+          )
+          ..id = 'lt${DateTime.now().millisecondsSinceEpoch}'
+          ..title = '${src.title} (copy)'
+          ..updatedAt = DateTime.now();
     await upsert(dup);
     return dup;
   }

@@ -1,0 +1,18 @@
+[INFO] git: current branch: main
+[WARN] git: 1 uncommitted change(s)
+[WARN] git: branch 'codex/fix-landing-product-update': upstream deleted
+[WARN] git: branch 'codex/humtrack-feedback-plan': upstream deleted
+[INFO] git: branch 'codex/humtrack-guided-creation' committed history is already contained in origin/main (no unpublished commits)
+[INFO] git: branch 'codex/humtrack-mobile-quality-20260928' committed history is already contained in origin/main (no unpublished commits)
+[WARN] git: worktree outside .worktrees/: C:\dev\Handy_code\.worktrees\humtrack-landing-update
+[WARN] git: worktree outside .worktrees/: C:\dev\Handy_code\humtrack-songplan
+[WARN] git: worktree outside .worktrees/: C:\Users\jlion\.codex\worktrees\35fd\humming-v2
+[WARN] git: worktree outside .worktrees/: C:\Users\jlion\.codex\worktrees\76f2\humming-v2
+[WARN] git: worktree outside .worktrees/: C:\Users\jlion\.codex\worktrees\humtrack-login-hotfix\humming-v2
+[FAIL] tools: flutter not on PATH
+[PASS] tools: JDK 17
+[PASS] config: .env.secrets has all required keys
+[PASS] config: Sentry DSN targets humtrack-mobile
+[PASS] config: matches committed fingerprints
+
+1 FAIL, 8 WARN

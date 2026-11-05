@@ -57,6 +57,11 @@ def test_invalid_rows_are_skipped(catalog_dir):
         {"id": "bad_role", "slot": 1003, "label": "X", "role": "synth", "file": "ok.sf2"},
         {"id": "missing_file", "slot": 1004, "label": "X", "role": "melody", "file": "nope.sf2"},
         {"id": "missing_fields", "slot": 1005},
+        # a non-integer bank/program/fallback drops the row, not the catalog
+        {"id": "bad_bank", "slot": 1006, "label": "X", "role": "melody", "file": "ok.sf2",
+         "sf_bank": "x"},
+        {"id": "bad_fallback", "slot": 1007, "label": "X", "role": "melody", "file": "ok.sf2",
+         "midi_fallback": None},
     ])
     cat = sf.load_catalog()
     assert [e["id"] for e in cat] == ["ok"]

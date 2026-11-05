@@ -1,0 +1,4 @@
+• Song card ⋯ → 'Back up to cloud' puts a copy in your account's cloud when you choose (sign-in, Pro)
+• Recordings go along only when ticked. Progress is shown, and a failed upload can be retried
+• Settings › Cloud backup restores a copy as a new song on this device; nothing is overwritten
+• Delete only the cloud copy; restore and delete keep working after a subscription ends

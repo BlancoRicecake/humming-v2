@@ -46,6 +46,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLabel"] = "HumTrack"
     }
 
     signingConfigs {
@@ -60,14 +61,60 @@ android {
     }
 
     buildTypes {
-        release {
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                // Fallback to debug keys so `flutter run --release` still works locally without key.properties.
-                signingConfigs.getByName("debug")
+        debug {
+            // Side-by-side dev install (2026-11-02): with the Gradle property
+            // humtrackDev (-P humtrackDev=true; the env-var form was not picked up) the debug build
+            // gets its own package and name, so installing it never replaces —
+            // or makes `flutter run` uninstall — a store install and its songs.
+            if (project.hasProperty("humtrackDev")) {
+                applicationIdSuffix = ".dev"
+                manifestPlaceholders["appLabel"] = "HumTrack Dev"
             }
         }
+        release {
+            // Never fall back to the debug keystore: without key.properties the
+            // release variant stays unsigned and verifyReleaseSigningConfiguration
+            // (below) fails the build before anything is packaged. Debug/profile
+            // builds are unaffected.
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
+}
+
+// Mirrors verifyReleaseAuthConfiguration (auth-config.gradle): runs for every
+// Flutter release compilation (APK, AAB, flavored release variants). Never
+// print keystore values.
+val releaseKeystoreFile = keystorePropertiesFile
+val verifyReleaseSigning = tasks.register("verifyReleaseSigningConfiguration") {
+    group = "verification"
+    description = "Reject release builds without android/key.properties (no debug-key fallback)."
+    doLast {
+        if (!releaseKeystoreFile.exists()) {
+            throw GradleException(
+                "android/key.properties is missing; release build blocked " +
+                    "(it would otherwise be signed with the debug key). " +
+                    "Provide the upload keystore configuration or build debug/profile instead."
+            )
+        }
+        val props = Properties()
+        FileInputStream(releaseKeystoreFile).use { props.load(it) }
+        val required = listOf("keyAlias", "keyPassword", "storeFile", "storePassword")
+        val missing = required.filter { props.getProperty(it).isNullOrBlank() }
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "android/key.properties is incomplete (missing: " + missing.joinToString(", ") +
+                    "); release build blocked."
+            )
+        }
+        logger.lifecycle("Release signing configuration verified (key.properties present).")
+    }
+}
+
+tasks.configureEach {
+    if (name.startsWith("compileFlutterBuild") && name.endsWith("Release")) {
+        dependsOn(verifyReleaseSigning)
     }
 }
 

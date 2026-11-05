@@ -61,6 +61,14 @@ class AuthEvent {
   final String? detail;
 }
 
+/// OAuth return scheme (PKCE: the callback must reach the app that started the
+/// sign-in). The direct-download Mac build (flavor `direct`, bundle
+/// com.humtrack.app.direct) registers `humtrack-direct` so its callback never
+/// lands in the App Store app on the same Mac; every other build uses `humtrack`.
+const String kAuthCallbackScheme =
+    String.fromEnvironment('HUMTRACK_AUTH_SCHEME', defaultValue: 'humtrack');
+const String kAuthCallbackUrl = '$kAuthCallbackScheme://auth/callback';
+
 class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
@@ -200,7 +208,7 @@ class AuthService {
       }
       await sb.Supabase.instance.client.auth.signInWithOAuth(
         p,
-        redirectTo: 'humtrack://auth/callback',
+        redirectTo: kAuthCallbackUrl,
       );
       return true;
     } catch (e, st) {

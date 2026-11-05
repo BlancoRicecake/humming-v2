@@ -25,10 +25,15 @@ class MainActivity : FlutterActivity() {
                     val source = java.io.File(call.argument<String>("path") ?: "").canonicalFile
                     val folder = java.io.File(io.flutter.util.PathUtils.getDataDirectory(this), "looptap/exports").canonicalFile
                     require(source.parentFile == folder && source.isFile)
-                    require(source.extension.lowercase() in setOf("wav", "mid"))
+                    require(source.extension.lowercase() in setOf("wav", "mid", "humtrack"))
                     val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
-                        type = if (source.extension.lowercase() == "mid") "audio/midi" else "audio/wav"
+                        type = when (source.extension.lowercase()) {
+                            "mid" -> "audio/midi"
+                            // .humtrack project backup (ZIP): keep the extension
+                            "humtrack" -> "application/octet-stream"
+                            else -> "audio/wav"
+                        }
                         putExtra(Intent.EXTRA_TITLE, source.name)
                     }
                     pendingExport = result

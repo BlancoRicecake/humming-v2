@@ -1,3 +1,5 @@
+import 'dart:ui' show ViewFocusEvent, ViewFocusState;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../state/loop_prefs.dart';
@@ -70,7 +72,8 @@ List<PhysicalKeyboardKey> instrumentKeys(String group, List<int>? saved) {
   return saved.map(PhysicalKeyboardKey.new).toList();
 }
 
-/// Focus-scoped physical keys keep Korean IME and text editing independent.
+/// Route-scoped physical keys keep playing after toolbar focus changes while
+/// leaving text editing, dialogs and shortcuts independent.
 class DesktopInstrument extends StatefulWidget {
   const DesktopInstrument({
     super.key,
@@ -79,12 +82,21 @@ class DesktopInstrument extends StatefulWidget {
     required this.labels,
     required this.onDown,
     required this.child,
+    this.capturePointerFocus = true,
+    this.showKeyHints = true,
   });
   final String group;
   final Object identity;
   final List<String> labels;
   final VoidCallback Function(int) onDown;
   final Widget child;
+
+  /// Embedded editors own their focus; hardware instrument keys still route.
+  final bool capturePointerFocus;
+
+  /// The key-hint row above the surface (hidden by the grid's 편집 확대;
+  /// the hardware keys keep playing).
+  final bool showKeyHints;
   @override
   State<DesktopInstrument> createState() => _DesktopInstrumentState();
 }
@@ -93,6 +105,8 @@ class _DesktopInstrumentState extends State<DesktopInstrument>
     with WidgetsBindingObserver {
   final _focus = FocusNode(debugLabel: 'Instrument keyboard');
   final _held = <PhysicalKeyboardKey, VoidCallback>{};
+  bool _appActive = true;
+  bool _windowFocused = true;
   bool get _ko => Localizations.localeOf(context).languageCode == 'ko';
   void _release() {
     final callbacks = _held.values.toList();
@@ -106,6 +120,8 @@ class _DesktopInstrumentState extends State<DesktopInstrument>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_hardwareKey);
+    FocusManager.instance.addListener(_release);
   }
 
   @override
@@ -118,15 +134,47 @@ class _DesktopInstrumentState extends State<DesktopInstrument>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) _release();
+    _appActive = state == AppLifecycleState.resumed;
+    if (!_appActive) _release();
+  }
+
+  @override
+  void didChangeViewFocus(ViewFocusEvent event) {
+    if (!mounted || event.viewId != View.of(context).viewId) return;
+    _windowFocused = event.state == ViewFocusState.focused;
+    if (!_windowFocused) _release();
   }
 
   @override
   void dispose() {
     _release();
+    HardwareKeyboard.instance.removeHandler(_hardwareKey);
+    FocusManager.instance.removeListener(_release);
     WidgetsBinding.instance.removeObserver(this);
     _focus.dispose();
     super.dispose();
+  }
+
+  bool _hardwareKey(KeyEvent event) {
+    if (!mounted) return false;
+    final keys = instrumentKeys(
+      widget.group,
+      LoopPrefs.instance.keyboardBindings.value[widget.group],
+    );
+    // Always release keys we own, including after a modal or window change.
+    if (event is KeyUpEvent) {
+      return _key(event, keys) == KeyEventResult.handled;
+    }
+    final focused = FocusManager.instance.primaryFocus?.context;
+    if (!_appActive ||
+        !_windowFocused ||
+        event.synthesized ||
+        ModalRoute.of(context)?.isCurrent == false ||
+        focused?.widget is EditableText ||
+        focused?.findAncestorWidgetOfExactType<EditableText>() != null) {
+      return false;
+    }
+    return _key(event, keys) == KeyEventResult.handled;
   }
 
   KeyEventResult _key(KeyEvent event, List<PhysicalKeyboardKey> keys) {
@@ -283,30 +331,52 @@ class _DesktopInstrumentState extends State<DesktopInstrument>
         onFocusChange: (focused) {
           if (!focused) _release();
         },
-        onKeyEvent: (_, event) => _key(event, keys),
         child: Listener(
-          onPointerDown: (_) => _focus.requestFocus(),
+          onPointerDown:
+              widget.capturePointerFocus ? (_) => _focus.requestFocus() : null,
           child: Column(
             children: [
+              if (widget.showKeyHints)
               SizedBox(
                 height: 40,
                 child: Row(
                   children: [
                     Expanded(
-                      child: Row(children: [
-                        for (var i = 0; i < widget.labels.length && i < keys.length; i++)
-                          Expanded(child: Center(child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(color: LT.surface2,
-                              border: Border.all(color: LT.borderStrong),
-                              borderRadius: BorderRadius.circular(5)),
-                            child: Text(widget.group == 'piano'
-                              ? instrumentKeyLabel(keys[i])
-                              : '${instrumentKeyLabel(keys[i])} · ${widget.labels[i]}',
-                              maxLines: 1, overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: LT.t2, fontSize: 12)),
-                          ))),
-                      ]),
+                      child: Row(
+                        children: [
+                          for (
+                            var i = 0;
+                            i < widget.labels.length && i < keys.length;
+                            i++
+                          )
+                            Expanded(
+                              child: Center(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: LT.surface2,
+                                    border: Border.all(color: LT.borderStrong),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Text(
+                                    widget.group == 'piano'
+                                        ? instrumentKeyLabel(keys[i])
+                                        : '${instrumentKeyLabel(keys[i])} · ${widget.labels[i]}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: LT.t2,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                     IconButton(
                       tooltip: _ko ? '연주 키 설정' : 'Instrument keys',

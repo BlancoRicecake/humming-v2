@@ -1,5 +1,6 @@
 require "minitest/autorun"
 require "tmpdir"
+require "fileutils"
 require_relative "release_support"
 
 class ReleaseSupportTest < Minitest::Test
@@ -63,10 +64,17 @@ class ReleaseSupportTest < Minitest::Test
     refute target.rejected
   end
 
+  # required settings + an explicit cloud decision (off)
+  def required_env
+    HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }.merge("HUMTRACK_CLOUD_BACKUP" => "false")
+  end
+
   def configuration
     HumTrackRelease::DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }.merge(
       "APP_ENVIRONMENT" => "staging",
       "FIREBASE_ANALYTICS_ENABLED" => "false",
+      "SENTRY_ENVIRONMENT" => "production",
+      "HUMTRACK_CLOUD_BACKUP" => "false",
     )
   end
 
@@ -87,8 +95,138 @@ class ReleaseSupportTest < Minitest::Test
     refute_includes error.message, "https://private.example"
   end
 
-  def test_optional_analytics_settings_do_not_block_existing_releases
+  def test_sentry_environment_is_explicit_and_validated
+    required = required_env
+    refute HumTrackRelease.defines(env: required, secrets_path: "/absent").key?("SENTRY_ENVIRONMENT")
+    internal = HumTrackRelease.defines(env: required.merge("SENTRY_ENVIRONMENT" => "internal"), secrets_path: "/absent")
+    assert_equal "internal", internal["SENTRY_ENVIRONMENT"]
+    error = assert_raises(ArgumentError) do
+      HumTrackRelease.defines(env: required.merge("SENTRY_ENVIRONMENT" => "debug"), secrets_path: "/absent")
+    end
+    assert_includes error.message, "SENTRY_ENVIRONMENT"
+  end
+
+  # ── cloud release gate (2026-11-04) ──
+  CLOUD_HOST = "api.example.test"
+  NOW = Time.utc(2026, 11, 4, 12)
+
+  def cloud_env(dir, receipt: {}, verified: CLOUD_HOST, flag: "true")
     required = HumTrackRelease::REQUIRED_DEFINE_KEYS.to_h { |key| [key, "value-#{key}"] }
+    required["ENGINE_URL"] = "https://#{CLOUD_HOST}"
+    path = File.join(dir, "receipt.json")
+    File.write(path, JSON.generate({
+      "kind" => "humtrack-cloud-provider-receipt", "passed" => true, "cleanup_confirmed" => true,
+      "api_host" => CLOUD_HOST, "checked_at" => (NOW - 3600).utc.iso8601, "server_version" => "abc1234",
+    }.merge(receipt)))
+    required.merge(
+      "HUMTRACK_CLOUD_BACKUP" => flag,
+      "HUMTRACK_CLOUD_SERVICE_VERIFIED" => verified,
+      "HUMTRACK_CLOUD_PROVIDER_RECEIPT" => path,
+    ).compact
+  end
+
+  def ready(extra = {})
+    ->(url) do
+      raise "unexpected #{url}" unless url == "https://#{CLOUD_HOST}/health/cloud"
+      {"ready" => true, "contract" => 1, "version" => "abc1234"}.merge(extra)
+    end
+  end
+
+  def cloud_defines(env, probe: ready)
+    HumTrackRelease.defines(env: env, secrets_path: "/absent", probe: probe, now: NOW)
+  end
+
+  def test_cloud_off_needs_nothing_and_qa_flags_never_reach_a_build
+    json = JSON.generate("HUMTRACK_QA_PRO" => "true", "HUMTRACK_QA_ANNOUNCEMENTS" => "true")
+    never = ->(_) { raise "no network for a cloud-off build" }
+    off = HumTrackRelease.defines(env: required_env.merge("HUMTRACK_DART_DEFINES_JSON" => json),
+                                  secrets_path: "/absent", probe: never)
+    assert_equal "false", off["HUMTRACK_CLOUD_BACKUP"]
+    refute off.key?("HUMTRACK_QA_PRO")
+    refute off.key?("HUMTRACK_QA_ANNOUNCEMENTS")
+  end
+
+  def test_cloud_must_be_decided_explicitly
+    # a build machine without the setting (e.g. the Mac) stops instead of
+    # quietly building cloud OFF
+    missing = required_env.reject { |key, _| key == "HUMTRACK_CLOUD_BACKUP" }
+    [missing, missing.merge("HUMTRACK_CLOUD_BACKUP" => "")].each do |env|
+      error = assert_raises(ArgumentError) { HumTrackRelease.defines(env: env, secrets_path: "/absent") }
+      assert_includes error.message, "HUMTRACK_CLOUD_BACKUP=true"
+    end
+  end
+
+  def test_cloud_on_builds_when_server_attestation_and_receipt_agree
+    Dir.mktmpdir do |dir|
+      result = cloud_defines(cloud_env(dir))
+      assert_equal "true", result["HUMTRACK_CLOUD_BACKUP"]
+      # the operator inputs steer the gate only; they are never compiled in
+      refute result.key?("HUMTRACK_CLOUD_SERVICE_VERIFIED")
+      refute result.key?("HUMTRACK_CLOUD_PROVIDER_RECEIPT")
+    end
+  end
+
+  def test_cloud_on_refuses_a_bad_flag_value
+    Dir.mktmpdir do |dir|
+      error = assert_raises(ArgumentError) { cloud_defines(cloud_env(dir, flag: "yes")) }
+      assert_includes error.message, "HUMTRACK_CLOUD_BACKUP"
+    end
+  end
+
+  def test_cloud_on_needs_the_operator_attestation_for_this_server
+    Dir.mktmpdir do |dir|
+      [nil, "", "staging.example.test"].each do |verified|
+        error = assert_raises(ArgumentError) { cloud_defines(cloud_env(dir, verified: verified)) }
+        assert_includes error.message, "HUMTRACK_CLOUD_SERVICE_VERIFIED=#{CLOUD_HOST}"
+      end
+    end
+  end
+
+  def test_cloud_on_needs_a_fresh_passed_receipt_for_this_server
+    Dir.mktmpdir do |dir|
+      [
+        {"passed" => false},
+        {"cleanup_confirmed" => false},
+        {"api_host" => "staging.example.test"},
+        {"checked_at" => (NOW - 15 * 24 * 3600).utc.iso8601},
+        {"checked_at" => (NOW + 3600).utc.iso8601},
+        {"checked_at" => "yesterday"},
+        {"kind" => "something-else"},
+        {"server_version" => ""},
+      ].each do |bad|
+        error = assert_raises(ArgumentError) { cloud_defines(cloud_env(dir, receipt: bad)) }
+        assert_includes error.message, "receipt", bad.inspect
+      end
+      env = cloud_env(dir)
+      File.write(env["HUMTRACK_CLOUD_PROVIDER_RECEIPT"], "{not json")
+      assert_raises(ArgumentError) { cloud_defines(env) }
+      env.delete("HUMTRACK_CLOUD_PROVIDER_RECEIPT")
+      assert_raises(ArgumentError) { cloud_defines(env) }
+    end
+  end
+
+  def test_cloud_on_needs_a_ready_server_running_the_tested_version
+    Dir.mktmpdir do |dir|
+      env = cloud_env(dir)
+      [ready("ready" => false), ready("contract" => 2), ->(_) { raise "HTTP 404" }, ->(_) { "not a hash" }].each do |probe|
+        error = assert_raises(ArgumentError) { cloud_defines(env, probe: probe) }
+        assert_includes error.message, "not ready"
+      end
+      error = assert_raises(ArgumentError) { cloud_defines(env, probe: ready("version" => "newer99")) }
+      assert_includes error.message, "another backend version"
+    end
+  end
+
+  def test_cloud_on_needs_an_https_engine
+    Dir.mktmpdir do |dir|
+      env = cloud_env(dir).merge("ENGINE_URL" => "http://#{CLOUD_HOST}")
+      error = assert_raises(ArgumentError) { cloud_defines(env) }
+      assert_includes error.message, "https"
+    end
+  end
+
+  def test_optional_analytics_settings_do_not_block_existing_releases
+    required = required_env
     result = HumTrackRelease.defines(env: required, secrets_path: "/absent")
     assert_equal required, result
     refute result.key?("FIREBASE_ANALYTICS_ENABLED")
@@ -217,6 +355,71 @@ class ReleaseSupportTest < Minitest::Test
       assert_raises(ArgumentError) do
         HumTrackRelease.require_google_plist!(path: File.join(dir, "missing.plist"))
       end
+    end
+  end
+
+  def test_mac_defines_set_every_channel_value_explicitly
+    store = HumTrackRelease.mac_defines("app-store", {"A" => "1"})
+    assert_equal "true", store["HUMTRACK_MAC_APP_STORE"]
+    assert_equal "humtrack", store["HUMTRACK_AUTH_SCHEME"]
+    direct = HumTrackRelease.mac_defines("direct", {"A" => "1"})
+    assert_equal "false", direct["HUMTRACK_MAC_APP_STORE"]
+    assert_equal "humtrack-direct", direct["HUMTRACK_AUTH_SCHEME"]
+    assert_equal "1", direct["A"]
+    assert_raises(ArgumentError) { HumTrackRelease.mac_defines("mas", {}) }
+    assert_raises(ArgumentError) { HumTrackRelease.mac_defines(nil, {}) }
+  end
+
+  def test_mac_flavor_and_app_path_follow_the_channel
+    assert_equal [], HumTrackRelease.mac_flavor_args("app-store")
+    assert_equal ["--flavor", "direct"], HumTrackRelease.mac_flavor_args("direct")
+    assert_equal "/b/Release/HumTrack.app", HumTrackRelease.mac_app_path("app-store", build_root: "/b")
+    assert_equal "/b/Release-direct/HumTrack.app", HumTrackRelease.mac_app_path("direct", build_root: "/b")
+  end
+
+  def test_defines_never_pass_mac_channel_values_through_env
+    %w[HUMTRACK_MAC_APP_STORE HUMTRACK_AUTH_SCHEME].each do |key|
+      refute_includes HumTrackRelease::DEFINE_KEYS, key
+    end
+  end
+
+  def write_mac_app(dir, contents)
+    bin = File.join(dir, "HumTrack.app/Contents/Frameworks/App.framework/Versions/A")
+    FileUtils.mkdir_p(bin)
+    File.binwrite(File.join(bin, "App"), contents)
+    File.join(dir, "HumTrack.app")
+  end
+
+  def plist(bundle_id, scheme)
+    ->(_path) { {"CFBundleIdentifier" => bundle_id, "CFBundleURLTypes" => [{"CFBundleURLSchemes" => [scheme]}]} }
+  end
+
+  STORE_BINARY = "\x00humtrack-mac-channel:app-store\x00humtrack://auth/callback\x00"
+  DIRECT_BINARY = "\x00humtrack-mac-channel:direct\x00humtrack-direct://auth/callback\x00"
+
+  def test_verify_mac_channel_accepts_matching_builds
+    Dir.mktmpdir do |dir|
+      store = write_mac_app(File.join(dir, "s"), STORE_BINARY)
+      HumTrackRelease.verify_mac_channel!(store, "app-store", plist_reader: plist("com.humtrack.app", "humtrack"))
+      direct = write_mac_app(File.join(dir, "d"), DIRECT_BINARY)
+      HumTrackRelease.verify_mac_channel!(direct, "direct", plist_reader: plist("com.humtrack.app.direct", "humtrack-direct"))
+    end
+  end
+
+  def test_verify_mac_channel_rejects_any_mismatch
+    Dir.mktmpdir do |dir|
+      store = write_mac_app(File.join(dir, "s"), STORE_BINARY)
+      ok = plist("com.humtrack.app", "humtrack")
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(store, "direct", plist_reader: ok) }
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(store, "app-store", plist_reader: plist("com.humtrack.app.direct", "humtrack")) }
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(store, "app-store", plist_reader: plist("com.humtrack.app", "humtrack-direct")) }
+      wrong_cb = write_mac_app(File.join(dir, "w"), "humtrack-mac-channel:app-store humtrack-direct://auth/callback")
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(wrong_cb, "app-store", plist_reader: ok) }
+      none = write_mac_app(File.join(dir, "n"), "no marker")
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(none, "app-store", plist_reader: ok) }
+      both = write_mac_app(File.join(dir, "b"), "humtrack-mac-channel:direct humtrack-mac-channel:app-store humtrack://auth/callback")
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(both, "app-store", plist_reader: ok) }
+      assert_raises(ArgumentError) { HumTrackRelease.verify_mac_channel!(File.join(dir, "missing.app"), "app-store", plist_reader: ok) }
     end
   end
 end

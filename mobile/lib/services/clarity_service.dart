@@ -40,14 +40,10 @@ class ClarityService {
       // production 빌드는 SDK 가 자동으로 None 강제 (오버헤드 제거). debug 만 Info.
       logLevel: kDebugMode ? LogLevel.Info : LogLevel.None,
     );
-    return ValueListenableBuilder<bool>(
-      valueListenable: collectionEnabled,
-      child: app,
-      builder: (_, allowed, child) {
-        _collectionEnabled = allowed;
-        if (!allowed) return child!;
-        return ClarityWidget(app: child!, clarityConfig: config);
-      },
+    return _ClarityGate(
+      collectionEnabled: collectionEnabled,
+      config: config,
+      app: app,
     );
   }
 
@@ -90,5 +86,59 @@ class ClarityService {
   void screen(String name) {
     if (!enabled || !_collectionEnabled || name.isEmpty) return;
     Clarity.setCurrentScreenName(name);
+  }
+}
+
+/// Keeps the app subtree stable across consent changes. Clarity is only
+/// initialised (ClarityWidget mounted) once consent has been granted; after
+/// that the wrapper stays mounted for the rest of the process and consent is
+/// applied with Clarity.pause()/resume() (see [ClarityService.
+/// setCollectionEnabled]). The app sits under a [GlobalKey] so the single
+/// "not wrapped → wrapped" transition re-parents the existing element tree
+/// instead of rebuilding it (no new LoopStore, no lost editor state).
+class _ClarityGate extends StatefulWidget {
+  const _ClarityGate({
+    required this.collectionEnabled,
+    required this.config,
+    required this.app,
+  });
+
+  final ValueListenable<bool> collectionEnabled;
+  final ClarityConfig config;
+  final Widget app;
+
+  @override
+  State<_ClarityGate> createState() => _ClarityGateState();
+}
+
+class _ClarityGateState extends State<_ClarityGate> {
+  final GlobalKey _appKey = GlobalKey(debugLabel: 'clarity-app-root');
+  bool _wrapped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _wrapped = widget.collectionEnabled.value;
+    ClarityService.instance._collectionEnabled = widget.collectionEnabled.value;
+    widget.collectionEnabled.addListener(_onConsent);
+  }
+
+  @override
+  void dispose() {
+    widget.collectionEnabled.removeListener(_onConsent);
+    super.dispose();
+  }
+
+  void _onConsent() {
+    final allowed = widget.collectionEnabled.value;
+    ClarityService.instance._collectionEnabled = allowed;
+    if (allowed && !_wrapped) setState(() => _wrapped = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = KeyedSubtree(key: _appKey, child: widget.app);
+    if (!_wrapped) return app;
+    return ClarityWidget(app: app, clarityConfig: widget.config);
   }
 }

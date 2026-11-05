@@ -1,0 +1,43 @@
+name: CI Windows
+
+# Compile/test only. No public config, signing keys, upload, or distribution.
+on:
+  push:
+    branches: [main, develop]
+    paths: ['mobile/**', 'infra/scripts/**', 'infra/windows/**', '.github/workflows/ci-windows.yml']
+  pull_request:
+    paths: ['mobile/**', 'infra/scripts/**', 'infra/windows/**', '.github/workflows/ci-windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Release packaging boundary tests
+        run: python infra/scripts/test_windows_release.py
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: mobile
+      - run: flutter analyze --no-pub
+        working-directory: mobile
+      - run: flutter test --no-pub
+        working-directory: mobile
+      - name: Compile main Windows runner (not a distributable build)
+        run: flutter build windows --release --no-pub --target lib/main.dart
+        working-directory: mobile

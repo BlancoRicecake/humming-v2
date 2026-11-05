@@ -57,6 +57,19 @@ void main() {
       final v = verdict(expiresAt: now.subtract(EntitlementVerdict.grace));
       expect(v.isUsable('u1', now), isFalse);
     });
+
+    test('pro verdict older than 7 days → not usable (offline cap)', () {
+      final v = verdict(expiresAt: now.add(const Duration(days: 300)));
+      expect(v.isUsable('u1', now.add(const Duration(days: 7))), isTrue);
+      expect(
+        v.isUsable('u1', now.add(const Duration(days: 7, minutes: 1))),
+        isFalse,
+      );
+    });
+
+    test('offline cap applies even without an expiry', () {
+      expect(verdict().isUsable('u1', now.add(const Duration(days: 8))), isFalse);
+    });
   });
 
   group('EntitlementVerdict JSON', () {
@@ -203,6 +216,50 @@ void main() {
       await EntitlementCache.clear();
       expect(await File('${root.path}/looptap/entitlement.json').exists(), isFalse);
       expect((await EntitlementCache.load()).verdict, isNull);
+    });
+
+    test('migrates the legacy Documents file once, then deletes it', () async {
+      final legacyRoot = await Directory.systemTemp.createTemp('lt_ent_legacy_');
+      EntitlementCache.legacyRootOverride = legacyRoot;
+      try {
+        final legacy = File('${legacyRoot.path}/looptap/entitlement.json');
+        await legacy.create(recursive: true);
+        await legacy.writeAsString(jsonEncode(EntitlementCacheState(
+          verdict: verdict(expiresAt: DateTime.utc(2027, 1, 1)),
+          lastRestoreAt: now,
+          lastRestoreUserId: 'u1',
+        ).toJson()));
+
+        final loaded = await EntitlementCache.load();
+        expect(loaded.verdict?.userId, 'u1');
+        expect(loaded.lastRestoreUserId, 'u1');
+        expect(await legacy.exists(), isFalse);
+        expect(await File('${root.path}/looptap/entitlement.json').exists(), isTrue);
+
+        // Second load reads the new location only.
+        expect((await EntitlementCache.load()).verdict?.userId, 'u1');
+      } finally {
+        EntitlementCache.legacyRootOverride = null;
+        await legacyRoot.delete(recursive: true);
+      }
+    });
+
+    test('existing new file wins over a stale legacy file', () async {
+      final legacyRoot = await Directory.systemTemp.createTemp('lt_ent_legacy_');
+      EntitlementCache.legacyRootOverride = legacyRoot;
+      try {
+        await EntitlementCache.save(EntitlementCacheState(verdict: verdict(userId: 'new')));
+        final legacy = File('${legacyRoot.path}/looptap/entitlement.json');
+        await legacy.create(recursive: true);
+        await legacy.writeAsString(
+            jsonEncode(EntitlementCacheState(verdict: verdict(userId: 'old')).toJson()));
+
+        expect((await EntitlementCache.load()).verdict?.userId, 'new');
+        expect(await legacy.exists(), isFalse);
+      } finally {
+        EntitlementCache.legacyRootOverride = null;
+        await legacyRoot.delete(recursive: true);
+      }
     });
 
     test('corrupt file → empty, no throw', () async {

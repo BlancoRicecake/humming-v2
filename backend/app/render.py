@@ -8,6 +8,7 @@ and add it to PATH at import time. On systems without the DLL the
 from __future__ import annotations
 
 import io
+import logging
 import os
 import struct
 import sys
@@ -21,6 +22,8 @@ import numpy as np
 import soundfile as sf
 
 from .schemas import Note
+
+logger = logging.getLogger("soundlab")
 
 DEFAULT_SF2 = r"C:\Users\jlion\Downloads\GeneralUser_GS_v2.0.3--doc_r6\GeneralUser-GS\GeneralUser-GS.sf2"
 BUNDLED_FS_BIN = (
@@ -120,7 +123,10 @@ def initialize() -> None:
         if sf2 and Path(sf2).is_file():
             _STATE.sf2_path = sf2
         else:
-            _STATE.error = f"SF2 not found at {sf2!r}"
+            # Basename only: this string is returned to clients (503 detail,
+            # /render_capabilities); the full server path goes to the log.
+            logger.warning("SF2 not found at %r", sf2)
+            _STATE.error = f"SF2 not found ({Path(sf2).name if sf2 else sf2!r})"
         # Set last so is_engine_available() never observes a half-initialised state.
         _STATE.fluidsynth_module = fluidsynth
 
@@ -474,21 +480,44 @@ def render_tracks_to_wav(
         if sfid == -1:
             raise RuntimeError(f"sfload failed for {_STATE.sf2_path}")
 
+        # 15 melodic channels (0-15 minus GM drum channel 9). Empty tracks take
+        # no channel; a 16th melodic track would land on channel 16+, which
+        # FluidSynth silently drops — refuse it instead (caller maps to 400).
+        non_empty = [tr for tr in tracks if tr.get("notes")]
+        n_melodic = sum(1 for tr in non_empty
+                        if not all(n.kind == "percussive" for n in tr["notes"]))
+        if n_melodic > 15:
+            raise ValueError(f"too many melodic tracks ({n_melodic} > 15)")
+        # pyfluidsynth cannot mark another channel as a drum channel, so every
+        # drum track shares channel 9 and the last kit selected wins.
+        kits = {int(tr.get("program") or 0) for tr in non_empty
+                if all(n.kind == "percussive" for n in tr["notes"])}
+        if len(kits) > 1:
+            logger.warning("render_mix: %d drum tracks with different kits share channel 9", len(kits))
+
+        def _select(ch: int, bank: int, program: int, fallback: int) -> None:
+            if synth.program_select(ch, sfid, bank, program) == 0:
+                return
+            logger.warning("program_select failed ch=%d bank=%d program=%d — using %d",
+                           ch, bank, program, fallback)
+            if synth.program_select(ch, sfid, bank, fallback) != 0:
+                raise ValueError(f"program {program} (bank {bank}) not available in SoundFont")
+
         events: List[Tuple[float, int, int, int, int]] = []  # (time, rank, pitch, vel, channel)
         melodic_ch = 0
-        for tr in tracks:
-            notes = tr.get("notes") or []
+        for tr in non_empty:
+            notes = tr["notes"]
             program = int(tr.get("program") or 0)
-            is_perc = bool(notes) and all(n.kind == "percussive" for n in notes)
+            is_perc = all(n.kind == "percussive" for n in notes)
             if is_perc:
                 ch = 9
-                synth.program_select(9, sfid, 128, program)
+                _select(9, 128, program, 0)
             else:
                 if melodic_ch == 9:
                     melodic_ch += 1
                 ch = melodic_ch
                 melodic_ch += 1
-                synth.program_select(ch, sfid, 0, program)
+                _select(ch, 0, program, 0)
             for n in notes:
                 if n.end <= n.start:
                     continue

@@ -16,11 +16,12 @@ and must never depend on Supabase.
 """
 from __future__ import annotations
 
+import hmac
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 
 import anyio
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from ..deps import _parse_ts, require_supabase
 from ..settings import get_settings
@@ -76,10 +77,25 @@ def _collect(now: datetime, max_age: timedelta) -> dict:
     return stores
 
 
-@router.get("/health/iap-notifications")
-async def iap_notifications_health(response: Response) -> dict:
+def _check_token(request: Request, expected: Optional[str]) -> None:
+    """When IAP_HEALTH_TOKEN is set, require it as ``X-Health-Token`` or a
+    Bearer token; unset keeps the endpoint open."""
+    if not expected:
+        return
+    got = request.headers.get("x-health-token") or ""
+    auth = request.headers.get("authorization") or ""
+    if not got and auth.lower().startswith("bearer "):
+        got = auth[7:].strip()
+    if not hmac.compare_digest(got.encode(), expected.encode()):
+        raise HTTPException(401, "health token required")
+
+
+# GET /health/iap-notifications — added to `router` by main.py, wrapped in the
+# per-IP rate limit (the limiter lives there; slowapi needs `request`).
+async def iap_notifications_health(request: Request, response: Response) -> dict:
     # async + thread offload for the same reason as /health (Sentry wrapper)
     # and because the Supabase client is synchronous.
+    _check_token(request, get_settings().iap_health_token)
     max_age = timedelta(days=get_settings().iap_notification_max_age_days)
     now = datetime.now(timezone.utc)
     stores = await anyio.to_thread.run_sync(_collect, now, max_age)

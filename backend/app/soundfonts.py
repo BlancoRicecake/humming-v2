@@ -81,14 +81,20 @@ def _load_sidecar(base: Path) -> None:
     global _sidecar_loaded_for
     if _sidecar_loaded_for == base:
         return
-    _sidecar_loaded_for = base
-    try:
-        data = json.loads((base / SIDECAR).read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            _HASH_CACHE.update({str(k): str(v) for k, v in data.items()
-                                if isinstance(v, str) and len(v) == 64})
-    except (OSError, ValueError):
-        pass
+    # Under _HASH_LOCK: _save_sidecar iterates _HASH_CACHE under the lock, and
+    # the flag is set only after the read so a concurrent caller can't skip a
+    # load that hasn't happened yet.
+    with _HASH_LOCK:
+        if _sidecar_loaded_for == base:
+            return
+        try:
+            data = json.loads((base / SIDECAR).read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                _HASH_CACHE.update({str(k): str(v) for k, v in data.items()
+                                    if isinstance(v, str) and len(v) == 64})
+        except (OSError, ValueError):
+            pass
+        _sidecar_loaded_for = base
 
 
 def _save_sidecar(base: Path) -> None:
@@ -165,6 +171,12 @@ def load_catalog() -> List[dict]:
             continue
         if sid in seen_ids or slot in seen_slots:
             continue
+        try:  # a non-integer bank/program/fallback skips the row, not the catalog
+            sf_bank = int(raw.get("sf_bank", 0))
+            sf_program = int(raw.get("sf_program", 0))
+            midi_fallback = int(raw.get("midi_fallback", 0))
+        except (TypeError, ValueError, OverflowError):
+            continue
         path = base / str(raw["file"])
         if not path.is_file():
             continue
@@ -178,9 +190,9 @@ def load_catalog() -> List[dict]:
             "category": str(raw.get("category", "")),
             "bytes": path.stat().st_size,
             "sha256": _sha256(path),
-            "sf_bank": int(raw.get("sf_bank", 0)),
-            "sf_program": int(raw.get("sf_program", 0)),
-            "midi_fallback": int(raw.get("midi_fallback", 0)),
+            "sf_bank": sf_bank,
+            "sf_program": sf_program,
+            "midi_fallback": midi_fallback,
             "license": str(raw.get("license", "")),
         })
     return out

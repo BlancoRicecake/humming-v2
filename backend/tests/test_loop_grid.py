@@ -105,6 +105,40 @@ def test_storage_is_linear():
     assert abs(out[0].start - 3 * cell) < 1e-6
 
 
+def test_nearest_step_matches_full_scan():
+    """O(1) _nearest_step must equal the old O(steps) linear scan exactly,
+    including swing, phase offsets, grid points/midpoints (ties) and onsets
+    outside the loop."""
+    import random
+
+    from app.analyze import _nearest_step
+
+    def full_scan(t, total, cell, phase, swing):
+        best_k, best_d = 0, None
+        for k in range(total):
+            d = abs(t - _swung_step_time(k, cell, phase, swing))
+            if best_d is None or d < best_d:
+                best_d, best_k = d, k
+        return best_k
+
+    rng = random.Random(20261022)
+    for _ in range(20000):
+        cell = (60.0 / rng.uniform(20, 320)) * 4.0 / rng.choice([1, 3, 4, 8, 12, 16, 32, 128])
+        total = rng.randint(1, 128)
+        swing = rng.choice([0.0, 0.75, rng.uniform(0.0, 0.75)])
+        phase = rng.uniform(-cell / 2, cell / 2)
+        if rng.random() < 0.3:
+            k = rng.randint(-3, total + 3)
+            t = _swung_step_time(k, cell, phase, swing)
+            if rng.random() < 0.5:
+                t = (t + _swung_step_time(k + 1, cell, phase, swing)) / 2
+        else:
+            t = rng.uniform(phase - 3 * cell, phase + (total + 3) * cell)
+        assert _nearest_step(t, total, cell, phase, swing) == full_scan(t, total, cell, phase, swing)
+    for t in (float("nan"), float("inf"), -float("inf")):
+        assert _nearest_step(t, 16, 0.125, 0.0, 0.5) == full_scan(t, 16, 0.125, 0.0, 0.5)
+
+
 def _run():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

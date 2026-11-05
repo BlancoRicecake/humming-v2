@@ -1,4 +1,6 @@
-• Start your first song right from the home screen, no sign-in needed
-• Turn recorded vocal clips into instrument tracks (MIDI)
-• Exported files are easier to find
-• Updated open-source license notices
+• After humming, compare your hum with the converted melody and try another key
+• Pick notes to set velocity, pitch or mute right away
+• Drag the grid to move around; hold 1 second to select several notes
+• Long-press a section to reorder it; duplicates are named #2
+• Select several songs to delete or back up, and read announcements
+• Make a backup file (.humtrack) of a song and open it as a new song

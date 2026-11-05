@@ -1496,6 +1496,13 @@ class L10nKo extends L10n {
   String get payPendingButton => '승인 대기 중…';
 
   @override
+  String get payDesktopInfo =>
+      '휴대폰 HumTrack 앱에서 Pro를 구독한 뒤 같은 계정으로 로그인해 주세요. 이 프로그램에서는 결제하지 않으며, 서버에서 계정의 구독 상태를 확인합니다.';
+
+  @override
+  String get payDesktopRefresh => '계정 Pro 상태 확인';
+
+  @override
   String get payRestore => '구매 복원';
 
   @override
@@ -1503,6 +1510,10 @@ class L10nKo extends L10n {
 
   @override
   String get payStoreUnavailableDevice => '이 기기에서는 스토어를 사용할 수 없어요.';
+
+  @override
+  String get payAccountProOnly =>
+      '이 버전에서는 앱 안에서 구독할 수 없어요. App Store나 Google Play에서 구독한 계정으로 로그인하면 Pro가 자동으로 적용돼요.';
 
   @override
   String get payPurchaseFailed => '구매를 완료하지 못했어요. 다시 시도해 주세요.';
@@ -1637,6 +1648,10 @@ class L10nKo extends L10n {
   }
 
   @override
+  String get ltSettingsDeleteAccountPending =>
+      '탈퇴 요청을 접수했어요. 로그아웃되며 서버 데이터 삭제는 계속 진행됩니다. 이 기기에 저장한 곡은 그대로 남아요.';
+
+  @override
   String get ltSettingsDeleteAccountDone => '회원 탈퇴가 완료됐어요.';
 
   @override
@@ -1666,6 +1681,18 @@ class L10nKo extends L10n {
 
   @override
   String get ltExportStemsSub => '트랙별 WAV 분리';
+
+  @override
+  String get ltExportNewVariation => '다른 변주로';
+
+  @override
+  String get ltExportNewVariationSub => '확률·세기 변화를 새로 뽑습니다 (되돌리기 가능)';
+
+  @override
+  String get ltExportNewVariationDone => '새 변주를 만들었습니다';
+
+  @override
+  String get ltExportMidiAllNotes => 'MIDI: 확률 무시하고 모든 노트 포함';
 
   @override
   String get ltExportShareTitle => '공유';
@@ -1716,6 +1743,12 @@ class L10nKo extends L10n {
 
   @override
   String get ltSettingsAnalyticsSub => '제품 개선용 Clarity·Firebase 분석 허용';
+
+  @override
+  String get ltSettingsVocalSync => '보컬 싱크';
+
+  @override
+  String get ltSettingsVocalSyncSub => '녹음이 늦으면 늘리고, 빠르면 줄여요';
 
   @override
   String get ltSettingsAbout => '정보';
@@ -1920,16 +1953,19 @@ class L10nKo extends L10n {
   String get ltEditorOctaveUp => '옥타브 올리기';
 
   @override
-  String get ltEditorHumToMidi => '허밍 → MIDI';
+  String get ltEditorHumToMidi => '허밍 to MIDI';
 
   @override
   String get ltEditorHintGridDrums => '셀을 탭해서 켜고 끄기';
 
   @override
-  String get ltEditorHintGridPitched => '탭 · 드래그로 길이 조절 · 자동 병합';
+  String get ltEditorHintGridPitched => '입력 · 영역 선택 · 복사/붙여넣기';
 
   @override
-  String get ltEditorHintPads => '녹음 후 탭';
+  String get ltEditorHintGridPhone => '탭: 노트 추가 · 노트 탭: 선택 · 빈 곳 끌기: 여러 개 선택';
+
+  @override
+  String get ltEditorHintPads => '녹음을 켠 상태에서 연주';
 
   @override
   String get ltDrumBeatGrid => '비트 그리드';
@@ -1999,7 +2035,7 @@ class L10nKo extends L10n {
 
   @override
   String ltHumModalTitle(String track) {
-    return '허밍 → MIDI · $track';
+    return '허밍 to MIDI · $track';
   }
 
   @override
@@ -2019,6 +2055,9 @@ class L10nKo extends L10n {
 
   @override
   String get ltRecErrUnavailable => '녹음을 시작할 수 없어요';
+
+  @override
+  String get ltRecErrNoCodec => '이 기기에서 쓸 수 있는 녹음 형식이 없어요';
 
   @override
   String get ltRecErrInterrupted => '녹음이 중단됐어요 — 다시 시도해주세요';
@@ -2131,7 +2170,7 @@ class L10nKo extends L10n {
   String get ltVocalEditorEffectsGroup => '이펙트';
 
   @override
-  String get ltVocalEditorReset => '되돌리기';
+  String get ltVocalEditorReset => '편집값 초기화';
 
   @override
   String get ltVocalEditorServerTag => '서버';
@@ -2223,6 +2262,373 @@ class L10nKo extends L10n {
       '변경 사항을 저장하지 못했어요. 기기의 저장 공간을 확인하고 다시 시도해 주세요.';
 
   @override
+  String get ltLibraryRecovered =>
+      '곡 목록 파일을 읽지 못해 마지막으로 저장된 백업에서 되살렸어요. 최근 몇 초의 변경은 빠졌을 수 있어요.';
+
+  @override
+  String get ltLibrarySkipped =>
+      '일부 곡을 읽지 못해 목록에서 뺐어요. 원본 파일은 지우지 않고 따로 보관했어요.';
+
+  @override
+  String get ltLibraryUnreadable =>
+      '곡 목록 파일을 읽지 못했어요. 파일은 그대로 두었고, 녹음 파일 정리도 멈췄어요.';
+
+  @override
+  String get ltLibraryNewer =>
+      '더 새 버전의 HumTrack이 저장한 곡 목록이에요. 볼 수는 있지만 이 버전에서는 저장하지 않아요. 앱을 업데이트해 주세요.';
+
+  @override
+  String ltLibraryFolder(String path) {
+    return '저장 위치: $path';
+  }
+
+  @override
+  String get ltCloudMenu => '클라우드에 백업';
+
+  @override
+  String get ltCloudTitle => '클라우드 백업';
+
+  @override
+  String get ltCloudSettingsSub => '곡을 직접 올리고, 다른 기기에서 새 곡으로 받아요';
+
+  @override
+  String get ltCloudBackupTitle => '클라우드에 백업';
+
+  @override
+  String get ltCloudBackupBody =>
+      '이 곡의 노트·악기·구성을 내 계정 클라우드에 올려요. 자동으로 올라가지 않고, 누를 때만 올라가요.';
+
+  @override
+  String ltCloudIncludeAudio(int count) {
+    return '녹음 $count개도 함께 올리기';
+  }
+
+  @override
+  String get ltCloudAudioOn => '녹음 파일이 클라우드에 보관돼요. 클라우드 사본을 지우면 함께 지워져요.';
+
+  @override
+  String get ltCloudAudioOff => '녹음은 이 기기에만 남아요. 다른 기기에서 받으면 녹음 자리는 비어 있어요.';
+
+  @override
+  String get ltCloudAudioOptOut =>
+      '지금 클라우드 사본에는 녹음이 들어 있어요. 녹음 없이 올리면 그 사본이 녹음 없는 사본으로 바뀌고, 클라우드의 이전 녹음은 삭제돼요.';
+
+  @override
+  String get ltCloudBackupConfirm => '올리기';
+
+  @override
+  String ltCloudBackedUp(String title) {
+    return '클라우드에 올렸어요: $title';
+  }
+
+  @override
+  String ltCloudBackedUpNoAudio(String title) {
+    return '녹음 없이 클라우드에 올렸어요: $title';
+  }
+
+  @override
+  String get ltCloudConflictTitle => '클라우드에 더 최근 사본이 있어요';
+
+  @override
+  String get ltCloudConflictBody =>
+      '다른 기기에서 이 곡을 그사이에 올렸어요. 어떻게 할까요? 고르기 전에는 아무것도 바뀌지 않아요.';
+
+  @override
+  String get ltCloudConflictGone =>
+      '이 곡의 클라우드 사본이 다른 기기에서 지워졌거나 다시 만들어졌어요. 어떻게 할까요?';
+
+  @override
+  String get ltCloudKeepDevice => '이 기기 것으로 바꾸기';
+
+  @override
+  String get ltCloudTakeCloud => '클라우드 것 받기(새 곡)';
+
+  @override
+  String get ltCloudKeepBoth => '둘 다 보관';
+
+  @override
+  String get ltCloudRestore => '이 기기로 받기';
+
+  @override
+  String ltCloudRestored(String title) {
+    return '새 곡으로 받았어요: $title';
+  }
+
+  @override
+  String get ltCloudRestoredNoAudio => '녹음 없이 올린 사본이라 녹음 자리는 비어 있어요.';
+
+  @override
+  String get ltCloudDelete => '클라우드에서 삭제';
+
+  @override
+  String ltCloudDeleteTitle(String title) {
+    return '클라우드에서 ‘$title’ 삭제';
+  }
+
+  @override
+  String get ltCloudDeleteBody =>
+      '클라우드 사본(올린 녹음 포함)만 지워요. 이 기기와 다른 기기에 저장된 곡은 그대로예요. 되돌릴 수 없어요.';
+
+  @override
+  String get ltCloudDeleteYes => '삭제';
+
+  @override
+  String get ltCloudDeleted => '클라우드 사본을 지웠어요.';
+
+  @override
+  String ltCloudUsage(String used, String quota) {
+    return '사용량 $used / $quota';
+  }
+
+  @override
+  String get ltCloudEmpty => '클라우드에 올린 곡이 없어요. 곡 메뉴의 ‘클라우드에 백업’으로 올려 보세요.';
+
+  @override
+  String get ltCloudWithAudio => '녹음 포함';
+
+  @override
+  String get ltCloudNoAudio => '녹음 제외';
+
+  @override
+  String get ltCloudPrivacyNote =>
+      '클라우드 사본은 직접 지울 때까지 보관돼요. 구독이 끝나도 받기·삭제는 할 수 있어요.';
+
+  @override
+  String get ltCloudUnavailable => '클라우드 백업을 아직 쓸 수 없어요. 아무것도 올리지 않았어요.';
+
+  @override
+  String get ltCloudSignIn => '클라우드 백업은 로그인한 뒤 쓸 수 있어요.';
+
+  @override
+  String get ltCloudProRequired =>
+      '클라우드에 올리기는 Pro에서 쓸 수 있어요. 받기와 삭제는 계속 할 수 있어요.';
+
+  @override
+  String get ltCloudQuotaExceeded => '클라우드 용량이 부족해 올리지 않았어요. 기존 사본은 그대로예요.';
+
+  @override
+  String get ltCloudDamaged => '받은 파일이 올린 것과 달라 가져오지 않았어요. 아무것도 바뀌지 않았어요.';
+
+  @override
+  String get ltCloudAccountChanged =>
+      '작업 중에 로그인한 계정이 바뀌어 멈췄어요. 다른 계정에는 아무것도 올리거나 가져오지 않았어요.';
+
+  @override
+  String get ltCloudFailed =>
+      '연결 문제로 끝내지 못했어요. 기존 곡과 클라우드 사본은 그대로예요. 다시 시도해 주세요.';
+
+  @override
+  String get ltCloudGuideTitle => '클라우드 백업은 이렇게 써요';
+
+  @override
+  String get ltCloudGuideWhere =>
+      '저장 위치: 내 계정의 HumTrack 클라우드에 곡 사본이 보관돼요. 이 기기의 곡은 그대로 남아요.';
+
+  @override
+  String get ltCloudGuideUpload =>
+      '올리기: 곡 카드의 ⋯ → ‘클라우드에 백업’. Pro가 필요하고, 녹음은 체크했을 때만 함께 올라가요.';
+
+  @override
+  String get ltCloudGuideRestore =>
+      '받기: 아래 목록에서 ‘이 기기로 받기’를 누르면 새 곡으로 추가돼요. 기존 곡을 덮어쓰지 않아요.';
+
+  @override
+  String get ltCloudGuideDelete =>
+      '삭제: ‘클라우드에서 삭제’는 클라우드 사본만 지워요. 구독이 끝나도 받기와 삭제는 할 수 있어요.';
+
+  @override
+  String get ltCloudSignInAction => '로그인';
+
+  @override
+  String get ltCloudProNote =>
+      '올리기는 Pro에서 쓸 수 있어요. 이미 올린 사본은 지금도 받거나 지울 수 있어요.';
+
+  @override
+  String get ltCloudProAction => 'Pro 보기';
+
+  @override
+  String get ltCloudRetry => '다시 시도';
+
+  @override
+  String ltCloudLinkedTo(String title) {
+    return '이 기기의 ‘$title’과 연결됨';
+  }
+
+  @override
+  String ltCloudUploading(int percent) {
+    return '클라우드에 올리는 중… $percent%';
+  }
+
+  @override
+  String get ltCloudPreparing => '올릴 파일을 준비하는 중…';
+
+  @override
+  String ltCloudLastBackup(String date) {
+    return '마지막 백업: $date';
+  }
+
+  @override
+  String get ltCloudOpen => '보기';
+
+  @override
+  String get annTitle => '공지사항';
+
+  @override
+  String get annOpenWeb => '웹에서 보기';
+
+  @override
+  String get annSettingsSub => '개발 소식과 장애·긴급 안내';
+
+  @override
+  String get annKindInfo => '소식';
+
+  @override
+  String get annKindImportant => '중요';
+
+  @override
+  String get annKindCritical => '긴급';
+
+  @override
+  String get annAll => '모두 보기';
+
+  @override
+  String annAllWithCount(int count) {
+    return '모두 보기 ($count)';
+  }
+
+  @override
+  String annHomeLink(int count) {
+    return '공지사항 $count';
+  }
+
+  @override
+  String get annUnread => '새 공지';
+
+  @override
+  String get annEmpty => '지금 표시할 공지가 없어요.';
+
+  @override
+  String annStale(String date) {
+    return '인터넷에 연결되지 않아 $date에 받은 공지를 보여 드려요. 내용이 바뀌었을 수 있어요.';
+  }
+
+  @override
+  String get annConfirm => '확인';
+
+  @override
+  String get annLater => '나중에';
+
+  @override
+  String get ltBackupMake => '백업 파일 만들기';
+
+  @override
+  String get ltBackupOpen => '백업 열기';
+
+  @override
+  String get ltBackupOpenSub => '다른 기기에서 만든 .humtrack 파일을 새 곡으로 가져와요';
+
+  @override
+  String ltBackupMade(String name) {
+    return '백업 파일을 만들었어요: $name\n‘내보낸 파일’에서 원하는 폴더에 저장하거나 공유하세요.';
+  }
+
+  @override
+  String ltBackupMissingTakes(int count) {
+    return '녹음 파일 $count개는 이미 없어서 빠졌어요.';
+  }
+
+  @override
+  String get ltBackupShowFiles => '파일 보기';
+
+  @override
+  String get ltSongsImportMidi => 'MIDI 가져오기';
+
+  @override
+  String get ltSongsSelect => '작업물 선택';
+
+  @override
+  String ltSongsSelected(int count) {
+    return '$count개 선택';
+  }
+
+  @override
+  String get ltSongsSelectAll => '전체 선택';
+
+  @override
+  String get ltSongsSelectCancel => '선택 끝내기';
+
+  @override
+  String get ltSongsExportPicked => '백업으로 내보내기';
+
+  @override
+  String get ltSongsDeletePicked => '삭제';
+
+  @override
+  String ltSongsDeletePickedTitle(int count) {
+    return '작업물 $count개를 삭제할까요?';
+  }
+
+  @override
+  String ltSongsExportedPicked(int count) {
+    return '백업 파일 $count개를 만들었어요. ‘내보낸 파일’에서 저장하거나 공유하세요.';
+  }
+
+  @override
+  String get ltCardExport => '내보내기';
+
+  @override
+  String get ltBackupFailed => '백업 파일을 만들지 못했어요. 저장 공간을 확인해 주세요. 곡은 그대로예요.';
+
+  @override
+  String ltBackupImported(String title) {
+    return '백업을 새 곡으로 가져왔어요: $title';
+  }
+
+  @override
+  String ltBackupImportedMissing(int count) {
+    return '원래 기기에서도 없던 녹음 $count개는 빈 자리로 남겼어요(소리 없음).';
+  }
+
+  @override
+  String get ltBackupNotBackup =>
+      'HumTrack 백업 파일(.humtrack)이 아니에요. 아무것도 바꾸지 않았어요.';
+
+  @override
+  String get ltBackupNewer => '더 새 버전의 HumTrack에서 만든 백업이에요. 앱을 업데이트한 뒤 열어 주세요.';
+
+  @override
+  String get ltBackupUnsafe => '백업 안에 허용되지 않은 파일이 있어 열지 않았어요. 아무것도 바꾸지 않았어요.';
+
+  @override
+  String get ltBackupTooLarge => '백업 파일이 너무 커서 열 수 없어요.';
+
+  @override
+  String get ltBackupMissingAudio => '곡에 필요한 녹음 파일이 백업에 없어 가져오지 않았어요.';
+
+  @override
+  String get ltBackupDamaged => '백업 파일이 손상되어 가져오지 않았어요. 아무것도 바꾸지 않았어요.';
+
+  @override
+  String get ltBackupImportFailed =>
+      '백업을 가져오지 못했어요. 저장 공간을 확인해 주세요. 기존 곡은 그대로예요.';
+
+  @override
+  String get ltExitSaveFailedTitle => '저장하지 못했어요';
+
+  @override
+  String get ltExitSaveFailed =>
+      '마지막 변경 사항을 저장하지 못해 창을 그대로 두었어요. 저장 공간을 확인한 뒤 다시 저장해 주세요. 편집 내용은 그대로 있어요.';
+
+  @override
+  String get ltExitKeepEditing => '계속 편집';
+
+  @override
+  String get ltExitRetrySave => '다시 저장';
+
+  @override
+  String get ltExitDiscardQuit => '저장하지 않고 종료';
+
+  @override
   String get policyNoticeTitle => '약관 개정 안내';
 
   @override
@@ -2290,10 +2696,95 @@ class L10nKo extends L10n {
 
   @override
   String get ltGuidedPrepare =>
-      '조용한 곳에서 네 박자 준비 신호 뒤에 짧은 멜로디를 흥얼거려 보세요. 변환에는 인터넷 연결이 필요해요.';
+      '조용한 곳에서 네 박자 준비 신호 뒤에 멜로디를 흥얼거리고, 다 부르면 \'변환\'을 눌러 멈추세요(최대 20초). 변환에는 인터넷 연결이 필요해요.';
 
   @override
-  String get ltGuidedSteps => '1 멜로디·샘플  →  2 반주  →  3 저장';
+  String get ltGuidedMelodyReady => '멜로디가 만들어졌어요';
+
+  @override
+  String get ltGuidedCompareHint =>
+      '내 허밍과 변환된 멜로디를 비교해 들어 보세요. 악기나 키를 바꿔 볼 수도 있어요.';
+
+  @override
+  String get ltGuidedMelodyHint => '변환된 멜로디를 들어 보세요. 악기나 키를 바꿔 볼 수도 있어요.';
+
+  @override
+  String get ltGuidedPlayTake => '내 허밍';
+
+  @override
+  String get ltHumAddTitle => '허밍으로 새 트랙 추가';
+
+  @override
+  String get ltHumAddSteps => '1 악기 → 2 허밍 → 3 추가';
+
+  @override
+  String get ltHumAddPrepare =>
+      '악기를 고르고 멜로디를 흥얼거려 보세요. 녹음하는 동안 지금 곡이 함께 재생돼요(이어폰을 쓰면 더 깨끗해요). 다 부르면 \'변환\'을 누르세요. 변환된 멜로디는 새 트랙으로 추가돼요.';
+
+  @override
+  String get ltHumAddInstrument => '새 트랙의 악기';
+
+  @override
+  String get ltHumAddRecord => '허밍 녹음하기';
+
+  @override
+  String get ltHumAddRecordDesc => '곡에 맞춰 부른 멜로디가 새 트랙이 돼요';
+
+  @override
+  String get ltHumAddReady => '새 트랙이 준비됐어요';
+
+  @override
+  String get ltHumAddHint => '내 허밍과 비교하거나 곡과 함께 들어 보세요. 마음에 들면 추가하세요.';
+
+  @override
+  String get ltHumAddPlaySong => '곡과 함께 듣기';
+
+  @override
+  String get ltHumAddRetake => '다시 허밍';
+
+  @override
+  String get ltHumAddConfirm => '이 트랙 추가';
+
+  @override
+  String get ltGuidedPlayNewKey => '바뀐 키로 듣기';
+
+  @override
+  String get ltGuidedPlayMelody => '변환된 멜로디';
+
+  @override
+  String get ltGuidedKey => '키 변경';
+
+  @override
+  String get ltGuidedMakeSong => '이 멜로디로 곡 만들기';
+
+  @override
+  String get ltGuidedVoiceReady => '녹음했어요';
+
+  @override
+  String get ltGuidedPlayVoice => '들어보기';
+
+  @override
+  String get ltGuidedMakeSongVoice => '이 녹음으로 곡 만들기';
+
+  @override
+  String get ltGuidedSteps => '1 녹음 → 2 저장';
+
+  @override
+  String get ltGuidedHumTitle => '허밍으로 멜로디 만들기';
+
+  @override
+  String get ltGuidedHumDesc =>
+      '흥얼거린 멜로디를 음표로 바꿔요. 악기 소리로 듣고 음을 고칠 수 있어요. 인터넷 연결이 필요해요.';
+
+  @override
+  String get ltGuidedVoiceTitle => '목소리 그대로 녹음하기';
+
+  @override
+  String get ltGuidedVoiceDesc =>
+      '노래나 소리를 녹음 그대로 보컬 트랙에 넣어요. 음표로 바뀌지 않아요(나중에 변환할 수 있어요).';
+
+  @override
+  String get ltGuidedVoiceImport => '녹음 파일 불러오기';
 
   @override
   String get ltSampleTitle => '내 소리 샘플';
@@ -2442,7 +2933,7 @@ class L10nKo extends L10n {
   String get ltFirstSongTitle => '첫 곡을 만들어 보세요';
 
   @override
-  String get ltFirstSongHint => '허밍 → 반주 → 저장\n로그인 없이 무료로 시작해요.';
+  String get ltFirstSongHint => '녹음 → 저장\n로그인 없이 무료로 시작해요.';
 
   @override
   String get ltFilesTitle => '내보낸 파일';
@@ -2546,4 +3037,454 @@ class L10nKo extends L10n {
 
   @override
   String get ltGuidedKeepVocal => '목소리 그대로 녹음';
+
+  @override
+  String get ltVocalEditorClearFx => '효과 전체 제거';
+
+  @override
+  String get ltVocalEditorRestoreOriginal => '원음 복원';
+
+  @override
+  String get ltVocalEditorFxSourceMissing =>
+      '원본 파일이 없어 효과를 변경할 수 없습니다. 기존 소리는 유지됩니다.';
+
+  @override
+  String get ltVocalFxPresets => '보컬 프리셋';
+
+  @override
+  String get ltVocalFxPresetHint => '프리셋은 오토튠을 유지하고 나머지 효과를 교체합니다.';
+
+  @override
+  String get ltVocalFxLocal => '효과 추가 · 기기에서 처리';
+
+  @override
+  String get ltVocalFxAmount => '적용 강도';
+
+  @override
+  String get ltVocalFxAmountHint => '다음에 추가할 개별 효과에 적용됩니다.';
+
+  @override
+  String get ltVocalFxServer => '기존 효과 · 서버 연결 필요';
+
+  @override
+  String get ltVocalPreviewOriginal => '원음 듣기';
+
+  @override
+  String get ltVocalPreviewProcessed => '효과음 듣기';
+
+  @override
+  String get ltVocalPreviewOriginalPlaying => '원음 재생 중';
+
+  @override
+  String get ltVocalPreviewProcessedPlaying => '효과음 재생 중';
+
+  @override
+  String get ltVocalPreviewStopped => '재생 정지';
+
+  @override
+  String get ltVocalPreviewLoading => '비교음 준비 중…';
+
+  @override
+  String get ltVocalPreviewNoEffects => '적용된 효과 없음';
+
+  @override
+  String get ltVocalPreviewEffects => '적용 효과';
+
+  @override
+  String get ltVocalPreviewLoop => '구간 반복';
+
+  @override
+  String get ltVocalPreviewLevel => '음량 맞춤';
+
+  @override
+  String get ltVocalPreviewAuto => '적용 후 듣기';
+
+  @override
+  String get ltVocalPreviewFailed => '오디오를 재생하지 못했습니다. 파일과 출력 장치를 확인해주세요.';
+
+  @override
+  String get topBarBackToSongs => '곡 목록으로';
+
+  @override
+  String topBarAutoSaved(String time) {
+    return '자동 저장됨 $time';
+  }
+
+  @override
+  String get topBarRangeLoop => '구간 반복 켜기/끄기';
+
+  @override
+  String get topBarPosition => '재생 위치 (마디.박.16분)';
+
+  @override
+  String get topBarBpmTap => '눌러서 BPM 입력';
+
+  @override
+  String get topBarKeyTap => '키 바꾸기';
+
+  @override
+  String get topBarSongSettings => '곡 설정';
+
+  @override
+  String get topBarTempo => '템포';
+
+  @override
+  String get topBarSwingHint => '그루브가 지정되지 않은 트랙에 적용';
+
+  @override
+  String get topBarSectionLength => '섹션 길이 (마디)';
+
+  @override
+  String get topBarMore => '더 보기';
+
+  @override
+  String get topBarShortcuts => '단축키 보기';
+
+  @override
+  String get topBarProBadge => 'PRO';
+
+  @override
+  String get shortcutPlay => '재생 / 일시정지';
+
+  @override
+  String get shortcutRecord => '녹음';
+
+  @override
+  String get shortcutSave => '저장';
+
+  @override
+  String get shortcutUndo => '실행 취소';
+
+  @override
+  String get shortcutRedo => '다시 실행';
+
+  @override
+  String get shortcutGroove => '그루브';
+
+  @override
+  String get shortcutDuplicateLinked => '섹션 연결 복제';
+
+  @override
+  String get shortcutRangeLoop => '구간 반복 켜기/끄기';
+
+  @override
+  String get shortcutMixer => '믹서';
+
+  @override
+  String get shortcutHelp => '단축키 보기';
+
+  @override
+  String get shortcutHelpLegatoNote =>
+      '피아노롤(선택 편집)에 포커스가 있고 고칠 노트가 있으면 Ctrl/⌘+L은 기존대로 레가토입니다(선택이 없으면 트랙 전체). 그 밖에는 구간 반복입니다.';
+
+  @override
+  String get shortcutHelpTypingNote => '글자를 입력하는 중에는 단축키가 동작하지 않습니다.';
+
+  @override
+  String get shortcutSectionWorkspace => '작업 공간';
+
+  @override
+  String get shortcutSectionPianoRoll => '피아노롤 (그리드 · 선택 편집)';
+
+  @override
+  String get shortcutSectionGuitar => '기타 트랙 피아노롤';
+
+  @override
+  String get shortcutSectionDrums => '드럼 그리드 (선택 모드)';
+
+  @override
+  String get shortcutEditDeselect => '선택 해제';
+
+  @override
+  String get shortcutEditSelectAll => '전체 선택';
+
+  @override
+  String get shortcutEditArpeggiate => '펼치기 (아르페지오)';
+
+  @override
+  String get shortcutEditCopy => '복사 (선택한 노트)';
+
+  @override
+  String get shortcutEditPaste => '붙여넣기 (입력 모드에서도)';
+
+  @override
+  String get shortcutEditDuplicate => '복제';
+
+  @override
+  String get shortcutEditSplitPlayhead => '재생 위치에서 자르기';
+
+  @override
+  String get shortcutEditSplitSheet => '자르기 설정';
+
+  @override
+  String get shortcutEditGlue => '이어 붙이기';
+
+  @override
+  String get shortcutEditLegato => '레가토 (선택한 노트, 선택이 없으면 트랙 전체)';
+
+  @override
+  String get shortcutEditQuantize => '퀀타이즈 (선택, 없으면 트랙 전체)';
+
+  @override
+  String get shortcutEditQuantizeSettings => '퀀타이즈 설정';
+
+  @override
+  String get shortcutEditHumanize => '휴머나이즈 (선택, 없으면 트랙 전체)';
+
+  @override
+  String get shortcutEditFitScale => '스케일에 맞추기 (곡에 스케일이 있을 때)';
+
+  @override
+  String get shortcutEditChance => '확률 올리기/내리기 (확률 막대가 열려 있을 때)';
+
+  @override
+  String get shortcutEditChordStampMode => '코드 찍기 모드 켜기/끄기 (모든 도구)';
+
+  @override
+  String get shortcutEditDelete => '삭제';
+
+  @override
+  String get shortcutEditMute => '소리 끄기/켜기';
+
+  @override
+  String get shortcutEditChordBelow => '선택한 노트 아래에 코드 깔기';
+
+  @override
+  String get shortcutEditChordType => '코드 종류 고르기';
+
+  @override
+  String get shortcutEditMove => '앞뒤로 옮기기';
+
+  @override
+  String get shortcutEditLength => '길이 줄이기/늘리기';
+
+  @override
+  String get shortcutEditSemitone => '반음 올리기/내리기';
+
+  @override
+  String get shortcutEditOctave => '옥타브 올리기/내리기';
+
+  @override
+  String get shortcutGuitarStroke => '다운/업 스트로크';
+
+  @override
+  String get shortcutGuitarStrings => '줄 배정';
+
+  @override
+  String get shortcutGuitarRing => '울림 아르페지오';
+
+  @override
+  String get shortcutDrumToggleSelect => '그리기 ⇄ 선택 모드 (모든 모드)';
+
+  @override
+  String get shortcutDrumMoveFine => '조금씩 옮기기';
+
+  @override
+  String get shortcutDrumVelocity => '세기 올리기/내리기';
+
+  @override
+  String get shortcutDrumVelocityBig => '세기 크게 올리기/내리기';
+
+  @override
+  String get bandSongPlay => '곡 재생';
+
+  @override
+  String get bandAddSection => '섹션 추가';
+
+  @override
+  String get bandChipTooltip => '클릭: 선택 · 두 번 클릭: 이름 · 우클릭: 메뉴 · 휠: 반복 수';
+
+  @override
+  String bandLinkedNotice(int count) {
+    return '연결된 구간 $count개에 함께 적용';
+  }
+
+  @override
+  String get bandRenameTitle => '섹션 이름';
+
+  @override
+  String get bandRepeats => '반복';
+
+  @override
+  String get bandDeleteSection => '섹션 삭제';
+
+  @override
+  String get rulerTooltip => '끌어서 반복 구간 지정 · 양 끝을 끌어 조절 · 클릭해서 재생 위치 이동';
+
+  @override
+  String get auditionRestart => '같은 구간 처음부터 듣기';
+
+  @override
+  String soloCompareFull(int count) {
+    return 'Solo $count · 전체와 비교';
+  }
+
+  @override
+  String get soloCompareBack => '전체 파트 · Solo로 비교';
+
+  @override
+  String get soloClear => '해제';
+
+  @override
+  String get soloOpenVelocity => '강약 보기';
+
+  @override
+  String get soloIssueMuted => '음소거가 켜져 있어요';
+
+  @override
+  String get soloIssueZeroVolume => '트랙 음량이 0이에요';
+
+  @override
+  String get soloIssueNoNotes => '이 구간에 재생할 노트·오디오가 없어요';
+
+  @override
+  String soloIssueVeryQuiet(int min, int max) {
+    return '노트 세기 $min–$max/127 · 매우 작게 들릴 수 있어요';
+  }
+
+  @override
+  String get soloIssueOpenHint => '눌러서 강약 보기';
+
+  @override
+  String get shortcutViewToggle => '편곡 ↔ 편집 보기';
+
+  @override
+  String get shortcutOpenEditor => '선택한 트랙 편집 (편곡 보기)';
+
+  @override
+  String get viewArrange => '편곡';
+
+  @override
+  String get viewEdit => '편집';
+
+  @override
+  String get viewLocked => '녹음 중에는 보기를 바꿀 수 없어요';
+
+  @override
+  String minimapEditing(String track) {
+    return '$track 편집 중';
+  }
+
+  @override
+  String get minimapToArrange => '편곡 보기로';
+
+  @override
+  String get minimapOverviewTooltip => '곡 전체 · 클릭: 재생 위치 이동 · 사각형 끌기: 피아노롤 이동';
+
+  @override
+  String get arrangeHint => '트랙 줄을 두 번 누르거나 Enter를 누르면 편집 보기로 넘어가요';
+
+  @override
+  String get shortcutInspector => '인스펙터 접기 / 펼치기';
+
+  @override
+  String get inspectorTrack => '트랙';
+
+  @override
+  String inspectorNotes(int count) {
+    return '노트 $count';
+  }
+
+  @override
+  String get inspectorCollapse => '인스펙터 접기';
+
+  @override
+  String get inspectorExpand => '인스펙터 펼치기';
+
+  @override
+  String inspectorSummary(int notes, int bars) {
+    return '노트 $notes개 · $bars마디';
+  }
+
+  @override
+  String get inspectorInstrument => '악기';
+
+  @override
+  String get inspectorOctave => '옥타브';
+
+  @override
+  String get inspectorVolume => '볼륨';
+
+  @override
+  String get inspectorPan => 'Pan';
+
+  @override
+  String get inspectorPanHint => '두 번 클릭 또는 Alt+클릭: 가운데로';
+
+  @override
+  String get inspectorMute => '음소거';
+
+  @override
+  String get inspectorGroove => '그루브';
+
+  @override
+  String get inspectorGrooveNone => '없음';
+
+  @override
+  String get inspectorHum => '허밍으로 노트 넣기';
+
+  @override
+  String get inspectorMidiImport => 'MIDI 구간 가져오기';
+
+  @override
+  String get inspectorClear => '트랙 비우기';
+
+  @override
+  String get inspectorNoNotes => '그리드에서 노트를 고르면 여기서 편집해요';
+
+  @override
+  String get inspectorArrangeOnly => '편곡 보기에서는 트랙 탭만 보여요';
+
+  @override
+  String inspectorSelectedNotes(int count) {
+    return '선택한 노트 $count개';
+  }
+
+  @override
+  String get inspectorPosition => '위치';
+
+  @override
+  String get inspectorLength => '길이';
+
+  @override
+  String get inspectorMore => '더 보기';
+
+  @override
+  String get inspectorGuitar => '기타 스트로크·줄';
+
+  @override
+  String get inspectorSettings => '설정';
+
+  @override
+  String get inspectorDrumSelectHint => '선택 모드에서 노트를 고르세요';
+
+  @override
+  String get velocityLaneRow => '강약 · 확률';
+
+  @override
+  String get velocityLaneFold => '강약 막대 접기';
+
+  @override
+  String get velocityLaneUnfold => '강약 막대 펼치기';
+
+  @override
+  String get gridInKeyOnly => '키 안의 음만';
+
+  @override
+  String get gridInKeyOnlyTip => '키 밖의 빈 줄을 숨기고, 새 음은 키 안에 넣어요';
+
+  @override
+  String gridOutOfKeyCount(int count) {
+    return '키 밖 음 $count개';
+  }
+
+  @override
+  String get humPrimary => '허밍으로 넣기';
+
+  @override
+  String get shortcutHum => '허밍으로 넣기';
+
+  @override
+  String get shortcutHelpHumNote =>
+      '피아노롤·드럼 그리드에 포커스가 있고 고칠 노트가 있으면 Ctrl/⌘+Shift+H는 기존대로 휴머나이즈입니다. 그 밖에는 활성 트랙의 허밍 창을 엽니다.';
 }

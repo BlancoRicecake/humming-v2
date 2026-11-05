@@ -1,4 +1,4 @@
-platform :osx, '10.15'
+platform :osx, '12.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -7,6 +7,10 @@ project 'Runner', {
   'Debug' => :debug,
   'Profile' => :release,
   'Release' => :release,
+  # `direct` flavor: website download build (com.humtrack.app.direct).
+  'Debug-direct' => :debug,
+  'Profile-direct' => :release,
+  'Release-direct' => :release,
 }
 
 def flutter_root
@@ -25,6 +29,18 @@ end
 require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
 
 flutter_macos_podfile_setup
+
+# HumTrack: build these plugin pods from a patched copy instead of the pub cache.
+# flutter_midi_pro's pinned fork uses iOS-only AVAudioSession in its macOS code;
+# see ../third_party/flutter_midi_pro_macos/HUMTRACK_PATCH.md.
+HUMTRACK_MACOS_POD_OVERRIDES = {
+  'flutter_midi_pro' => '../third_party/flutter_midi_pro_macos',
+}.freeze
+humtrack_pod = method(:pod)
+define_singleton_method(:pod) do |name = nil, *requirements|
+  override = HUMTRACK_MACOS_POD_OVERRIDES[name]
+  override ? humtrack_pod.call(name, path: override) : humtrack_pod.call(name, *requirements)
+end
 
 target 'Runner' do
   use_frameworks!
