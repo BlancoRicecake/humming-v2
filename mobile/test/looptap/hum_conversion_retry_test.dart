@@ -562,8 +562,15 @@ void main() {
   }
 
   Future<void> finishSuccess(WidgetTester tester) async {
-    await settleIo(tester);
-    await tester.pump(const Duration(seconds: 1));
+    // Success copies the take with real file I/O, which only advances inside
+    // runAsync; a slow runner can need more than one settleIo window. Wait for
+    // the observable result (the modal closing), capped, instead of fixed time.
+    for (var i = 0; i < 100 && _modal.evaluate().isNotEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.pumpAndSettle();
     expect(_modal, findsNothing);
   }
