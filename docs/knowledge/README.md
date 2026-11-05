@@ -18,6 +18,7 @@ HumTrack의 판단 하나하나에 쓰는 배경 지식. 경쟁사, 오픈소스
 - [`raw/2026-10-12-collaboration.md`](raw/2026-10-12-collaboration.md) — 협업·커뮤니티·크리에이터 마켓 플랫폼
 - [`raw/2026-10-12-open-source-stack.md`](raw/2026-10-12-open-source-stack.md) — 오픈소스·라이선스 부품
 - [`raw/2026-10-12-market-pricing.md`](raw/2026-10-12-market-pricing.md) — 시장 규모, 장벽, 가격, 지역
+- [`raw/2026-11-01-update.md`](raw/2026-11-01-update.md) — 2026-11 월간 갱신
 
 ## 사용 규칙
 
@@ -39,3 +40,4 @@ HumTrack의 판단 하나하나에 쓰는 배경 지식. 경쟁사, 오픈소스
 | 날짜 | 내용 |
 |---|---|
 | 2026-10-12 | 최초 수집. 5개 영역 병렬 조사, 핵심 주장 4개 원문 재확인 (YuE 라이선스, BandLab Audio-to-MIDI 유료, flutter_midi_pro의 Android FluidSynth, Stripe 크로스보더 국가 제한). 조사 도구 한도로 일부 `[미확인]` 남음 |
+| 2026-11-01 | 월간 갱신(자동). BandLab 일본 Studio 유료 시험 2개 출처로 확인, BandLab Pro/Max 개편, Suno 다운로드 상한·v6 무료 듣기 전용, EU AI Act 50조 기한(2026-12-02) 확인, YouTube Music AI 표시, YuE2 가중치 CC BY-NC. insights 27~33 추가 |

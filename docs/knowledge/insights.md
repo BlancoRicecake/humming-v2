@@ -1,6 +1,6 @@
 # 결정에 쓰는 핵심 시사점
 
-조사일 2026-10-12 · 원문과 전체 출처는 `raw/` · ✅ = 이 세션에서 원문 페이지로 재확인 · `[미확인]` = 단일·약한 출처
+조사일 2026-10-12 (2026-11-01 월간 갱신 반영) · 원문과 전체 출처는 `raw/` · ✅ = 이 세션에서 원문 페이지로 재확인 · `[미확인]` = 단일·약한 출처
 
 각 항목 끝의 **→** 는 HumTrack의 어떤 결정에 영향을 주는지다. 여기 적힌 것은 판단 재료이지 결정이 아니다. 결정은 Heo가 하고 `context-notes.md`에 남긴다.
 
@@ -28,15 +28,22 @@
 
 ## C. 경쟁 구도
 
-8. **BandLab이 이미 핵심 기능을 갖고 있다.** 1억+ 사용자. 목소리·악기 → MIDI 변환(Audio-to-MIDI)은 **멤버십 전용** ✅([BandLab 도움말](https://help.bandlab.com/hc/en-us/articles/37575596722329-Converting-Audio-to-MIDI)), 기존 MIDI에 코드·베이스·드럼을 붙이는 Layer도 멤버십. 멤버십은 월 $14.99.
+8. **BandLab이 이미 핵심 기능을 갖고 있다.** 1억+ 사용자. 목소리·악기 → MIDI 변환(Audio-to-MIDI)은 **멤버십 전용** ✅([BandLab 도움말](https://help.bandlab.com/hc/en-us/articles/37575596722329-Converting-Audio-to-MIDI)), 기존 MIDI에 코드·베이스·드럼을 붙이는 Layer도 멤버십. 멤버십은 월 $14.99. (2026-11 변경: 2026-09-15부터 Free·Pro·Max 3단계. Pro 연 $99(이후 $149), Max 연 $199(이후 $299). Audio-to-MIDI·Smart Tools(Layer 포함)는 여전히 Pro 이상, [BandLab 가격](https://www.bandlab.com/membership-pricing), [BandLab 블로그 2026-09-15](https://blog.bandlab.com/bandlab-membership/))
    → HumTrack의 차별점은 기능 자체가 아니라 **"쉬움 + 모바일 우선 + BandLab의 1/4 가격 + 내 멜로디라는 소유감"**.
-9. **BandLab이 수익화를 조이고 있다.** 2026-05 업데이트에서 무료 샘플 제한·광고를 늘려 해당 버전 평점이 4.19→2.76 `[단일 출처: mwm.ai]`. 일본에서 Studio를 여는 데 멤버십을 요구하는 테스트 중이라는 고객센터 답변이 일본 App Store 리뷰에 있다 `[단일 출처, 미확인]`.
+9. **BandLab이 수익화를 조이고 있다.** 2026-05 업데이트에서 무료 샘플 제한·광고를 늘려 해당 버전 평점이 4.19→2.76 `[단일 출처: mwm.ai]`. 일본에서 Studio를 여는 데 멤버십을 요구하는 테스트 중이라는 고객센터 답변이 일본 App Store 리뷰에 있다 `[단일 출처, 미확인]`. (2026-11 변경: 출처 2개로 확인. 일본 App Store 리뷰(9/7)에 개발사 답변(9/8)이 "Studio 접근의 새 이용 형태"를 인정, hashout.jp(2026-10-21)가 고객센터 답변으로 시험 도입을 보도. 공식 공지는 없음. 일본 가격 Pro 월 ¥2,500·연 ¥25,000, [hashout.jp](https://hashout.jp/?p=12973), [App Store JP](https://apps.apple.com/jp/app/id968585775))
    → 사실이면 **일본에서 대체재를 찾는 사용자가 생기는 시기**다. 재확인 1순위.
 10. **'허밍 → 곡' 전용 앱은 비어 있다.** HumToSong(iOS, 1천 회 미만, ★2.6), EveryBit(Android, 5천 회, ★3.1), ByteDance Ripple(2023 미국 베타 후 소식 없음 `[미확인]`).
     → 이 니치에 제대로 된 제품이 없다.
-11. **"노래 하나 갖고 싶다"는 수요는 AI 생성기가 무료로 흡수 중이다.** Suno(사용자 1억·연매출 약 $3억 주장 `[미확인]`), Gemini Lyria 3.5(2026-09, 최대 3분, 무료), CapCut AI 음악, ElevenMusic(무료 하루 7곡).
+11. **"노래 하나 갖고 싶다"는 수요는 AI 생성기가 무료로 흡수 중이다.** Suno(사용자 1억·연매출 약 $3억 주장 `[미확인]`), Gemini Lyria 3.5(2026-09, 최대 3분, 무료), CapCut AI 음악, ElevenMusic(무료 하루 7곡). (2026-11 변경: Suno는 2026-09-03부터 다운로드 상한(무료 평생 7회·신규 무료 계정은 사실상 0, Pro 월 20, Premier 월 60), v6(2026-09-09)부터 무료는 듣기 전용, [Mubert 정리](https://mubert.com/blog/suno-download-caps), [genmedialab](https://www.genmedialab.com/news/suno-v6-launch/). Lyria 3.5 API 입력은 텍스트·이미지뿐이고 허밍 입력 없음, [Google 문서](https://ai.google.dev/gemini-api/docs/models/lyria-3.5))
     → 즉석 생성으로 경쟁하지 않는다. **"네 멜로디, 네 곡, 네 소유"**로 선을 긋는다.
-12. **가장 가까운 신규 경쟁자는 Mozart AI**(목소리 아이디어로 시작하는 AI DAW, 초보자 대상, 모바일 앱, 2026-02 시드 $6M). Audiotool 3.0(무료 브라우저 DAW, 실시간 공동작업, 모바일 앱 예정)도 주시. → `watchlist.md`
+12. **가장 가까운 신규 경쟁자는 Mozart AI**(목소리 아이디어로 시작하는 AI DAW, 초보자 대상, 모바일 앱, 2026-02 시드 $6M). Audiotool 3.0(무료 브라우저 DAW, 실시간 공동작업, 모바일 앱 예정)도 주시. → `watchlist.md` (2026-11 변경: Mozart AI의 iOS 앱 이름은 "Song Generator"이고 Creator 월 $8~10·Pro 월 $18·Premium 월 $30의 크레딧제. 허밍 입력 언급 없음. DAW보다 생성기 쪽으로 이동, [App Store](https://apps.apple.com/us/app/mozart-ai-song-generator/id6758667169). Audiotool 모바일 앱 출시 소식은 없음)
+
+27. **일본 BandLab 무료 사용자가 Studio에서 밀려나고 있다 (2026-11).** 시험 도입이지만 무료로 프로젝트를 못 여는 사용자가 생겼고, 대안은 월 ¥2,500. HumTrack(월 ₩5,500)은 그 1/4 수준이다. ([hashout.jp 2026-10-21](https://hashout.jp/?p=12973))
+    → 일본 출시·일본어 스토어 문구·틱톡 메시지("BandLab 대신, 허밍으로")를 앞당길 근거. 단 공식 공지가 없어 언제든 철회될 수 있다.
+28. **AI 생성기는 '꺼내기'를 더 조인다 (2026-11).** Suno 무료는 v6부터 듣기 전용, 신규 무료 계정은 다운로드가 사실상 없음. Udio도 다운로드 막힘. ([Mubert](https://mubert.com/blog/suno-download-caps))
+    → 5번의 반대편이 더 선명해졌다. **"무료로도 내 곡을 들려줄 수 있다"**(로드맵 4장 B안)는 생성기 대비 분명한 차별점이 된다.
+29. **'허밍 → 완성곡' 생성형 앱이 늘고 있다 (2026-11).** Larka AI(허밍·휘파람 → 보컬·믹스·커버까지, iOS 출시 예정 `[미확인]`), 웹 허밍-투-송 생성기 다수, 일본 순위에 "허밍 → 보카로풍 곡"으로 소개된 Music Maker JAM `[단일 출처]`. 모두 결과를 고칠 수 없고 MIDI가 없다. ([Larka 2026-04-26](https://larka-music.com/blog/hum-melody-into-finished-song-iphone), [my-best](https://my-best.com/6100))
+    → 10번("니치가 비어 있다")은 '편집 가능한 허밍 DAW'로 좁혀서 봐야 한다. 차별점은 **"멜로디가 그대로 남고, 고칠 수 있다"**.
 
 ## D. 기술
 
@@ -48,14 +55,24 @@
     → 데스크톱 트랙과 겹치는 큰 결정. 작은 실험(스파이크)부터.
 16. **라이선스 확인이 필요한 곳이 있다.** flutter_midi_pro는 Android에서 FluidSynth(LGPL-2.1)를 쓴다 ✅([pub.dev](https://pub.dev/packages/flutter_midi_pro)). LGPL 고지·소스 제공·교체 가능한 라이브러리 형태가 필요하다. 번들 사운드폰트 출처도 점검(GeneralUser GS·MuseScore General·FluidR3는 괜찮음, Sonatina·Spitfire LABS는 피함). AGPL/GPL(Essentia, aubio, 무료 JUCE, Vital)은 가져오지 않는다. (2026-10-12 결정, Heo: **지금 고지 보강**. 앱 라이선스 화면에 FluidSynth LGPL 전문·소스 위치와 누락됐던 CC-BY 사운드폰트 크레딧을 추가하는 코드 작성 — `mobile/lib/services/third_party_licenses.dart`)
 17. **최근 지원이 끝난 부품.** Superpowered(2027-07 종료), FFmpegKit·sfizz·Magenta note-seq(2026 보관 처리). 새로 쓰지 않는다.
-18. **YuE 라이선스가 바뀌었다.** 코드와 가중치 모두 Apache-2.0 ✅(2025-01-30, [GitHub](https://github.com/multimodal-art-projection/YuE)). `docs/AI_ARRANGEMENT_ROADMAP.md`의 "가중치 CC BY-NC" 서술은 낡았다. 단, 학습 데이터 출처가 공개되지 않아 법적 위험은 남는다(아래 E). (2026-10-12 결정, Heo: **실험 후보**로 올림. 내부 계정·AI 표시 조건, 출시 관문은 그대로. 로드맵 문서 정정 완료)
+18. **YuE 라이선스가 바뀌었다.** 코드와 가중치 모두 Apache-2.0 ✅(2025-01-30, [GitHub](https://github.com/multimodal-art-projection/YuE)). `docs/AI_ARRANGEMENT_ROADMAP.md`의 "가중치 CC BY-NC" 서술은 낡았다. 단, 학습 데이터 출처가 공개되지 않아 법적 위험은 남는다(아래 E). (2026-10-12 결정, Heo: **실험 후보**로 올림. 내부 계정·AI 표시 조건, 출시 관문은 그대로. 로드맵 문서 정정 완료) (2026-11 변경: 후속 **YuE2**(기술 보고서 2026-09-26)는 코드만 Apache-2.0이고 **가중치는 CC BY-NC 4.0**, 기업은 상업 라이선스 문의 필요. YuE2로 옮기면 상업 사용 불가, [GitHub](https://github.com/multimodal-art-projection/YuE))
+
+30. **flutter_soloud 5.x가 오디오 엔진 통합 가설(15번)에 맞는 기능을 갖췄다 (2026-11).** 4.1.0(2026-07) pull-buffer 스트리밍·`playClocked`/`playScheduled`, 5.0.0(2026-09) Dart build hooks 전환, 5.1.5 Android AAudio 경로 변경 경합·iOS 백그라운드 복귀 수정. 마이크 입력은 없음. ([changelog](https://pub.dev/packages/flutter_soloud/changelog))
+    → 스파이크를 한다면 5.2.x 기준. 녹음은 별도 패키지 유지.
+31. **SwiftF0 0.3.0 (2026-09-25, MIT, ONNX 모델 동봉).** ([PyPI](https://pypi.org/project/swift-f0/))
+    → 14번 온디바이스 후보의 최신 기준점. 허밍 전사 벤치마크의 새 SOTA는 이번 달 찾지 못함.
 
 ## E. AI·법률
 
-19. **소송의 초점은 '학습 데이터 출처'다.** UMG·Sony가 Suno를 다시 제소(2026-09-18), 독일 GEMA가 Suno에 승소(2026-07-31). 미국 저작권청은 "프롬프트만으로는 저작권이 없고, 사람의 창작이 드러난 부분은 보호된다"는 입장. (raw/pitch-ai-legal)
+19. **소송의 초점은 '학습 데이터 출처'다.** UMG·Sony가 Suno를 다시 제소(2026-09-18), 독일 GEMA가 Suno에 승소(2026-07-31). (2026-11 변경: Suno가 두 번째 소송의 중지를 신청(2026-10-30, [Law360](https://law360.com/articles/2544762/ai-music-startup-wants-labels-second-ip-suit-paused)). 첫 소송은 증거개시 공방 중. Suno v6는 WMG·BMG·Believe 라이선스 카탈로그로 만든 첫 모델이라고 밝힘) 미국 저작권청은 "프롬프트만으로는 저작권이 없고, 사람의 창작이 드러난 부분은 보호된다"는 입장. (raw/pitch-ai-legal)
     → **HumTrack 구조 자체가 강점이다.** 허밍한 멜로디 = 사람의 창작, 규칙 기반 반주 = 학습 데이터 위험 없음. "긁어 온 데이터 없이, 네 멜로디로"를 내세울 수 있다. 생성형 AI를 붙인다면 학습 데이터가 깨끗한 것만(Stable Audio Open 등).
-20. **AI 생성물 표시 의무가 시작됐다.** EU AI Act 50조(2026-08-02, 기존 시스템은 2026-12-02 `[세부 미확인]`), Spotify·YouTube·TikTok도 표시 요구. 실존 인물 목소리 복제는 금지 추세(Spotify 정책, 테네시 ELVIS Act).
+20. **AI 생성물 표시 의무가 시작됐다.** EU AI Act 50조(2026-08-02, 기존 시스템은 2026-12-02 `[세부 미확인]`) (2026-11 변경: 확인됨. Digital Omnibus(규정 2026/1744, 2026-07-27 발효) 111조 4항으로 2026-08-02 전 출시된 생성 시스템의 50조 2항 기계판독 표시 기한이 2026-12-02. 워터마크 검출 상호운용은 2027-02-02. 소비자용 시스템은 B2B 예외 불가, [ActuIA](https://www.actuia.com/en/news/ai-act-obligations-in-force-and-delays-under-omnibus-2026-1744/), [Reed Smith 2026-07-28](https://www.reedsmith.com/our-insights/blogs/viewpoints/102nbz0/transparency-obligations-for-ai-generated-content-the-code-of-practice-adequacy/)), Spotify·YouTube·TikTok도 표시 요구. 실존 인물 목소리 복제는 금지 추세(Spotify 정책, 테네시 ELVIS Act). (2026-11 변경: 미 연방 NO FAKES Act는 상원 법사위 통과 후 2026-09-30 만장일치 처리가 막혀 11월 이후로 보류, [Daily Journal 2026-10-07](https://www.dailyjournal.com/article/395055-no-fakes-act-dead-for-now-as-cruz-objects-to-unanimous-consent-request))
     → 내보내기 메타데이터에 "어느 부분이 사람·규칙·AI인지" 기록. 목소리 복제 기능은 만들지 않는다.
+
+32. **스트리밍 플랫폼의 AI 표시가 '역할별·정도별'로 갈라졌다 (2026-11).** YouTube Music(2026-10-14) Fully/Partly/No Gen AI 3단계, DDEX·CSV로 신고, 자체 탐지로 보충. Auto-Tune식 보정·자동 마스터링은 'No'. Spotify AI Credits(보컬·가사·악기·후반작업 역할별, 베타 2026-04 `[미확인]`), Apple Music Transparency Tags(작곡·음원·아트워크·MV, 2026-03 `[2차 출처]`). ([MBW](https://www.musicbusinessworldwide.com/youtube-music-starts-labeling-ai-generated-songs-using-partner-disclosures-and-its-own-detection-tools/))
+    → 20번의 내보내기 메타데이터를 **DDEX Gen AI 범주(작곡·보컬·악기 등 역할별)**에 맞춰 설계하면 유통사에 그대로 넘길 수 있다. 허밍 멜로디 + 규칙 반주인 기본 곡은 'No' 또는 'Partly'에 가깝다는 점이 마케팅 재료.
+33. **라이선스 받은 '팬 리믹스'가 커진다 (2026-11).** Hook이 UMG와 계약(2026-08-19). 새 곡을 생성하지 않고, 모든 창작물을 허가·크레딧·추적하며 만들 때와 공유할 때 권리자에게 지급. ([MBW](https://www.musicbusinessworldwide.com/universal-music-group-partners-with-hook-to-license-fan-created-content-across-social-media/))
+    → 22·23번 "남의 씨앗에 한 겹 얹기 + 크레딧"의 대형 사례. HumTrack 공간은 기성곡이 아니라 **사용자 허밍 씨앗** 위에서 같은 구조를 만들면 라이선스 비용이 없다.
 
 ## F. 함께 노는 공간 (장기 비전)
 
