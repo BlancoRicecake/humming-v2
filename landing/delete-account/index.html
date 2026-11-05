@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>계정 및 데이터 삭제 — HumTrack</title>
-<meta name="description" content="HumTrack 계정 및 관련 데이터 삭제 요청 안내 — 앱 내 절차, 이메일 요청, 삭제 범위와 보관 기간.">
+<meta name="description" content="HumTrack 계정 및 관련 데이터 삭제 요청 안내 — 앱 내 절차, 이메일 요청, 클라우드 사본만 삭제하기, 삭제 범위와 보관 기간.">
 <meta property="og:type" content="article">
 <meta property="og:title" content="계정 및 데이터 삭제 — HumTrack">
 <meta property="og:description" content="HumTrack 계정 및 관련 데이터 삭제 요청 안내.">
@@ -75,16 +75,20 @@ th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
 <main>
   <article data-body="ko">
     <h1>계정 및 데이터 삭제</h1>
-    <p class="subtitle">HumTrack 계정과 클라우드에 저장된 모든 작업물을 영구 삭제하는 방법입니다.</p>
+    <p class="subtitle">HumTrack 계정과 서버에 보관된 계정 데이터·클라우드 백업 사본을 영구 삭제하는 방법, 그리고 계정은 유지한 채 클라우드 사본만 지우는 방법입니다.</p>
 
     <h2>1. 앱 내에서 삭제하기 (권장)</h2>
     <ol>
-      <li>HumTrack 앱 실행 → 우상단 <strong>계정 아이콘</strong> 탭</li>
-      <li><strong>설정 → 계정</strong> 진입</li>
-      <li><strong>"계정 삭제"</strong> 버튼 탭</li>
-      <li>확인 다이얼로그에서 <strong>"삭제 확인"</strong> 탭</li>
+      <li>HumTrack 앱 실행 → 곡 목록 상단의 <strong>설정</strong>(톱니바퀴) 아이콘 탭</li>
+      <li>로그인한 상태에서 설정 맨 아래 <strong>"회원 탈퇴"</strong> 탭</li>
+      <li>확인 창에서 <strong>"삭제"</strong> 탭</li>
     </ol>
-    <p>삭제 요청은 즉시 백엔드로 전달되며, <strong>72시간 이내</strong>에 모든 클라우드 데이터가 영구 삭제됩니다.</p>
+    <p>삭제 요청은 서버에 바로 접수되고 앱은 로그아웃됩니다. 접수 이후에는 새 클라우드 백업을 올리거나 갱신할 수 없습니다.</p>
+    <ul>
+      <li><strong>계정(로그인 정보)</strong>: 접수 직후 삭제를 시도하며, 실패하면 자동으로 다시 시도합니다.</li>
+      <li><strong>클라우드 백업 사본</strong>(Cloudflare R2, 백업할 때 선택해 올린 녹음 포함): 진행 중이던 업로드 허가(최대 1시간)가 끝난 뒤 백그라운드 정리 작업이 삭제합니다. 삭제에 실패한 파일은 자동으로 다시 시도하며, 접수 후 늦게 도착한 업로드가 없는지도 계속 확인해 지웁니다.</li>
+    </ul>
+    <p>아래 5항의 법령상 보관 데이터를 제외한 서버 데이터는 <strong>72시간 이내</strong>에 영구 삭제됩니다. 이 기기에 저장된 곡(로컬 원본)은 계정 삭제와 별개로 기기에 그대로 남습니다.</p>
 
     <h2>2. 이메일로 요청하기</h2>
     <p>앱에 접근할 수 없는 경우 다음 주소로 직접 요청해 주세요:</p>
@@ -99,17 +103,30 @@ th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
 
     <h2>3. 삭제되는 데이터</h2>
     <table>
-      <thead><tr><th>데이터</th><th>저장 위치</th><th>처리</th></tr></thead>
+      <thead><tr><th>데이터</th><th>저장 위치</th><th>삭제 방식</th></tr></thead>
       <tbody>
-        <tr><td>계정 정보 (이메일, OAuth ID)</td><td>Supabase Auth</td><td>즉시 삭제</td></tr>
-        <tr><td>프로젝트 메타 (제목, BPM, 트랙)</td><td>Supabase Postgres</td><td>즉시 삭제</td></tr>
-        <tr><td>보컬 파일 (Pro 사용자)</td><td>Cloudflare R2</td><td>즉시 삭제</td></tr>
-        <tr><td>사용 카운터 (분석 횟수, 업로드 크기)</td><td>Supabase Postgres</td><td>즉시 삭제</td></tr>
-        <tr><td>마지막 동기화 시각, 디바이스 정보</td><td>Supabase Postgres</td><td>즉시 삭제</td></tr>
+        <tr><td>계정 정보 (이메일, OAuth ID)</td><td>Supabase Auth</td><td>접수 직후 삭제 시도, 실패 시 자동 재시도</td></tr>
+        <tr><td>클라우드 백업 관리 정보 (곡 제목, 파일 크기, 녹음 포함 여부, 백업 시각)</td><td>Supabase Postgres</td><td>계정 정보와 함께 삭제</td></tr>
+        <tr><td>클라우드 백업 사본 (곡 사본과 선택해 올린 녹음, Pro)</td><td>Cloudflare R2</td><td>업로드 허가가 끝난 뒤 백그라운드에서 삭제, 실패 시 자동 재시도</td></tr>
+        <tr><td>사용량 기록 (분석 횟수, 클라우드 사용 용량)</td><td>Supabase Postgres</td><td>계정 정보와 함께 삭제</td></tr>
+        <tr><td>구독 상태 기록 (스토어, 상품, 상태, 만료일)</td><td>Supabase Postgres</td><td>계정 정보와 함께 삭제 (결제 영수증은 5항의 법령상 보관 대상)</td></tr>
       </tbody>
     </table>
+    <p>위 데이터는 모두 <strong>72시간 이내</strong>에 영구 삭제됩니다. "접수"는 삭제가 끝났다는 뜻이 아니라, 위 순서대로 삭제가 진행 중이라는 뜻입니다.</p>
 
-    <h2>4. 법령상 보관되는 데이터</h2>
+    <h2>4. 계정은 유지하고 클라우드 사본만 삭제하기</h2>
+    <p>계정을 지우지 않고 클라우드 백업 사본만 지울 수 있습니다.</p>
+    <ol>
+      <li>앱의 <strong>설정 → 클라우드 백업</strong> 진입</li>
+      <li>지울 곡에서 <strong>"클라우드에서 삭제"</strong> 탭 후 확인</li>
+    </ol>
+    <ul>
+      <li>클라우드 사본(올린 녹음 포함)만 지워지며 되돌릴 수 없습니다. 이 기기와 다른 기기에 저장된 곡은 그대로 남습니다.</li>
+      <li>구독이 끝난 뒤에도 기존 사본을 받거나 지울 수 있습니다.</li>
+      <li>계정과 스토어 구독은 그대로 유지됩니다. 구독 해지는 7항처럼 스토어에서 따로 해야 합니다.</li>
+    </ul>
+
+    <h2>5. 법령상 보관되는 데이터</h2>
     <p>다음은 법령 의무에 따라 일정 기간 보관되며, 그 후 자동 폐기됩니다:</p>
     <table>
       <thead><tr><th>데이터</th><th>보관 기간</th><th>근거</th></tr></thead>
@@ -121,23 +138,23 @@ th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
     </table>
     <p>위 데이터는 개인 식별이 어려운 형태로 보관되며, 추가적인 마케팅·분석 용도로 사용되지 않습니다.</p>
 
-    <h2>5. 무료 사용자의 데이터</h2>
+    <h2>6. 무료 사용자의 데이터</h2>
     <p>로그인 없이 사용하는 익명 사용자의 경우 별도 삭제 요청이 필요하지 않습니다:</p>
     <ul>
       <li><strong>보컬 녹음</strong>: 분석 서버 메모리에서 처리 후 <strong>분석 완료 즉시 폐기</strong>. 서버 디스크에 기록 ❌</li>
       <li><strong>로컬 저장 프로젝트</strong>: 디바이스에만 저장. 앱 삭제 시 함께 제거됨 (iOS/Android OS 가 자동 처리)</li>
     </ul>
 
-    <h2>6. 활성 구독 상태에서의 삭제</h2>
+    <h2>7. 활성 구독 상태에서의 삭제</h2>
     <div class="warn">
-      <strong>주의</strong> — 계정 삭제는 진행 중인 유료 구독을 자동 해지하지 않습니다. 구독은 별도로 앱 마켓 의 구독 설정에서 직접 해지해 주세요:
+      <strong>주의</strong> — 계정 삭제나 클라우드 사본 삭제는 진행 중인 유료 구독을 자동 해지하지 않습니다. 구독은 별도로 앱 마켓 의 구독 설정에서 직접 해지해 주세요:
       <ul style="margin-top:8px;">
         <li><strong>iOS</strong>: 설정 → [사용자 이름] → 구독 → HumTrack</li>
         <li><strong>기타 앱 마켓</strong>: 구매하신 마켓의 구독 관리 화면</li>
       </ul>
     </div>
 
-    <h2>7. 문의</h2>
+    <h2>8. 문의</h2>
     <p>삭제 절차나 진행 상태에 대한 문의는 <code>humtrack@gmail.com</code> 으로 연락 주세요.</p>
     <p style="color:var(--text-secondary); font-size:13px; margin-top:24px;">
       개발자: 에르모세아르 (Hermosear)<br>
@@ -149,16 +166,20 @@ th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
 
   <article data-body="en" hidden>
     <h1>Account &amp; Data Deletion</h1>
-    <p class="subtitle">How to permanently delete your HumTrack account and all cloud-stored data.</p>
+    <p class="subtitle">How to permanently delete your HumTrack account, the account data on our servers and your cloud backup copies — or delete only the cloud copies while keeping your account.</p>
 
     <h2>1. Delete From the App (Recommended)</h2>
     <ol>
-      <li>Open HumTrack → tap the <strong>account icon</strong> (top-right)</li>
-      <li>Go to <strong>Settings → Account</strong></li>
-      <li>Tap <strong>"Delete account"</strong></li>
-      <li>Confirm in the dialog</li>
+      <li>Open HumTrack → tap the <strong>Settings</strong> (gear) icon at the top of your song list</li>
+      <li>While signed in, tap <strong>"Delete account"</strong> at the bottom of Settings</li>
+      <li>Tap <strong>"Delete"</strong> in the confirmation dialog</li>
     </ol>
-    <p>The request is sent to our backend immediately. All cloud data is permanently deleted within <strong>72 hours</strong>.</p>
+    <p>Your request is recorded on our server right away and the app signs you out. After that, no new cloud backups can be uploaded or updated.</p>
+    <ul>
+      <li><strong>Account (sign-in record)</strong>: we try to delete it right after the request and retry automatically if that fails.</li>
+      <li><strong>Cloud backup copies</strong> (Cloudflare R2, including any recordings you chose to upload): a background cleanup deletes them once any upload permission that was in progress has ended (at most 1 hour). Files that fail to delete are retried automatically, and we keep checking for and removing any upload that arrives late.</li>
+    </ul>
+    <p>Except for the data retained by law in Section 5, server data is permanently deleted within <strong>72 hours</strong>. Songs saved on your device (your local originals) are separate from your account and stay on the device.</p>
 
     <h2>2. Request by Email</h2>
     <p>If you cannot access the app, email us directly:</p>
@@ -173,17 +194,30 @@ th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
 
     <h2>3. Data That Is Deleted</h2>
     <table>
-      <thead><tr><th>Data</th><th>Storage</th><th>Action</th></tr></thead>
+      <thead><tr><th>Data</th><th>Storage</th><th>How it is deleted</th></tr></thead>
       <tbody>
-        <tr><td>Account info (email, OAuth ID)</td><td>Supabase Auth</td><td>Deleted immediately</td></tr>
-        <tr><td>Project metadata (title, BPM, tracks)</td><td>Supabase Postgres</td><td>Deleted immediately</td></tr>
-        <tr><td>Vocal files (Pro only)</td><td>Cloudflare R2</td><td>Deleted immediately</td></tr>
-        <tr><td>Usage counters (analyses, upload bytes)</td><td>Supabase Postgres</td><td>Deleted immediately</td></tr>
-        <tr><td>Last sync timestamp, device info</td><td>Supabase Postgres</td><td>Deleted immediately</td></tr>
+        <tr><td>Account info (email, OAuth ID)</td><td>Supabase Auth</td><td>Deletion attempted right after the request; retried automatically on failure</td></tr>
+        <tr><td>Cloud backup management data (song title, file size, whether recordings are included, backup time)</td><td>Supabase Postgres</td><td>Deleted together with the account info</td></tr>
+        <tr><td>Cloud backup copies (song copies and recordings you chose to upload, Pro)</td><td>Cloudflare R2</td><td>Deleted in the background once upload permissions have ended; retried automatically on failure</td></tr>
+        <tr><td>Usage records (analysis count, cloud storage used)</td><td>Supabase Postgres</td><td>Deleted together with the account info</td></tr>
+        <tr><td>Subscription status record (store, product, status, expiry)</td><td>Supabase Postgres</td><td>Deleted together with the account info (payment receipts are retained by law, Section 5)</td></tr>
       </tbody>
     </table>
+    <p>All of the data above is permanently deleted within <strong>72 hours</strong>. "Accepted" means deletion is in progress in the order above, not that it has already finished.</p>
 
-    <h2>4. Data Retained for Legal Compliance</h2>
+    <h2>4. Delete Only Your Cloud Copies (Keep Your Account)</h2>
+    <p>You can delete cloud backup copies without deleting your account.</p>
+    <ol>
+      <li>In the app, go to <strong>Settings → Cloud backup</strong></li>
+      <li>Tap <strong>"Delete from cloud"</strong> on the song and confirm</li>
+    </ol>
+    <ul>
+      <li>Only the cloud copy (with any uploaded recordings) is deleted, and this can't be undone. Songs saved on this and other devices stay.</li>
+      <li>You can still restore or delete existing copies after a subscription ends.</li>
+      <li>Your account and your store subscription stay as they are. To cancel the subscription, do it in the store (Section 7).</li>
+    </ul>
+
+    <h2>5. Data Retained for Legal Compliance</h2>
     <p>The following is retained as required by law, then automatically purged:</p>
     <table>
       <thead><tr><th>Data</th><th>Retention</th><th>Basis</th></tr></thead>
@@ -195,23 +229,23 @@ th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
     </table>
     <p>This data is stored in a form that minimizes identifiability and is not used for marketing or analytics.</p>
 
-    <h2>5. Anonymous (Free) Users</h2>
+    <h2>6. Anonymous (Free) Users</h2>
     <p>If you have used HumTrack without signing in, no deletion request is needed:</p>
     <ul>
       <li><strong>Vocal recordings</strong>: processed in server memory and discarded immediately upon analysis completion. Never written to disk.</li>
       <li><strong>Local projects</strong>: stored only on your device. Removed when you uninstall the app (handled by iOS/Android).</li>
     </ul>
 
-    <h2>6. Active Subscription Notice</h2>
+    <h2>7. Active Subscription Notice</h2>
     <div class="warn">
-      <strong>Important</strong> — Deleting your account does not automatically cancel an active subscription. Cancel it separately in the app marketplace subscription settings:
+      <strong>Important</strong> — Deleting your account or your cloud copies does not automatically cancel an active subscription. Cancel it separately in the app marketplace subscription settings:
       <ul style="margin-top:8px;">
         <li><strong>iOS</strong>: Settings → [Your Name] → Subscriptions → HumTrack</li>
         <li><strong>Other app marketplaces</strong>: your store's subscription settings</li>
       </ul>
     </div>
 
-    <h2>7. Contact</h2>
+    <h2>8. Contact</h2>
     <p>Questions about deletion or status: <code>humtrack@gmail.com</code>.</p>
     <p style="color:var(--text-secondary); font-size:13px; margin-top:24px;">
       Developer: Hermosear<br>
