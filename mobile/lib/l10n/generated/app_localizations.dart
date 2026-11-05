@@ -3300,6 +3300,18 @@ abstract class L10n {
   /// **'즐겨찾기'**
   String get ltInstrumentFavorites;
 
+  /// No description provided for @ltInstrumentFavoriteAdd.
+  ///
+  /// In ko, this message translates to:
+  /// **'즐겨찾기에 추가'**
+  String get ltInstrumentFavoriteAdd;
+
+  /// No description provided for @ltInstrumentFavoriteRemove.
+  ///
+  /// In ko, this message translates to:
+  /// **'즐겨찾기에서 제거'**
+  String get ltInstrumentFavoriteRemove;
+
   /// 악기 시트 — 내려받는 카탈로그 사운드 카테고리 칩
   ///
   /// In ko, this message translates to:
@@ -3749,6 +3761,48 @@ abstract class L10n {
   /// In ko, this message translates to:
   /// **'변환'**
   String get ltHumConvert;
+
+  /// No description provided for @ltHumConversionFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'허밍을 변환하지 못했어요'**
+  String get ltHumConversionFailed;
+
+  /// No description provided for @ltHumRecordingKept.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음은 이 창에 남아 있어요. 같은 녹음으로 다시 시도할 수 있어요.'**
+  String get ltHumRecordingKept;
+
+  /// No description provided for @ltHumRetryRecording.
+  ///
+  /// In ko, this message translates to:
+  /// **'같은 녹음으로 다시 시도'**
+  String get ltHumRetryRecording;
+
+  /// No description provided for @ltHumDiscardRecording.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 버리고 닫기'**
+  String get ltHumDiscardRecording;
+
+  /// No description provided for @ltHumDiscardTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 녹음을 버릴까요?'**
+  String get ltHumDiscardTitle;
+
+  /// No description provided for @ltHumDiscardBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 녹음을 버리면 같은 녹음으로 다시 시도할 수 없어요.'**
+  String get ltHumDiscardBody;
+
+  /// No description provided for @ltHumKeepRecording.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 유지하기'**
+  String get ltHumKeepRecording;
 
   /// 녹음기 시작 실패
   ///
@@ -5013,8 +5067,74 @@ abstract class L10n {
   /// No description provided for @ltGuidedSteps.
   ///
   /// In ko, this message translates to:
-  /// **'1 녹음 → 2 저장'**
+  /// **'녹음 → 비교 → 곡 만들기'**
   String get ltGuidedSteps;
+
+  /// No description provided for @ltGuidedRetake.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 허밍 녹음하기'**
+  String get ltGuidedRetake;
+
+  /// No description provided for @ltGuidedRetakeHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'새 변환이 성공할 때까지 지금 멜로디를 유지해요.'**
+  String get ltGuidedRetakeHint;
+
+  /// No description provided for @ltTransportPlay.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생'**
+  String get ltTransportPlay;
+
+  /// No description provided for @ltTransportPause.
+  ///
+  /// In ko, this message translates to:
+  /// **'일시정지'**
+  String get ltTransportPause;
+
+  /// No description provided for @ltTransportRecordStart.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 시작'**
+  String get ltTransportRecordStart;
+
+  /// No description provided for @ltTransportRecordStop.
+  ///
+  /// In ko, this message translates to:
+  /// **'녹음 종료'**
+  String get ltTransportRecordStop;
+
+  /// No description provided for @ltTransportSettings.
+  ///
+  /// In ko, this message translates to:
+  /// **'재생 설정'**
+  String get ltTransportSettings;
+
+  /// No description provided for @ltTransportLoop.
+  ///
+  /// In ko, this message translates to:
+  /// **'반복 · 구간 듣기'**
+  String get ltTransportLoop;
+
+  /// No description provided for @ltTransportBars.
+  ///
+  /// In ko, this message translates to:
+  /// **'마디 수'**
+  String get ltTransportBars;
+
+  /// No description provided for @ltTransportTempoUp.
+  ///
+  /// In ko, this message translates to:
+  /// **'템포 높이기'**
+  String get ltTransportTempoUp;
+
+  /// No description provided for @ltTransportTempoDown.
+  ///
+  /// In ko, this message translates to:
+  /// **'템포 낮추기'**
+  String get ltTransportTempoDown;
 
   /// No description provided for @ltGuidedHumTitle.
   ///
@@ -6021,7 +6141,7 @@ abstract class L10n {
   /// No description provided for @bandChipTooltip.
   ///
   /// In ko, this message translates to:
-  /// **'클릭: 선택 · 두 번 클릭: 이름 · 우클릭: 메뉴 · 휠: 반복 수'**
+  /// **'클릭: 선택 · 두 번 클릭 / F2: 이름 · 우클릭 / Shift+F10: 메뉴 · 휠: 반복 수'**
   String get bandChipTooltip;
 
   /// No description provided for @bandLinkedNotice.

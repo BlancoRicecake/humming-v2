@@ -35,8 +35,7 @@ class DesktopCommands extends StatelessWidget {
   final VoidCallback? inspector;
   final bool enabled;
 
-  /// ui-001 stage 3: Tab switches the arrange / edit view (before Flutter's
-  /// focus traversal; never while typing). Enter edits the selected track,
+  /// Enter edits the selected track,
   /// only when nothing more specific (a button, a field, the piano roll)
   /// holds the keyboard focus.
   final VoidCallback? viewToggle, openEditor;
@@ -82,7 +81,9 @@ class DesktopCommands extends StatelessWidget {
     final command = keyboard.isControlPressed || keyboard.isMetaPressed;
     for (final s in kDesktopShortcuts) {
       if (s.command != command || s.shift != keyboard.isShiftPressed) continue;
-      if (s.letter ? _letter(event, s.key) : event.logicalKey == s.key) return s.id;
+      if (s.letter ? _letter(event, s.key) : event.logicalKey == s.key) {
+        return s.id;
+      }
     }
     return null;
   }
@@ -118,6 +119,21 @@ class DesktopCommands extends StatelessWidget {
         final id = match(event);
         final action = id == null ? null : _action(id);
         if (action == null) return KeyEventResult.ignored;
+        // Space activates a focused native button. Keep playback's global
+        // Space shortcut for the command area and music editing surfaces.
+        if (id == DesktopShortcutId.play && focused != null) {
+          var button = false;
+          focused.visitAncestorElements((element) {
+            final widget = element.widget;
+            button =
+                widget is ButtonStyleButton ||
+                widget is IconButton ||
+                widget is InkResponse ||
+                widget is PopupMenuButton;
+            return !button;
+          });
+          if (button) return KeyEventResult.ignored;
+        }
         if (id == DesktopShortcutId.openEditor &&
             FocusManager.instance.primaryFocus != node) {
           return KeyEventResult.ignored;
@@ -434,7 +450,8 @@ class PhoneSplitHandle extends StatelessWidget {
     final ko = Localizations.localeOf(context).languageCode == 'ko';
     return Semantics(
       label: ko ? '트랙과 편집 영역 크기 조절' : 'Resize tracks and editor',
-      hint: ko ? '위아래로 끌기 · 두 번 눌러 초기화' : 'Drag up or down · double-tap to reset',
+      hint:
+          ko ? '위아래로 끌기 · 두 번 눌러 초기화' : 'Drag up or down · double-tap to reset',
       child: GestureDetector(
         key: const ValueKey('phone-split-handle'),
         behavior: HitTestBehavior.opaque,

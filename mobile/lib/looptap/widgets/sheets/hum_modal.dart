@@ -18,15 +18,19 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../audio/headset.dart';
 import '../../../audio/synth.dart';
 import '../../../services/product_analytics.dart';
+import '../../music/hum_conversion.dart';
 import '../../theme/atoms.dart';
 import '../../theme/tokens.dart';
 import 'lt_modal.dart';
+
+export '../../music/hum_conversion.dart';
 
 Future<void> showHumModal(
   BuildContext context, {
   required String trackLabel,
   required Color accent,
-  required Future<void> Function(String audioPath) onConvert,
+  required Future<HumConversionResult> Function(HumConversionRequest request)
+  onConvert,
   required int bpm,
   required int bars,
   int countInBeats = 4,
@@ -72,7 +76,8 @@ class _HumModal extends StatefulWidget {
   });
   final String trackLabel;
   final Color accent;
-  final Future<void> Function(String audioPath) onConvert;
+  final Future<HumConversionResult> Function(HumConversionRequest request)
+  onConvert;
   final int bpm;
   final int bars;
   final int countInBeats;
@@ -93,7 +98,8 @@ class _HumModal extends StatefulWidget {
 
 class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   final AudioRecorder _rec = AudioRecorder();
-  String _phase = 'countin'; // countin | listen | converting | done | error
+  String _phase =
+      'countin'; // countin | listen | converting | conversionError | done | error
   // Error CODE (not text) — the message is localized in build(), so _fail can
   // run after an await without touching context.
   String _errorCode = '';
@@ -109,6 +115,12 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   bool _closed = false; // cancelled/disposed — in-flight awaits must bail
   bool _checkingPermission = false;
   bool _permissionDenied = false; // error phase offers "Open Settings"
+  String? _recordingPath;
+  String? _conversionError;
+  HumConversionRequest? _activeRequest;
+  bool _confirmingDiscard = false;
+  BuildContext? _discardDialogContext;
+  Timer? _doneTimer;
   // waveform driven by REAL mic amplitude — bars only move when you actually
   // make sound (silence stays flat), so it reflects the input.
   List<double> _levels = List.filled(40, 0.04);
@@ -133,6 +145,9 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _closed = true;
+    _doneTimer?.cancel();
+    _activeRequest?.cancel();
+    _releaseRecording();
     _msTimer?.cancel();
     _autoStop?.cancel();
     _ampSub?.cancel();
@@ -247,7 +262,9 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
       if (!await _rec.isEncoderSupported(choice.encoder)) {
         const wav = RecordingChoice(RecordingCodec.wav, '.wav');
         if (choice != wav && await _rec.isEncoderSupported(wav.encoder)) {
-          debugPrint('[hum] ${platform.name}: ${choice.codec.name} unsupported -> wav');
+          debugPrint(
+            '[hum] ${platform.name}: ${choice.codec.name} unsupported -> wav',
+          );
           choice = wav;
         } else {
           debugPrint('[hum] ${platform.name}: no supported recording codec');
@@ -342,7 +359,10 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
           });
       // One loop pass (or the caller's maximum), then convert automatically;
       // the Convert button stops earlier.
-      _autoStop = Timer(Duration(milliseconds: widget.maxMs ?? _loopMs), _finish);
+      _autoStop = Timer(
+        Duration(milliseconds: widget.maxMs ?? _loopMs),
+        _finish,
+      );
     } catch (e) {
       // Minimal diagnostics: platform, codec, error type / code. No paths, no
       // audio, no user data.
@@ -429,39 +449,139 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
     try {
       path = await _rec.stop();
     } catch (_) {}
+    _recordingPath = path;
     await _restoreOutput();
+    if (_closed || !mounted) {
+      _releaseRecording();
+      return;
+    }
     if (path == null) {
       _finishing = false;
       _fail('noaudio');
       return;
     }
-    if (mounted) setState(() => _phase = 'converting');
     widget.onRecordedMs?.call(_ms);
-    try {
-      await widget.onConvert(path);
-    } catch (_) {
-      /* host shows its own error toast + fallback */
-    }
-    if (!mounted) return;
-    setState(() => _phase = 'done');
-    Timer(const Duration(milliseconds: 650), () {
-      if (mounted) Navigator.of(context).pop();
+    await _convertRecording();
+  }
+
+  /// The modal owns this file through all attempts. In particular, neither a
+  /// timeout nor dismissing an error message transfers/deletes the recording.
+  Future<void> _convertRecording() async {
+    final path = _recordingPath;
+    if (_closed || !mounted || path == null || _activeRequest != null) return;
+    final request = HumConversionRequest(path);
+    _activeRequest = request;
+    setState(() {
+      _phase = 'converting';
+      _conversionError = null;
     });
+    HumConversionResult result;
+    try {
+      result = await widget.onConvert(request);
+    } catch (_) {
+      result = const HumConversionResult.failure();
+    } finally {
+      _activeRequest = null;
+      // Do not remove a file while the callback may still be reading it.
+      if (_closed || request.cancelled) _releaseRecording();
+    }
+    if (_closed || !mounted) return;
+    if (result.status != HumConversionStatus.failure) _closeDiscardPrompt();
+    if (result.status == HumConversionStatus.cancelled) {
+      await _cancel();
+      return;
+    }
+    if (result.status == HumConversionStatus.failure) {
+      setState(() {
+        _phase = 'conversionError';
+        _conversionError = result.message;
+      });
+      return;
+    }
+    _releaseRecording();
+    setState(() => _phase = 'done');
+    _doneTimer = Timer(const Duration(milliseconds: 650), () {
+      if (mounted && !_closed) Navigator.of(context).pop();
+    });
+  }
+
+  void _releaseRecording() {
+    if (_activeRequest != null) return;
+    final path = _recordingPath;
+    _recordingPath = null;
+    _deleteQuiet(path);
+  }
+
+  void _closeDiscardPrompt() {
+    final dialogContext = _discardDialogContext;
+    if (dialogContext != null &&
+        dialogContext.mounted &&
+        ModalRoute.of(dialogContext)?.isCurrent == true) {
+      Navigator.of(dialogContext).pop(false);
+    }
+  }
+
+  /// An accidental Escape/system back must not silently discard a failed take.
+  Future<void> _requestClose() async {
+    if (_closed || _confirmingDiscard) return;
+    if (_recordingPath == null || _phase == 'done') {
+      await _cancel();
+      return;
+    }
+    _confirmingDiscard = true;
+    final l = L10n.of(context);
+    bool? discard;
+    try {
+      discard = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          _discardDialogContext = dialogContext;
+          return AlertDialog(
+            title: Text(l.ltHumDiscardTitle),
+            content: Text(l.ltHumDiscardBody),
+            actions: [
+              TextButton(
+                autofocus: true,
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(l.ltHumKeepRecording),
+              ),
+              TextButton(
+                key: const ValueKey('hum-confirm-discard'),
+                onPressed: () {
+                  _activeRequest?.cancel();
+                  Navigator.of(dialogContext).pop(true);
+                },
+                child: Text(l.ltHumDiscardRecording),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      _confirmingDiscard = false;
+      _discardDialogContext = null;
+    }
+    if (discard == true && mounted && !_closed) await _cancel();
   }
 
   Future<void> _cancel() async {
     if (_closed) return; // Close + Cancel double-tap → single pop
     _closed = true;
+    _doneTimer?.cancel();
+    _activeRequest?.cancel();
     _autoStop?.cancel();
     _msTimer?.cancel();
     _ampSub?.cancel();
     _stateSub?.cancel();
     _stopBacking();
     String? path;
-    try {
-      path = await _rec.stop();
-    } catch (_) {}
+    if (!_finishing) {
+      try {
+        path = await _rec.stop();
+      } catch (_) {}
+    }
     _deleteQuiet(path);
+    _releaseRecording();
     await _restoreOutput();
     if (mounted) Navigator.of(context).pop();
   }
@@ -474,6 +594,7 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
       'countin' => l.ltHumCountIn,
       'listen' => l.ltHumListen,
       'converting' => l.ltHumConverting,
+      'conversionError' => _conversionError ?? l.ltHumConversionFailed,
       'error' => _errorText(l),
       _ => l.ltHumDone,
     };
@@ -482,7 +603,7 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _cancel();
+        if (!didPop) _requestClose();
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -492,23 +613,32 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
             children: [
               Ms(LtIcons.graphicEq, size: 18, color: widget.accent),
               const SizedBox(width: 8),
-              Text(
-                l.ltHumModalTitle(widget.trackLabel),
-                style: LTType.inter(
-                  size: 16,
-                  weight: FontWeight.w800,
-                  color: LT.t1,
+              Flexible(
+                child: Text(
+                  l.ltHumModalTitle(widget.trackLabel),
+                  textAlign: TextAlign.center,
+                  style: LTType.inter(
+                    size: 16,
+                    weight: FontWeight.w800,
+                    color: LT.t1,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: LTType.inter(
-              size: 12,
-              color: _phase == 'error' ? LT.danger : LT.t2,
+          Semantics(
+            liveRegion: _phase == 'error' || _phase == 'conversionError',
+            child: Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: LTType.inter(
+                size: 12,
+                color:
+                    _phase == 'error' || _phase == 'conversionError'
+                        ? LT.danger
+                        : LT.t2,
+              ),
             ),
           ),
           const SizedBox(height: 20),
@@ -523,42 +653,51 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
                         color: widget.accent,
                         fill: 1,
                       )
-                      : _phase == 'error'
+                      : _phase == 'error' || _phase == 'conversionError'
                       ? Ms(LtIcons.info, size: 44, color: LT.danger)
                       : _phase == 'countin'
                       ? Text(
                         '$_count',
+                        textScaler: TextScaler.noScaling,
                         style: LTType.mono(
                           size: 48,
                           weight: FontWeight.w800,
                           color: widget.accent,
                         ),
                       )
-                      : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          for (final l in _levels)
-                            Container(
-                              width: 5,
-                              height: (l * (_phase == 'listen' ? 64 : 24))
-                                  .clamp(6, 64),
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 1.5,
+                      : FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            for (final l in _levels)
+                              Container(
+                                width: 5,
+                                height: (l * (_phase == 'listen' ? 64 : 24))
+                                    .clamp(6, 64),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 1.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      _phase == 'listen'
+                                          ? widget.accent
+                                          : LT.t3,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
                               ),
-                              decoration: BoxDecoration(
-                                color:
-                                    _phase == 'listen' ? widget.accent : LT.t3,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
             ),
           ),
           const SizedBox(height: 22),
           if (_phase == 'listen')
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 Container(
                   width: 8,
@@ -578,35 +717,64 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
                   ),
                 ),
                 const SizedBox(width: 14),
-                GestureDetector(
-                  onTap: _finish,
-                  child: Container(
-                    height: 44,
-                    padding: const EdgeInsets.symmetric(horizontal: 26),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: widget.accent,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      l.ltHumConvert,
-                      style: LTType.inter(
-                        size: 14,
-                        weight: FontWeight.w800,
-                        color: LT.bg,
-                      ),
-                    ),
-                  ),
-                ),
+                _solidBtn(l.ltHumConvert, _finish),
                 const SizedBox(width: 14),
                 _ghostBtn(l.cancel, _cancel),
               ],
             )
           else if (_phase == 'countin')
             _ghostBtn(l.cancel, _cancel)
-          else if (_phase == 'error')
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+          else if (_phase == 'converting')
+            TextButton(
+              key: const ValueKey('hum-cancel-conversion'),
+              autofocus: true,
+              style: TextButton.styleFrom(
+                foregroundColor: LT.t2,
+                minimumSize: const Size(0, 48),
+              ),
+              onPressed: _requestClose,
+              child: Text(l.cancel),
+            )
+          else if (_phase == 'conversionError') ...[
+            Text(
+              l.ltHumRecordingKept,
+              textAlign: TextAlign.center,
+              style: LTType.inter(size: 13, color: LT.t1, height: 1.5),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  key: const ValueKey('hum-retry-recording'),
+                  autofocus: true,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: widget.accent,
+                    foregroundColor: LT.bg,
+                    minimumSize: const Size(0, 48),
+                  ),
+                  onPressed: _convertRecording,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: Text(l.ltHumRetryRecording),
+                ),
+                TextButton(
+                  key: const ValueKey('hum-discard-recording'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: LT.t2,
+                    minimumSize: const Size(0, 48),
+                  ),
+                  onPressed: _requestClose,
+                  child: Text(l.ltHumDiscardRecording),
+                ),
+              ],
+            ),
+          ] else if (_phase == 'error')
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 if (_permissionDenied) ...[
                   _solidBtn(l.retry, _requestPermissionThenCountIn),
@@ -622,37 +790,25 @@ class _HumModalState extends State<_HumModal> with WidgetsBindingObserver {
     );
   }
 
-  Widget _ghostBtn(String label, VoidCallback onTap) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: LT.border),
-      ),
-      child: Text(
-        label,
-        style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t2),
-      ),
+  Widget _ghostBtn(String label, VoidCallback onTap) => OutlinedButton(
+    onPressed: onTap,
+    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+    child: Text(
+      label,
+      style: LTType.inter(size: 13, weight: FontWeight.w700, color: LT.t2),
     ),
   );
 
-  Widget _solidBtn(String label, VoidCallback onTap) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: widget.accent,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: LTType.inter(size: 13, weight: FontWeight.w800, color: LT.bg),
-      ),
+  Widget _solidBtn(String label, VoidCallback onTap) => FilledButton(
+    onPressed: onTap,
+    style: FilledButton.styleFrom(
+      minimumSize: const Size(0, 48),
+      backgroundColor: widget.accent,
+      foregroundColor: LT.bg,
+    ),
+    child: Text(
+      label,
+      style: LTType.inter(size: 13, weight: FontWeight.w800, color: LT.bg),
     ),
   );
 }

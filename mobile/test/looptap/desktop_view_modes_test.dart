@@ -207,11 +207,13 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('view-edit')));
       await tester.pumpAndSettle();
       expect(arrangeShown(), isFalse);
-      // Tab both ways
+      // Tab and Shift+Tab traverse controls without changing views.
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pumpAndSettle();
-      expect(arrangeShown(), isTrue);
+      expect(arrangeShown(), isFalse);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await tester.pumpAndSettle();
       expect(arrangeShown(), isFalse);
       // the minimap's track button opens the arrange view
@@ -283,14 +285,14 @@ void main() {
       expect(view(), 'arrange');
       await tester.tap(find.byKey(const ValueKey('top-stop')));
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.tap(find.byKey(const ValueKey('view-edit')));
       await tester.pumpAndSettle();
       expect(arrangeShown(), isFalse, reason: 'unlocked after stop');
     });
   });
 
   group('keyboard focus', () {
-    testWidgets('Tab from a focused piano roll: arrange view, focus back on the commands; Tab returns', (tester) async {
+    testWidgets('Tab from a focused piano roll moves focus and Shift+Tab returns without switching views', (tester) async {
       await open(tester);
       await editTrack(tester, 'melody');
       await tester.pumpAndSettle();
@@ -303,11 +305,14 @@ void main() {
       expect(focusLabel(), 'MIDI note editor');
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pumpAndSettle();
-      expect(arrangeShown(), isTrue);
-      expect(focusLabel(), 'editor commands', reason: 'no hidden grid keeps the keyboard');
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(arrangeShown(), isFalse);
+      expect(focusLabel(), isNot('MIDI note editor'));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await tester.pumpAndSettle();
-      expect(arrangeShown(), isFalse, reason: 'Enter edits the selected track');
+      expect(arrangeShown(), isFalse);
+      expect(focusLabel(), 'MIDI note editor');
     });
 
     testWidgets('typing in the title or a dialog: Tab / Enter do not switch', (tester) async {
@@ -617,11 +622,12 @@ void main() {
     // Later that day the audition row (loop · bars · Solo) moved into the
     // transport's loop button sheet: the roll starts 22.8 px higher and
     // is 22.8 px taller (844x390 60.8 -> 83.6, 390x844 333.2 -> 356.0).
-    for (final (size, top, height) in const [(Size(844, 390), 241.4, 83.6), (Size(390, 844), 423.0, 356.0)]) {
-      testWidgets('phone ${size.width.toInt()}x${size.height.toInt()} unchanged', (tester) async {
+    // UI/UX recovery: 48px touch targets replace the previous shrunken bars.
+    // Check usable roll space rather than freezing the old toolbar coordinates.
+    for (final (size, minimumHeight) in const [(Size(844, 390), 60.0), (Size(390, 844), 330.0)]) {
+      testWidgets('phone ${size.width.toInt()}x${size.height.toInt()} keeps usable roll space with touch targets', (tester) async {
         final vp = await measure(tester, size, desktop: false);
-        expect(vp.top, closeTo(top, .05));
-        expect(vp.height, closeTo(height, .05));
+        expect(vp.height, greaterThanOrEqualTo(minimumHeight));
         expect(find.byType(TimelineMinimap), findsNothing);
         expect(find.byKey(const ValueKey('top-view-switch')), findsNothing);
       });

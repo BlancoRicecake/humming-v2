@@ -16,29 +16,34 @@ Future<T?> showLtModal<T>(
     barrierLabel: 'modal',
     barrierColor: Colors.black.withValues(alpha: 0.65),
     transitionDuration: const Duration(milliseconds: 140),
-    pageBuilder: (dialogContext, __, ___) => Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: width, maxHeight: MediaQuery.of(dialogContext).size.height * 0.88),
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            decoration: BoxDecoration(
-              color: LT.surface,
-              borderRadius: BorderRadius.circular(LTRadius.sheet),
-              border: Border.all(color: LT.border),
+    pageBuilder:
+        (dialogContext, __, ___) => Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: width,
+              maxHeight: MediaQuery.of(dialogContext).size.height * 0.88,
             ),
-            clipBehavior: Clip.antiAlias,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: child,
+            child: Material(
+              color: LT.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(LTRadius.sheet),
+                side: const BorderSide(color: LT.border),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: child,
+              ),
             ),
           ),
         ),
-      ),
-    ),
-    transitionBuilder: (_, anim, __, child) => FadeTransition(
-      opacity: anim,
-      child: ScaleTransition(scale: Tween(begin: 0.97, end: 1.0).animate(anim), child: child),
-    ),
+    transitionBuilder:
+        (_, anim, __, child) => FadeTransition(
+          opacity: anim,
+          child: ScaleTransition(
+            scale: Tween(begin: 0.97, end: 1.0).animate(anim),
+            child: child,
+          ),
+        ),
   );
 }

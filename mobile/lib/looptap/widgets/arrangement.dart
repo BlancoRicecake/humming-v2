@@ -162,6 +162,8 @@ class Arrangement extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final rowHeight = ((scaler.scale(12) + scaler.scale(10)) * 1.5 + 6).clamp(this.rowHeight, double.infinity);
     // Playhead spans only the actual lanes (not the empty space / footer below).
     final lanesHeight = tracks.length * (rowHeight + _rowGap);
     final lanes = ClipRect(
@@ -341,7 +343,7 @@ class Arrangement extends StatelessWidget {
             )
             : SizedBox(
               key: const ValueKey('arrangement-header'),
-              height: 36,
+              height: 48,
               child: Row(
                 children: [
                   SizedBox(
@@ -350,7 +352,7 @@ class Arrangement extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         SizedBox(
-                          height: 16,
+                          height: 28,
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: soloHeader ?? const SizedBox.shrink(),

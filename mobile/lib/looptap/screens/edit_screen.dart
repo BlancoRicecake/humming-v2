@@ -105,6 +105,7 @@ class EditScreen extends StatefulWidget {
     this.guidedStart = false,
     this.guidedEntrySource = 'new_song',
     this.midiFilePicker,
+    this.humEngine,
     this.exportOnOpen = false,
   });
   final String guidedEntrySource;
@@ -116,6 +117,9 @@ class EditScreen extends StatefulWidget {
   /// Test seam for "MIDI passage as new section"; null = the platform picker.
   @visibleForTesting
   final MidiFilePicker? midiFilePicker;
+  /// Test seam for conversion responses; normal recording uses EngineApi.
+  @visibleForTesting
+  final EngineApi? humEngine;
   final bool guidedStart;
   final Song song;
 
@@ -1105,8 +1109,9 @@ class _EditScreenState extends State<EditScreen>
   void dispose() {
     _desktopClosing = true;
     _takePlayer?.dispose();
-    final take = _guidedTakePath;
-    if (take != null) _deleteQuietly(take);
+    for (final take in _guidedTakeFiles) {
+      _deleteQuietly(take);
+    }
     WidgetsBinding.instance.removeObserver(this);
     LoopPrefs.instance.gridFocus.removeListener(_layoutPrefsChanged);
     LoopPrefs.instance.phoneTimelineShare.removeListener(_layoutPrefsChanged);
@@ -4181,6 +4186,8 @@ class _EditScreenState extends State<EditScreen>
   void _openHum() {
     _audio.ensure();
     if (_playing) _stopAll();
+    _takePlayer?.stop();
+    if (_playingTake) setState(() => _playingTake = false);
     showHumModal(
       context,
       trackLabel: _meta.label,
@@ -4692,8 +4699,7 @@ class _EditScreenState extends State<EditScreen>
   }
 
   // Send the hum recording to the FastAPI humming→MIDI engine, map its notes
-  // (seconds → steps) into the active track. Falls back to a generated phrase
-  // if the engine is unreachable so the button always does something.
+  // (seconds → steps) into the active track. Failures keep the recording for retry.
   // LoopTap scale name -> backend Scale literal (schemas.py). Only 'pentatonic'
   // differs; minor/major/dorian match.
   static const _engineScale = {'pentatonic': 'minor_pentatonic'};
@@ -4701,21 +4707,22 @@ class _EditScreenState extends State<EditScreen>
   // ── guided: the hummed take, kept to compare with the melody ─────────
   int? _humRecordedMs;
   String? _guidedTakePath;
+  // Older successful takes may still be referenced by undo/redo snapshots.
+  final Set<String> _guidedTakeFiles = {};
   AudioPlayer? _takePlayer;
   bool _playingTake = false;
 
-  Future<void> _keepGuidedTake(String audioPath) async {
+  Future<String?> _copyGuidedTake(String audioPath) async {
     try {
       final src = File(audioPath);
-      if (!await src.exists()) return;
+      if (!await src.exists()) return null;
       final ext = audioPath.contains('.') ? audioPath.substring(audioPath.lastIndexOf('.')) : '.wav';
-      final dest = '${Directory.systemTemp.path}/humtrack_guided_take_${widget.song.id}$ext';
+      final dest = '${src.parent.path}/humtrack_guided_take_${widget.song.id}_${DateTime.now().microsecondsSinceEpoch}$ext';
       await src.copy(dest);
-      final old = _guidedTakePath;
-      _guidedTakePath = dest;
-      if (old != null && old != dest) _deleteQuietly(old);
+      return dest;
     } catch (_) {
       // comparison just isn't offered
+      return null;
     }
   }
 
@@ -4754,23 +4761,26 @@ class _EditScreenState extends State<EditScreen>
     _listenGuided();
   }
 
-  Future<void> _humConvert(String audioPath) async {
+  Future<HumConversionResult> _humConvert(HumConversionRequest request) async {
+    if (!mounted || request.cancelled) {
+      return const HumConversionResult.cancelled();
+    }
+    final audioPath = request.audioPath;
     final drums = _meta.kind == TrackKind.drums;
-    if (_guided && !drums) {
-      // keep the take to compare with the converted melody (this session
-      // only; deleted with the editor)
-      await _keepGuidedTake(audioPath);
-      _guidedKeyBase = null;
-      // a take longer than the loop: grow the new song to fit it
+    final guidedMelody = _guided && !drums;
+    // Analyze for the required length without changing the current song. The
+    // new length, notes and comparison take commit together after success.
+    var conversionBars = _bars;
+    if (guidedMelody) {
       final ms = _humRecordedMs;
-      if (ms != null && mounted) {
+      if (ms != null) {
         final barMs = kBeatsPerBar * 60000 / _bpm;
         final need = (ms / barMs).ceil();
         final fit = const [1, 2, 4, 8, 16].firstWhere(
           (b) => b >= need,
           orElse: () => 16,
         );
-        if (fit > _bars) _setBars(fit);
+        if (fit > conversionBars) conversionBars = fit;
       }
     }
     // The request is built for THIS section/lane/tempo/key; if any of them
@@ -4805,24 +4815,25 @@ class _EditScreenState extends State<EditScreen>
       // loop-grid mode: backend hard-snaps to the fixed grid and returns integer
       // step/dur_steps (de-swung, deduped, loop-bounded) — no client re-rounding.
       loopQuantize: true,
-      loopBars: _bars,
+      loopBars: conversionBars,
       stepsPerBar: kStepsPerBeat * kBeatsPerBar,
       swing: _swing,
     );
     // Nothing is mutated (and no undo entry pushed) until the engine has
     // answered AND produced notes — a failure leaves the track exactly as it
     // was and offers a retry; no silent generated filler (C12).
-    var ok = false;
     try {
-      final res = await EngineApi().analyze(audioPath, opts);
-      if (!mounted) return;
+      final res = await (widget.humEngine ?? EngineApi()).analyze(
+        audioPath,
+        opts,
+        cancelToken: request.cancelToken,
+      );
+      if (!mounted || request.cancelled) {
+        return const HumConversionResult.cancelled();
+      }
       if (targetChanged()) throw const _HumTargetChanged();
       final sps = 60 / bpm / kStepsPerBeat;
-      // remembered (not saved) for "make a groove from the last take"
-      _lastTakeOnsets = [
-        for (final n in res.notes) (steps: n.start / sps, velocity: n.velocity),
-      ];
-      final steps = _steps;
+      final steps = conversionBars * kStepsPerBeat * kBeatsPerBar;
       final t = track;
       var count = 0;
       if (drums) {
@@ -4881,8 +4892,28 @@ class _EditScreenState extends State<EditScreen>
           );
         }
         if (out.isEmpty) throw StateError('no notes');
+        // Copy only a valid new melody; don't overwrite the previous original
+        // while a retry can still fail or be discarded.
+        final take = guidedMelody ? await _copyGuidedTake(audioPath) : null;
+        if (!mounted || request.cancelled || targetChanged()) {
+          if (take != null) _deleteQuietly(take);
+          if (!mounted || request.cancelled) {
+            return const HumConversionResult.cancelled();
+          }
+          throw const _HumTargetChanged();
+        }
         _pushUndo();
         setState(() {
+          if (guidedMelody) {
+            t.pitchNotes.clear();
+            _guidedKeyBase = null;
+            _guidedTakePath = take;
+            if (take != null) _guidedTakeFiles.add(take);
+            for (final i in linkedIndices(_sections, _activeIdx)) {
+              _sections[i].bars = conversionBars;
+              _loopRanges.remove(_sections[i].id);
+            }
+          }
           t.pitchNotes.addAll(out);
           if (_desktop) {
             _humReveal = (
@@ -4894,7 +4925,10 @@ class _EditScreenState extends State<EditScreen>
         });
         count = out.length;
       }
-      ok = true;
+      // Only successful conversions replace the remembered groove source.
+      _lastTakeOnsets = [
+        for (final n in res.notes) (steps: n.start / sps, velocity: n.velocity),
+      ];
       _toast(L10n.of(context).ltEditorHumAdded(count));
       // Clarity: 분석 성공 + 분기(드럼/멜로딕) 태깅. noteCount 는 이벤트로 분포 확인.
       ProductAnalytics.instance.track(
@@ -4910,33 +4944,17 @@ class _EditScreenState extends State<EditScreen>
           properties: const {'feature': 'guided_creation'},
         );
       }
+      return const HumConversionResult.success();
     } catch (e) {
+      if (!mounted || request.cancelled) {
+        return const HumConversionResult.cancelled();
+      }
       // a moved target isn't an engine failure — keep it out of the metric.
       if (e is! _HumTargetChanged) _trackAnalyzeFailure(e);
       debugPrint('[hum] convert failed: $e');
-      if (!mounted) {
-        _deleteTempFile(audioPath);
-        return;
-      }
-      // keep the recording for a retry; drop it once the offer goes unanswered
-      final ctl = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
-      final shown = ctl.showSnackBar(
-        SnackBar(
-          content: Text(_humErrorMessage(L10n.of(context), e)),
-          duration: const Duration(seconds: 6),
-          action: SnackBarAction(
-            label: L10n.of(context).retry,
-            onPressed: () => _humConvert(audioPath),
-          ),
-        ),
-      );
-      unawaited(
-        shown.closed.then((reason) {
-          if (reason != SnackBarClosedReason.action) _deleteTempFile(audioPath);
-        }),
-      );
-    } finally {
-      if (ok) _deleteTempFile(audioPath); // temp hum recording (C27)
+      // The modal owns the take and keeps a persistent retry action. Returning
+      // failure must never be mistaken for successfully inserting notes.
+      return HumConversionResult.failure(_humErrorMessage(L10n.of(context), e));
     }
   }
 
@@ -4986,11 +5004,6 @@ class _EditScreenState extends State<EditScreen>
     }
     if (e is StateError) return l.ltEditorHumErrNoNotes;
     return l.ltEditorHumErrGeneric;
-  }
-
-  /// Best-effort delete of a temp recording handed to us by a modal.
-  void _deleteTempFile(String path) {
-    unawaited(File(path).delete().then((_) {}, onError: (_) {}));
   }
 
   // Fit an engine MIDI note onto the grid's in-key rows. The grid spans ~1
@@ -5631,157 +5644,62 @@ class _EditScreenState extends State<EditScreen>
 
   Widget _topBar() {
     final l = L10n.of(context);
-    // 좌측 그룹(뒤로/제목/undo/redo)과 우측 그룹(mixer/key/saved/save/export) 으로
-    // 분리. Spacer 가 둘 사이를 벌리되, 작은 폰(iPhone SE 등)에선 좌·우 그룹의
-    // 자연 너비 합이 부모 폭을 넘기 때문에 각 그룹을 Flexible+FittedBox(scaleDown)
-    // 으로 감싸 비율 유지하며 축소. 큰 폰/아이패드는 원본 크기 그대로.
-    // _topBar 전용 컴팩트 사이즈 — 헤더 공간 절약 (옵션 B).
-    const btnSize = 30.0;
-    const pillH = 26.0;
-    const pillFS = 11.0;
-    const pillPad = 10.0;
-
-    final leftGroup = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconBtn(
-          icon: LtIcons.arrowBack,
-          size: btnSize,
-          tooltip: l.ltEditorBack,
-          onTap: _backWithSave,
-        ),
-        const SizedBox(width: 8),
-        const Ms(LtIcons.edit, size: 14, color: LT.t3),
-        const SizedBox(width: 6),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 240),
-          child: IntrinsicWidth(
-            child: TextField(
-              controller: _titleCtl,
-              onChanged: (v) {
-                final wasDirty = _dirty;
-                _pushUndo(coalesce: true); // one undo entry per typing burst
-                _title = v;
-                if (!wasDirty) setState(() {});
-              },
-              cursorColor: LT.lime,
-              style: LTType.inter(
-                size: 14,
-                weight: FontWeight.w700,
-                color: LT.t1,
-              ),
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 2),
-                border: InputBorder.none,
-              ),
-            ),
-          ),
-        ),
-      ],
+    Widget title() => TextField(
+      key: const ValueKey('phone-song-title'),
+      controller: _titleCtl,
+      onChanged: (v) {
+        final wasDirty = _dirty;
+        _pushUndo(coalesce: true);
+        _title = v;
+        if (!wasDirty) setState(() {});
+      },
+      cursorColor: LT.lime,
+      style: LTType.inter(size: 14, weight: FontWeight.w700),
+      decoration: const InputDecoration(isDense: true,
+        contentPadding: EdgeInsets.symmetric(vertical: 10), border: InputBorder.none),
     );
-
-    // 아이콘 전용 버튼은 hold(롱프레스) 시 IconBtn 내부 Tooltip 으로 라벨 노출.
-    // Save / Export 의 텍스트 라벨을 빼는 대신 동일한 정보 전달.
-    final rightGroup = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 2026-11-02: no logo / star button here any more — "Hum to MIDI"
-        // on the track does the humming
-        // Saved indicator — 고정폭 슬롯으로 예약. 라벨이 등장/사라져도 rightGroup
-        // 자연 너비 불변 → 다른 버튼들 흔들림/축소 없음.
-        SizedBox(
-          width: 90,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: AnimatedSwitcher(
-              duration: LTMotion.state,
-              child: Text(
-                _saveLabel(l),
-                key: ValueKey(_saveLabel(l)),
-                style: LTType.mono(
-                  size: 11,
-                  weight: FontWeight.w600,
-                  color: _savedFlash ? LT.lime : LT.t3,
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        _undoRedoBtn(
-          LtIcons.undo,
-          l.ltEditorUndo,
-          _undo.isNotEmpty,
-          _undoAction,
-        ),
-        const SizedBox(width: 6),
-        _undoRedoBtn(
-          LtIcons.redo,
-          l.ltEditorRedo,
-          _redo.isNotEmpty,
-          _redoAction,
-        ),
-        const SizedBox(width: 8),
-        IconBtn(
-          icon: LtIcons.save,
-          size: btnSize,
-          tooltip: l.save,
-          onTap: _saveNow,
-        ),
-        const SizedBox(width: 8),
-        IconBtn(
-          icon: LtIcons.tune,
-          size: btnSize,
-          tooltip: l.ltMixerTitle,
-          onTap: _openMixer,
-        ),
-        const SizedBox(width: 8),
-        Pill(
-          label: '$_keyRoot ${ltScaleLabel(l, _scale)}',
-          icon: LtIcons.musicNote,
-          height: pillH,
-          fontSize: pillFS,
-          horizontalPadding: pillPad,
-          onTap: _openKey,
-        ),
-        const SizedBox(width: 12),
-        // Pro 게이트 — 비-Pro 면 paywall 우선 표시, 통과 후 export drawer 진입.
-        // active: true 로 라임 배경 → 1순위 액션 시각 강조.
-        IconBtn(
-          icon: LtIcons.iosShare,
-          size: btnSize,
-          active: true,
-          tooltip: l.projectOptionExport,
-          onTap: _exportOrPaywall,
-        ),
-      ],
-    );
-
+    final back = IconBtn(icon: LtIcons.arrowBack, size: 30, tooltip: l.ltEditorBack, onTap: _backWithSave);
+    final undo = _undoRedoBtn(LtIcons.undo, l.ltEditorUndo, _undo.isNotEmpty, _undoAction);
+    final redo = _undoRedoBtn(LtIcons.redo, l.ltEditorRedo, _redo.isNotEmpty, _redoAction);
+    final actions = <String, VoidCallback>{
+      'save': _saveNow, 'mixer': _openMixer, 'key': _openKey, 'export': _exportOrPaywall,
+    };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: LT.border)),
-      ),
-      // 우측 그룹은 자연 크기 유지(라벨이 등장해도 버튼 사이즈 그대로). 좌측만
-      // 남은 공간(= 부모 폭 − 우측 자연 폭) 안에서 자연 크기를 쓰되, 그게 부족하면
-      // FittedBox(scaleDown) 으로 비율 유지하며 축소. Expanded 가 남은 폭 전부를
-      // 차지해서 좌측이 우측과 시각적으로 분리되도록 함.
-      child: Row(
-        children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: leftGroup,
-              ),
-            ),
-          ),
-          rightGroup,
-        ],
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: LT.border))),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final compact = constraints.maxWidth < 740 || MediaQuery.textScalerOf(context).scale(14) > 20;
+        return Row(children: [
+          back,
+          const SizedBox(width: 8),
+          Expanded(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            title(),
+            Semantics(liveRegion: _savedFlash, child: Text(_saveLabel(l),
+              style: LTType.mono(size: 11, color: _savedFlash ? LT.lime : LT.t3))),
+          ])),
+          undo, redo,
+          if (compact)
+            PopupMenuButton<String>(
+              key: const ValueKey('phone-editor-more'),
+              tooltip: l.topBarMore,
+              constraints: const BoxConstraints(minWidth: 200, maxWidth: 320),
+              onSelected: (value) => actions[value]?.call(),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'save', child: Text(l.save)),
+                PopupMenuItem(value: 'mixer', child: Text(l.ltMixerTitle)),
+                PopupMenuItem(value: 'key', child: Text(l.ltGuidedKey)),
+                PopupMenuItem(value: 'export', child: Text(l.projectOptionExport)),
+              ],
+            )
+          else ...[
+            IconBtn(icon: LtIcons.save, size: 30, tooltip: l.save, onTap: _saveNow),
+            IconBtn(icon: LtIcons.tune, size: 30, tooltip: l.ltMixerTitle, onTap: _openMixer),
+            TextButton(onPressed: _openKey, style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              child: Text('$_keyRoot ${ltScaleLabel(l, _scale)}')),
+            IconBtn(icon: LtIcons.iosShare, size: 30, active: true, tooltip: l.projectOptionExport, onTap: _exportOrPaywall),
+          ],
+        ]);
+      }),
     );
   }
 
@@ -5895,8 +5813,9 @@ class _EditScreenState extends State<EditScreen>
       );
     }
 
-    final rightGroup = Row(
-      mainAxisSize: MainAxisSize.min,
+    final rightGroup = Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      runSpacing: 8,
       children: [
         // pitched pads: current swipe-able note range (melody/fill/bass).
         if (pitched && _inputMode == 'pads') _rangeReadout(),
@@ -5944,7 +5863,13 @@ class _EditScreenState extends State<EditScreen>
       // Vocal 트랙은 instrument pill/toggle/octave/Hum to MIDI 가 전부 빠져서
       // Row 자연 높이가 줄어 → 트랙 전환 시 화면이 흔들림. SizedBox(height: 32)
       // 로 트랙 종류와 무관하게 일정 높이 보장.
-      child: SizedBox(
+      child: MediaQuery.textScalerOf(context).scale(13) > 18
+        ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            SingleChildScrollView(scrollDirection: Axis.horizontal, child: leftGroup),
+            const SizedBox(height: 4),
+            Align(alignment: Alignment.centerRight, child: rightGroup),
+          ])
+        : SizedBox(
         height: 32,
         child: Row(
           children: [
@@ -6426,6 +6351,9 @@ class _EditScreenState extends State<EditScreen>
     grooves: List.of(_grooves),
     trackGrooves: Map.of(_trackGrooves),
     grooveAmount: _grooveAmount,
+    guidedTakePath: _guidedTakePath,
+    guidedKeyBase: _guidedKeyBase,
+    lastTakeOnsets: _lastTakeOnsets,
   );
 
   /// Snapshot current state before a mutation. [coalesce] merges rapid bursts
@@ -6444,6 +6372,7 @@ class _EditScreenState extends State<EditScreen>
   }
 
   void _restore(_EditSnapshot s) {
+    _takePlayer?.stop();
     // When the undo/redo only changes note content (same arrangement shape) and
     // we're mid-playback, keep the clock running and the playhead where it is —
     // so undo/redo while recording feels seamless instead of jolting to a stop.
@@ -6495,6 +6424,10 @@ class _EditScreenState extends State<EditScreen>
         ..clear()
         ..addAll(s.trackGrooves);
       _grooveAmount = s.grooveAmount;
+      _playingTake = false;
+      _guidedTakePath = s.guidedTakePath;
+      _guidedKeyBase = s.guidedKeyBase;
+      _lastTakeOnsets = s.lastTakeOnsets;
       if (!keepPlaying) _playStep.value = 0;
     });
     // Play-song preview reads from the flattened display section — rebuild it
@@ -6677,6 +6610,9 @@ class _EditSnapshot {
     this.grooves = const [],
     this.trackGrooves = const {},
     this.grooveAmount = 1.0,
+    this.guidedTakePath,
+    this.guidedKeyBase,
+    this.lastTakeOnsets,
   });
   final List<Section> sections;
   final int activeIdx;
@@ -6697,6 +6633,9 @@ class _EditSnapshot {
   final List<GrooveTemplate> grooves;
   final Map<String, GrooveAssign> trackGrooves;
   final double grooveAmount;
+  final String? guidedTakePath;
+  final ({List<PitchNote> notes, String root, String scale})? guidedKeyBase;
+  final List<({double steps, int velocity})>? lastTakeOnsets;
 }
 
 /// Thrown inside _humConvert when the section/lane/tempo/key the hum was

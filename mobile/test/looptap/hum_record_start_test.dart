@@ -115,7 +115,7 @@ void main() {
                         context,
                         trackLabel: 'Melody',
                         accent: Colors.green,
-                        onConvert: (_) async {},
+                        onConvert: (_) async => const HumConversionResult.success(),
                         bpm: 120,
                         bars: 1,
                         countInBeats: 1,

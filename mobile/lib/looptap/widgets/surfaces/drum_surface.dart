@@ -147,12 +147,18 @@ class DrumSurface extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           flex: 2,
-          child: _BeatGrid(
-            notes: notes,
-            playStep: playStep,
-            steps: steps,
-            bars: bars,
-            specs: specs,
+          // This read-only beat matrix shares fixed cells with the live pads.
+          // Limit only its short timing/lane labels; guidance, settings and
+          // recording/retry actions keep the user's full system text size.
+          child: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.15,
+            child: _BeatGrid(
+              notes: notes,
+              playStep: playStep,
+              steps: steps,
+              bars: bars,
+              specs: specs,
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -252,8 +258,10 @@ class _BeatGrid extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               LtLabel(L10n.of(context).ltDrumBeatGrid),
               LtLabel(L10n.of(context).ltDrumGridMeta(bars), color: LT.t3),
@@ -414,8 +422,7 @@ class _DrumGridState extends State<DrumGrid> {
 
   bool get _ko => Localizations.localeOf(context).languageCode == 'ko';
   bool get _editable => widget.enabled && widget.onEdit != null;
-  List<DrumNote> get _picked =>
-      widget.notes.where(_selected.contains).toList();
+  List<DrumNote> get _picked => widget.notes.where(_selected.contains).toList();
   bool get _canEdit => _editable && _picked.isNotEmpty;
 
   /// Whole-track commands (quantize, humanize) act on the selection, or on
@@ -522,7 +529,12 @@ class _DrumGridState extends State<DrumGrid> {
       (x / _area.width * widget.steps).clamp(0, widget.steps - 1e-6);
   Rect _hitRect(DrumNote n, int row) {
     final unit = _area.width / widget.steps;
-    return Rect.fromLTWH(n.startSteps * unit, row * _rowHeight, unit, _rowHeight);
+    return Rect.fromLTWH(
+      n.startSteps * unit,
+      row * _rowHeight,
+      unit,
+      _rowHeight,
+    );
   }
 
   DrumNote? _hitAt(Offset p) {
@@ -582,8 +594,7 @@ class _DrumGridState extends State<DrumGrid> {
         ..._boxBase,
         for (var r = 0; r < widget.specs.length; r++)
           for (final n in widget.notes)
-            if (n.kind == widget.specs[r].kind &&
-                rect.overlaps(_hitRect(n, r)))
+            if (n.kind == widget.specs[r].kind && rect.overlaps(_hitRect(n, r)))
               n,
       };
     });
@@ -830,41 +841,49 @@ class _DrumGridState extends State<DrumGrid> {
     final items = _inspectorItems();
     // a slider's key sits on the Slider inside its fixed-width SizedBox
     bool has(Widget w, String key) =>
-        w.key == ValueKey(key) || (w is SizedBox && w.child?.key == ValueKey(key));
+        w.key == ValueKey(key) ||
+        (w is SizedBox && w.child?.key == ValueKey(key));
     Widget k(String key) => items.firstWhere((w) => has(w, key));
-    Widget labelOf(String key) => items[items.indexWhere((w) => has(w, key)) - 1];
+    Widget labelOf(String key) =>
+        items[items.indexWhere((w) => has(w, key)) - 1];
     Widget slider(String key) => Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [labelOf(key), k(key)]),
-    );
-    Widget sheetRow(String key, String moreKey, VoidCallback onMore) => Container(
-      height: 34,
-      margin: const EdgeInsets.only(top: 6),
-      padding: const EdgeInsets.only(left: 2),
-      decoration: BoxDecoration(
-        color: LT.surface2,
-        borderRadius: BorderRadius.circular(LTRadius.chip),
-        border: Border.all(color: LT.border),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [labelOf(key), k(key)],
       ),
-      child: Row(
-        children: [
-          Expanded(child: Align(alignment: Alignment.centerLeft, child: k(key))),
-          Tooltip(
-            message: l.inspectorSettings,
-            child: InkResponse(
-              key: ValueKey(moreKey),
-              radius: 16,
-              onTap: widget.enabled ? onMore : null,
-              child: const SizedBox(
-                width: 32,
-                height: 32,
-                child: Icon(Icons.chevron_right, size: 16, color: LT.t2),
-              ),
-            ),
+    );
+    Widget sheetRow(String key, String moreKey, VoidCallback onMore) =>
+        Container(
+          height: 34,
+          margin: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.only(left: 2),
+          decoration: BoxDecoration(
+            color: LT.surface2,
+            borderRadius: BorderRadius.circular(LTRadius.chip),
+            border: Border.all(color: LT.border),
           ),
-        ],
-      ),
-    );
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(alignment: Alignment.centerLeft, child: k(key)),
+              ),
+              Tooltip(
+                message: l.inspectorSettings,
+                child: InkResponse(
+                  key: ValueKey(moreKey),
+                  radius: 16,
+                  onTap: widget.enabled ? onMore : null,
+                  child: const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Icon(Icons.chevron_right, size: 16, color: LT.t2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
     final kinds = {for (final n in _picked) drumLabel(l, n.kind)};
     return Column(
       key: const ValueKey('drum-notes-tab'),
@@ -879,23 +898,43 @@ class _DrumGridState extends State<DrumGrid> {
                 Text(
                   l.inspectorSelectedNotes(_selected.length),
                   key: const ValueKey('drum-notes-title'),
-                  style: LTType.inter(size: 13, weight: FontWeight.w800, color: LT.t1),
+                  style: LTType.inter(
+                    size: 13,
+                    weight: FontWeight.w800,
+                    color: LT.t1,
+                  ),
                 ),
                 if (kinds.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(kinds.join(' · '), style: LTType.mono(size: 11, color: LT.t2)),
+                  Text(
+                    kinds.join(' · '),
+                    style: LTType.mono(size: 11, color: LT.t2),
+                  ),
                 ],
                 if (!_select) ...[
                   const SizedBox(height: 8),
-                  Text(l.inspectorDrumSelectHint, style: LTType.inter(size: 11, color: LT.t3)),
+                  Text(
+                    l.inspectorDrumSelectHint,
+                    style: LTType.inter(size: 11, color: LT.t3),
+                  ),
                 ],
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(l.inspectorPosition, style: LTType.inter(size: 11, weight: FontWeight.w700, color: LT.t3)),
-                      Wrap(spacing: 4, children: [k('drum-time-left'), k('drum-time-right')]),
+                      Text(
+                        l.inspectorPosition,
+                        style: LTType.inter(
+                          size: 11,
+                          weight: FontWeight.w700,
+                          color: LT.t3,
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 4,
+                        children: [k('drum-time-left'), k('drum-time-right')],
+                      ),
                     ],
                   ),
                 ),
@@ -903,8 +942,16 @@ class _DrumGridState extends State<DrumGrid> {
                 slider('drum-chance'),
                 slider('drum-velocity-deviation'),
                 const SizedBox(height: 8),
-                sheetRow('drum-quantize', 'drum-quantize-settings', _quantizeSettings),
-                sheetRow('drum-humanize', 'drum-humanize-settings', _humanizeSettings),
+                sheetRow(
+                  'drum-quantize',
+                  'drum-quantize-settings',
+                  _quantizeSettings,
+                ),
+                sheetRow(
+                  'drum-humanize',
+                  'drum-humanize-settings',
+                  _humanizeSettings,
+                ),
               ],
             ),
           ),
@@ -919,7 +966,11 @@ class _DrumGridState extends State<DrumGrid> {
           child: Row(
             children: [
               for (final key in const ['drum-mute', 'drum-delete'])
-                Expanded(child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: k(key)))),
+                Expanded(
+                  child: Center(
+                    child: FittedBox(fit: BoxFit.scaleDown, child: k(key)),
+                  ),
+                ),
             ],
           ),
         ),
@@ -1140,10 +1191,7 @@ class _DrumGridState extends State<DrumGrid> {
     return Focus(
       focusNode: _focus,
       onKeyEvent: _key,
-      child: Listener(
-        onPointerDown: (_) => _focus.requestFocus(),
-        child: body,
-      ),
+      child: Listener(onPointerDown: (_) => _focus.requestFocus(), child: body),
     );
   }
 
@@ -1324,12 +1372,7 @@ class _DrumGridPainter extends CustomPainter {
       for (final n in notes) {
         if (n.kind != specs[r].kind) continue;
         final rect = RRect.fromRectAndRadius(
-          Rect.fromLTWH(
-            n.startSteps * unit + 2,
-            top + 4,
-            unit - 4,
-            rowH - 8,
-          ),
+          Rect.fromLTWH(n.startSteps * unit + 2, top + 4, unit - 4, rowH - 8),
           const Radius.circular(3),
         );
         final strength = (n.velocity ?? 100) / 127;
@@ -1344,7 +1387,10 @@ class _DrumGridPainter extends CustomPainter {
               ..color = color.withValues(alpha: alpha),
           );
         } else {
-          canvas.drawRRect(rect, Paint()..color = color.withValues(alpha: alpha));
+          canvas.drawRRect(
+            rect,
+            Paint()..color = color.withValues(alpha: alpha),
+          );
         }
         if (selected.contains(n)) {
           canvas.drawRRect(

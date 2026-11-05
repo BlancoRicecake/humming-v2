@@ -189,6 +189,8 @@ Future<void> main() async {
 
     visit(WidgetsBinding.instance.rootElement!);
     final converted = Completer<String>();
+    final probeRead = Completer<void>();
+    String? inspectedPath;
     final ctx = nav!.context;
     // ignore: use_build_context_synchronously
     unawaited(
@@ -196,8 +198,11 @@ Future<void> main() async {
         ctx,
         trackLabel: 'Melody',
         accent: const Color(0xFFB8F34A),
-        onConvert: (path) async {
-          if (!converted.isCompleted) converted.complete(path);
+        onConvert: (request) async {
+          if (!converted.isCompleted) converted.complete(request.audioPath);
+          // The probe reads the file below before the modal releases ownership.
+          await probeRead.future;
+          return const HumConversionResult.success();
         },
         bpm: 120,
         bars: 1,
@@ -206,6 +211,7 @@ Future<void> main() async {
     );
     try {
       final path = await converted.future.timeout(const Duration(seconds: 15));
+      inspectedPath = path;
       final f = File(path);
       final bytes = f.existsSync() ? f.readAsBytesSync() : Uint8List(0);
       modal['ext'] = p.extension(path);
@@ -228,12 +234,14 @@ Future<void> main() async {
       } finally {
         await player.dispose();
       }
-      if (f.existsSync()) f.deleteSync(); // no audio kept
-      modal['deleted'] = !f.existsSync();
+      modal['readBeforeRelease'] = f.existsSync();
     } catch (e) {
       modal['error'] = _error(e);
+    } finally {
+      if (!probeRead.isCompleted) probeRead.complete();
     }
     await Future<void>.delayed(const Duration(seconds: 1));
+    if (inspectedPath != null) modal['deleted'] = !File(inspectedPath).existsSync();
     nav!.popUntil((r) => r.isFirst);
   } catch (e, s) {
     report['error'] = e.toString();

@@ -119,12 +119,14 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              l.ltSettingsTitle,
-              style: LTType.inter(
-                size: 17,
-                weight: FontWeight.w800,
-                color: LT.t1,
+            Expanded(
+              child: Text(
+                l.ltSettingsTitle,
+                style: LTType.inter(
+                  size: 17,
+                  weight: FontWeight.w800,
+                  color: LT.t1,
+                ),
               ),
             ),
             IconBtn(
@@ -383,7 +385,9 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     if (!mounted) return;
     final msg =
         err == null
-            ? (store.accountDeletionPending ? l.ltSettingsDeleteAccountPending : l.ltSettingsDeleteAccountDone)
+            ? (store.accountDeletionPending
+                ? l.ltSettingsDeleteAccountPending
+                : l.ltSettingsDeleteAccountDone)
             : l.ltSettingsDeleteAccountFailed(_deleteErrorText(l, err));
     if (err == null) {
       Navigator.of(this.context).pop(); // settings sheet 닫기
@@ -435,6 +439,15 @@ class _Row extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final words = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, style: LTType.inter(size: 13, weight: FontWeight.w700)),
+        if (sub != null)
+          Text(sub!, style: LTType.inter(size: 11, color: LT.t3)),
+      ],
+    );
     final row = Container(
       constraints: const BoxConstraints(minHeight: 52),
       margin: const EdgeInsets.only(bottom: 8),
@@ -444,40 +457,42 @@ class _Row extends StatelessWidget {
         borderRadius: BorderRadius.circular(LTRadius.control),
         border: Border.all(color: LT.border),
       ),
-      child: Row(
-        children: [
-          Ms(icon, size: 20, color: LT.t2),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  title,
-                  style: LTType.inter(
-                    size: 13,
-                    weight: FontWeight.w700,
-                    color: LT.t1,
-                  ),
-                ),
-                if (sub != null)
-                  Text(sub!, style: LTType.inter(size: 11, color: LT.t3)),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked =
+              right != null &&
+              (constraints.maxWidth < 300 ||
+                  MediaQuery.textScalerOf(context).scale(13) > 18);
+          final heading = Row(
+            children: [
+              Ms(icon, size: 20, color: LT.t2),
+              const SizedBox(width: 12),
+              Expanded(child: words),
+              if (!stacked && right != null) ...[
+                const SizedBox(width: 8),
+                right!,
               ],
-            ),
-          ),
-          if (right != null) right!,
-          if (onTap != null && right == null)
-            const Ms(LtIcons.chevronRight, size: 16, color: LT.t3),
-        ],
+              if (onTap != null && right == null)
+                const Ms(LtIcons.chevronRight, size: 16, color: LT.t3),
+            ],
+          );
+          return stacked
+              ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  heading,
+                  const SizedBox(height: 8),
+                  Align(alignment: Alignment.centerRight, child: right!),
+                ],
+              )
+              : heading;
+        },
       ),
     );
-    if (onTap == null) return row;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: row,
-    );
+    if (onTap == null) {
+      return right is _MiniSwitch ? MergeSemantics(child: row) : row;
+    }
+    return Semantics(button: true, child: InkWell(onTap: onTap, child: row));
   }
 }
 
@@ -487,35 +502,7 @@ class _MiniSwitch extends StatelessWidget {
   final ValueChanged<bool> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => onChanged(!on),
-      child: Container(
-        width: 40,
-        height: 23,
-        decoration: BoxDecoration(
-          color: on ? LT.lime : LT.surface3,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: on ? Colors.transparent : LT.border),
-        ),
-        child: AnimatedAlign(
-          duration: const Duration(milliseconds: 160),
-          alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-          child: Padding(
-            padding: const EdgeInsets.all(2),
-            child: Container(
-              width: 17,
-              height: 17,
-              decoration: BoxDecoration(
-                color: on ? LT.bg : LT.t3,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Switch(value: on, onChanged: onChanged);
 }
 
 class _LatencyStepper extends StatelessWidget {
@@ -535,7 +522,7 @@ class _LatencyStepper extends StatelessWidget {
           onTap: () => onChanged(value - 10),
         ),
         SizedBox(
-          width: 54,
+          width: MediaQuery.textScalerOf(context).scale(11) * 6,
           child: Text(
             '${value}ms',
             textAlign: TextAlign.center,
@@ -564,40 +551,16 @@ class _Segmented extends StatelessWidget {
   final ValueChanged<int> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: LT.bg,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: LT.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < options.length; i++)
-            GestureDetector(
-              onTap: () => onChanged(i),
-              child: Container(
-                height: 24,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: index == i ? LT.lime : Colors.transparent,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  options[i],
-                  style: LTType.inter(
-                    size: 11,
-                    weight: FontWeight.w700,
-                    color: index == i ? LT.bg : LT.t2,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    children: [
+      for (var i = 0; i < options.length; i++)
+        ChoiceChip(
+          label: Text(options[i]),
+          selected: index == i,
+          onSelected: (_) => onChanged(i),
+        ),
+    ],
+  );
 }

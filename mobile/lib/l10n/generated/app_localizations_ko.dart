@@ -1809,6 +1809,12 @@ class L10nKo extends L10n {
   String get ltInstrumentFavorites => '즐겨찾기';
 
   @override
+  String get ltInstrumentFavoriteAdd => '즐겨찾기에 추가';
+
+  @override
+  String get ltInstrumentFavoriteRemove => '즐겨찾기에서 제거';
+
+  @override
   String get ltInstrumentCloudSounds => '클라우드 사운드';
 
   @override
@@ -2052,6 +2058,27 @@ class L10nKo extends L10n {
 
   @override
   String get ltHumConvert => '변환';
+
+  @override
+  String get ltHumConversionFailed => '허밍을 변환하지 못했어요';
+
+  @override
+  String get ltHumRecordingKept => '녹음은 이 창에 남아 있어요. 같은 녹음으로 다시 시도할 수 있어요.';
+
+  @override
+  String get ltHumRetryRecording => '같은 녹음으로 다시 시도';
+
+  @override
+  String get ltHumDiscardRecording => '녹음 버리고 닫기';
+
+  @override
+  String get ltHumDiscardTitle => '이 녹음을 버릴까요?';
+
+  @override
+  String get ltHumDiscardBody => '이 녹음을 버리면 같은 녹음으로 다시 시도할 수 없어요.';
+
+  @override
+  String get ltHumKeepRecording => '녹음 유지하기';
 
   @override
   String get ltRecErrUnavailable => '녹음을 시작할 수 없어요';
@@ -2773,7 +2800,40 @@ class L10nKo extends L10n {
   String get ltGuidedMakeSongVoice => '이 녹음으로 곡 만들기';
 
   @override
-  String get ltGuidedSteps => '1 녹음 → 2 저장';
+  String get ltGuidedSteps => '녹음 → 비교 → 곡 만들기';
+
+  @override
+  String get ltGuidedRetake => '다시 허밍 녹음하기';
+
+  @override
+  String get ltGuidedRetakeHint => '새 변환이 성공할 때까지 지금 멜로디를 유지해요.';
+
+  @override
+  String get ltTransportPlay => '재생';
+
+  @override
+  String get ltTransportPause => '일시정지';
+
+  @override
+  String get ltTransportRecordStart => '녹음 시작';
+
+  @override
+  String get ltTransportRecordStop => '녹음 종료';
+
+  @override
+  String get ltTransportSettings => '재생 설정';
+
+  @override
+  String get ltTransportLoop => '반복 · 구간 듣기';
+
+  @override
+  String get ltTransportBars => '마디 수';
+
+  @override
+  String get ltTransportTempoUp => '템포 높이기';
+
+  @override
+  String get ltTransportTempoDown => '템포 낮추기';
 
   @override
   String get ltGuidedHumTitle => '허밍으로 멜로디 만들기';
@@ -3298,7 +3358,8 @@ class L10nKo extends L10n {
   String get bandAddSection => '섹션 추가';
 
   @override
-  String get bandChipTooltip => '클릭: 선택 · 두 번 클릭: 이름 · 우클릭: 메뉴 · 휠: 반복 수';
+  String get bandChipTooltip =>
+      '클릭: 선택 · 두 번 클릭 / F2: 이름 · 우클릭 / Shift+F10: 메뉴 · 휠: 반복 수';
 
   @override
   String bandLinkedNotice(int count) {

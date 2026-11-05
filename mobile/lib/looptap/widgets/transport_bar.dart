@@ -56,206 +56,290 @@ class TransportBar extends StatelessWidget {
   final bool
   showRecord; // hidden on the vocal track (it has its own record ring)
 
+  Widget _controls(BuildContext context) {
+    final l = L10n.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconBtn(
+          icon: LtIcons.stop,
+          size: 48,
+          tooltip: l.pendingStop,
+          onTap: onStop,
+        ),
+        const SizedBox(width: 8),
+        MergeSemantics(
+          key: const ValueKey('transport-play'),
+          child: IconButton.filled(
+            tooltip: playing ? l.ltTransportPause : l.ltTransportPlay,
+            onPressed: onPlay,
+            style: IconButton.styleFrom(
+              backgroundColor: LT.lime,
+              foregroundColor: LT.bg,
+              minimumSize: const Size(48, 48),
+              visualDensity: VisualDensity.standard,
+            ),
+            icon: Semantics(
+              label: playing ? l.ltTransportPause : l.ltTransportPlay,
+              child: Ms(
+                playing ? LtIcons.pause : LtIcons.playArrow,
+                color: LT.bg,
+                size: 25,
+              ),
+            ),
+          ),
+        ),
+        if (showRecord) ...[
+          const SizedBox(width: 8),
+          MergeSemantics(
+            key: const ValueKey('transport-record'),
+            child: Semantics(
+              toggled: recording,
+              child: IconButton(
+                tooltip:
+                    recording
+                        ? l.ltTransportRecordStop
+                        : l.ltTransportRecordStart,
+                onPressed: onRec,
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  visualDensity: VisualDensity.standard,
+                  backgroundColor: recording ? LT.danger : LT.surface2,
+                  side: const BorderSide(color: LT.danger, width: 2),
+                ),
+                icon: Icon(
+                  recording ? Icons.stop_rounded : Icons.fiber_manual_record,
+                  semanticLabel:
+                      recording
+                          ? l.ltTransportRecordStop
+                          : l.ltTransportRecordStart,
+                  color: recording ? LT.t1 : LT.danger,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _settings(BuildContext context) async {
+    var currentBpm = bpm;
+    var currentMetro = metro;
+    var currentCount = countIn;
+    var currentSwing = swing;
+    var currentBars = bars;
+    await showLtModal(
+      context,
+      width: 440,
+      child: StatefulBuilder(
+        builder: (context, update) {
+          final l = L10n.of(context);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                l.ltTransportSettings,
+                style: LTType.inter(size: 18, weight: FontWeight.w800),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: BpmStepper(
+                  bpm: currentBpm,
+                  onBpm: (v) {
+                    update(() => currentBpm = v);
+                    onBpm(v);
+                  },
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(l.metronomeTitle),
+                value: currentMetro,
+                onChanged: (v) {
+                  update(() => currentMetro = v);
+                  onMetro(v);
+                },
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(l.ltTransportCountIn),
+                value: currentCount,
+                onChanged: (v) {
+                  update(() => currentCount = v);
+                  onCountIn(v);
+                },
+              ),
+              ListTile(
+                key: const ValueKey('transport-loop-options'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l.ltTransportLoop),
+                selected: rangeLoop,
+                trailing: const Icon(Icons.chevron_right),
+                onTap:
+                    onLoop == null
+                        ? null
+                        : () {
+                          Navigator.of(context).pop();
+                          onLoop!();
+                        },
+              ),
+              Text('${l.ltTransportSwing} · ${(currentSwing * 100).round()}%'),
+              Semantics(
+                label: l.ltTransportSwing,
+                child: Slider(
+                  value: (currentSwing * 100).clamp(0, 60),
+                  min: 0,
+                  max: 60,
+                  label: '${(currentSwing * 100).round()}%',
+                  semanticFormatterCallback: (v) => '${v.round()}%',
+                  onChanged: (v) {
+                    update(() => currentSwing = v / 100);
+                    onSwing(v / 100);
+                  },
+                ),
+              ),
+              Text(l.ltTransportBars),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final value in const [1, 2, 4, 8, 16])
+                    ChoiceChip(
+                      label: Text('$value'),
+                      selected: currentBars == value,
+                      onSelected: (_) {
+                        update(() => currentBars = value);
+                        onBars(value);
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  onClear();
+                },
+                child: Text(l.ltTransportClearTrack),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l.close),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = L10n.of(context);
-    return Row(
-      children: [
-        // ── left: options ──
-        // 작은 폰(iPhone SE 등) 에선 BPM stepper + 아이콘 3개 합이 부모 너비를
-        // 넘으므로 FittedBox scaleDown 으로 비율 유지하며 축소. clipBehavior 로
-        // overflow 데코(노란 빗금)도 안 뜨게.
-        Expanded(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconBtn(
-                  icon: LtIcons.straighten,
-                  active: metro,
-                  tooltip: l.metronomeTitle,
-                  onTap: () => onMetro(!metro),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Keep primary actions at their actual touch size. Secondary settings get
+        // a named sheet instead of shrinking controls to fit a narrow landscape.
+        if (constraints.maxWidth < 1000 ||
+            MediaQuery.textScalerOf(context).scale(14) > 19) {
+          return Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Tooltip(
+                    message: l.ltTransportSettings,
+                    child: TextButton.icon(
+                      key: const ValueKey('transport-settings'),
+                      onPressed: () => _settings(context),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                      ),
+                      icon: const Icon(Icons.tune, size: 20),
+                      label: Semantics(label: l.ltTransportSettings, child: Text('$bpm BPM')),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                IconBtn(
-                  icon: LtIcons.timer,
-                  active: countIn,
-                  tooltip: l.ltTransportCountIn,
-                  onTap: () => onCountIn(!countIn),
-                ),
-                const SizedBox(width: 8),
-                IconBtn(
-                  icon: LtIcons.repeat,
-                  active: rangeLoop,
-                  tooltip:
-                      Localizations.localeOf(context).languageCode == 'ko'
-                          ? '반복 · 구간 듣기'
-                          : 'Loop · listen to a part',
-                  onTap: onLoop,
-                ),
-                const SizedBox(width: 12),
-                _BpmStepper(bpm: bpm, onBpm: onBpm),
-              ],
-            ),
-          ),
-        ),
-        // 좌측 BPM stepper 와 center Stop 버튼 사이 여백 — 우측 SizedBox(12) 와 대칭.
-        const SizedBox(width: 12),
-        // ── center: transport ──
-        // 사이즈 위계: Play(46) > Record(40) > Stop(34). 약간 더 컴팩트화해서
-        // 하단 bar 전체 높이를 더 줄임 (Row 높이 = 가장 큰 자식 = Play).
-        Row(
-          mainAxisSize: MainAxisSize.min,
+              ),
+              const SizedBox(width: 8),
+              _controls(context),
+            ],
+          );
+        }
+        return Row(
           children: [
-            IconBtn(
-              icon: LtIcons.stop,
-              size: 34,
-              tooltip: l.pendingStop,
-              onTap: onStop,
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  IconBtn(
+                    icon: LtIcons.straighten,
+                    active: metro,
+                    toggled: metro,
+                    tooltip: l.metronomeTitle,
+                    onTap: () => onMetro(!metro),
+                  ),
+                  IconBtn(
+                    icon: LtIcons.timer,
+                    active: countIn,
+                    toggled: countIn,
+                    tooltip: l.ltTransportCountIn,
+                    onTap: () => onCountIn(!countIn),
+                  ),
+                  IconBtn(
+                    icon: LtIcons.repeat,
+                    active: rangeLoop,
+                    toggled: rangeLoop,
+                    tooltip: l.ltTransportLoop,
+                    onTap: onLoop,
+                  ),
+                  _BpmStepper(bpm: bpm, onBpm: onBpm),
+                ],
+              ),
             ),
             const SizedBox(width: 12),
-            // play
-            GestureDetector(
-              onTap: onPlay,
-              child: Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: LT.lime,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: LT.lime.withValues(alpha: 0.4),
-                      blurRadius: 20,
+            _controls(context),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  spacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      '${l.ltTransportSwing} ${(swing * 100).round()}%',
+                      style: LTType.inter(size: 12),
+                    ),
+                    SizedBox(
+                      width: 110,
+                      child: Semantics(
+                        label: l.ltTransportSwing,
+                        child: Slider(
+                          value: (swing * 100).clamp(0, 60),
+                          min: 0,
+                          max: 60,
+                          semanticFormatterCallback: (v) => '${v.round()}%',
+                          onChanged: (v) => onSwing(v / 100),
+                        ),
+                      ),
+                    ),
+                    _BarsToggle(bars: bars, onBars: onBars),
+                    IconBtn(
+                      icon: LtIcons.backspace,
+                      tooltip: l.ltTransportClearTrack,
+                      onTap: onClear,
                     ),
                   ],
                 ),
-                child: Center(
-                  child: Ms(
-                    playing ? LtIcons.pause : LtIcons.playArrow,
-                    size: 23,
-                    color: LT.bg,
-                    fill: 1,
-                  ),
-                ),
               ),
             ),
-            if (showRecord) ...[
-              const SizedBox(width: 12),
-              // record
-              GestureDetector(
-                onTap: onRec,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: recording ? LT.danger : LT.surface2,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: LT.danger, width: 2),
-                    boxShadow:
-                        recording
-                            ? [
-                              BoxShadow(
-                                color: LT.danger.withValues(alpha: 0.53),
-                                blurRadius: 20,
-                              ),
-                            ]
-                            : null,
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 13,
-                      height: 13,
-                      decoration: const BoxDecoration(
-                        color: LT.danger,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ],
-        ),
-        // 좌측 BPM stepper 뒤의 SizedBox(width: 12) 와 대칭 맞추기 — Record 와
-        // "Swing" 라벨이 딱 붙어 보이던 문제.
-        const SizedBox(width: 12),
-        // ── right: swing + bars + clear ──
-        // 좌측과 동일한 이유로 FittedBox scaleDown. alignment 는 centerRight 라
-        // 큰 폰에선 기존처럼 오른쪽 정렬, 좁아지면 비율 유지하며 자연 축소.
-        Expanded(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerRight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Swing 컨트롤 — 라벨이 슬라이더 좌상단에 붙는 2-line 레이아웃.
-                // 1줄 인라인보다 세로 공간을 더 쓰지만 라벨이 슬라이더 컨텍스트로
-                // 즉시 묶여 보임. groove-001: Swing은 그루브 미지정 트랙에만 적용.
-                Tooltip(
-                  message:
-                      Localizations.localeOf(context).languageCode == 'ko'
-                          ? '그루브가 지정되지 않은 트랙에 적용'
-                          : 'Applies to tracks without a groove',
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          LtLabel(
-                            l.ltTransportSwing,
-                            color: swing > 0 ? LT.lime : LT.t3,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${(swing * 100).round()}%',
-                            style: LTType.mono(size: 10, color: LT.t3),
-                          ),
-                        ],
-                      ),
-                      SizedBox(
-                        width: 110,
-                        height: 18,
-                        child: SliderTheme(
-                          data: SliderThemeData(
-                            trackHeight: 3,
-                            activeTrackColor: LT.lime,
-                            inactiveTrackColor: LT.surface3,
-                            thumbColor: LT.lime,
-                            overlayShape: SliderComponentShape.noOverlay,
-                            thumbShape: const RoundSliderThumbShape(
-                              enabledThumbRadius: 6,
-                            ),
-                          ),
-                          child: Slider(
-                            min: 0,
-                            max: 60,
-                            value: (swing * 100).clamp(0, 60),
-                            onChanged: (v) => onSwing(v / 100),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                _BarsToggle(bars: bars, onBars: onBars),
-                const SizedBox(width: 10),
-                IconBtn(
-                  icon: LtIcons.backspace,
-                  tooltip: l.ltTransportClearTrack,
-                  onTap: onClear,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -312,30 +396,17 @@ class _BpmStepperState extends State<_BpmStepper> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _StepBtn('−', (m) => _step(-m)),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _editDirect, // tap the number → type a value directly
-            child: SizedBox(
-              width: 58,
-              // a wide font / a 3-digit tempo shrinks instead of overflowing
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      '$_bpm',
-                      style: LTType.mono(
-                        size: 15,
-                        weight: FontWeight.w700,
-                        color: LT.t1,
-                      ),
-                    ),
-                    const SizedBox(width: 3),
-                    Text('BPM', style: LTType.inter(size: 9, color: LT.t3)),
-                  ],
+          Flexible(
+            child: TextButton(
+              onPressed: _editDirect,
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              child: Text(
+                '$_bpm BPM',
+                textAlign: TextAlign.center,
+                style: LTType.mono(
+                  size: 15,
+                  weight: FontWeight.w700,
+                  color: LT.t1,
                 ),
               ),
             ),
@@ -365,10 +436,12 @@ class _StepBtnState extends State<_StepBtn> {
   // held — otherwise a second down would orphan the first auto-repeat timer
   // (ramping BPM forever) and a second up would end the wrong hold.
   int? _pointer;
+  bool _pointerTap = false;
 
   void _start(int pointer) {
     if (_pointer != null) return;
     _pointer = pointer;
+    _pointerTap = true;
     _hold?.cancel();
     _fires = 0;
     widget.onStep(1); // immediate first step (also the plain-tap case)
@@ -393,6 +466,7 @@ class _StepBtnState extends State<_StepBtn> {
     _pointer = null;
     _hold?.cancel();
     _hold = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _pointerTap = false);
   }
 
   @override
@@ -409,18 +483,22 @@ class _StepBtnState extends State<_StepBtn> {
       onPointerDown: (e) => _start(e.pointer),
       onPointerUp: (e) => _stop(e.pointer),
       onPointerCancel: (e) => _stop(e.pointer),
-      child: SizedBox(
-        width: 26,
-        height: 26,
-        child: Center(
-          child: Text(
-            widget.glyph,
-            style: LTType.inter(
-              size: 18,
-              weight: FontWeight.w700,
-              color: LT.t1,
-            ),
-          ),
+      child: IconButton(
+        tooltip:
+            widget.glyph == '+'
+                ? L10n.of(context).ltTransportTempoUp
+                : L10n.of(context).ltTransportTempoDown,
+        onPressed: () {
+          if (!_pointerTap) widget.onStep(1);
+        },
+        style: IconButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          visualDensity: VisualDensity.standard,
+        ),
+        icon: Text(
+          widget.glyph,
+          textScaler: TextScaler.noScaling,
+          style: LTType.inter(size: 18, weight: FontWeight.w700, color: LT.t1),
         ),
       ),
     );
@@ -449,11 +527,12 @@ class _BpmInputState extends State<_BpmInput> {
   // Owned here (not by _promptBpm) so it's disposed only once the dialog's
   // TextField has left the tree — i.e. after the pop animation.
   late final TextEditingController _ctrl = TextEditingController(
-    text: '${widget.initial}',
-  )..selection = TextSelection(
-    baseOffset: 0,
-    extentOffset: '${widget.initial}'.length,
-  );
+      text: '${widget.initial}',
+    )
+    ..selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: '${widget.initial}'.length,
+    );
   String? _error;
 
   @override
@@ -512,50 +591,20 @@ class _BpmInputState extends State<_BpmInput> {
           ),
         ),
         const SizedBox(height: 14),
-        Row(
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          alignment: WrapAlignment.end,
           children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(LTRadius.pill),
-                    border: Border.all(color: LT.border),
-                  ),
-                  child: Text(
-                    l.cancel,
-                    style: LTType.inter(
-                      size: 14,
-                      weight: FontWeight.w700,
-                      color: LT.t2,
-                    ),
-                  ),
-                ),
-              ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              child: Text(l.cancel),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: GestureDetector(
-                onTap: _submit,
-                child: Container(
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: LT.lime,
-                    borderRadius: BorderRadius.circular(LTRadius.pill),
-                  ),
-                  child: Text(
-                    l.apply,
-                    style: LTType.inter(
-                      size: 14,
-                      weight: FontWeight.w800,
-                      color: LT.bg,
-                    ),
-                  ),
-                ),
-              ),
+            FilledButton(
+              onPressed: _submit,
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              child: Text(l.apply),
             ),
           ],
         ),
@@ -571,43 +620,19 @@ class _BarsToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: LT.surface2,
-        borderRadius: BorderRadius.circular(LTRadius.pill),
-        border: Border.all(color: LT.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final b in const [1, 2, 4])
-            GestureDetector(
-              onTap: () => onBars(b),
-              child: Container(
-                width: 28,
-                height: 24,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: bars == b ? LT.lime : Colors.transparent,
-                  borderRadius: BorderRadius.circular(LTRadius.pill),
-                ),
-                child: Text(
-                  '$b',
-                  style: LTType.inter(
-                    size: 12,
-                    weight: FontWeight.w800,
-                    color: bars == b ? LT.bg : LT.t2,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+    return Wrap(
+      spacing: 4,
+      children: [
+        for (final b in const [1, 2, 4])
+          ChoiceChip(
+            label: Text('$b'),
+            selected: bars == b,
+            onSelected: (_) => onBars(b),
+          ),
+      ],
     );
   }
 }
-
 
 // ui-001 stage 1: the desktop top bar's song-settings popover reuses the same
 // BPM stepper (40–220, hold to accelerate, tap the number to type), the same
@@ -633,4 +658,5 @@ class BarsToggle extends StatelessWidget {
 }
 
 /// The direct BPM entry modal (null on cancel), clamped to 40–220.
-Future<int?> promptBpm(BuildContext context, int current) => _promptBpm(context, current);
+Future<int?> promptBpm(BuildContext context, int current) =>
+    _promptBpm(context, current);

@@ -64,7 +64,11 @@ class GuidedHumPanel extends StatelessWidget {
 
   Widget _title(String text) => Text(
     text,
-    style: const TextStyle(color: LT.t1, fontSize: 21, fontWeight: FontWeight.bold),
+    style: const TextStyle(
+      color: LT.t1,
+      fontSize: 21,
+      fontWeight: FontWeight.bold,
+    ),
   );
 
   Widget _body(String text) =>
@@ -163,7 +167,9 @@ class GuidedHumPanel extends StatelessWidget {
               const Icon(Icons.auto_awesome, color: LT.lime, size: 20),
               const SizedBox(width: 8),
               Expanded(
-                child: _title(addTrack ? l.ltHumAddReady : l.ltGuidedMelodyReady),
+                child: _title(
+                  addTrack ? l.ltHumAddReady : l.ltGuidedMelodyReady,
+                ),
               ),
             ],
           ),
@@ -171,14 +177,19 @@ class GuidedHumPanel extends StatelessWidget {
           _body(
             addTrack
                 ? l.ltHumAddHint
-                : (onPlayTake != null ? l.ltGuidedCompareHint : l.ltGuidedMelodyHint),
+                : (onPlayTake != null
+                    ? l.ltGuidedCompareHint
+                    : l.ltGuidedMelodyHint),
           ),
           const SizedBox(height: 14),
           // the converted melody, like a MIDI clip
           Container(
             key: const ValueKey('guided-melody-roll'),
             // taller on a tall phone screen, compact in a short window
-            height: (MediaQuery.sizeOf(context).height * .3).clamp(120.0, 260.0),
+            height: (MediaQuery.sizeOf(context).height * .3).clamp(
+              120.0,
+              260.0,
+            ),
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: LT.surface,
@@ -195,72 +206,72 @@ class GuidedHumPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
+          _AdaptivePair(
             children: [
               if (onPlayTake != null) ...[
-                Expanded(
-                  child: _PlayButton(
-                    key: const ValueKey('guided-play-take'),
-                    icon: Icons.mic,
-                    label: l.ltGuidedPlayTake,
-                    on: playingTake,
-                    onTap: onPlayTake!,
-                  ),
+                _PlayButton(
+                  key: const ValueKey('guided-play-take'),
+                  icon: Icons.mic,
+                  label: l.ltGuidedPlayTake,
+                  on: playingTake,
+                  onTap: onPlayTake!,
                 ),
-                const SizedBox(width: 10),
               ],
-              Expanded(
-                child: _PlayButton(
-                  key: const ValueKey('guided-play-melody'),
-                  icon: Icons.piano,
-                  label:
-                      addTrack
-                          ? l.ltHumAddPlaySong
-                          : (keyChanged ? l.ltGuidedPlayNewKey : l.ltGuidedPlayMelody),
-                  on: playing,
-                  accent: true,
-                  onTap: onListen,
-                ),
+              _PlayButton(
+                key: const ValueKey('guided-play-melody'),
+                icon: Icons.piano,
+                label:
+                    addTrack
+                        ? l.ltHumAddPlaySong
+                        : (keyChanged
+                            ? l.ltGuidedPlayNewKey
+                            : l.ltGuidedPlayMelody),
+                on: playing,
+                accent: true,
+                onTap: onListen,
               ),
             ],
           ),
           const SizedBox(height: 10),
-          Row(
+          _AdaptivePair(
             children: [
-              Expanded(
-                child: _SettingButton(
-                  key: const ValueKey('guided-instrument'),
-                  icon: Icons.piano_outlined,
-                  label: l.ltGuidedSound,
-                  value: instrumentName,
-                  onTap: onInstrument,
-                ),
+              _SettingButton(
+                key: const ValueKey('guided-instrument'),
+                icon: Icons.piano_outlined,
+                label: l.ltGuidedSound,
+                value: instrumentName,
+                onTap: onInstrument,
               ),
               if (addTrack) ...[
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _SettingButton(
-                    key: const ValueKey('guided-retake'),
-                    icon: Icons.mic,
-                    label: l.ltHumAddRetake,
-                    onTap: onRecord,
-                  ),
+                _SettingButton(
+                  key: const ValueKey('guided-retake'),
+                  icon: Icons.mic,
+                  label: l.ltHumAddRetake,
+                  onTap: onRecord,
                 ),
               ] else if (onKey != null) ...[
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _SettingButton(
-                    key: const ValueKey('guided-key'),
-                    icon: Icons.tune,
-                    label: l.ltGuidedKey,
-                    value: keyLabel,
-                    highlight: keyChanged,
-                    onTap: onKey!,
-                  ),
+                _SettingButton(
+                  key: const ValueKey('guided-key'),
+                  icon: Icons.tune,
+                  label: l.ltGuidedKey,
+                  value: keyLabel,
+                  highlight: keyChanged,
+                  onTap: onKey!,
                 ),
               ],
             ],
           ),
+          if (!addTrack) ...[
+            const SizedBox(height: 10),
+            TextButton.icon(
+              key: const ValueKey('guided-retake'),
+              onPressed: onRecord,
+              style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+              icon: const Icon(Icons.mic_none),
+              label: Text(l.ltGuidedRetake),
+            ),
+            _body(l.ltGuidedRetakeHint),
+          ],
         ],
       );
     } else {
@@ -299,8 +310,6 @@ class GuidedHumPanel extends StatelessWidget {
                     style: const TextStyle(color: LT.t2, fontSize: 13),
                   ),
                 ),
-                if (!hasNotes && !addTrack)
-                  TextButton(onPressed: onEdit, child: Text(l.ltGuidedDirect)),
               ],
             ),
           ),
@@ -311,7 +320,20 @@ class GuidedHumPanel extends StatelessWidget {
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 560),
-                  child: content,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!hasNotes && !addTrack)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: onEdit,
+                            child: Text(l.ltGuidedDirect),
+                          ),
+                        ),
+                      content,
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -325,23 +347,32 @@ class GuidedHumPanel extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 560),
                   child: SizedBox(
                     width: double.infinity,
-                    height: 52,
                     child: FilledButton.icon(
                       key: const ValueKey('guided-make-song'),
                       onPressed: onEdit,
                       style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 52),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 14,
+                        ),
                         backgroundColor: LT.lime,
                         foregroundColor: LT.bg,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(LTRadius.pill),
                         ),
-                        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                        textStyle: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       icon: const Icon(Icons.arrow_forward),
                       label: Text(
                         addTrack
                             ? l.ltHumAddConfirm
-                            : (melody ? l.ltGuidedMakeSong : l.ltGuidedMakeSongVoice),
+                            : (melody
+                                ? l.ltGuidedMakeSong
+                                : l.ltGuidedMakeSongVoice),
                       ),
                     ),
                   ),
@@ -352,6 +383,40 @@ class GuidedHumPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Stack paired actions when enlarged text or a narrow phone needs the width.
+class _AdaptivePair extends StatelessWidget {
+  const _AdaptivePair({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final stack =
+          constraints.maxWidth < 380 ||
+          MediaQuery.textScalerOf(context).scale(14) > 19;
+      if (stack) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const SizedBox(height: 10),
+              children[i],
+            ],
+          ],
+        );
+      }
+      return Row(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) const SizedBox(width: 10),
+            Expanded(child: children[i]),
+          ],
+        ],
+      );
+    },
+  );
 }
 
 /// A rounded play / stop button; [accent] = the melody (lime when playing).
@@ -380,8 +445,8 @@ class _PlayButton extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: LTMotion.state,
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          constraints: const BoxConstraints(minHeight: 52),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(LTRadius.pill),
             border: Border.all(color: on ? color : LT.border),
@@ -407,8 +472,6 @@ class _PlayButton extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: on ? color : LT.t1,
                     fontSize: 13.5,
@@ -465,15 +528,11 @@ class _SettingButton extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: LT.t2, fontSize: 12),
                   ),
                   if (value != null)
                     Text(
                       value!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: LT.t1,
                         fontSize: 14,
@@ -533,9 +592,10 @@ class _MelodyRollPainter extends CustomPainter {
     // beat and bar lines
     const perBeat = kStepsPerBeat, perBar = kBeatsPerBar * kStepsPerBeat;
     final beat = Paint()..color = LT.border.withValues(alpha: .6);
-    final bar = Paint()
-      ..color = LT.borderStrong
-      ..strokeWidth = 1.2;
+    final bar =
+        Paint()
+          ..color = LT.borderStrong
+          ..strokeWidth = 1.2;
     for (var s = 0; s <= total; s += perBeat) {
       canvas.drawLine(
         Offset(x(s.toDouble()), padY),
@@ -545,9 +605,10 @@ class _MelodyRollPainter extends CustomPainter {
     }
     // notes
     final fill = Paint()..color = LT.lime;
-    final glow = Paint()
-      ..color = LT.lime.withValues(alpha: .25)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    final glow =
+        Paint()
+          ..color = LT.lime.withValues(alpha: .25)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
     final noteH = math.max(3.0, math.min(rowH - 1, 14.0));
     for (final n in notes) {
       if (n.muted) continue;
@@ -555,7 +616,12 @@ class _MelodyRollPainter extends CustomPainter {
       final left = x(start), right = x(start + n.soundingSteps);
       final top = y(n.midi) + (rowH - noteH) / 2;
       final r = RRect.fromRectAndRadius(
-        Rect.fromLTRB(left + .5, top, math.max(left + 3, right - .5), top + noteH),
+        Rect.fromLTRB(
+          left + .5,
+          top,
+          math.max(left + 3, right - .5),
+          top + noteH,
+        ),
         const Radius.circular(3),
       );
       canvas.drawRRect(r, glow);
@@ -633,7 +699,11 @@ class _Choice extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       description,
-                      style: const TextStyle(color: LT.t2, fontSize: 12.5, height: 1.4),
+                      style: const TextStyle(
+                        color: LT.t2,
+                        fontSize: 12.5,
+                        height: 1.4,
+                      ),
                     ),
                     if (extra != null) extra!,
                   ],

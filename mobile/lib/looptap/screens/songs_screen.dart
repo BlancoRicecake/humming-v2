@@ -281,8 +281,8 @@ class _Header extends StatelessWidget {
 
   Widget _row(BuildContext context) {
     final l = L10n.of(context);
-    return Row(
-      children: [
+    return LayoutBuilder(builder: (context, constraints) {
+      final brand = Row(children: [
         // logo — HumTrack app icon (lime hummingbird), rounded to match the badge
         ClipRRect(
           borderRadius: BorderRadius.circular(9),
@@ -295,7 +295,7 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Column(
+        Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -318,8 +318,10 @@ class _Header extends StatelessWidget {
             ),
             LtLabel(l.ltSongsTagline, color: LT.t3),
           ],
-        ),
-        const Spacer(),
+        )),
+      ]);
+      final controls = Wrap(spacing: 10, runSpacing: 8, alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center, children: [
         // 2026-11-02: our announcements, with a dot while some are unread
         ListenableBuilder(
           listenable: Listenable.merge([
@@ -361,7 +363,6 @@ class _Header extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(width: 10),
         // 2026-11-02: import (MIDI) as an icon; the check icon selects songs
         // (delete / export together). Opening a backup is in Settings.
         IconBtn(
@@ -371,7 +372,6 @@ class _Header extends StatelessWidget {
           tooltip: l.ltSongsImportMidi,
           onTap: onImportMidi,
         ),
-        const SizedBox(width: 10),
         if (onSelect != null) ...[
           IconBtn(
             key: const ValueKey('songs-select'),
@@ -380,11 +380,9 @@ class _Header extends StatelessWidget {
             tooltip: l.ltSongsSelect,
             onTap: onSelect!,
           ),
-          const SizedBox(width: 10),
         ],
         if (context.watch<LoopStore>().proActive) ...[
           _ProBadge(onTap: () => showAccountSheet(context)),
-          const SizedBox(width: 10),
         ],
         IconBtn(
           icon: LtIcons.settings,
@@ -392,9 +390,7 @@ class _Header extends StatelessWidget {
           tooltip: l.ltSettingsTitle,
           onTap: () => showSettingsSheet(context),
         ),
-        const SizedBox(width: 10),
         _MyPageButton(),
-        const SizedBox(width: 10),
         Pill(
           label: l.ltSongsNewSong,
           icon: LtIcons.add,
@@ -404,8 +400,12 @@ class _Header extends StatelessWidget {
           horizontalPadding: 18,
           onTap: onNew,
         ),
-      ],
-    );
+      ]);
+      if (constraints.maxWidth < 1000 || MediaQuery.textScalerOf(context).scale(14) > 19) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [brand, const SizedBox(height: 8), controls]);
+      }
+      return Row(children: [Expanded(child: brand), const SizedBox(width: 16), controls]);
+    });
   }
 }
 
@@ -599,12 +599,27 @@ class _Grid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final firstSong = userSongCount(songs) == 0;
-    return GridView.builder(
+    final scaler = MediaQuery.textScalerOf(context);
+    final enlarged = scaler.scale(14) > 19;
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = enlarged ? (constraints.maxWidth < 760 ? 1 : 2) : (constraints.maxWidth < 700 ? 2 : 3);
+      final width = (constraints.maxWidth - 14 * (columns - 1)) / columns;
+      double textHeight(String text, double size, double lineHeight, {FontWeight weight = FontWeight.w400, double inset = 28}) {
+        final painter = TextPainter(text: TextSpan(text: text,
+          style: DefaultTextStyle.of(context).style.copyWith(fontSize: size, height: lineHeight, fontWeight: weight)),
+          textScaler: scaler, textDirection: Directionality.of(context))..layout(maxWidth: (width - inset).clamp(1, double.infinity));
+        return painter.height;
+      }
+      final l = L10n.of(context);
+      final buttonHeight = (textHeight(l.ltGuidedStart, 12, 1.4, inset: 78) + 24).clamp(48.0, double.infinity);
+      final needed = 28 + textHeight(l.ltFirstSongTitle, 16, 1.4, weight: FontWeight.w800) +
+          8 + textHeight(l.ltFirstSongHint, 11, 1.4) + 12 + buttonHeight;
+      return GridView.builder(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: MediaQuery.sizeOf(context).width < 760 ? 2 : 3,
+        crossAxisCount: columns,
         mainAxisSpacing: 14,
         crossAxisSpacing: 14,
-        mainAxisExtent: firstSong ? 210 : 150,
+        mainAxisExtent: firstSong ? needed.clamp(210.0, double.infinity) : 150 * (scaler.scale(14) / 14).clamp(1.0, double.infinity),
       ),
       itemCount: songs.length + 1,
       itemBuilder: (context, i) {
@@ -629,6 +644,7 @@ class _Grid extends StatelessWidget {
         );
       },
     );
+    });
   }
 
   Future<void> _renameSong(BuildContext context, Song song) async {

@@ -132,8 +132,8 @@ void main() {
   group('ruler loop range (whole bars, end bar included)', () {
     testWidgets('drag bars 2→3 and 3→2 = bars 2–3; header 36 px with the band on top', (tester) async {
       await open(tester);
-      expect(tester.getSize(find.byKey(const ValueKey('arrangement-header'))).height, 36);
-      expect(tester.getSize(find.byKey(const ValueKey('desktop-section-band'))).height, 16);
+      expect(tester.getSize(find.byKey(const ValueKey('arrangement-header'))).height, 48);
+      expect(tester.getSize(find.byKey(const ValueKey('desktop-section-band'))).height, 28);
       expect(tester.getRect(find.byKey(const ValueKey('desktop-section-band'))).bottom,
           lessThanOrEqualTo(tester.getRect(find.byKey(const ValueKey('timeline-ruler'))).top));
       await drag(tester, 16 + 2, 32 + 8);
@@ -394,7 +394,10 @@ void main() {
         // 2026-11-02: no audition row over the editor; the transport's
         // loop button opens it in a sheet
         expect(find.byType(AuditionBar), findsNothing);
-        await tester.tap(find.byTooltip('Loop · listen to a part'));
+        await tester.tap(find.byKey(const ValueKey('transport-settings')));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.byKey(const ValueKey('transport-loop-options')));
+        await tester.tap(find.byKey(const ValueKey('transport-loop-options')));
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('audition-sheet')), findsOneWidget);
         expect(find.byType(AuditionBar), findsOneWidget);
@@ -585,6 +588,6 @@ void main() {
     final header = tester.getRect(find.byKey(const ValueKey('arrangement-header')));
     debugPrint('[stage2-measure] 1280x720 grid (stage 3 edit view): pitch-grid-viewport height=${viewport.height.toStringAsFixed(1)} '
         'top=${viewport.top.toStringAsFixed(1)} arrange header=${header.height}');
-    expect(header.height, 36);
+    expect(header.height, 48);
   });
 }

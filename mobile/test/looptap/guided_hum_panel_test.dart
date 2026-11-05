@@ -61,19 +61,20 @@ void main() {
   testWidgets('first: two described choices, no backing step', (tester) async {
     final log = <String>[];
     await show(tester, hasNotes: false, log: log);
-    expect(find.text('1 녹음 → 2 저장'), findsOneWidget);
+    expect(find.text('녹음 → 비교 → 곡 만들기'), findsOneWidget);
     expect(find.text('허밍으로 멜로디 만들기'), findsOneWidget);
     expect(find.text('목소리 그대로 녹음하기'), findsOneWidget);
     expect(find.textContaining('최대 20초'), findsOneWidget);
     expect(find.text('신나게'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('guided-choice-hum')));
     await tester.tap(find.byKey(const ValueKey('guided-choice-voice')));
+    await tester.ensureVisible(find.byKey(const ValueKey('guided-voice-import')));
     await tester.tap(find.byKey(const ValueKey('guided-voice-import')));
     expect(log, ['hum', 'voice', 'import']);
     expect(find.byKey(const ValueKey('guided-make-song')), findsNothing);
   });
 
-  testWidgets('after a hum: compare, instrument, key, make a song — nothing else', (tester) async {
+  testWidgets('after a hum: compare, instrument, key, retake and make a song', (tester) async {
     final log = <String>[];
     await show(tester, hasNotes: true, hasMelody: true, log: log);
     expect(find.text('멜로디가 만들어졌어요'), findsOneWidget);
@@ -81,13 +82,13 @@ void main() {
       expect(find.text(gone), findsNothing, reason: gone);
     }
     // a short landscape window scrolls: bring each one into view first
-    for (final k in ['guided-play-take', 'guided-play-melody', 'guided-instrument', 'guided-key']) {
+    for (final k in ['guided-play-take', 'guided-play-melody', 'guided-instrument', 'guided-key', 'guided-retake']) {
       await tester.ensureVisible(find.byKey(ValueKey(k)));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(ValueKey(k)));
     }
     await tester.tap(find.byKey(const ValueKey('guided-make-song')));
-    expect(log, ['take', 'listen', 'instrument', 'key', 'edit']);
+    expect(log, ['take', 'listen', 'instrument', 'key', 'hum', 'edit']);
     expect(find.text('이 멜로디로 곡 만들기'), findsOneWidget);
   });
 

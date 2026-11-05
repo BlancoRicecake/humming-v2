@@ -82,7 +82,7 @@ void main() {
     await tester.pumpWidget(_host(onBpm: steps.add));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('120'));
+    await tester.tap(find.text('120 BPM'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '150');
     await tester.testTextInput.receiveAction(TextInputAction.done);

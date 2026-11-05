@@ -2,7 +2,7 @@
 // 눈금 구간 반복"): desktop-only pieces of the track header row.
 //
 // DesktopSectionBand replaces the standalone SectionBar row on desktop: a
-// 16 px strip of section cells above the ruler. Click = select, double-click
+// 28 px strip of section cells above the ruler. Click = select, double-click
 // = rename, right-click = the existing section menu, wheel = repeats, `+` =
 // add section; LinkBadge, the linked-sections notice and Play song stay.
 //
@@ -11,6 +11,7 @@
 // handlers and the quiet-Solo warning as an icon tooltip (click = 강약 보기).
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../l10n/generated/app_localizations.dart';
 import '../models/loop_models.dart';
@@ -45,7 +46,7 @@ class DesktopSectionBand extends StatelessWidget {
   final ValueChanged<int> onMenu;
   final VoidCallback onPlaySong;
 
-  static const double height = 16;
+  static const double height = 28;
 
   Future<void> _rename(BuildContext context, int idx) async {
     final before = sections[idx].name;
@@ -65,8 +66,14 @@ class DesktopSectionBand extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = L10n.of(context);
     final groups = linkGroupNumbers(sections);
-    final active = activeIdx >= 0 && activeIdx < sections.length ? sections[activeIdx] : null;
-    final linked = active?.linkId == null ? 0 : sections.where((s) => s.linkId == active!.linkId).length;
+    final active =
+        activeIdx >= 0 && activeIdx < sections.length
+            ? sections[activeIdx]
+            : null;
+    final linked =
+        active?.linkId == null
+            ? 0
+            : sections.where((s) => s.linkId == active!.linkId).length;
     return SizedBox(
       key: const ValueKey('desktop-section-band'),
       height: height,
@@ -87,46 +94,84 @@ class DesktopSectionBand extends StatelessWidget {
                   child: Listener(
                     onPointerSignal: (e) {
                       if (e is PointerScrollEvent && e.scrollDelta.dy != 0) {
-                        onRepeats(i, s.repeats + (e.scrollDelta.dy < 0 ? 1 : -1));
+                        onRepeats(
+                          i,
+                          s.repeats + (e.scrollDelta.dy < 0 ? 1 : -1),
+                        );
                       }
                     },
-                    child: GestureDetector(
-                      // the same per-section key the phone SectionBar chip uses
-                      key: ValueKey(s.id),
-                      onTap: () => onSwitch(i),
-                      onDoubleTap: () => _rename(context, i),
-                      onSecondaryTap: () => onMenu(i),
-                      onLongPress: () => onMenu(i),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        decoration: BoxDecoration(
-                          color: on ? LT.lime.withValues(alpha: 0.16) : LT.surface2,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: on ? LT.lime : LT.border),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (groups[s.linkId] != null) ...[
-                              LinkBadge(key: ValueKey('section-link-${s.id}'), group: groups[s.linkId]!),
-                              const SizedBox(width: 3),
-                            ],
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 120),
-                              child: Text(
-                                s.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: LTType.inter(size: 10, weight: FontWeight.w800, color: on ? LT.lime : LT.t1, height: 1),
+                    child: CallbackShortcuts(
+                      bindings: {
+                        const SingleActivator(LogicalKeyboardKey.f2):
+                            () => _rename(context, i),
+                        const SingleActivator(LogicalKeyboardKey.contextMenu):
+                            () => onMenu(i),
+                        const SingleActivator(
+                              LogicalKeyboardKey.f10,
+                              shift: true,
+                            ):
+                            () => onMenu(i),
+                      },
+                      child: Semantics(
+                        button: true,
+                        selected: on,
+                        child: InkWell(
+                          // the same per-section key the phone SectionBar chip uses
+                          key: ValueKey(s.id),
+                          onTap: () => onSwitch(i),
+                          onDoubleTap: () => _rename(context, i),
+                          onSecondaryTap: () => onMenu(i),
+                          onLongPress: () => onMenu(i),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            decoration: BoxDecoration(
+                              color:
+                                  on
+                                      ? LT.lime.withValues(alpha: 0.16)
+                                      : LT.surface2,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: on ? LT.lime : LT.border,
                               ),
                             ),
-                            const SizedBox(width: 3),
-                            Text(
-                              '×${s.repeats}',
-                              key: ValueKey('section-repeats-${s.id}'),
-                              style: LTType.mono(size: 9, color: on ? LT.lime : LT.t3),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (groups[s.linkId] != null) ...[
+                                  LinkBadge(
+                                    key: ValueKey('section-link-${s.id}'),
+                                    group: groups[s.linkId]!,
+                                  ),
+                                  const SizedBox(width: 3),
+                                ],
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 120,
+                                  ),
+                                  child: Text(
+                                    s.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: LTType.inter(
+                                      size: 10,
+                                      weight: FontWeight.w800,
+                                      color: on ? LT.lime : LT.t1,
+                                      height: 1,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '×${s.repeats}',
+                                  key: ValueKey('section-repeats-${s.id}'),
+                                  style: LTType.mono(
+                                    size: 9,
+                                    color: on ? LT.lime : LT.t3,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -139,16 +184,18 @@ class DesktopSectionBand extends StatelessWidget {
           // outside the scrolling cells: always reachable
           Tooltip(
             message: l.bandAddSection,
-            child: GestureDetector(
+            child: InkWell(
               key: const ValueKey('section-add'),
               onTap: onAdd,
               child: Container(
-                width: 22,
+                width: 28,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: LT.border),
                 ),
-                child: const Center(child: Ms(LtIcons.add, size: 12, color: LT.t2)),
+                child: Center(
+                  child: Semantics(button: true, label: l.bandAddSection, child: const Ms(LtIcons.add, size: 12, color: LT.t2)),
+                ),
               ),
             ),
           ),
@@ -162,7 +209,7 @@ class DesktopSectionBand extends StatelessWidget {
             ),
           ],
           const SizedBox(width: 8),
-          GestureDetector(
+          InkWell(
             key: const ValueKey('section-play-song'),
             onTap: onPlaySong,
             child: Container(
@@ -175,11 +222,21 @@ class DesktopSectionBand extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Ms(songMode ? LtIcons.stop : LtIcons.playlistPlay, size: 12, color: songMode ? LT.bg : LT.lime, fill: 1),
+                  Ms(
+                    songMode ? LtIcons.stop : LtIcons.playlistPlay,
+                    size: 12,
+                    color: songMode ? LT.bg : LT.lime,
+                    fill: 1,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     songMode ? l.ltSectionStopSong : l.bandSongPlay,
-                    style: LTType.inter(size: 10, weight: FontWeight.w800, color: songMode ? LT.bg : LT.t1, height: 1),
+                    style: LTType.inter(
+                      size: 10,
+                      weight: FontWeight.w800,
+                      color: songMode ? LT.bg : LT.t1,
+                      height: 1,
+                    ),
                   ),
                 ],
               ),
@@ -199,8 +256,13 @@ class _RenameField extends StatefulWidget {
 }
 
 class _RenameFieldState extends State<_RenameField> {
-  late final TextEditingController _ctl = TextEditingController(text: widget.initial)
-    ..selection = TextSelection(baseOffset: 0, extentOffset: widget.initial.length);
+  late final TextEditingController _ctl = TextEditingController(
+      text: widget.initial,
+    )
+    ..selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: widget.initial.length,
+    );
 
   @override
   void dispose() {
@@ -217,7 +279,10 @@ class _RenameFieldState extends State<_RenameField> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(l.bandRenameTitle, style: LTType.inter(size: 15, weight: FontWeight.w800)),
+        Text(
+          l.bandRenameTitle,
+          style: LTType.inter(size: 15, weight: FontWeight.w800),
+        ),
         const SizedBox(height: 12),
         TextField(
           key: const ValueKey('section-rename-field'),
@@ -229,12 +294,21 @@ class _RenameFieldState extends State<_RenameField> {
           style: LTType.inter(size: 14, weight: FontWeight.w700),
         ),
         const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(l.cancel)),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l.cancel),
+            ),
             const SizedBox(width: 8),
-            FilledButton(key: const ValueKey('section-rename-apply'), onPressed: _submit, child: Text(l.apply)),
+            FilledButton(
+              key: const ValueKey('section-rename-apply'),
+              onPressed: _submit,
+              child: Text(l.apply),
+            ),
           ],
         ),
       ],
@@ -265,19 +339,33 @@ class DesktopSoloHeader extends StatelessWidget {
     SoloIssue.muted => l.soloIssueMuted,
     SoloIssue.zeroVolume => l.soloIssueZeroVolume,
     SoloIssue.noNotes => l.soloIssueNoNotes,
-    SoloIssue.veryQuiet => l.soloIssueVeryQuiet(s.minVelocity ?? 0, s.maxVelocity ?? 0),
+    SoloIssue.veryQuiet => l.soloIssueVeryQuiet(
+      s.minVelocity ?? 0,
+      s.maxVelocity ?? 0,
+    ),
   };
 
   @override
   Widget build(BuildContext context) {
     final l = L10n.of(context);
-    final quiet = issues.where((s) => s.issue == SoloIssue.veryQuiet).firstOrNull;
+    final quiet =
+        issues.where((s) => s.issue == SoloIssue.veryQuiet).firstOrNull;
     final message = issues.map((s) => '${s.label}: ${reason(l, s)}').join('\n');
-    Widget link(String key, String text, VoidCallback? onTap, Color color) => GestureDetector(
-      key: ValueKey(key),
-      onTap: enabled ? onTap : null,
-      child: Text(text, maxLines: 1, style: LTType.inter(size: 10, weight: FontWeight.w800, color: enabled ? color : LT.t3, height: 1)),
-    );
+    Widget link(String key, String text, VoidCallback? onTap, Color color) =>
+        GestureDetector(
+          key: ValueKey(key),
+          onTap: enabled ? onTap : null,
+          child: Text(
+            text,
+            maxLines: 1,
+            style: LTType.inter(
+              size: 10,
+              weight: FontWeight.w800,
+              color: enabled ? color : LT.t3,
+              height: 1,
+            ),
+          ),
+        );
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.centerLeft,
@@ -285,17 +373,32 @@ class DesktopSoloHeader extends StatelessWidget {
         key: const ValueKey('desktop-solo-header'),
         mainAxisSize: MainAxisSize.min,
         children: [
-          link('audition-compare', bypassSolo ? l.soloCompareBack : l.soloCompareFull(soloCount), onCompare, bypassSolo ? LT.t1 : LT.lime),
+          link(
+            'audition-compare',
+            bypassSolo ? l.soloCompareBack : l.soloCompareFull(soloCount),
+            onCompare,
+            bypassSolo ? LT.t1 : LT.lime,
+          ),
           const SizedBox(width: 8),
           link('audition-clear-solo', l.soloClear, onClear, LT.t2),
           if (issues.isNotEmpty) ...[
             const SizedBox(width: 6),
             Tooltip(
-              message: quiet != null && onOpenVelocity != null ? '$message\n${l.soloIssueOpenHint}' : message,
+              message:
+                  quiet != null && onOpenVelocity != null
+                      ? '$message\n${l.soloIssueOpenHint}'
+                      : message,
               child: GestureDetector(
                 key: const ValueKey('solo-status-notice'),
-                onTap: quiet != null && onOpenVelocity != null ? () => onOpenVelocity!(quiet.id) : null,
-                child: const Icon(Icons.warning_amber_rounded, size: 13, color: LT.amber),
+                onTap:
+                    quiet != null && onOpenVelocity != null
+                        ? () => onOpenVelocity!(quiet.id)
+                        : null,
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 13,
+                  color: LT.amber,
+                ),
               ),
             ),
           ],

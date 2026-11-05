@@ -609,7 +609,8 @@ void main() {
       await tester.tap(find.text('help'));
       await tester.pumpAndSettle();
       final ids = {for (final s in kDesktopShortcuts) s.id};
-      expect(ids, DesktopShortcutId.values.toSet(), reason: 'every command has a registered key');
+      expect(ids, DesktopShortcutId.values.toSet()..remove(DesktopShortcutId.viewToggle),
+        reason: 'view switching uses the segment; Tab stays with focus traversal');
       for (final id in ids) {
         final row = find.byKey(ValueKey('shortcut-help-${id.name}'));
         expect(row, findsOneWidget, reason: id.name);

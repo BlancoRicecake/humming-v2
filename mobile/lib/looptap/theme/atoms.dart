@@ -44,6 +44,7 @@ class IconBtn extends StatelessWidget {
     this.color,
     this.tooltip,
     this.fill = 0,
+    this.toggled,
   });
 
   final IconData icon;
@@ -54,30 +55,51 @@ class IconBtn extends StatelessWidget {
   final String? tooltip;
   final double fill;
 
+  /// Selected state only for actual toggles, not highlighted action buttons.
+  final bool? toggled;
+
   @override
   Widget build(BuildContext context) {
-    final btn = GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: LTMotion.state,
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: active ? LT.lime : LT.surface2,
-          shape: BoxShape.circle,
-          border: Border.all(color: active ? Colors.transparent : LT.border),
-        ),
-        child: Center(
-          child: Ms(
-            icon,
-            size: (size * 0.52).roundToDouble(),
-            color: active ? LT.bg : (color ?? LT.t1),
-            fill: fill,
+    final platform = Theme.of(context).platform;
+    final touch =
+        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+    final target = touch && size < 48 ? 48.0 : size;
+    final button = IconButton(
+      onPressed: onTap,
+      tooltip: tooltip,
+      padding: EdgeInsets.zero,
+      constraints: BoxConstraints.tightFor(width: target, height: target),
+      style: IconButton.styleFrom(
+        minimumSize: Size(target, target),
+        maximumSize: Size(target, target),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.standard,
+      ),
+      icon: Semantics(
+        label: tooltip,
+        child: AnimatedContainer(
+          duration: LTMotion.state,
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: active ? LT.lime : LT.surface2,
+            shape: BoxShape.circle,
+            border: Border.all(color: active ? Colors.transparent : LT.border),
+          ),
+          child: Center(
+            child: Ms(
+              icon,
+              size: (size * 0.52).roundToDouble(),
+              color: active ? LT.bg : (color ?? LT.t1),
+              fill: fill,
+            ),
           ),
         ),
       ),
     );
-    return tooltip == null ? btn : Tooltip(message: tooltip!, child: btn);
+    return toggled == null
+        ? button
+        : MergeSemantics(child: Semantics(toggled: toggled, child: button));
   }
 }
 
@@ -128,8 +150,11 @@ class Pill extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: height,
-        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        constraints: BoxConstraints(minHeight: height),
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: 4,
+        ),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(LTRadius.pill),
@@ -142,12 +167,14 @@ class Pill extends StatelessWidget {
               Ms(icon!, size: 15, color: iconColor ?? fg),
               const SizedBox(width: 6),
             ],
-            Text(
-              label,
-              style: LTType.inter(
-                size: fontSize,
-                weight: FontWeight.w700,
-                color: fg,
+            Flexible(
+              child: Text(
+                label,
+                style: LTType.inter(
+                  size: fontSize,
+                  weight: FontWeight.w700,
+                  color: fg,
+                ),
               ),
             ),
           ],

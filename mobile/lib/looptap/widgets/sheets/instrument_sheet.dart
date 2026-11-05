@@ -48,6 +48,7 @@ class _InstrumentSheet extends StatefulWidget {
 
 class _InstrumentSheetState extends State<_InstrumentSheet> {
   late int _program = widget.currentProgram;
+
   /// null until the first build picks the category holding the current
   /// program (resolved there, not in initState, because the category labels
   /// come from L10n).
@@ -108,7 +109,8 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
           InstrumentCategory(c.label, [...c.instruments, ...merged[c.label]!])
         else
           c,
-      if (cloud.isNotEmpty) InstrumentCategory(l.ltInstrumentCloudSounds, cloud),
+      if (cloud.isNotEmpty)
+        InstrumentCategory(l.ltInstrumentCloudSounds, cloud),
     ];
     if (_favorites.isEmpty) return base;
     final favorites = [
@@ -123,7 +125,9 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
 
   // Runtime-catalog instruments matching this track's role.
   List<InstrumentDef> _catalogInstruments() {
-    final role = instrumentFavoriteKeyForTrack(widget.trackId); // melody|bass|drums
+    final role = instrumentFavoriteKeyForTrack(
+      widget.trackId,
+    ); // melody|bass|drums
     return [
       for (final e in SoundfontCatalog.instance.all)
         if (e.role == role) InstrumentDef(e.id, e.label, e.slot),
@@ -146,9 +150,10 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
   Widget build(BuildContext context) {
     final l = L10n.of(context);
     final categories = _categories(l);
-    final categoryIndex = (_categoryIndex ?? _initialCategoryIndex(categories))
-        .clamp(0, categories.length - 1)
-        .toInt();
+    final categoryIndex =
+        (_categoryIndex ?? _initialCategoryIndex(categories))
+            .clamp(0, categories.length - 1)
+            .toInt();
     final category = categories[categoryIndex];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,7 +165,13 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 34,
+          height:
+              48 +
+              (MediaQuery.textScalerOf(context).scale(12) - 12).clamp(
+                    0,
+                    double.infinity,
+                  ) *
+                  2,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             physics: const ClampingScrollPhysics(),
@@ -180,28 +191,40 @@ class _InstrumentSheetState extends State<_InstrumentSheet> {
         // a nested scroll clipped tall categories (16 items) in landscape.
         ValueListenableBuilder<Map<int, double>>(
           valueListenable: SoundfontCatalog.instance.downloadProgress,
-          builder: (context, prog, _) => GridView.count(
-            crossAxisCount: 2,
-            mainAxisSpacing: 6,
-            crossAxisSpacing: 6,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 3.6,
-            children: [
-              for (final inst in category.instruments)
-                _PickButton(
-                  label: inst.label,
-                  favorite: _favorites.contains(inst.program),
-                  selected: inst.program == _program,
-                  onTap: () => _pick(inst.program),
-                  onFavorite: () => _toggleFavorite(inst.program),
-                  // cloud sounds: download icon / progress ring / ready check
-                  cloud: isDynamicSlot(inst.program),
-                  progress: prog[inst.program],
-                  downloaded: SoundfontCatalog.instance.isDownloaded(inst.program),
-                ),
-            ],
-          ),
+          builder:
+              (context, prog, _) => LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns =
+                      constraints.maxWidth < 360 ||
+                              MediaQuery.textScalerOf(context).scale(13) > 18
+                          ? 1
+                          : 2;
+                  final width =
+                      (constraints.maxWidth - 6 * (columns - 1)) / columns;
+                  return Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final inst in category.instruments)
+                        SizedBox(
+                          width: width,
+                          child: _PickButton(
+                            label: inst.label,
+                            favorite: _favorites.contains(inst.program),
+                            selected: inst.program == _program,
+                            onTap: () => _pick(inst.program),
+                            onFavorite: () => _toggleFavorite(inst.program),
+                            cloud: isDynamicSlot(inst.program),
+                            progress: prog[inst.program],
+                            downloaded: SoundfontCatalog.instance.isDownloaded(
+                              inst.program,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
         ),
       ],
     );
@@ -222,24 +245,13 @@ class _CategoryChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = selected ? LT.lime : LT.surface2;
     final fg = selected ? LT.bg : LT.t2;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        alignment: Alignment.center,
-        constraints: const BoxConstraints(minWidth: 72),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: selected ? LT.lime : LT.border),
-        ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: LTType.inter(size: 12, weight: FontWeight.w800, color: fg),
-        ),
-      ),
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      selectedColor: bg,
+      backgroundColor: LT.surface2,
+      labelStyle: LTType.inter(size: 12, weight: FontWeight.w800, color: fg),
     );
   }
 }
@@ -270,65 +282,74 @@ class _PickButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = selected ? LT.lime : LT.surface2;
     final fg = selected ? LT.bg : LT.t1;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: bg,
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: selected ? LT.lime : LT.border),
-        ),
-        child: Row(
-          children: [
-            if (cloud) ...[
-              progress != null
-                  ? SizedBox(
-                      width: 14,
-                      height: 14,
-                      // determinate ring so a 200–400MB download reads as real
-                      // progress, not a stuck spinner
-                      child: CircularProgressIndicator(
+          child: Container(
+            alignment: Alignment.center,
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: selected ? LT.lime : LT.border),
+            ),
+            child: Row(
+              children: [
+                if (cloud) ...[
+                  progress != null
+                      ? SizedBox(
+                        width: 14,
+                        height: 14,
+                        // determinate ring so a 200–400MB download reads as real
+                        // progress, not a stuck spinner
+                        child: CircularProgressIndicator(
                           value: progress,
                           strokeWidth: 2,
-                          color: selected ? LT.bg : LT.t3),
-                    )
-                  : Ms(
-                      downloaded ? LtIcons.checkCircle : LtIcons.download,
-                      size: 15,
-                      color: downloaded
-                          ? (selected ? LT.bg : LT.lime)
-                          : (selected ? LT.bg : LT.t3),
+                          color: selected ? LT.bg : LT.t3,
+                        ),
+                      )
+                      : Ms(
+                        downloaded ? LtIcons.checkCircle : LtIcons.download,
+                        size: 15,
+                        color:
+                            downloaded
+                                ? (selected ? LT.bg : LT.lime)
+                                : (selected ? LT.bg : LT.t3),
+                      ),
+                  const SizedBox(width: 5),
+                ],
+                Expanded(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: LTType.inter(
+                      size: 13,
+                      weight: FontWeight.w700,
+                      color: fg,
                     ),
-              const SizedBox(width: 5),
-            ],
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: LTType.inter(
-                  size: 13,
-                  weight: FontWeight.w700,
-                  color: fg,
+                  ),
                 ),
-              ),
-            ),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onFavorite,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: Ms(
-                  favorite ? LtIcons.star : LtIcons.starBorder,
-                  size: 17,
-                  color: favorite ? LT.amber : (selected ? LT.bg : LT.t3),
+                IconButton(
+                  onPressed: onFavorite,
+                  tooltip:
+                      '${favorite ? L10n.of(context).ltInstrumentFavoriteRemove : L10n.of(context).ltInstrumentFavoriteAdd} · $label',
+                  style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+                  icon: Ms(
+                    favorite ? LtIcons.star : LtIcons.starBorder,
+                    size: 17,
+                    color: favorite ? LT.amber : (selected ? LT.bg : LT.t3),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

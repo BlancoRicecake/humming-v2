@@ -1851,6 +1851,12 @@ class L10nEn extends L10n {
   String get ltInstrumentFavorites => 'Favorites';
 
   @override
+  String get ltInstrumentFavoriteAdd => 'Add to favorites';
+
+  @override
+  String get ltInstrumentFavoriteRemove => 'Remove from favorites';
+
+  @override
   String get ltInstrumentCloudSounds => 'Cloud sounds';
 
   @override
@@ -2117,6 +2123,29 @@ class L10nEn extends L10n {
 
   @override
   String get ltHumConvert => 'Convert';
+
+  @override
+  String get ltHumConversionFailed => 'Couldn\'t convert your hum';
+
+  @override
+  String get ltHumRecordingKept =>
+      'Your recording is kept in this window. You can retry with the same recording.';
+
+  @override
+  String get ltHumRetryRecording => 'Retry this recording';
+
+  @override
+  String get ltHumDiscardRecording => 'Discard recording and close';
+
+  @override
+  String get ltHumDiscardTitle => 'Discard this recording?';
+
+  @override
+  String get ltHumDiscardBody =>
+      'If you discard it, you won\'t be able to retry with this recording.';
+
+  @override
+  String get ltHumKeepRecording => 'Keep this recording';
 
   @override
   String get ltRecErrUnavailable => 'Recording unavailable';
@@ -2875,7 +2904,41 @@ class L10nEn extends L10n {
   String get ltGuidedMakeSongVoice => 'Make a song with this recording';
 
   @override
-  String get ltGuidedSteps => '1 Record → 2 Save';
+  String get ltGuidedSteps => 'Record → Compare → Create';
+
+  @override
+  String get ltGuidedRetake => 'Hum again';
+
+  @override
+  String get ltGuidedRetakeHint =>
+      'Your current melody stays until the new conversion succeeds.';
+
+  @override
+  String get ltTransportPlay => 'Play';
+
+  @override
+  String get ltTransportPause => 'Pause';
+
+  @override
+  String get ltTransportRecordStart => 'Start recording';
+
+  @override
+  String get ltTransportRecordStop => 'Stop recording';
+
+  @override
+  String get ltTransportSettings => 'Playback settings';
+
+  @override
+  String get ltTransportLoop => 'Loop · listen to a part';
+
+  @override
+  String get ltTransportBars => 'Bars';
+
+  @override
+  String get ltTransportTempoUp => 'Increase tempo';
+
+  @override
+  String get ltTransportTempoDown => 'Decrease tempo';
 
   @override
   String get ltGuidedHumTitle => 'Make a melody from a hum';
@@ -3416,7 +3479,7 @@ class L10nEn extends L10n {
 
   @override
   String get bandChipTooltip =>
-      'Click: select · Double-click: rename · Right-click: menu · Wheel: repeats';
+      'Click: select · Double-click / F2: rename · Right-click / Shift+F10: menu · Wheel: repeats';
 
   @override
   String bandLinkedNotice(int count) {

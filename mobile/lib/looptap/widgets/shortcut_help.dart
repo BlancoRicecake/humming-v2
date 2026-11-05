@@ -73,9 +73,8 @@ const List<DesktopShortcut> kDesktopShortcuts = [
   DesktopShortcut(DesktopShortcutId.duplicateLinked, LogicalKeyboardKey.keyD, command: true, shift: true),
   DesktopShortcut(DesktopShortcutId.help, LogicalKeyboardKey.f1),
   DesktopShortcut(DesktopShortcutId.help, LogicalKeyboardKey.slash, command: true),
-  // ui-001 stage 3: arrange <-> edit view; Enter (arrange view, nothing else
-  // focused) edits the selected track
-  DesktopShortcut(DesktopShortcutId.viewToggle, LogicalKeyboardKey.tab),
+  // Tab / Shift+Tab belong to focus traversal. Views use the visible segment.
+  // Enter (arrange view, nothing else focused) edits the selected track.
   DesktopShortcut(DesktopShortcutId.openEditor, LogicalKeyboardKey.enter),
   // ui-001 stage 4 (Ctrl/Cmd+Shift+I stays the guitar grid's ring)
   DesktopShortcut(DesktopShortcutId.inspector, LogicalKeyboardKey.keyI, command: true),
