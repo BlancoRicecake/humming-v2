@@ -1,17 +1,17 @@
 # HumTrack 이용약관 (Terms of Service)
 
-<!-- 운영자 필독 (시행 전 조치): 아래 시행일 2026-10-20 은 이용약관 제3조 제3항의
-     "회원에게 불리한 변경 또는 중대한 변경의 경우 30일 전 고지" 를 보수적으로 적용한 날짜입니다.
-     ⚠ 이번 개정에는 **개인정보처리방침 개정**(세션 리플레이·오류 리포팅 등 분석 도구 고지 정정)이
-     포함됩니다. 세션 리플레이는 신규 고지 항목이므로 개인정보처리방침 제10조의 30일 사전 고지
-     대상이며, 고지를 생략하거나 기간을 단축할 수 없습니다.
-     본 개정본을 배포·게시할 때 시행일 30일 전까지 반드시 다음 두 가지를 모두 이행해야 합니다:
-       (1) 앱 내 공지 게시,  (2) 등록 회원 이메일 발송.
-     Operator: this revision includes a PRIVACY amendment (session replay and error-reporting
-     disclosure), so notice cannot be skipped or shortened. In-app notice AND email to
-     registered members must go out at least 30 days before the effective date (2026-10-20). -->
-**시행일**: 2026-10-20
-**최종개정**: 2026-09-04
+<!-- 운영자 필독 (게시 전 조치): 1.4-draft 는 선택형 클라우드 백업 출시에 맞춰 작업물 저장·보유 조항을
+     정정하는 초안이며, 개인정보처리방침 1.5-draft 와 함께 시행합니다. 시행일은 아직 정하지 않았습니다.
+     제3조 제3항 및 개인정보처리방침 제10조에 따라 시행일 30일 전까지 (1) 앱 내 공지 게시,
+     (2) 등록 회원 이메일 발송을 모두 마친 뒤 시행일을 확정해 아래에 기재합니다.
+     시행일 전까지는 1.3-draft(시행 2026-10-20)가 적용됩니다.
+     Operator: 1.4-draft aligns storage and retention with optional cloud backup and takes effect
+     together with Privacy Policy 1.5-draft. The effective date is NOT set: fix it only after the
+     in-app notice AND the email to registered members have gone out at least 30 days ahead.
+     Until then 1.3-draft (effective 2026-10-20) applies. -->
+**시행일(예정)**: 추후 공지
+**최종개정**: 2026-11-06
+**상태**: 1.4-draft · 클라우드 백업 저장 안내 개정 초안
 본 약관은 한국어 본문과 영문 본문(English below)을 함께 제공하며, 두 언어 본문은 동등하게 유효합니다. 해석상 차이가 발생하는 경우, 대한민국 거주 회원에 대해서는 한국어본이, 그 외 회원에 대해서는 영문본이 우선합니다.
 
 ---
@@ -52,6 +52,7 @@
    - 무료 기능 전체
    - 곡 무제한 저장 (무료 플랜은 4곡까지)
    - WAV / MIDI / 스템 무제한 내보내기
+   - 곡 클라우드 백업: 클라우드 백업을 지원하는 앱에서 회원이 직접 선택한 곡의 사본을 저장하고 복원 (제8조 제2항)
 3. 회사는 안정적 서비스 제공을 위해 정기·비정기 점검을 시행할 수 있으며, 사전 또는 사후 공지합니다.
 4. 회사는 서비스의 일부 기능을 신설·변경·중단할 수 있으며, 중대한 변경 시 사전 공지합니다.
 
@@ -79,17 +80,21 @@
    - AI / 머신러닝 모델 학습
    - 제3자에 대한 판매·재라이선싱
    - 회사의 마케팅·홍보 자료 (회원의 사전 명시적 동의 없는 한)
-3. 회사는 서비스 제공 목적(전송·분석 처리)에 한하여 콘텐츠를 처리할 수 있는 비독점적·한정적·전 세계적·로열티 없는 라이선스만을 보유하며, 본 라이선스는 콘텐츠 또는 계정 삭제 시 즉시 종료됩니다.
+3. 회사는 서비스 제공 목적(전송·분석 처리, 회원이 요청한 백업의 보관·복원)에 한하여 콘텐츠를 처리할 수 있는 비독점적·한정적·전 세계적·로열티 없는 라이선스만을 보유하며, 본 라이선스는 콘텐츠 또는 계정 삭제 시 즉시 종료됩니다.
 4. 회원은 자신이 업로드·생성한 콘텐츠가 제3자의 저작권·초상권·상표권 등을 침해하지 않음을 보증하며, 위반으로 발생한 분쟁의 책임은 해당 회원이 부담합니다.
 
 ### 제8조 (콘텐츠 보유 및 파기)
-1. **보컬 오디오 (무료·Pro 공통)**: 분석·보컬 처리·오토튠·이펙트 endpoint 에서 메모리 기반으로 처리 후 **처리 완료 즉시 폐기**합니다. 서버 디스크에 기록되지 않습니다.
-2. **회원의 작업물 (곡, 보컬, MIDI, 프로젝트 메타)**: **회원의 기기 내부(Documents 디렉터리)에만 저장**되며, 회사 서버에 업로드·보관되지 않습니다. 따라서 회사는 회원의 작업물을 보유하지 않고, 작업물의 삭제·백업은 회원이 기기에서 직접 수행합니다. 구독이 만료되어도 기기에 저장된 곡은 삭제되지 않으며, Pro 전용 기능(곡 무제한 저장, WAV/MIDI/스템 내보내기)만 잠깁니다. 기기 분실·초기화 등 로컬 저장 데이터의 손실에 대해서는 제10조 제2항이 적용됩니다.
+1. **보컬 오디오 (무료·Pro 공통)**: 분석·보컬 처리·오토튠·이펙트 endpoint 에서 메모리 기반으로 처리 후 **처리 완료 즉시 폐기**합니다. 서버 디스크에 기록되지 않습니다. 녹음은 회원이 클라우드 백업을 실행하면서 녹음 포함을 별도로 선택한 경우에만 제2호의 백업 사본에 포함되며, 이 선택은 기본으로 꺼져 있습니다.
+2. **회원의 작업물 (곡, 보컬 녹음, MIDI, 프로젝트 메타)**: 기본적으로 **회원의 기기 내부(Documents 디렉터리)에 저장**됩니다. 곡을 편집하거나 저장할 때 서버로 자동 동기화하지 않습니다.
+   - **클라우드 백업 (Pro, 선택)**: 클라우드 백업을 지원하는 앱에서 Pro 회원이 곡을 직접 선택해 백업하면, 곡 사본은 Cloudflare R2에, 백업 목록과 용량 관리에 필요한 정보는 Supabase에 저장됩니다. 녹음 포함은 기본으로 꺼져 있으며, 회원이 별도로 선택한 경우에만 포함됩니다.
+   - **복원·삭제**: 회원은 설정 → 클라우드 백업에서 사본을 기기에 새 곡으로 복원하거나 클라우드 사본만 삭제할 수 있습니다. 복원은 기존 곡을 덮어쓰지 않으며, 클라우드 사본을 삭제해도 기기의 원본은 남습니다.
+   - **구독 만료 시**: 기기에 저장된 곡은 삭제되지 않고 계속 열람·편집·재생할 수 있으며, Pro 전용 기능(곡 무제한 저장, WAV/MIDI/스템 내보내기, 새 클라우드 백업 생성과 기존 백업 갱신)만 잠깁니다. 기존 클라우드 사본은 만료만으로 삭제되지 않으며, 회원이 사본이나 계정을 삭제하기 전까지 목록 보기·복원·삭제를 할 수 있습니다.
+   - 클라우드에 백업하지 않은 로컬 저장 데이터의 손실(기기 분실·초기화 등)에 대해서는 제10조 제2항이 적용됩니다.
 3. **휴면 계정 정책 (예정)**: 별도 정책이 향후 도입될 수 있으며, 도입 시 시행일 30일 전 앱 내 공지 및 가입 이메일을 통해 사전 고지합니다. 도입 시 예정 흐름:
    - **휴면 전환**: 마지막 로그인일로부터 1년(12개월) 미접속 시 휴면 계정으로 전환. 데이터는 격리 보존되며, 로그인 시 즉시 복원.
-   - **데이터 영구 삭제**: 휴면 전환 후 추가 1년(12개월) 미접속 시 30일 전 이메일 사전 고지 후 회사가 보유한 계정 데이터(Supabase Auth 계정 정보 및 구독·영수증 기록) 영구 삭제. 회원 기기에 저장된 곡은 회사가 보유하지 않으므로 영향을 받지 않습니다.
+   - **데이터 영구 삭제**: 휴면 전환 후 추가 1년(12개월) 미접속 시 30일 전 이메일 사전 고지 후 회사가 보유한 계정 데이터(Supabase Auth 계정 정보 및 구독·영수증 기록) 영구 삭제. 회원 기기에 저장된 곡은 영향을 받지 않으며, 클라우드 백업 사본의 처리 방식은 휴면 정책 도입 시 함께 사전 고지합니다.
    - **Pro 활성 구독자는 휴면 전환 제외** — 결제 활성 상태인 동안에는 미접속과 무관하게 활성 계정으로 유지.
-3. **계정 정보**: 회원 탈퇴 요청 시 Supabase Auth 계정, Supabase Postgres 의 구독·영수증 기록, 그리고 Cloudflare R2 에 해당 회원 prefix 로 남아 있는 객체가 있는 경우 이를 포함한 모든 관련 데이터가 cascade 영구 삭제됩니다. SLA: 영업일 기준 3일 이내 접수 확인, 72시간 이내 전면 삭제.
+3. **계정 정보**: 회원 탈퇴 요청 시 법령상 보존해야 하는 기록(아래 IAP 영수증 등)을 제외하고 Supabase Auth 계정, Supabase Postgres 의 구독·영수증 기록, Cloudflare R2 의 클라우드 백업 사본과 Supabase 의 백업 관리 정보를 포함한 모든 관련 데이터가 cascade 영구 삭제됩니다. SLA: 영업일 기준 3일 이내 접수 확인, 72시간 이내 전면 삭제.
 4. **IAP 영수증 / 결제 webhook 알림 로그**: 90일 보관 후 폐기. 단, 「전자상거래법」 및 「전자금융거래법」상 보존 의무가 적용되는 영수증 데이터는 해당 법정 기간(5년) 동안 보관 후 폐기합니다.
 
 ### 제9조 (회원의 의무 및 금지행위)
@@ -104,7 +109,7 @@
 
 ### 제10조 (책임 제한)
 1. 회사는 천재지변, 불가항력, 제3자 서비스(Apple, Google, Supabase, Cloudflare, Fly.io 등)의 장애로 인한 손해에 대해 회사의 고의·중과실이 없는 한 책임지지 않습니다.
-2. 회사는 회원이 로컬 디바이스에만 저장한 데이터의 손실(디바이스 분실, OS 백업 미설정 등)에 대해 책임지지 않습니다.
+2. 회사는 회원이 클라우드에 백업하지 않고 로컬 디바이스에만 저장한 데이터의 손실(디바이스 분실, OS 백업 미설정 등)에 대해 책임지지 않습니다.
 3. 회사의 손해배상 책임은, 관련 법령(특히 한국 「약관규제법」 및 강행 소비자보호 법령)이 허용하는 최대 한도에서, 손해 발생 직전 12개월간 해당 회원이 회사에 지급한 구독료 총액을 초과하지 않습니다.
 4. 위 조항은 회사의 고의 또는 중대한 과실로 인한 손해, 강행법규상 제한할 수 없는 책임에는 적용되지 않습니다.
 
@@ -155,7 +160,7 @@ We may revise these Terms in compliance with applicable law. We will provide not
 
 ### Article 5. The Service
 - **Free**: humming recording, AI analysis, autotune, full editing and section arrangement, on-device playback, and local storage — with no watermark and no quality cap. Up to 4 saved songs; no WAV/MIDI/stem export.
-- **HumTrack Pro**: everything in Free, plus unlimited saved songs (the Free plan keeps 4) and unlimited WAV / MIDI / stem export.
+- **HumTrack Pro**: everything in Free, plus unlimited saved songs (the Free plan keeps 4), unlimited WAV / MIDI / stem export, and cloud backup of the songs you choose to back up, in app versions that support it (Article 8).
 
 ### Article 6. Subscription and Auto-Renewal
 - Pro is sold **exclusively** via the app marketplace in-app purchase. We do not collect, store, or process your payment card data; the app marketplace does.
@@ -170,24 +175,28 @@ We may revise these Terms in compliance with applicable law. We will provide not
 ### Article 7. Content and Rights
 - **You own 100% of the copyright and all rights in the music and MIDI you create.**
 - We will **never** use your vocal recordings, analysis results, or generated music for ad targeting, AI/ML training, third-party resale, or our own marketing without your prior explicit consent.
-- We hold only a non-exclusive, limited, worldwide, royalty-free license to process Content solely to operate the Service. This license terminates when you delete the Content or your account.
+- We hold only a non-exclusive, limited, worldwide, royalty-free license to process Content solely to operate the Service (transmission, analysis and processing, and storing and restoring the backups you request). This license terminates when you delete the Content or your account.
 - You represent that your Content does not infringe any third-party rights.
 
 ### Article 8. Retention and Deletion
-- **Vocal audio (Free and Pro alike)**: processed in memory only by the analysis, vocal-processing, autotune, and effects endpoints and **discarded immediately** upon completion. Not written to server disk.
-- **Your work (songs, vocals, MIDI, project metadata)**: stored **only on your device** (the app's Documents directory). It is never uploaded to or retained on our servers, so we hold no copy of it; deleting and backing it up happens on your device. When a subscription expires, songs already on your device are not deleted — only the Pro-only features (unlimited saved songs, WAV/MIDI/stem export) lock. Loss of local data (lost or reset device) is governed by Article 10.
+- **Vocal audio (Free and Pro alike)**: processed in memory only by the analysis, vocal-processing, autotune, and effects endpoints and **discarded immediately** upon completion. Not written to server disk. Recordings are included in a cloud backup copy (next item) only if you choose to include them when backing up; this option is off by default.
+- **Your work (songs, vocal recordings, MIDI, project metadata)**: stored **on your device by default** (the app's Documents directory). Editing or saving a song does not sync it to our servers automatically.
+  - **Cloud backup (Pro, optional)**: in app versions that support cloud backup, when a Pro member chooses to back up a song, we store a copy in Cloudflare R2 and the information needed to manage your backups and storage usage in Supabase. Including recordings is off by default; they are included only if you select them.
+  - **Restore and delete**: under Settings → Cloud backup, you can restore a copy as a new song on your device or delete the cloud copy. Restoring does not overwrite an existing song, and deleting a cloud copy leaves the original on your device.
+  - **When a subscription expires**: songs on your device are not deleted and you can keep opening, editing and playing them; only the Pro-only features (unlimited saved songs, WAV/MIDI/stem export, and creating or updating cloud backups) lock. Expiry alone does not delete existing cloud copies; you can still view, restore or delete them until you delete the copy or your account.
+  - Loss of local data that was not backed up to the cloud (lost or reset device) is governed by Article 10.
 - **Dormant account policy (planned)**: a separate dormant-account policy may be introduced. We will provide notice 30 days before the effective date via in-app and email. Planned flow:
   - **Dormant transition**: 1 year (12 months) of inactivity from last login triggers dormant status. Data is isolated and preserved; logging in restores the account instantly.
-  - **Permanent data deletion**: an additional 1 year (12 months) of inactivity in dormant status, with 30 days' email notice, leads to permanent deletion of the account data we hold (Supabase Auth account record and subscription/receipt rows). Songs stored on your device are unaffected — we hold no copy of them.
+  - **Permanent data deletion**: an additional 1 year (12 months) of inactivity in dormant status, with 30 days' email notice, leads to permanent deletion of the account data we hold (Supabase Auth account record and subscription/receipt rows). Songs stored on your device are unaffected; how cloud backup copies are handled will be set out in that advance notice.
   - **Active Pro subscribers are exempt** — active subscription preserves account regardless of inactivity.
-- **Account data**: on deletion request, your Supabase Auth account, your Supabase Postgres subscription and receipt rows, and any objects remaining under your prefix in Cloudflare R2 are cascade-deleted. **SLA: confirmation within 3 business days, full deletion within 72 hours.**
+- **Account data**: on deletion request, except for records we must retain by law (such as the billing receipts below), your Supabase Auth account, your Supabase Postgres subscription and receipt rows, your cloud backup copies in Cloudflare R2 and the backup management data in Supabase are cascade-deleted. **SLA: confirmation within 3 business days, full deletion within 72 hours.**
 - **IAP receipt webhook logs**: retained 90 days, except where Korean Electronic Commerce Act / Electronic Financial Transactions Act require 5-year retention of billing receipts.
 
 ### Article 9. Prohibited Conduct
 You may not: upload infringing content; interfere with the Service (DDoS, automation, reverse engineering); bypass payment systems; allow children under 14 to use the account; or otherwise violate law or these Terms. We may suspend or terminate accounts that violate these rules, with notice (or immediately, with later notice, in urgent cases).
 
 ### Article 10. Limitation of Liability
-To the maximum extent permitted by law, our aggregate liability shall not exceed the subscription fees you paid us in the 12 months preceding the claim. We are not liable for force majeure, third-party outages (Apple, Google, Supabase, Cloudflare, Fly.io), or local-device data loss. Nothing in these Terms limits liability that cannot be limited by mandatory law (including gross negligence and willful misconduct).
+To the maximum extent permitted by law, our aggregate liability shall not exceed the subscription fees you paid us in the 12 months preceding the claim. We are not liable for force majeure, third-party outages (Apple, Google, Supabase, Cloudflare, Fly.io), or loss of data kept only on your device and not backed up to the cloud. Nothing in these Terms limits liability that cannot be limited by mandatory law (including gross negligence and willful misconduct).
 
 ### Article 11. Termination
 You may close your account anytime via Settings → Delete Account. Closing the account does **not** automatically cancel your IAP subscription; cancel separately via the app marketplace. We may terminate for material breach with notice (or immediately for urgent cases, with later notice).
@@ -218,6 +227,7 @@ You may close your account anytime via Settings → Delete Account. Closing the 
 | 1.1-draft | 2026-06-03 | HumTrack 리브랜딩 반영, 가격 KRW 로 정정, 30일 grace 명시, 갱신 7일 전 고지 의무 추가, 미성년자 결제 조항 추가, Apple Sign In relay email 처리, 통신판매업자 표시사항 추가 |
 | 1.2-draft | 2026-06-03 | Pro 영구 보관 정책 적용 (30일 grace 제거), 휴면 계정 정책 명시 (1년 미접속 휴면 + 추가 1년 후 데이터 삭제, Pro 활성 예외), 사업자 정보 채움 (에르모세아르 / 대표 김동현 / 사업자등록 106-16-34319 / 통신판매업 2024-용인기흥-2437 / 주소 / 연락처), EU 대리인 현 시점 미지정 명시 (사용자 임계 도달 시 추후 지정), "단독 개발자" 표기 제거 (소규모 운영) |
 | 1.3-draft | 2026-09-04 | **Pro 혜택 정의 정정** — Pro 혜택을 실제 제공 기능(무제한 곡 저장 · WAV/MIDI/스템 내보내기)으로 정정하고, 미구현 상태였던 클라우드 동기화(5GB)·보컬 클라우드 영구 보관·우선 분석 조항을 삭제. 제5조 무료 플랜 한도를 "곡 4개 저장"으로 명시(녹음·분석·오토튠·편집·배열·재생은 무료, 워터마크·품질 제한 없음). 제8조 보유 조항을 "작업물은 회원 기기에만 저장, 서버 미보관"으로 정정하고 휴면 시 삭제 대상을 계정 데이터로 한정. 계정 삭제 약속(72시간 cascade 삭제, 영업일 3일 SLA)과 고지 의무는 변경 없이 유지. 시행일 2026-10-20 (제3조 제3항 30일 사전 고지 적용). / **Pro tier corrected** to the benefits actually shipped — unlimited saved songs and WAV/MIDI/stem export — with the never-implemented 5 GB cloud sync, permanent vocal cloud storage and priority-analysis provisions removed; Article 8 retention corrected to reflect that member work is stored only on the device and never on our servers. Deletion commitments and notice obligations unchanged. Effective 2026-10-20 after 30 days' notice. |
+| 1.4-draft | 2026-11-06 | **선택형 클라우드 백업 반영** — 제5조 Pro 혜택에 회원이 직접 실행하는 곡 클라우드 백업을 추가. 제8조의 "작업물은 기기에만 저장, 서버 미보관" 조항을 기본 기기 저장 + Pro 회원이 요청한 곡 사본의 Cloudflare R2 보관(관리 정보는 Supabase)으로 정정하고, 녹음 포함 선택(기본 꺼짐), 새 곡으로 복원, 구독 만료 후 기존 사본의 열람·복원·삭제, 탈퇴 시 백업 사본 삭제와 법정 보존 예외를 명시. 제7조 제3항 처리 목적과 제10조 제2항을 이에 맞춤. 보컬 처리 오디오의 즉시 폐기, 가격·자동 갱신·환불, 72시간 삭제·영업일 3일 접수 확인 약속은 유지. 시행일 추후 공지(제3조 제3항 30일 사전 고지). / **Optional cloud backup** — adds member-initiated song backup to Pro (Article 5); corrects Article 8 from "stored only on your device" to on-device by default plus the copies a Pro member asks us to keep in Cloudflare R2 (management data in Supabase); states that recordings are opt-in (off by default), restores create a new song, existing copies stay viewable, restorable and deletable after expiry, and account deletion removes backups except records kept by law. Article 7 licence purpose and Article 10 aligned. Immediate discard of processed vocal audio, pricing, renewal, refunds and the 72-hour deletion commitment unchanged. Effective date to be announced after 30 days' notice. |
 
 ## 연락처
 

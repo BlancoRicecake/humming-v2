@@ -1,18 +1,17 @@
 # HumTrack 환불 정책 (Refund Policy)
 
-<!-- 운영자 필독 (시행 전 조치): 아래 시행일 2026-10-20 은 이용약관 제3조 제3항의
-     "회원에게 불리한 변경 또는 중대한 변경의 경우 30일 전 고지" 를 보수적으로 적용한 날짜입니다.
-     ⚠ 이번 개정에는 **개인정보처리방침 개정**(세션 리플레이·오류 리포팅 등 분석 도구 고지 정정)이
-     포함됩니다. 세션 리플레이는 신규 고지 항목이므로 개인정보처리방침 제10조의 30일 사전 고지
-     대상이며, 고지를 생략하거나 기간을 단축할 수 없습니다.
-     본 개정본을 배포·게시할 때 시행일 30일 전까지 반드시 다음 두 가지를 모두 이행해야 합니다:
-       (1) 앱 내 공지 게시,  (2) 등록 회원 이메일 발송.
-     Operator: this revision includes a PRIVACY amendment (session replay and error-reporting
-     disclosure), so notice cannot be skipped or shortened. In-app notice AND email to
-     registered members must go out at least 30 days before the effective date (2026-10-20). -->
-**시행일**: 2026-10-20
-**최종개정**: 2026-09-04
-**상태**: 1.3-draft — 사업자 정보 + 정책 사실관계 확정. 변호사 자문은 출시 후 진행 가능.
+<!-- 운영자 필독 (게시 전 조치): 1.4-draft 는 선택형 클라우드 백업 출시에 맞춰 제8조(환불 시 데이터 보존)를
+     정정하는 초안이며, 이용약관 1.4-draft·개인정보처리방침 1.5-draft 와 함께 시행합니다. 환불 조건·절차는
+     바꾸지 않았습니다. 시행일은 아직 정하지 않았습니다. 이용약관 제3조 제3항 및 개인정보처리방침 제10조에
+     따라 시행일 30일 전까지 (1) 앱 내 공지 게시, (2) 등록 회원 이메일 발송을 모두 마친 뒤 시행일을
+     확정해 아래에 기재합니다. 시행일 전까지는 1.3-draft(시행 2026-10-20)가 적용됩니다.
+     Operator: 1.4-draft corrects Section 8 for optional cloud backup; refund conditions are
+     unchanged. The effective date is NOT set: fix it only after the in-app notice AND the email
+     to registered members have gone out at least 30 days ahead. Until then 1.3-draft
+     (effective 2026-10-20) applies. -->
+**시행일(예정)**: 추후 공지
+**최종개정**: 2026-11-06
+**상태**: 1.4-draft — 클라우드 백업 출시에 맞춘 제8조 데이터 보존 정정 초안. 환불 조건·절차는 변경 없음. 변호사 자문은 출시 후 진행 가능.
 
 본 문서는 한국어 본문과 영문 본문(English below)을 함께 제공하며, 두 언어 본문은 동등하게 유효합니다.
 
@@ -104,9 +103,10 @@ HumTrack Pro 구독은 **앱 마켓의 인앱결제(IAP)를 통해서만** 판�
 ### 8. 환불 시 데이터 보존
 
 환불 여부와 무관하게:
-- 회원의 곡·보컬·MIDI 등 작업물은 **회원의 기기 내부에만 저장**되며, 환불·해지로 인해 삭제되지 않습니다. 회사는 이를 서버에 보관하지 않으므로 삭제하거나 복구할 수 없습니다.
-- 구독이 환불·취소되어 만료된 경우 **Pro 전용 기능(곡 무제한 저장, WAV/MIDI/스템 내보내기)만 잠기며**, 이미 기기에 저장된 곡은 그대로 열람·편집·재생할 수 있습니다. 재구독 시 Pro 기능이 즉시 재활성화됩니다.
-- 회사가 보유하는 계정 기록(Supabase Auth 계정 정보, 구독·영수증 기록)은 회원이 앱 내 "설정 → 계정 삭제"를 요청할 경우 72시간 이내 영구 삭제됩니다.
+- 회원의 곡·보컬·MIDI 등 작업물은 기본적으로 **회원의 기기 내부에 저장**되며, 환불·해지로 인해 삭제되지 않습니다. 회사는 기기에 저장된 작업물을 삭제하거나 복구할 수 없습니다.
+- Pro 회원이 직접 만든 **클라우드 백업 사본**도 환불·해지·구독 만료만으로 삭제되지 않습니다. 만료 후에는 새 백업을 만들거나 기존 백업을 갱신할 수 없지만, 회원이 사본이나 계정을 삭제하기 전까지 설정 → 클라우드 백업에서 기존 사본의 목록 보기, 새 곡으로 복원, 삭제를 할 수 있습니다. 녹음은 백업할 때 별도로 선택한 경우에만 사본에 포함됩니다.
+- 구독이 환불·취소되어 만료된 경우 **Pro 전용 기능(곡 무제한 저장, WAV/MIDI/스템 내보내기, 클라우드 백업 생성·갱신)만 잠기며**, 이미 기기에 저장된 곡은 그대로 열람·편집·재생할 수 있습니다. 재구독 시 Pro 기능이 즉시 재활성화됩니다.
+- 회원이 앱 내 "설정 → 계정 삭제"를 요청하면, 법령상 보존해야 하는 기록을 제외하고 회사가 보유하는 계정 기록(Supabase Auth 계정 정보, 구독·영수증 기록), 클라우드 백업 사본과 백업 관리 정보가 72시간 이내 영구 삭제됩니다.
 - 향후 휴면 계정 정책이 도입될 경우 시행일 30일 전 본 정책 개정을 통해 사전 고지합니다 (예정: 1년 미접속 시 휴면 전환, 휴면 후 1년 추가 미접속 시 30일 사전 고지 후 데이터 영구 삭제).
 
 ---
@@ -165,7 +165,7 @@ Submit to `humtrack@gmail.com` with store receipt ID, timestamp, evidence. **SLA
 - Apple Family Sharing, Apple ID balance top-ups, and similar store-policy-governed payments.
 
 ### 8. Data is Not Auto-Deleted on Refund
-Refund or cancellation does **not** delete your data. Your songs, vocals and MIDI are stored **only on your device**; we hold no copy of them, so a refund or cancellation cannot remove them. When a subscription ends, only the Pro-only features (unlimited saved songs, WAV/MIDI/stem export) lock — songs already saved on your device remain viewable, editable and playable, and resubscribing reactivates Pro immediately. The account record we do hold (Supabase Auth account, subscription and receipt rows) is permanently deleted within 72 hours of a Settings → Delete Account request. A future dormant-account policy may be introduced with 30 days' prior notice (planned: 1 year of inactivity triggers dormant transition; an additional 1 year of inactivity, plus 30 days' final notice, leads to permanent deletion of that account data).
+Refund or cancellation does **not** delete your data. Your songs, vocals and MIDI are stored **on your device by default**, and a refund or cancellation does not remove them; we cannot delete or recover what is stored on your device. Cloud backup copies you created as a Pro member are not deleted by a refund, cancellation or subscription expiry alone. After expiry you cannot create or update backups, but under Settings → Cloud backup you can still view existing copies, restore them as new songs, or delete them until you delete the copy or your account. Recordings are in a copy only if you selected them when backing up. When a subscription ends, only the Pro-only features (unlimited saved songs, WAV/MIDI/stem export, and creating or updating cloud backups) lock — songs already saved on your device remain viewable, editable and playable, and resubscribing reactivates Pro immediately. On a Settings → Delete Account request, except for records we must retain by law, the account record we hold (Supabase Auth account, subscription and receipt rows), your cloud backup copies and backup management data are permanently deleted within 72 hours. A future dormant-account policy may be introduced with 30 days' prior notice (planned: 1 year of inactivity triggers dormant transition; an additional 1 year of inactivity, plus 30 days' final notice, leads to permanent deletion of that account data).
 
 ---
 
@@ -177,6 +177,7 @@ Refund or cancellation does **not** delete your data. Your songs, vocals and MID
 | 1.1-draft | 2026-06-03 | HumTrack 리브랜딩, "회사 직접 환불 ❌, 스토어 1차" 명확화 — 회사 환불은 goodwill 보충으로 위치 재정의, 7일 전 갱신 고지 의무 명시, 미성년자 결제 취소 추가, 청약철회권 제한 trigger 를 "Pro 기능 1회 사용" 으로 명확화 + 동의 surface 절차 명시 |
 | 1.2-draft | 2026-06-03 | 환불 시 데이터 보존 정책 정정 — Pro 영구 보관, 만료 시 신규 업로드 잠금 + 다운로드/삭제 가능, 휴면 정책 (1+1년) 사전 고지, 사업자 정보 채움 |
 | 1.3-draft | 2026-09-04 | **Pro 혜택 정의 정정 반영** — 청약철회권 제한 사유 및 서비스 장애 보상 조건에서 미구현 기능인 "클라우드 동기화" 를 삭제하고 실제 Pro 혜택(WAV/MIDI/스템 내보내기, 곡 무제한 저장)으로 정정. 제8조를 "작업물은 회원 기기에만 저장 · 환불·해지로 삭제되지 않음 · 만료 시 Pro 기능만 잠김" 으로 정정. 환불 권리와 SLA(영업일 5일 1차 회신, 14일 최종 결정)는 변경 없이 유지. 시행일 2026-10-20 (30일 사전 고지 적용). / **Aligned with the corrected Pro tier**: removed the never-implemented "cloud sync" from the withdrawal-limitation list and the service-outage compensation clause, replacing it with the real Pro benefits (WAV/MIDI/stem export, unlimited saved songs); Section 8 corrected to say your work lives on your device and is untouched by a refund. Refund rights and SLAs unchanged. Effective 2026-10-20 after 30 days' notice. |
+| 1.4-draft | 2026-11-06 | **선택형 클라우드 백업 반영** — 제8조의 "작업물은 회원 기기에만 저장, 서버 미보관"을 기본 기기 저장으로 정정하고, Pro 회원이 만든 클라우드 백업 사본은 환불·해지·만료만으로 삭제되지 않으며 만료 후에도 열람·새 곡 복원·삭제가 가능하고 새 백업·갱신만 잠긴다는 점, 녹음은 선택한 경우에만 포함된다는 점, 계정 삭제 시 법정 보존 기록을 제외하고 백업 사본과 관리 정보도 72시간 이내 삭제된다는 점을 명시. 청약철회권 제한 사유, 회사 검토 환불 사유, 환불되지 않는 경우와 SLA는 변경 없음. 시행일 추후 공지(30일 사전 고지). / **Optional cloud backup** — Section 8 corrected from "stored only on your device" to on-device by default; cloud backup copies a Pro member created are not deleted by a refund, cancellation or expiry, stay viewable, restorable as new songs and deletable after expiry (only creating or updating backups locks); recordings are included only if selected; account deletion also removes backups and backup management data within 72 hours, except records kept by law. Withdrawal limits, company refund review, non-refundable cases and SLAs unchanged. Effective date to be announced after 30 days' notice. |
 
 ## 연락처
 
