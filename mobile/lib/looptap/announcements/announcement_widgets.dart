@@ -17,6 +17,7 @@ import '../../l10n/generated/app_localizations.dart';
 import '../theme/tokens.dart';
 import '../widgets/policy_notice.dart';
 import 'announcement.dart';
+import 'announcement_image.dart';
 import 'announcement_service.dart';
 
 String _lang(BuildContext context) =>
@@ -201,7 +202,17 @@ class _CriticalDialog extends StatelessWidget {
       icon: Icon(_icon(a.kind), color: _color(a.kind)),
       title: Text(a.title(lang)),
       scrollable: true,
-      content: Text(a.body(lang)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (a.image != null) ...[
+            AnnouncementImage(announcement: a, maxHeight: 200),
+            const SizedBox(height: 16),
+          ],
+          Text(a.body(lang)),
+        ],
+      ),
       actions: [
         if (a.action != null)
           TextButton(
@@ -390,6 +401,10 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
             const SizedBox(height: 4),
             Text(DateFormat.yMd(lang).format(a.startsAt.toLocal()), style: const TextStyle(color: LT.t3, fontSize: 12)),
             const SizedBox(height: 16),
+            if (a.image != null) ...[
+              AnnouncementImage(announcement: a),
+              const SizedBox(height: 16),
+            ],
             SelectableText(a.body(lang), style: const TextStyle(color: LT.t1, height: 1.5)),
             const SizedBox(height: 20),
             Wrap(

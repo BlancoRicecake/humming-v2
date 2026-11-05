@@ -4530,6 +4530,18 @@ abstract class L10n {
   /// **'지금 표시할 공지가 없어요.'**
   String get annEmpty;
 
+  /// No description provided for @annImageLoading.
+  ///
+  /// In ko, this message translates to:
+  /// **'이미지를 불러오고 있어요…'**
+  String get annImageLoading;
+
+  /// No description provided for @annImageUnavailable.
+  ///
+  /// In ko, this message translates to:
+  /// **'이미지를 불러오지 못했어요. 아래 공지 내용은 계속 읽을 수 있어요.'**
+  String get annImageUnavailable;
+
   /// No description provided for @annStale.
   ///
   /// In ko, this message translates to:

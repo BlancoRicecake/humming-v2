@@ -14,9 +14,22 @@ const kAnnouncementMaxItems = 50;
 const kAnnouncementMaxResponseBytes = 256 * 1024;
 const kAnnouncementMaxTitle = 120;
 const kAnnouncementMaxBody = 4000;
+const kAnnouncementMaxImageAlt = 300;
 const kAnnouncementSupportEmail = 'humtrack@gmail.com';
 
 final _id = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
+
+/// Curated, same-site static images. Mirrors migration 009 and notices-common.js.
+/// Invalid optional media is omitted without hiding the notice's text.
+Uri? safeAnnouncementImage(String? raw) {
+  if (raw == null || raw.length > 512 || raw.trim() != raw) return null;
+  if (!RegExp(
+    r'^https://(www\.)?hum-track\.com/assets/notices/[A-Za-z0-9_-]+\.(png|jpg|jpeg|webp)$',
+  ).hasMatch(raw)) {
+    return null;
+  }
+  return Uri.tryParse(raw);
+}
 
 /// The only links an announcement may open (on the user's tap): https on
 /// hum-track.com (or a subdomain), the App Store / Google Play, or mail to
@@ -33,7 +46,8 @@ Uri? safeAnnouncementAction(String? raw) {
   }
   if (uri.scheme != 'https' || uri.userInfo.isNotEmpty || uri.hasPort) return null;
   final host = uri.host.toLowerCase();
-  final ok = host == 'hum-track.com' ||
+  final ok =
+      host == 'hum-track.com' ||
       host.endsWith('.hum-track.com') ||
       host == 'apps.apple.com' ||
       host == 'play.google.com';
@@ -57,6 +71,9 @@ class Announcement {
     this.actionLabelKo,
     this.actionLabelEn,
     this.action,
+    this.image,
+    this.imageAltKo,
+    this.imageAltEn,
   });
 
   final String id;
@@ -69,6 +86,8 @@ class Announcement {
   final int? minBuild, maxBuild;
   final String? actionLabelKo, actionLabelEn;
   final Uri? action;
+  final Uri? image;
+  final String? imageAltKo, imageAltEn;
 
   /// "read" / "acknowledged" are per id AND revision: an edited announcement
   /// counts as new.
@@ -77,6 +96,7 @@ class Announcement {
   String title(String lang) => lang == 'ko' ? titleKo : titleEn;
   String body(String lang) => lang == 'ko' ? bodyKo : bodyEn;
   String? actionLabel(String lang) => lang == 'ko' ? actionLabelKo : actionLabelEn;
+  String? imageAlt(String lang) => lang == 'ko' ? imageAltKo : imageAltEn;
 
   bool activeAt(DateTime now) =>
       !now.isBefore(startsAt) && (endsAt == null || now.isBefore(endsAt!));
@@ -153,6 +173,11 @@ class Announcement {
     final action = safeAnnouncementAction(rawAction is String ? rawAction : null);
     final labelKo = text('action_label_ko', 40), labelEn = text('action_label_en', 40);
     final hasAction = action != null && labelKo != null && labelEn != null;
+    final rawImage = raw['image_url'];
+    final image = safeAnnouncementImage(rawImage is String ? rawImage : null);
+    final imageAltKo = text('image_alt_ko', kAnnouncementMaxImageAlt);
+    final imageAltEn = text('image_alt_en', kAnnouncementMaxImageAlt);
+    final hasImage = image != null && imageAltKo != null && imageAltEn != null;
     return Announcement(
       id: id,
       revision: revision,
@@ -169,6 +194,9 @@ class Announcement {
       actionLabelKo: hasAction ? labelKo : null,
       actionLabelEn: hasAction ? labelEn : null,
       action: hasAction ? action : null,
+      image: hasImage ? image : null,
+      imageAltKo: hasImage ? imageAltKo : null,
+      imageAltEn: hasImage ? imageAltEn : null,
     );
   }
 

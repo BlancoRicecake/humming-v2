@@ -861,6 +861,8 @@
   "@annHomeLink": {"placeholders": {"count": {"type": "int"}}},
   "annUnread": "New",
   "annEmpty": "No announcements right now.",
+  "annImageLoading": "Loading image…",
+  "annImageUnavailable": "The image couldn’t be loaded. You can still read the announcement below.",
   "annStale": "You're offline, so these are the announcements received on {date}. They may have changed.",
   "@annStale": {"placeholders": {"date": {"type": "String"}}},
   "annConfirm": "Got it",

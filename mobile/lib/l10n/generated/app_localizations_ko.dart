@@ -2508,6 +2508,12 @@ class L10nKo extends L10n {
   String get annEmpty => '지금 표시할 공지가 없어요.';
 
   @override
+  String get annImageLoading => '이미지를 불러오고 있어요…';
+
+  @override
+  String get annImageUnavailable => '이미지를 불러오지 못했어요. 아래 공지 내용은 계속 읽을 수 있어요.';
+
+  @override
   String annStale(String date) {
     return '인터넷에 연결되지 않아 $date에 받은 공지를 보여 드려요. 내용이 바뀌었을 수 있어요.';
   }

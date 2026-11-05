@@ -2595,6 +2595,13 @@ class L10nEn extends L10n {
   String get annEmpty => 'No announcements right now.';
 
   @override
+  String get annImageLoading => 'Loading image…';
+
+  @override
+  String get annImageUnavailable =>
+      'The image couldn’t be loaded. You can still read the announcement below.';
+
+  @override
   String annStale(String date) {
     return 'You\'re offline, so these are the announcements received on $date. They may have changed.';
   }

@@ -25,9 +25,10 @@ import 'announcement.dart';
 /// The feed's body bytes; null = the feature isn't configured in this build.
 typedef AnnouncementFetch = Future<List<int>?> Function();
 
-const _columns =
-    'id,revision,kind,title_ko,title_en,body_ko,body_en,starts_at,ends_at,'
-    'platforms,min_build,max_build,action_label_ko,action_label_en,action_url';
+// Optional fields may be absent on a server not yet migrated to 009. Selecting
+// the whole public notice row keeps the existing text feed working in that case.
+// RLS still limits rows to published/active notices; no user credentials are used.
+const _columns = '*';
 
 /// GET {SUPABASE_URL}/rest/v1/app_announcements with the public anon key.
 Future<List<int>?> supabaseAnnouncementFetch() async {

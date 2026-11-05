@@ -230,6 +230,28 @@ void main() {
     });
   }
 
+  testWidgets('critical image failure keeps the body and confirmation reachable at large text', (tester) async {
+    feed.rows = [
+      {
+        ...annRow('image-critical', kind: 'critical'),
+        'image_url': 'https://hum-track.com/assets/notices/missing-image.png',
+        'image_alt_ko': '공지 이미지',
+        'image_alt_en': 'Announcement image',
+      },
+    ];
+    await home(tester, lang: 'ko', size: const Size(320, 640), text: 2);
+    await tester.pumpAndSettle();
+    expect(critical, findsOneWidget);
+    expect(find.byKey(const ValueKey('ann-image-error')), findsOneWidget);
+    expect(find.text('본문입니다.'), findsOneWidget);
+    final confirm = find.byKey(const ValueKey('ann-critical-confirm'));
+    await tester.ensureVisible(confirm);
+    await tester.tap(confirm);
+    await settle(tester, () => critical.evaluate().isEmpty);
+    expect(service.isAcknowledged(service.visible.single), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   // 2026-11-02: no banner over the songs — the header's megaphone gets a
   // dot and opens the list (the policy notice is listed there too)
   testWidgets('the real song list: no banner; the megaphone dot opens the list', (tester) async {
