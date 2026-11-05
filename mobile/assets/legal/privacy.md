@@ -88,7 +88,7 @@
 | 수탁자 | 위탁 업무 | 리전 | 데이터 |
 |---|---|---|---|
 | Supabase Inc. | DB·인증 호스팅 | 미국 (AWS us-east-1) | 계정, 구독·영수증 기록, 백업 관리 정보 |
-| Cloudflare, Inc. | DNS·CDN, 객체 스토리지 (R2) | 운영 버킷 저장 위치 확인 중 | 회원이 요청한 백업 사본과 선택한 녹음 |
+| Cloudflare, Inc. | DNS·CDN, 객체 스토리지 (R2) | 아시아·태평양(APAC), 저장 국가 확인 중 | 회원이 요청한 백업 사본과 선택한 녹음 |
 | Fly.io, Inc. | 백엔드 분석·오디오 처리 서버 호스팅 | 미국 (iad — Ashburn, VA) | 보컬 (메모리 처리, 즉시 폐기) |
 | Apple Inc. | iOS IAP 처리, Apple Sign In | 미국 | 영수증, OAuth sub |
 | Google LLC | Android IAP, Google Sign In, Firebase Analytics 제품 분석 | 미국 / 글로벌 | 영수증, OAuth sub, 제품 상호작용, 앱·기기 정보, 앱 인스턴스 식별자, 사용자 ID(불투명 UUID) |
@@ -191,7 +191,7 @@ Service operation, including song backup, restoration and deletion at your reque
 | Subprocessor | Purpose | Region |
 |---|---|---|
 | Supabase, Inc. | DB and auth hosting (account, subscription and receipt records, and backup management data) | US (AWS us-east-1) |
-| Cloudflare, Inc. | DNS/CDN and R2 storage of requested backup copies, including selected recordings | Production bucket location pending verification |
+| Cloudflare, Inc. | DNS/CDN and R2 storage of requested backup copies, including selected recordings | Asia-Pacific (APAC). Storage country pending verification |
 | Fly.io, Inc. | Backend analysis and audio processing (in memory) | US (iad, Ashburn VA) |
 | Apple Inc. | iOS IAP, Sign In with Apple | US |
 | Google LLC | Android IAP, Google Sign In, and Firebase Analytics product analytics | US / global |
