@@ -1,0 +1,5 @@
+• A smoother flow for reviewing and editing melodies made from humming.
+• Convert recorded vocals to MIDI and find your exported work more easily.
+• Pro members can back up individual songs to the cloud and choose whether to include recordings.
+• Restore a cloud copy as a new song or delete it in Settings.
+• Read HumTrack announcements in the app.
