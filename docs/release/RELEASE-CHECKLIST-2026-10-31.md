@@ -1,6 +1,16 @@
 # HumTrack 앱 업데이트 · Windows 첫 출시 체크리스트
 
 기준일: 2026-11-02 KST 갱신. **현재 판정: 출시 보류.**
+11/04 최신 후속: 사용자 지정 **원격 develop을 GitHub Actions에서 직접 checkout**해
+Android1.0.14(46) 검증·서명 빌드·internal 등록을 완료했다. CI 성공·등록 AAB 해시
+일치·46/completed·production39 보존 확인. iOS skipped, PR/공개 배포 없음.
+46은 사용된 번호이며 다음 새 Android 빌드는47 이상이다. 클라우드 OFF·실기기 검증 미완료.
+[develop 기반46 결과](ANDROID-DEVELOP-CI-INTERNAL-2026-11-04.md)를 최신 증빙으로 따른다.
+11/04 모바일 후속: **Android1.0.14(45) internal 등록 완료**, develop533a04d의
+Mobile CI 및 기존 Windows CI 성공. 클라우드 OFF·Sentry internal, production39 유지.
+45는 이전 내부 테스트 이력이다. 실기기 설치/업데이트·청취,
+클라우드 운영 공개는 미완료다. iOS는 사용자 MacBook에서 별도로 진행한다.
+[Android45 내부 테스트 결과](ANDROID-INTERNAL-TEST-2026-11-04.md)를 최신 증빙으로 따른다.
 11/03 사이트 배포 후속: 공지/관리자 페이지·현재 홈페이지를 기존 Vercel에 공개했다.
 14개 경로·파일 해시·관리자 noindex/no-store·공개 피드0건 확인. 앱/백엔드/Windows 배포나
 공지 게시는 하지 않았다. [사이트 배포 기록](SITE-DEPLOY-2026-11-03.md).
