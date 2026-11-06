@@ -1,12 +1,10 @@
 # HumTrack 개인정보처리방침 (Privacy Policy)
 
-<!-- 게시 전: R2 운영 버킷의 국외 이전 정보를 확인하고, 제10조에 따라 앱 공지와 가입 이메일을 보낸 뒤 시행일을 확정합니다.
-     이 개정은 Firebase Analytics 운영 수집을 활성화하지 않습니다. -->
-**시행일(예정)**: 추후 공지
+**시행일 / Effective date**: 2026년 12월 7일 00:00 (한국 시간) / December 7, 2026 at 00:00 KST
 
 **최종개정**: 2026-11-06
 
-**상태**: 1.5-draft · 클라우드 백업 안내 개정 초안
+**버전 / Version**: 1.5
 
 본 방침은 한국어 본문과 영문 본문(English below)을 함께 제공하며, 두 언어 본문은 동등하게 유효합니다.
 
@@ -88,7 +86,7 @@
 | 수탁자 | 위탁 업무 | 리전 | 데이터 |
 |---|---|---|---|
 | Supabase Inc. | DB·인증 호스팅 | 미국 (AWS us-east-1) | 계정, 구독·영수증 기록, 백업 관리 정보 |
-| Cloudflare, Inc. | DNS·CDN, 객체 스토리지 (R2) | 아시아·태평양(APAC), 저장 국가 확인 중 | 회원이 요청한 백업 사본과 선택한 녹음 |
+| Cloudflare, Inc. | DNS·CDN, 객체 스토리지 (R2) | 관리 화면 표시 위치는 아시아·태평양(APAC)이며, Cloudflare의 위치 설정은 특정 국가 내 저장을 보장하지 않습니다. | 회원이 요청한 백업 사본과 선택한 녹음 |
 | Fly.io, Inc. | 백엔드 분석·오디오 처리 서버 호스팅 | 미국 (iad — Ashburn, VA) | 보컬 (메모리 처리, 즉시 폐기) |
 | Apple Inc. | iOS IAP 처리, Apple Sign In | 미국 | 영수증, OAuth sub |
 | Google LLC | Android IAP, Google Sign In, Firebase Analytics 제품 분석 | 미국 / 글로벌 | 영수증, OAuth sub, 제품 상호작용, 앱·기기 정보, 앱 인스턴스 식별자, 사용자 ID(불투명 UUID) |
@@ -191,7 +189,7 @@ Service operation, including song backup, restoration and deletion at your reque
 | Subprocessor | Purpose | Region |
 |---|---|---|
 | Supabase, Inc. | DB and auth hosting (account, subscription and receipt records, and backup management data) | US (AWS us-east-1) |
-| Cloudflare, Inc. | DNS/CDN and R2 storage of requested backup copies, including selected recordings | Asia-Pacific (APAC). Storage country pending verification |
+| Cloudflare, Inc. | DNS/CDN and R2 storage of requested backup copies, including selected recordings | The storage dashboard shows Asia-Pacific (APAC). Cloudflare’s location settings do not guarantee storage in a particular country. |
 | Fly.io, Inc. | Backend analysis and audio processing (in memory) | US (iad, Ashburn VA) |
 | Apple Inc. | iOS IAP, Sign In with Apple | US |
 | Google LLC | Android IAP, Google Sign In, and Firebase Analytics product analytics | US / global |
@@ -239,7 +237,7 @@ We give 30 days' in-app and email notice for material changes. Minor edits are r
 | 1.3-draft | 2026-09-04 | **분석·진단 도구 고지를 실제 탑재 상태에 맞게 정정** — Sentry 를 "(예정)" 에서 활성으로 변경(앱·백엔드 모두 가동 중, 오류·크래시 리포팅, 서버 `send_default_pii=False` · 앱 `sendDefaultPii = false`, 로그인 사용자는 Supabase 사용자 ID(불투명 UUID)로만 식별). **Microsoft Clarity(세션 리플레이·히트맵) 고지를 신규 추가** — 수집 항목 표, 설명 문단(마스킹 범위 및 Supabase 사용자 ID 전달 사실 포함), 처리 목적, 수탁자 표 4곳 모두. 실제로 사용하지 않는 **PostHog 를 수집 항목·처리 목적·수탁자 표·"예정 항목" 안내에서 전면 삭제**. 「예정 항목 표시」 안내를 「분석·진단 도구 안내」로 교체. 세션 리플레이는 신규 고지 항목이므로 제10조에 따라 시행일 30일 전 사전 고지 필요. / **Analytics disclosure corrected to match what the app actually ships**: Sentry moved from "(Planned)" to active (live in both the app and the backend; error and crash reporting; `send_default_pii=False` on the server and `sendDefaultPii = false` in the app; signed-in users identified only by an opaque Supabase user ID). **Microsoft Clarity (session replay and heatmaps) newly disclosed** across all four places — collection table, explanatory paragraph (masking scope and the fact that the Supabase user ID is passed), purposes, and subprocessor table. **PostHog, which processes nothing, removed entirely** from the collection table, purposes, subprocessor table and the "planned services" note. Session replay is a new disclosure, so the 30-day prior notice under Section 10 applies. |
 | 1.4-draft | 2026-09-28 | **Firebase Analytics 운영 활성화 전 고지 초안** — 제품 상호작용·앱/기기 정보·앱 인스턴스 식별자·불투명 사용자 ID, 2개월 사용자/이벤트 보존, 설정 내 거부 방법, 전송 금지 데이터, 광고 식별자·광고 개인화 비활성화를 한·영 본문에 명시. 운영 수집은 정책 시행·스토어 양식 반영·실기기 검증 후에만 활성화. 시행 예정일 2026-11-01이며 앱 내 공지와 이메일을 모두 2026-10-02까지 발송해야 함. / **Pre-activation Firebase Analytics disclosure draft** — documents product interactions, app/device context, app instance ID, opaque user ID, two-month user/event retention, in-app opt-out, prohibited payloads, and disabled advertising identifiers/personalization. Production collection stays disabled until the policy is effective, store forms are updated, and physical-device validation passes. Proposed effective date: 2026-11-01; both in-app and email notice are due by 2026-10-02. |
 
-| 1.5-draft | 2026-11-06 | 선택형 클라우드 백업의 처리 항목, 녹음 포함 선택, 수탁자, 복원·삭제 및 구독 만료 후 이용 범위를 한·영 본문에 반영. 시행일 추후 공지. / Discloses optional cloud backup, recording controls, subprocessors, restoration, deletion and access after subscription expiry. Effective date to be announced. |
+| 1.5 | 2026-11-06 | 선택형 클라우드 백업 반영. 시행일 2026-12-07. / Covers optional cloud backup. Effective 2026-12-07. |
 
 ## 연락처
 

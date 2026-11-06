@@ -1,17 +1,8 @@
 # HumTrack 이용약관 (Terms of Service)
 
-<!-- 운영자 필독 (게시 전 조치): 1.4-draft 는 선택형 클라우드 백업 출시에 맞춰 작업물 저장·보유 조항을
-     정정하는 초안이며, 개인정보처리방침 1.5-draft 와 함께 시행합니다. 시행일은 아직 정하지 않았습니다.
-     제3조 제3항 및 개인정보처리방침 제10조에 따라 시행일 30일 전까지 (1) 앱 내 공지 게시,
-     (2) 등록 회원 이메일 발송을 모두 마친 뒤 시행일을 확정해 아래에 기재합니다.
-     시행일 전까지는 1.3-draft(시행 2026-10-20)가 적용됩니다.
-     Operator: 1.4-draft aligns storage and retention with optional cloud backup and takes effect
-     together with Privacy Policy 1.5-draft. The effective date is NOT set: fix it only after the
-     in-app notice AND the email to registered members have gone out at least 30 days ahead.
-     Until then 1.3-draft (effective 2026-10-20) applies. -->
-**시행일(예정)**: 추후 공지
+**시행일 / Effective date**: 2026년 12월 7일 00:00 (한국 시간) / December 7, 2026 at 00:00 KST
 **최종개정**: 2026-11-06
-**상태**: 1.4-draft · 클라우드 백업 저장 안내 개정 초안
+**버전 / Version**: 1.4
 본 약관은 한국어 본문과 영문 본문(English below)을 함께 제공하며, 두 언어 본문은 동등하게 유효합니다. 해석상 차이가 발생하는 경우, 대한민국 거주 회원에 대해서는 한국어본이, 그 외 회원에 대해서는 영문본이 우선합니다.
 
 ---
@@ -227,7 +218,7 @@ You may close your account anytime via Settings → Delete Account. Closing the 
 | 1.1-draft | 2026-06-03 | HumTrack 리브랜딩 반영, 가격 KRW 로 정정, 30일 grace 명시, 갱신 7일 전 고지 의무 추가, 미성년자 결제 조항 추가, Apple Sign In relay email 처리, 통신판매업자 표시사항 추가 |
 | 1.2-draft | 2026-06-03 | Pro 영구 보관 정책 적용 (30일 grace 제거), 휴면 계정 정책 명시 (1년 미접속 휴면 + 추가 1년 후 데이터 삭제, Pro 활성 예외), 사업자 정보 채움 (에르모세아르 / 대표 김동현 / 사업자등록 106-16-34319 / 통신판매업 2024-용인기흥-2437 / 주소 / 연락처), EU 대리인 현 시점 미지정 명시 (사용자 임계 도달 시 추후 지정), "단독 개발자" 표기 제거 (소규모 운영) |
 | 1.3-draft | 2026-09-04 | **Pro 혜택 정의 정정** — Pro 혜택을 실제 제공 기능(무제한 곡 저장 · WAV/MIDI/스템 내보내기)으로 정정하고, 미구현 상태였던 클라우드 동기화(5GB)·보컬 클라우드 영구 보관·우선 분석 조항을 삭제. 제5조 무료 플랜 한도를 "곡 4개 저장"으로 명시(녹음·분석·오토튠·편집·배열·재생은 무료, 워터마크·품질 제한 없음). 제8조 보유 조항을 "작업물은 회원 기기에만 저장, 서버 미보관"으로 정정하고 휴면 시 삭제 대상을 계정 데이터로 한정. 계정 삭제 약속(72시간 cascade 삭제, 영업일 3일 SLA)과 고지 의무는 변경 없이 유지. 시행일 2026-10-20 (제3조 제3항 30일 사전 고지 적용). / **Pro tier corrected** to the benefits actually shipped — unlimited saved songs and WAV/MIDI/stem export — with the never-implemented 5 GB cloud sync, permanent vocal cloud storage and priority-analysis provisions removed; Article 8 retention corrected to reflect that member work is stored only on the device and never on our servers. Deletion commitments and notice obligations unchanged. Effective 2026-10-20 after 30 days' notice. |
-| 1.4-draft | 2026-11-06 | **선택형 클라우드 백업 반영** — 제5조 Pro 혜택에 회원이 직접 실행하는 곡 클라우드 백업을 추가. 제8조의 "작업물은 기기에만 저장, 서버 미보관" 조항을 기본 기기 저장 + Pro 회원이 요청한 곡 사본의 Cloudflare R2 보관(관리 정보는 Supabase)으로 정정하고, 녹음 포함 선택(기본 꺼짐), 새 곡으로 복원, 구독 만료 후 기존 사본의 열람·복원·삭제, 탈퇴 시 백업 사본 삭제와 법정 보존 예외를 명시. 제7조 제3항 처리 목적과 제10조 제2항을 이에 맞춤. 보컬 처리 오디오의 즉시 폐기, 가격·자동 갱신·환불, 72시간 삭제·영업일 3일 접수 확인 약속은 유지. 시행일 추후 공지(제3조 제3항 30일 사전 고지). / **Optional cloud backup** — adds member-initiated song backup to Pro (Article 5); corrects Article 8 from "stored only on your device" to on-device by default plus the copies a Pro member asks us to keep in Cloudflare R2 (management data in Supabase); states that recordings are opt-in (off by default), restores create a new song, existing copies stay viewable, restorable and deletable after expiry, and account deletion removes backups except records kept by law. Article 7 licence purpose and Article 10 aligned. Immediate discard of processed vocal audio, pricing, renewal, refunds and the 72-hour deletion commitment unchanged. Effective date to be announced after 30 days' notice. |
+| 1.4 | 2026-11-06 | 선택형 클라우드 백업 반영. 시행일 2026-12-07. / Covers optional cloud backup. Effective 2026-12-07. |
 
 ## 연락처
 
