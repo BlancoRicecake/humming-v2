@@ -219,7 +219,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <ol>
 <li><strong>보컬 오디오 (무료·Pro 공통)</strong>: 분석·보컬 처리·오토튠·이펙트 endpoint 에서 메모리 기반으로 처리 후 <strong>처리 완료 즉시 폐기</strong>합니다. 서버 디스크에 기록되지 않습니다. 녹음은 회원이 클라우드 백업을 실행하면서 녹음 포함을 별도로 선택한 경우에만 제2호의 백업 사본에 포함되며, 이 선택은 기본으로 꺼져 있습니다.</li>
 <li><strong>회원의 작업물 (곡, 보컬 녹음, MIDI, 프로젝트 메타)</strong>: 기본적으로 <strong>회원의 기기 내부(Documents 디렉터리)에 저장</strong>됩니다. 곡을 편집하거나 저장할 때 서버로 자동 동기화하지 않습니다.<br>
-   - <strong>클라우드 백업 (Pro, 선택)</strong>: 클라우드 백업을 지원하는 앱에서 Pro 회원이 곡을 직접 선택해 백업하면, 곡 사본은 Cloudflare R2에, 백업 목록과 용량 관리에 필요한 정보는 Supabase에 저장됩니다. 녹음 포함은 기본으로 꺼져 있으며, 회원이 별도로 선택한 경우에만 포함됩니다.<br>
+   - <strong>클라우드 백업 (Pro, 선택)</strong>: 클라우드 백업을 지원하는 앱에서 Pro 회원이 곡 카드의 ⋯ 메뉴에서 ‘클라우드에 백업’을 선택하면, 곡 사본은 Cloudflare R2에, 백업 목록과 용량 관리에 필요한 정보는 Supabase에 저장됩니다. 녹음 포함은 기본으로 꺼져 있으며, 회원이 별도로 선택한 경우에만 포함됩니다.<br>
    - <strong>복원·삭제</strong>: 회원은 설정 → 클라우드 백업에서 사본을 기기에 새 곡으로 복원하거나 클라우드 사본만 삭제할 수 있습니다. 복원은 기존 곡을 덮어쓰지 않으며, 클라우드 사본을 삭제해도 기기의 원본은 남습니다.<br>
    - <strong>구독 만료 시</strong>: 기기에 저장된 곡은 삭제되지 않고 계속 열람·편집·재생할 수 있으며, Pro 전용 기능(곡 무제한 저장, WAV/MIDI/스템 내보내기, 새 클라우드 백업 생성과 기존 백업 갱신)만 잠깁니다. 기존 클라우드 사본은 만료만으로 삭제되지 않으며, 회원이 사본이나 계정을 삭제하기 전까지 목록 보기·복원·삭제를 할 수 있습니다.<br>
    - 클라우드에 백업하지 않은 로컬 저장 데이터의 손실(기기 분실·초기화 등)에 대해서는 제10조 제2항이 적용됩니다.</li>
@@ -318,7 +318,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <ul>
 <li><strong>Vocal audio (Free and Pro alike)</strong>: processed in memory only by the analysis, vocal-processing, autotune, and effects endpoints and <strong>discarded immediately</strong> upon completion. Not written to server disk. Recordings are included in a cloud backup copy (next item) only if you choose to include them when backing up; this option is off by default.</li>
 <li><strong>Your work (songs, vocal recordings, MIDI, project metadata)</strong>: stored <strong>on your device by default</strong> (the app's Documents directory). Editing or saving a song does not sync it to our servers automatically.<br>
-   - <strong>Cloud backup (Pro, optional)</strong>: in app versions that support cloud backup, when a Pro member chooses to back up a song, we store a copy in Cloudflare R2 and the information needed to manage your backups and storage usage in Supabase. Including recordings is off by default; they are included only if you select them.<br>
+   - <strong>Cloud backup (Pro, optional)</strong>: in app versions that support cloud backup, when a Pro member chooses “Back up to cloud” from the song card’s ⋯ menu, we store a copy in Cloudflare R2 and the information needed to manage your backups and storage usage in Supabase. Including recordings is off by default; they are included only if you select them.<br>
    - <strong>Restore and delete</strong>: under Settings → Cloud backup, you can restore a copy as a new song on your device or delete the cloud copy. Restoring does not overwrite an existing song, and deleting a cloud copy leaves the original on your device.<br>
    - <strong>When a subscription expires</strong>: songs on your device are not deleted and you can keep opening, editing and playing them; only the Pro-only features (unlimited saved songs, WAV/MIDI/stem export, and creating or updating cloud backups) lock. Expiry alone does not delete existing cloud copies; you can still view, restore or delete them until you delete the copy or your account.<br>
    - Loss of local data that was not backed up to the cloud (lost or reset device) is governed by Article 10.</li>

@@ -165,7 +165,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 </thead>
 <tbody>
 <tr>
-<td>이메일, OAuth provider, OAuth sub</td>
+<td>이메일, 로그인 제공자와 계정 식별자, Google 로그인 시 제공되는 이름 및 프로필 이미지 URL(해당하는 경우)</td>
 <td>회원가입 시</td>
 <td>Supabase Auth (us-east-1)</td>
 <td>회원 탈퇴 시까지</td>
@@ -242,7 +242,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <td>정당한 이익 (안정성)</td>
 </tr>
 <tr>
-<td>화면 상호작용 (탭·스크롤 등 세션 리플레이·히트맵, PII 자동 마스킹)</td>
+<td>화면 상호작용 (탭·스크롤 등), IP에서 추정한 대략적 위치, 로그인 시 계정 ID (세션 리플레이·히트맵)</td>
 <td>앱 사용 시</td>
 <td>Microsoft Clarity (미국/글로벌)</td>
 <td>세션 녹화 90일</td>
@@ -266,14 +266,14 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 - 이메일·이름·곡 제목·가사·오디오·파일 경로·노트/MIDI 내용·음성 특성·자유 입력 텍스트의 분석 이벤트 전송 ❌</p>
 <p><strong>분석·진단 도구 안내</strong>: Sentry와 Microsoft Clarity는 현재 활성화되어 있습니다. Firebase Analytics SDK는 통합되어 있으나 운영 수집은 비활성 상태이며, 본 개정 시행과 스토어 제출 정보 반영 후에만 활성화합니다. 이후에도 설정 → 익명 사용 분석에서 향후 수집을 끌 수 있습니다.</p>
 <p><strong>Sentry (오류·크래시 리포팅)</strong>: 앱과 백엔드에서 발생한 오류·크래시의 스택 트레이스와 발생 환경(기기 모델, OS·앱 버전, 요청 경로)을 수집하며, 성능 트레이싱은 10% 표본만 수집합니다. 서버는 <code>send_default_pii=False</code>, 앱은 <code>sendDefaultPii = false</code> 로 설정되어 이메일·IP 등 개인정보를 자동 수집하지 않으며, 로그인 사용자는 <strong>Supabase 사용자 ID(불투명 UUID)</strong> 로만 식별합니다. 보컬 오디오·곡·MIDI 는 Sentry 로 전송되지 않습니다.</p>
-<p><strong>Microsoft Clarity (세션 리플레이·히트맵)</strong>: 익명 행동 분석 도구로, 화면 녹화 영상이나 키 입력 원문을 저장하지 않으며 입력 필드 등 민감 영역은 SDK 가 자동 마스킹합니다. 광고 목적으로 사용되지 않고 제3자에 데이터를 이전하지 않으며, IDFA/ATT 추적 식별자도 사용하지 않습니다. 로그인 사용자의 경우 세션을 식별·필터링하기 위해 <strong>Supabase 사용자 ID(불투명 UUID)</strong> 가 Clarity 로 함께 전달됩니다(개인을 직접 식별하는 PII 아님). (IP 로부터 도시 단위의 대략적 위치가 추정될 수 있으나 개인과 연결되지 않습니다.)</p>
+<p><strong>Microsoft Clarity (세션 리플레이·히트맵)</strong>: Clarity는 제품 사용을 분석하기 위해 탭·스크롤 등의 화면 상호작용을 수집하며 입력 필드 등 민감 영역을 마스킹합니다. 로그인한 경우 세션을 구분하기 위해 Supabase 사용자 ID(불투명 UUID)를 Clarity에 전달합니다. IP에서 추정한 대략적 위치(국가·지역·도시)는 이 사용자 ID와 같은 세션에 기록될 수 있습니다. 이 데이터는 제품 분석에 사용하며 광고나 교차 앱 추적에 사용하지 않습니다.</p>
 <p><strong>Google Firebase Analytics (제품 분석)</strong>: 허용 목록에 든 고정 이벤트와 열거형 값만 전송합니다. 앱 시작과 기능 흐름의 시작·성공·실패를 집계하며 이메일·이름·곡 제목·가사·오디오·파일 경로·노트/MIDI 내용·음성 특성·자유 입력 텍스트는 전송하지 않습니다. 로그인 사용자는 불투명 Supabase 사용자 ID로만 연결됩니다. 광고 식별자와 광고 개인화 신호는 비활성화하며 광고·교차 앱 추적에 사용하지 않습니다.</p>
 <h3>3. 처리 목적</h3>
 <ol>
 <li>서비스 제공: 계정 인증, 보컬 분석 및 처리, 회원이 요청한 곡 백업·복원·삭제</li>
 <li>결제 및 구독 관리: IAP 영수증 검증, 갱신 webhook 처리, Pro 자격 판정</li>
 <li>안정성 개선: 오류·크래시 추적 (Sentry — PII 자동 수집 비활성)</li>
-<li>제품·UX 개선: 익명 세션 리플레이·히트맵 분석 (Microsoft Clarity)</li>
+<li>제품·UX 개선: 세션 리플레이·히트맵 분석 (Microsoft Clarity)</li>
 <li>제품 흐름 개선: 기능 사용·성공·실패를 집계한 제품 분석 (Google Firebase Analytics, 사용자가 끌 수 있음)</li>
 <li>보안: 이상 접속 탐지, API rate limiting</li>
 <li>법령상 의무: 세법, 전자상거래법, 전자금융거래법</li>
@@ -337,9 +337,9 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 </tr>
 <tr>
 <td>Microsoft Corporation (Clarity)</td>
-<td>세션 리플레이·히트맵 (익명 행동 분석)</td>
+<td>세션 리플레이·히트맵 (제품 사용 분석)</td>
 <td>미국 / 글로벌</td>
-<td>화면 상호작용 이벤트 (PII 마스킹)</td>
+<td>화면 상호작용, IP에서 추정한 대략적 위치, 로그인 시 계정 ID</td>
 </tr>
 </tbody>
 </table>
@@ -399,7 +399,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 </thead>
 <tbody>
 <tr>
-<td>Email, OAuth provider/sub</td>
+<td>Email, sign-in provider and account identifier, and name and profile image URL provided by Google Sign-In (if available)</td>
 <td>Sign-up</td>
 <td>Supabase Auth (us-east-1)</td>
 <td>Until account deletion</td>
@@ -476,7 +476,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <td>Legitimate interest</td>
 </tr>
 <tr>
-<td>Screen interactions (taps/scrolls — session replay &amp; heatmaps, PII auto-masked)</td>
+<td>Screen interactions (taps and scrolls), approximate IP-derived location, and account ID when signed in (session replay &amp; heatmaps)</td>
 <td>Use</td>
 <td>Microsoft Clarity (US/global)</td>
 <td>90-day session recordings</td>
@@ -487,7 +487,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 <p><strong>We do NOT collect</strong>: payment card numbers; location; contacts; photo library; or ad identifiers (IDFA/AAID). Analytics events never contain email, name, song title, lyrics, audio, recording paths, note/MIDI content, voice traits, or free-form text.</p>
 <p><strong>Analytics and diagnostics</strong>: Sentry and Microsoft Clarity are active today. The Firebase Analytics SDK is integrated, but production collection remains disabled and will be enabled only after this revision takes effect and store disclosures are updated. Future collection can then be stopped under Settings → Anonymous usage analytics.</p>
 <p><strong>Sentry</strong> (error and crash reporting) collects stack traces and the surrounding context (device model, OS/app version, request path) from both the app and the backend, plus a 10% sample of performance traces. The server runs with <code>send_default_pii=False</code> and the app with <code>sendDefaultPii = false</code>, so email and IP are not collected automatically; a signed-in user is identified only by their <strong>Supabase user ID (an opaque UUID)</strong>. Your vocals, songs and MIDI are never sent to Sentry.</p>
-<p><strong>Microsoft Clarity</strong> (session replay &amp; heatmaps) is anonymous behavior analytics: it does not store raw screen recordings or keystrokes, auto-masks sensitive fields, is never used for advertising, transfers no data to third parties, and uses no ad/ATT identifiers. For signed-in users, your <strong>Supabase user ID (an opaque UUID, not directly identifying PII)</strong> is passed to Clarity to filter session replays by user. Approximate city-level location may be inferred from IP but is not linked to identity.</p>
+<p><strong>Microsoft Clarity</strong> (session replay &amp; heatmaps). Clarity collects screen interactions, such as taps and scrolls, for product analytics and masks sensitive areas such as input fields. When you sign in, we send your Supabase user ID (an opaque UUID) to Clarity to distinguish sessions. Approximate location (country, region or city) inferred from your IP address may be recorded in the same session as this user ID. We use this data for product analytics. We do not use it for advertising or cross-app tracking.</p>
 <p><strong>Google Firebase Analytics</strong> sends only allowlisted fixed events and enum values for app launches and feature-flow starts, successes, and failures. It never sends email, name, song title, lyrics, audio, paths, note/MIDI content, voice traits, or free-form text. Signed-in users are linked only by an opaque Supabase user ID. Advertising identifiers and personalization signals are disabled; the data is not used for advertising or cross-app tracking.</p>
 <h3>3. Purposes</h3>
 <p>Service operation, including song backup, restoration and deletion at your request, payment management, security, stability analytics (Sentry), product/UX analytics (Microsoft Clarity), aggregate product-funnel analytics (Google Firebase Analytics, user-controllable), and legal compliance.</p>
@@ -544,7 +544,7 @@ footer.foot { border-top: 1px solid var(--border); padding: 36px 24px 32px; colo
 </tr>
 <tr>
 <td>Microsoft Corporation (Clarity)</td>
-<td>Session replay &amp; heatmaps (anonymous analytics)</td>
+<td>Session replay &amp; heatmaps (product analytics)</td>
 <td>US / global</td>
 </tr>
 </tbody>
